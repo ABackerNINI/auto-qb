@@ -40,6 +40,13 @@ def _require_relocate(ctx: WebContext) -> None:
         raise HTTPException(status_code=403, detail="整组迁移未启用(配置键 relocate.enabled)")
 
 
+#: 清空历史的现场说明(两步确认第一步的权威文案, D3/D5): **文案单点在本路由层** ——
+#: 前端 relPopClearHistory 第一步 POST(不带 confirm)取本 note 进 confirmDialog 展示
+#: (不硬编码第二份), 连失败记录一起清、不可恢复的口径只在这里维护。
+_CLEAR_HISTORY_NOTE = ("将清空全部迁移历史记录: 最近保留的成功记录、失败与已取消的记录一并删除, 不可恢复;"
+                       "在途迁移不受影响。确认清空?")
+
+
 def _list_param(body: dict | None, field: str, noun: str) -> list:
     """列表型请求体字段的取值守卫单点(issue 26-11-07-0536): 非数组 400 拒收不入队
 
@@ -211,6 +218,23 @@ def build_router(ctx: WebContext) -> APIRouter:
         if not job_id:
             raise HTTPException(status_code=400, detail="未提供 job_id(撤销目标不能为空)")
         return _enqueue("relocate_cancel", {"job_id": job_id, "confirm": bool((body or {}).get("confirm"))})
+
+    @router.post("/api/relocate/history/clear")
+    def api_relocate_history_clear(body: dict | None = None):
+        """清空迁移历史(S3 终态分级保留 D3/D5, 计划 26-11-15-2340 §03.4): 手动清空全部
+        终态账 —— done/failed/cancelled 一并清(D5: 手动清空可整链清; 自动面只滚 done,
+        失败与取消记录只能走本入口), **不可恢复**
+
+        两步确认同 relocate_cancel/finalize-now 口径: confirm 缺省/False 只回现场说明
+        (cls=confirm, 零动作), confirm=true 才执行。挂 relocate.enabled 403 门控(fail-closed,
+        同撤销端点); 经 _enqueue 走主循环线程执行 ctx.relocate.relocate_clear_history(与写
+        命令串行化, 清理走 purge_terminal_chain 整链基元)。回执(经 cmd 通道):
+        truth={cls, cleared, remaining, note} —— I1 引用保护缓行的账在 note 说明剩余。
+        """
+        _require_relocate(ctx)
+        if not (body or {}).get("confirm"):
+            return {"cls": "confirm", "note": _CLEAR_HISTORY_NOTE}
+        return _enqueue("relocate_clear_history", {})
 
     @router.post("/api/torrents/{hash}/super-seeding")
     def api_t_super_seeding(hash: str, body: dict | None = None):

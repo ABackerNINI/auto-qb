@@ -78,6 +78,7 @@ class WebCommandsMixin(TorrentsMixin, ConfigMixin, LimitMixin, LogsMixin):
             "relocate_precheck": self._cmd_relocate_precheck,
             "relocate_precheck_add": self._cmd_relocate_precheck_add,
             "relocate_cancel": self._cmd_relocate_cancel,
+            "relocate_clear_history": self._cmd_relocate_clear_history,
             "transfer_run": self._cmd_transfer_run,
             "transfer_test": self._cmd_transfer_test,
             "super_seeding": self._cmd_super_seeding,

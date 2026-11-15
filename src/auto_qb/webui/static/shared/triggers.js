@@ -245,6 +245,10 @@ const TRIGGER_DEFS = {
       "scope": "none", "why": "添加种子对话框建目录: 资源操作, 无选中/锚点语义"
     },
     {
+      "file": "relocate_pop.js", "fn": "relPopClearHistory", "ep": "/api/relocate/history/clear",
+      "scope": "none", "why": "S3 清空迁移历史(计划 26-11-15-2340 §03.4 D3/D5): 全局终态账清理, 无选中/锚点语义; 入口挂终态行迁移浮窗 footer, 确认框先行(confirmDialog + 路由层两步复核)"
+    },
+    {
       "file": "relocate_chain.js", "fn": "data", "ep": "/api/relocate/finalize-now",
       "scope": "none", "why": "D14 立即收尾(实际发起方法 relChainFinalizeNow): 目标 job 由路径链浮窗打开时的快照锚定, 无选中/锚点语义; 本文件是 IIFE 双层嵌套, 方法声明在 6 空格缩进 —— 守阵扫描器只认 4 空格声明, 归属上溯到 data"
     },

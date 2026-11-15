@@ -242,6 +242,41 @@ def _install_search_refresh_probe(app, mgr, site_conf) -> None:
         mgr.web.flush_views(force=True)  # 同 add: 桩无主循环, 发布视图须手动补一拍
         return {"hash": hash, "removed": True, "search_rev": mgr.web.search_rev}
 
+    @app.post("/__harness__/set_save_path")
+    def _set_save_path(hashes: str, save_path: str):
+        """改种子保存路径(仅测试桩; issue 26-11-11-0553 e2e 面): 模拟「迁移收官瞬间 qB
+        侧 save_path 变更」—— 组键 = (规范化 save_path, 文件), 路径一变组行 data-key 换键。
+
+        hashes = 逗号分隔多 hash(**一次**调用内全部改完并只重建发布一代 —— 换键的加/删
+        两半必须同代原子到达, 分两次调用会让客户端收到「新旧键并存/回摆」的中间代, 换键
+        窗口形态失真)。归组走**桩的既有直写口径**(与 main 启动段同款: 桩本就直写
+        groups/member_to_key 绕过归组模块 —— 存量 group_sizes 无缓存映射, 走 grouping 的
+        save_path delta 重归组会按「无缓存文件映射维持原行为」跳过, 测不到换键)。
+        仅回环可访问, 不参与打包、不进生产代码。
+        """
+        changed = []
+        for h in [x for x in (hashes or "").split(",") if x]:
+            tor = mgr.client.torrents.get(h)
+            if tor is None:
+                continue
+            tor.save_path = save_path
+            changed.append(h)
+        if not changed:
+            return {"changed": False, "search_rev": mgr.web.search_rev}
+        all_tors = list(mgr.client.torrents.values())
+        groups = {}
+        for i in range(0, len(all_tors) - 1, 2):
+            a, b = all_tors[i], all_tors[i + 1]
+            groups[(a.save_path, ())] = [a.hash, b.hash]
+        mgr.store.groups = groups
+        mgr.store.member_to_key = {h: k for k, hs in groups.items() for h in hs}
+        # 组行数据面在 view 缓存与 delta 时间线里 —— 直写 groups 不经任何脏标记, 必须显式
+        # 置 full 脏再走发布漏斗: 纯 rebuild_views 会落「空键集且 full=False」的代, delta
+        # 客户端漏组键变更(R11 注释同款缺口); flush_views 只在 group_view_dirty 时 rebuild。
+        mgr.web.mark_dirty(full=True, reason="harness_set_save_path")
+        mgr.web.flush_views(force=True)
+        return {"changed": True, "hashes": changed, "save_path": save_path, "search_rev": mgr.web.search_rev}
+
     probes = app.router.routes[first_probe:]
     del app.router.routes[first_probe:]
     app.router.routes[0:0] = probes

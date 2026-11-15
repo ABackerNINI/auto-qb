@@ -7,9 +7,10 @@
  * !参照 hr.js 逐条对齐参数(enter 120ms / leave 160ms 宽限 / 移入浮窗不关 / teleport body /
  *   上下翻转 / 指向箭头 / 滚动缩放即关 / 零矩形即收), **不抽公共基类**(语义独立, 防双实现
  *   被迫耦合; plan §07 风险表: 两处参数各自演化 = 漂移, 对齐靠本注释互指 + 守阵钉数值)。
- * !零请求契约: 浮窗数据全部来自行载荷(row.relocate 组行 g.relocate / 种子行 m.relocate)与
- *   relocateView(row)(decorate.js 单点), **不发任何请求** —— /api/relocate_chain 深探测
- *   仍只在链浮窗按需触发(relChain), 渲染期零触盘零请求(P0 纪律)。
+ * !零请求契约: 浮窗**数据**全部来自行载荷(row.relocate 组行 g.relocate / 种子行 m.relocate)与
+ *   relocateView(row)(decorate.js 单点), 组装/渲染**不发任何请求** —— /api/relocate_chain 深探测
+ *   仍只在链浮窗按需触发(relChain), 渲染期零触盘零请求(P0 纪律)。唯一例外是 relPopClearHistory
+ *   (S3 D3/D5 清空迁移历史): 显式点击才发的用户动作, 不破渲染期零请求(见方法注)。
  * !触发判据: relocateView(row) 非 null(即 state ∈ {moving, pending_finalize, failed, mixed}),
  *   或终态窄放行谓词 _relPopTerminalGate(row) 通过(done / cancelled 且 relocateResumeText 非空
  *   —— 终态残留的恢复账余量行给浮窗入口, 判据与抽屉迁移段同一单点; issue 26-11-15-0345,
@@ -27,6 +28,14 @@ let relPopShowT = 0, relPopHideT = 0;
 /* 全局一次性监听(滚动 / 缩放关弹窗)是否已挂。ESC 不在此挂 —— 走 lifecycle.js 的退栈链
  * (plan S3 拍板「ESC 接 lifecycle 退栈链」), 与 hrPop 的自带 keydown 监听是两条路。 */
 let relPopGlobalsHooked = false;
+
+/* 终态展示状态集(S3 清空历史按钮的可见性判据; 与后端派生单点 units.display_state_of_phase
+ * 的输出词表同源 —— 词值进投影契约, 改值须两端同步; 跨端同值断言钉扎在
+ * tests/test_webui_relocate_pop.py(REL_TERMINAL_STATES 字面量集 == units 展示词终态集),
+ * 后端词表单点在 units.display_state_of_phase / DISPLAY_* 常量)。
+ * 终态行(failed 常驻浮窗 / done/cancelled 经恢复账窄放行)是迁移历史唯一可见面, 「清空历史」
+ * 入口就挂在这(计划 26-11-15-2340 §03.4 D3/D5: 失败记录永不自动清, 只能手动清空)。 */
+const REL_TERMINAL_STATES = new Set(["done", "failed", "cancelled", "superseded"]);
 
 window.AQB_RELOCATE_POP = {
   data() {
@@ -180,7 +189,54 @@ window.AQB_RELOCATE_POP = {
         paths,
         kv,
         reason,
+        /* 清空历史入口(S3 D3/D5): 终态行才给 —— 失败记录永不自动清, 手动清空是唯一出口;
+         * 在途态不亮(在途账没有清空面, 撤销走行内菜单/抽屉的撤销语义)。 */
+        clearable: REL_TERMINAL_STATES.has(rel.state),
       };
+    },
+
+    /* ---------------- 清空迁移历史(S3 D3/D5, 计划 26-11-15-2340 §03.4) ----------------
+     * 唯一的手动清理入口(失败/取消记录永不自动清)。浮窗数据仍零请求 —— 本方法是**显式
+     * 点击**才发的用户动作, 不破「渲染期零请求」契约。两步确认走与 relocate_cancel 同款
+     * 协议: 第一步 POST 不带 confirm 只取路由层持有的现场说明(文案单点, 前端不硬编码
+     * 第二份), confirmDialog 展示后才发 confirm:true; 执行回执经 cmd 通道异步落 truth
+     * (deferred 回执族) —— 必须 waitCmd 等真值(cls/cleared/remaining/note), HTTP 层的
+     * {queued, cmd_id} 不含结果, 直接判它会谎报(评审 blocker-1)。I1 缓行/挂账缓行的
+     * 剩余账在真值 note 里说明。 */
+    async relPopClearHistory() {
+      if (this._relPopClearing) return;
+      let face;
+      try {
+        face = await this.api("/api/relocate/history/clear", {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+      } catch (e) {
+        this.toast("清空迁移历史不可用: " + ((e && e.message) || "网络或服务端错误"), "warn", 10000);
+        return;
+      }
+      const ok = await this.confirmDialog("清空迁移历史", (face && face.note) || "", {
+        okText: "清空",
+        danger: true,
+      });
+      if (!ok) return;
+      this._relPopClearing = true;
+      try {
+        const resp = await this.api("/api/relocate/history/clear", {
+          method: "POST",
+          body: JSON.stringify({ confirm: true }),
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        this.relPopHideNow();
+        const truth = (r && r.truth) || null;
+        if (r.ok && truth && truth.cls === "ok") this.toast(truth.note || "迁移历史已清空", "ok", 10000);
+        else this.toast((truth && truth.note) || (r && r.error) || "清空未执行, 结果以程序日志为准", "warn", 10000);
+      } catch (e) {
+        const msg = (e && e.message) || "网络或服务端错误";
+        this.toast("清空迁移历史不可用: " + msg, "warn", 10000);
+      } finally {
+        this._relPopClearing = false;
+      }
     },
   },
 };

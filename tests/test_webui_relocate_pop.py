@@ -6,10 +6,15 @@
   relPop.open / rp-head(r-dot+verdict+phase) / rp-sep / rp-paths(rp-pl+rp-pv, 目标位置挂
   rp-em) / rp-kv / rp-reason 结构齐全; xtpl-cells.html 组行/种子行两分支都挂
   relPopEnter/relPopLeave; relocate_pop.js 调度参数 120/160 + assembleRelPop 单点在场且零请求
-  (无 fetch//api) + 终态窄放行谓词 _relPopTerminalGate 在场(issue 26-11-15-0345); app.js 末尾
+  (无 fetch//api; 唯一豁免 = relPopClearHistory 方法体, S3 D3/D5 清空迁移历史 —— 显式点击动作,
+  方法体外 /api 仍判红, 方法体钉扎端点与 confirm:true / waitCmd 真值回执消费链) +
+  REL_TERMINAL_STATES 与 units 展示词终态集跨端同值断言(评审 minor-R2-1) +
+  终态窄放行谓词 _relPopTerminalGate
+  在场(issue 26-11-15-0345); app.js 末尾
   混入 AQB_RELOCATE_POP; 四皮肤 index.html 清单均引入 relocate_pop.js 且排在 app.js 之前
   (文件序不变量); row_lang.css .relpop 段不带 .rl-scope 前缀(teleport 到 body)且宽度/圆点/
-  固定色/全出血分隔条四拍板值在场 + 中性 tone 色义在场。
+  固定色/全出血分隔条四拍板值在场 + 中性 tone 色义在场 + rp-actions/rp-clear 清空历史按钮段
+  (S3 D3/D5)。
 - test_relocate_pop_assemble_node: node 探针真跑 assembleRelPop(照 test_p1_pair_state_mapping_node
   的 vm harness, format.js + decorate.js + relocate_pop.js 同 context 组装实例) —— 组 pair:
   paths 两行[当前位置/目标位置] + kv 序(成员 -> 来源 -> 更新, 组行无别名行); 组 mixed: 多目标
@@ -30,6 +35,8 @@ import os
 import re
 import shutil
 import subprocess
+
+from auto_qb.core.modules import relocate_units as ru
 
 from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest
 
@@ -71,6 +78,8 @@ def test_webui_relocate_pop_wiring():
         ('class="rp-k"', "kv 键列"),
         ('class="rp-v"', "kv 值列"),
         ('class="rp-reason"', "失败原因行"),
+        ('class="rp-actions"', "清空历史动作行(S3 D3/D5, 终态才亮 clearable)"),
+        ("relPopClearHistory()", "清空迁移历史按钮接 relPopClearHistory 单点"),
     ):
         assert needle in frag, f"浮窗模板缺 {what}(应有 `{needle}`)"
 
@@ -92,10 +101,35 @@ def test_webui_relocate_pop_wiring():
     assert pop_js.count("relocateResumeText(rel)") == 2, \
         "终态窄放行判据与 kv 行都必须消费 relocateResumeText 单点(不另写第二份口径)"
     # 零请求只认代码态(剥块/行注释再查 —— 头注纪律文字里的 /api/relocate_chain 不算使用)
+    # 唯一豁免 = relPopClearHistory(S3 D3/D5 清空迁移历史, 计划 26-11-15-2340 §03.4):
+    # 显式点击才发的用户动作(确认框先行), 与「渲染期零请求」不冲突 —— 豁免面收窄到该方法
+    # 体, 方法体外出现 fetch//api 仍然判红; 方法体自身钉扎确认步骤与端点(防误扩)。
+    clear_m = re.search(r"async relPopClearHistory\(\) \{.*?\n    \},\n", pop_js, re.S)
+    assert clear_m, "relPopClearHistory(清空历史入口)必须在场(S3 D3/D5)"
     pop_code = re.sub(r"/\*.*?\*/", "", pop_js, flags=re.S)
     pop_code = re.sub(r"//[^\n]*", "", pop_code)
+    pop_code = pop_code.replace(clear_m.group(0), "")
     assert "fetch(" not in pop_code and "/api/" not in pop_code, \
-        "浮窗数据全行载荷零请求(plan 不变量 2): 不得出现 fetch//api"
+        "浮窗数据全行载荷零请求(plan 不变量 2): 不得出现 fetch//api(唯一豁免 = relPopClearHistory 方法体)"
+    assert '"/api/relocate/history/clear"' in clear_m.group(0) and "confirm: true" in clear_m.group(0), \
+        "清空历史入口必须 POST /api/relocate/history/clear 且带 confirm:true(路由层两步确认)"
+    # waitCmd 消费链钉扎(评审 blocker-1): confirm:true 的 HTTP 回执是 {queued, cmd_id}
+    # (deferred 回执族, 无 cls/note) —— 直接判它会谎报「清空未执行」; 必须 waitCmd 等真值
+    # 回执并按 truth.cls/note 三态分流(ok -> note / 非 ok -> note 或 waitCmd error)。
+    body = clear_m.group(0)
+    assert "waitCmd(resp.cmd_id)" in body, "confirm:true 后必须 await this.waitCmd(resp.cmd_id) 等真值回执"
+    assert 'truth.cls === "ok"' in body and "truth.note" in body, "真值回执按 truth.cls/note 分流 toast(成功不谎报)"
+    assert "this.confirmDialog" in body and "face.note" in body, \
+        "确认文案必须取路由 confirm 步返回的 note(文案单点在路由层, 前端不硬编码第二份)"
+
+    # 3b. 终态词集跨端同值(评审 minor-R2-1): REL_TERMINAL_STATES(clearable 判据)是后端
+    # units 展示词的投影镜像 —— 词值进投影契约, 改名/改集必须两端同步; 正则取前端字面量集
+    # 与 units 展示词常量比对相等(relocate_pop.js 头注指向本断言)。
+    term_m = re.search(r"const REL_TERMINAL_STATES = new Set\(\[([^\]]+)\]\)", pop_js)
+    assert term_m, "REL_TERMINAL_STATES 字面量集必须在场(clearable 判据单点)"
+    js_states = set(re.findall(r'"([a-z_]+)"', term_m.group(1)))
+    assert js_states == {ru.DISPLAY_DONE, ru.DISPLAY_FAILED, ru.DISPLAY_CANCELLED, ru.DISPLAY_SUPERSEDED}, \
+        f"前端终态词集 {sorted(js_states)} 与 units 展示词终态集不一致 —— 改词必须两端同步(改值即漂移面)"
 
     # 4. app.js 混入 + 四皮肤 script 清单引入且排在 app.js 之前(文件序不变量, relocate_pop.js 头注)
     app_js = _read("app.js")

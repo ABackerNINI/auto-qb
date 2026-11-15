@@ -30,6 +30,17 @@ var ROW_H_MAIN_PROBES = [
   ["group", '.group-row[data-table="group"][data-key]'],
   ["member", '.member-row[data-table="detail"][data-hash]'],
 ];
+/* 0553 换键携带的待领池 TTL(ms): 换键的加/删两半可能隔几拍才在键集上到齐(delta 交付序),
+ * 短窗内跨拍配对; 超时即弃 —— 防删除组的高度被无关新组误领(后果轻微: 行进窗口即被实测
+ * 校正, 见 _measureRowH 内注释)。 */
+var ROWH_CARRY_TTL = 30000;
+/* 0553 携带面模块级状态(单页面单引擎, 与 relocate_pop.js 的调度定时器同款非实例态):
+ * 上一拍 group 活键集 + 两侧待领池。刻意不挂 this —— 实例属性经公共代理存取, 换键窗口
+ * 的跨拍读写在实例面上不可靠(实测 prev 回读滞后一拍, e2e 取证 26-11-11-0553), 模块级
+ * 原生 Set/Map 无此歧义。 */
+var ROWH_LIVE = null;        // Set<组键> 上一拍活键集
+var ROWH_ORPHANS = new Map(); // Map<旧键, {h, ts}> 待领孤儿(带实测高)
+var ROWH_FRESH = new Map();   // Map<新键, ts> 待测新键
 
 Object.assign(window.AQB_COLUMNS.methods, {
 
@@ -443,6 +454,58 @@ Object.assign(window.AQB_COLUMNS.methods, {
           this._winMeasured[kind] = false;
           this._rowHVer++;
           continue;
+        }
+        // 0553 组键换键携带(issue 26-11-11-0553, 计划 26-11-15-2340 §03.6): 组键 =
+        // (规范化 save_path, 文件) —— 整组迁移收官/接管瞬间 save_path 变更 -> 组行 data-key
+        // 换键, 旧键实测值成孤儿、新键无实测, 该行在窗口前缀和按 est 兜底一拍, 占位/滚动
+        // 总高短暂失真(列表跳一下; issue §06 建议修法其一「键替换时沿用旧键实测值」)。
+        // 配对在两侧待领池之间做: 消失键(孤儿, 带实测高) x 新出现且未实测的键, 两侧各恰一个
+        // 活着才确定性配对(多孤儿/多新键 = 歧义, 维持 est 兜底不猜)。池条目带 TTL(ROWH_CARRY_TTL)
+        // —— 换键的加/删两半可能隔了几拍才到齐(delta 交付序), 短窗内跨拍配对; 超时即弃,
+        // 防删除组的高度被 30s 后无关的新组误领(误领后果轻微: 行进窗口即被实测校正, 高度族
+        // 本就贴近均值)。
+        // 仅 group kind: torrent/member 行键是 hash(迁移全程稳定), 无换键面。
+        if (kind === "group") {
+          const now = Date.now();
+          const live = new Set(this.filteredGroups.map((g) => g.key));
+          const prev = ROWH_LIVE;
+          // 池维护三清: TTL 超时 / 孤儿键回到活集(交付回摆) / 待测键已被实测(无需携带)
+          for (const [k, rec] of Array.from(ROWH_ORPHANS)) {
+            if (now - rec.ts > ROWH_CARRY_TTL || live.has(k)) ROWH_ORPHANS.delete(k);
+          }
+          for (const [k, ts] of Array.from(ROWH_FRESH)) {
+            if (now - ts > ROWH_CARRY_TTL || this._rowHs["group:" + k] !== undefined) ROWH_FRESH.delete(k);
+          }
+          if (prev && prev.size) {
+            for (const k of prev) {
+              if (live.has(k)) continue;
+              const h = this._rowHs["group:" + k];
+              if (h !== undefined && !ROWH_ORPHANS.has(k)) ROWH_ORPHANS.set(k, { h, ts: now });
+            }
+            for (const k of live) {
+              if (!prev.has(k) && this._rowHs["group:" + k] === undefined && !ROWH_FRESH.has(k)) ROWH_FRESH.set(k, now);
+            }
+          }
+          ROWH_LIVE = live;
+          if (ROWH_FRESH.size === 1 && ROWH_ORPHANS.size === 1) {
+            const freshKey = ROWH_FRESH.keys().next().value;
+            const orphan = ROWH_ORPHANS.values().next().value;
+            /* 与行窗口化 pad 修复(issue 26-11-15-0332)的共存关系:
+             * 其一, 携带值 = 旧键实测高的转记, 写进 _rowHs 后即满足「已实测」判据(键在即已实测)
+             *   —— _reprobeRenderedRowH 把它当已有键、行进窗口后照常按真值修正(真值优先于
+             *   转记, |差|>0.5 才覆盖), 不会把携带值当陈旧值清掉;
+             * 其二, 远端冻结的 _rowHAvgOf 基准不受携带干扰: 携带发生在 updated() 拍, 主表基准
+             *   首校后已冻结(门恒关), 携带值只进 _rowHs 不触发均值重校, 不搬 pad;
+             * 其三, 出窗最后一探在 render 拍(reprobe 旧键)、携带在 updated() 拍, 时序天然错开:
+             *   旧键被顶掉陈旧值后才入孤儿池(孤儿高反而更准), 携带键是新键、reprobe 只修
+             *   已有键不会顶掉它。 */
+            this._rowHs["group:" + freshKey] = orphan.h;
+            ROWH_ORPHANS.clear();
+            ROWH_FRESH.delete(freshKey);
+            this._rowHVer++;  // 让窗口按携带高度重算, 消掉那一拍 est 跳变(与 _measureRowH/
+                              // 签名作废同款 updated() 拍响应式收敛, 不踩 reprobe 的 render
+                              // 途中改响应式态自激坑 —— 那条约束只限 render 途中)
+          }
         }
         const rows = document.querySelectorAll(sel);
         if (!rows.length) continue;

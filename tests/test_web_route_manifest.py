@@ -91,6 +91,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/relocate/precheck"),  # 整组迁移预检只读端点(plan 26-10-18-1604 P2; 403 门控 relocate.enabled)
     ("POST", "/api/relocate/precheck-add"),  # 添加种子落点预检只读端点(计划 26-10-18-1604 §3.6.1; 同一 403 门控)
     ("POST", "/api/relocate/cancel"),  # 撤销迁移端点(确认两步; D6 停手语义不搬回; 同一 403 门控)
+    ("POST", "/api/relocate/history/clear"),  # 清空迁移历史端点(确认两步; S3 终态分级保留 D3/D5, 计划 26-11-15-2340 §03.4; 同一 403 门控)
     ("POST", "/api/torrents/{hash}/super-seeding"),
     ("GET", "/api/torrents/{hash}/trackers"),
     ("POST", "/api/torrents/{hash}/trackers/add"),

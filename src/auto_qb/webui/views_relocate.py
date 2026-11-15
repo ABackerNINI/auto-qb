@@ -13,41 +13,25 @@ from ..core.modules import relocate_units as ru
 # 数值(漂移即展示谎报), 上界改名/改值由 test_webui_relocate_visibility 的钉扎兜住。
 from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
 
-# 相位 -> 展示状态归并(plan 数据契约; S4 相位模型: 收尾窗 = {armed, rewritten};
-# S1a 单活任务模型追加 superseded 只读历史态, 计划 26-11-15-2340 §03.2 D4):
-#   moving / watching                    -> moving(进行中)
-#   moved / armed / rewritten            -> pending_finalize(待收尾, fastresume 改写账在途)
-#   done / failed / cancelled            -> 同名终态
-#   superseded                           -> superseded(被接管: 只读历史, 链接工作移交活任务)
-MOVING_PHASES = frozenset({ru.PHASE_MOVING, ru.PHASE_WATCHING})
-PENDING_PHASES = frozenset({
-    ru.PHASE_MOVED,
-    ru.PHASE_ARMED,
-    ru.PHASE_REWRITTEN,
-})
-_ACTIVE_STATES = frozenset({"moving", "pending_finalize"})
+# 相位 -> 展示状态归并已收敛为单点派生函数(I3, 计划 26-11-15-2340 §03.4): 归并表
+# (MOVING_PHASES/PENDING_PHASES)与判定体单点在 units.display_state_of_phase, 本文件
+# 只保留 state_of_phase 这个 webui 消费面旧入口作薄委托 —— 不再各自维护第二份归并逻辑。
+_ACTIVE_STATES = frozenset({ru.DISPLAY_MOVING, ru.DISPLAY_PENDING_FINALIZE})
 # 组级优先序: failed > moving > pending_finalize > done > superseded。cancelled 不进组级标注
 # (已撤销 = 无迁移在进行, 不挂徽标); superseded 只读历史不进活跃集, 但组级聚合仍给它
 # 最低优先序(前任专属成员的标注不被当作未知相位误判成 moving)。
-_PRIORITY = {"failed": 4, "moving": 3, "pending_finalize": 2, "done": 1, "superseded": 0}
+_PRIORITY = {
+    ru.DISPLAY_FAILED: 4,
+    ru.DISPLAY_MOVING: 3,
+    ru.DISPLAY_PENDING_FINALIZE: 2,
+    ru.DISPLAY_DONE: 1,
+    ru.DISPLAY_SUPERSEDED: 0,
+}
 
 
 def state_of_phase(phase: str) -> str:
-    """job 相位 -> 展示状态(未知/缺相位按 moving: 旧 state 条目补丁口径)"""
-    p = str(phase or ru.PHASE_MOVING)
-    if p in MOVING_PHASES:
-        return "moving"
-    if p in PENDING_PHASES:
-        return "pending_finalize"
-    if p == ru.PHASE_DONE:
-        return "done"
-    if p == ru.PHASE_FAILED:
-        return "failed"
-    if p == ru.PHASE_CANCELLED:
-        return "cancelled"
-    if p == ru.PHASE_SUPERSEDED:
-        return "superseded"
-    return "moving"
+    """job 相位 -> 展示状态(派生单点 = units.display_state_of_phase, 本入口薄委托)"""
+    return ru.display_state_of_phase(phase)
 
 
 def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:

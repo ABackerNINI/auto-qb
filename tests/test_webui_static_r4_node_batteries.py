@@ -2077,6 +2077,10 @@ global.document = {
 const mkList = () => Array.from({ length: N }, (_, i) => ({ hash: "t" + i }));
 const mkCtx = () => Object.assign({}, M, {
   rowWin: true,
+  // 0553 换键携带块(issue 26-11-11-0553)在 group kind 上读 this.filteredGroups —— 生产是
+  // filters.js 的 computed(恒为数组); 本桩只做行高电池、不建模筛选面, 给空集 = 无换键面,
+  // 两侧待领池恒空、携带分支零副作用, 不干扰本电池的任何判据。
+  filteredGroups: [],
   _winMeasured: { torrent: true, group: true, member: true, drawerContent: true },
   _rowH: { torrent: 50, group: 50, member: 50, drawerContent: 50 },
   _rowHVer: 1,

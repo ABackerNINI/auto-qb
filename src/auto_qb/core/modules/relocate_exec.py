@@ -1330,6 +1330,9 @@ class ExecMixin:
 
         守卫(黄金法则 2, 保守默认):
         - 头部必须存在且已是终态(在途账无清理入口, D5);
+        - 头部带恢复确认挂账(resume_pending 非空)缓行 —— 挂账是「需手动恢复」的常驻提示态,
+          整链删除会把挂账/resuming 登记/前端余量行一起静默带走(评审 major-2); 挂账闭合
+          后可再清;
         - 上游只带走 PHASE_SUPERSEDED 前任 —— done/failed/cancelled 记录不属「随新任务
           整链消亡」的移交历史, 保留(分级保留/清空历史是 S3 面);
         - I1 引用保护(比任务口径「活任务引用不可清」更保守): 任一候选仍被**保留账**
@@ -1338,12 +1341,22 @@ class ExecMixin:
           随后被清理, 下一次调用自然补清。
 
         返回实际清除的 job_id 清单(含头部; 空清单 = 头部不存在/在途/被守卫缓行)。
-        消费面: S3 的终态分级保留(成功滚动清理)与「清空历史」按钮直接调用本基元;
-        现行代码不存在终态账自动删除面(逐字核实, 计划 26-11-15-2340 §03.2/D3), 故本步无自动消费点。
+        消费面(S3 已接线, 计划 26-11-15-2340 §03.4/D3): prune_success_history(done 滚动
+        保留)与 relocate_clear_history(「清空历史」按钮)直接调用本基元。
         """
         data_dir = self._data_dir()
         head = self._jobs.get(job_id)
         if head is None or not head.is_terminal:
+            return []
+        if head.resume_pending:
+            # 挂账缓行(评审 major-2): 恢复确认账非空 = 「需手动恢复」的常驻提示态
+            # (穷尽后余量挂账, _sync_resuming 让路窗口与前端余量行都消费它)—— 整链删除
+            # 会把挂账/登记/前端余量行一起静默带走, 与 Q11「批量搬迁不得冲掉失败账」同一
+            # 精神; 挂账闭合(_reconcile_resume_pending 确认/闭账)后再清自然放行。
+            logger.info(
+                f"relocate | 整链清理: job {job_id} 仍带恢复确认挂账({len(head.resume_pending)} 个成员"
+                "待恢复), 缓行不清 —— 挂账闭合后可再清"
+            )
             return []
         # 沿 inherited 上溯收集候选(头部 + 全部可达的 superseded 前任; 坏形条目跳过)
         candidates = {job_id: head}
@@ -1420,6 +1433,81 @@ class ExecMixin:
                 logger.warning(f"relocate | 整链清理: {path} 删除失败({e})")
                 ok = False
         return ok
+
+    # ---------- S3 终态分级保留(D3/Q11, 计划 26-11-15-2340 §03.4) ----------
+
+    def prune_success_history(self) -> list:
+        """成功记录滚动保留(D3 + Q11 修正): done 终态账只留最近 20 条, 更老走整链清理基元
+
+        分级规则(§03.4): 成功(done)自动滚动; failed/cancelled 永不自动清(Q11: 批量
+        搬迁 >20 组不得冲掉失败账 —— 只有 done 参与计数); superseded 不经本计数(随接管
+        任务整链消亡, 由 purge_terminal_chain 连带); **带恢复确认挂账的 done 不参与滚出**
+        (评审 major-2: 挂账是「需手动恢复」的常驻提示态, 静默删账会把挂账/resuming 登记/
+        前端余量行一起带走 —— 候选集直接过滤, 基元侧守卫双保险; 挂账闭合后下一拍自然补滚)。
+        清理走 purge_terminal_chain 单点(整链消亡 + I1 缓行保护已有): 被 I1 缓行的候选
+        保留, 下一次 done 落账自然补试。
+
+        触发面(以代码事实定, 两处都是 done 账变更的收敛点):
+        - done 落账(_set_job 终态分支, relocate_mod): 每次成功收官后即时滚出超限旧账;
+        - 账接管(_load_jobs, relocate_mod): 启动/热启用恢复存量账后滚一次, 覆盖迁移器
+          转入的旧账与停机期间累积的超限账。
+        成本上界(保守最小实现, 评审 minor-5): 候选逐条走基元, 基元每轮非空清各付一次
+        整段落盘+快照重算 —— 最坏 = 存量超限条数 N 轮; job 账极小(条数 = 组数), 启动期
+        一次性成本有界, 不为省 N-1 次落盘引入批量清理的第二份链/I1 语义。
+        dry-run 不动手(清理是真写盘)。返回本次实际清除的 job_id 清单(测试观测面)。
+        """
+        if self._dry_run():
+            return []
+        done = sorted(
+            (
+                j for j in self._jobs.values() if j.phase == ru.PHASE_DONE and not j.resume_pending  # 挂账不滚(major-2)
+            ),
+            key=lambda j: (float(j.updated_at or 0.0), j.job_id),
+        )
+        stale = done[:max(0, len(done) - ru.DONE_HISTORY_KEEP)]
+        purged: list = []
+        for job in stale:
+            purged.extend(self.purge_terminal_chain(job.job_id))
+        return purged
+
+    def relocate_clear_history(self) -> dict:
+        """手动清空迁移历史(D5: 手动清空可整链清; D3 失败/取消记录的唯一清理入口)
+
+        遍历终态账逐个走整链清理基元(purge_terminal_chain): done/failed/cancelled 全清,
+        superseded 前任随各自链头连带。**只清终态账** —— 在途账没有清空面(D5: 撤销走
+        relocate_cancel, 不在本入口)。两类缓行账保留(清空不是强删), 明细留 INFO 并在
+        回执 note 分别点名: 其一带恢复确认挂账的账(评审 major-2: 挂账是「需手动恢复」的
+        常驻提示态, 删账即静默丢提示)—— 挂账闭合后再次清空即可补清; 其二其余未清除的
+        终态账 —— 归因兜底口径(I1 引用保护或盘面删除失败待重试, 基元还有第三类缓行:
+        journal/spec 删除失败保留账待重试, 该账无引用方), 原因明细以程序日志为准。
+        dry-run 不执行(真写盘)。永不抛: 盘面删除失败由基元内部保留账待重试, 回执如实
+        反映 remaining。
+        """
+        if self._dry_run():
+            return {"cls": "blocked", "note": "dry-run: 清空历史不执行", "cleared": 0, "remaining": 0}
+        terminal = [j for j in list(self._jobs.values()) if j.is_terminal]
+        cleared: set = set()
+        for job in terminal:
+            cleared.update(self.purge_terminal_chain(job.job_id))
+        rest = [j for j in self._jobs.values() if j.is_terminal]
+        held_resume = [j for j in rest if j.resume_pending]
+        held_ref = [j for j in rest if not j.resume_pending]
+        remaining = [{"job_id": j.job_id, "phase": j.phase} for j in rest]
+        note = f"已清空 {len(cleared)} 条终态记录(含整链前任)"
+        if held_resume:
+            note += (f"; {len(held_resume)} 条仍带恢复确认挂账(需手动恢复)本次缓行 —— 挂账闭合后再次清空即可补清")
+            logger.info(
+                "relocate | 清空历史: 缓行(恢复确认挂账) " +
+                ", ".join(f"{j.job_id}({j.phase}, {len(j.resume_pending)} 待恢复)" for j in held_resume)
+            )
+        if held_ref:
+            # 兜底口径(评审 minor-R2-2): held_ref = 挂账之外仍未清除的终态账, 除 I1 缓行外
+            # 还可能是盘面删除失败待重试(无引用方) —— note 不点名单一原因, 明细交程序日志。
+            note += (f"; {len(held_ref)} 条终态记录本次未能清除(I1 引用保护或盘面删除失败待重试), "
+                     "原因明细见程序日志")
+            logger.info("relocate | 清空历史: 未清除(I1 引用保护或盘面删除失败) " + ", ".join(f"{j.job_id}({j.phase})" for j in held_ref))
+        logger.info(f"relocate | 清空历史: 已清除 {len(cleared)} 条, 剩余 {len(remaining)} 条")
+        return {"cls": "ok", "cleared": len(cleared), "remaining": len(remaining), "note": note}
 
     # ---------- P3 执行入口(三入口共用) ----------
 

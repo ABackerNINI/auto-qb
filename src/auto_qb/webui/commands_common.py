@@ -161,6 +161,9 @@ DEFERRED_RECEIPT_COMMANDS = frozenset(
         "relocate_precheck",
         "relocate_precheck_add",
         "relocate_cancel",
+        # relocate_clear_history(S3 终态分级保留 D3/D5, 计划 26-11-15-2340 §03.4): 清空终态账
+        # 两步走(路由层 confirm 面 / 前端确认框先行), 回执由 handler 自写(truth 带 cleared/remaining/note)
+        "relocate_clear_history",
         # 种子转移(计划 26-10-31-0306 W3): 逐种子结果/版本信息经 truth 带出, handler 自写回执
         "transfer_run",
         "transfer_test",

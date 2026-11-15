@@ -404,6 +404,11 @@
           </div>
           <div v-for="(kv, i) in relPop.data.kv" :key="'k'+i" class="rp-kv"><span class="rp-k">{{ kv[0] }}</span><span class="rp-v">{{ kv[1] }}</span></div>
           <div v-if="relPop.data.reason" class="rp-reason">{{ relPop.data.reason }}</div>
+          <!-- 清空迁移历史(S3 D3/D5, 计划 26-11-15-2340 §03.4): 终态行的唯一手动清理入口,
+               确认框在 relPopClearHistory(confirmDialog + 路由层两步复核), 终态才亮(assembleRelPop.clearable) -->
+          <div v-if="relPop.data.clearable" class="rp-actions">
+            <button type="button" class="rp-clear" @click="relPopClearHistory()">清空迁移历史</button>
+          </div>
         </template>
       </div>
     </teleport>

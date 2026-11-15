@@ -398,6 +398,19 @@ class TorrentsMixin:
             (" | 三段式确认面已下发" if result.get("guide") else "")
         )
 
+    def _cmd_relocate_clear_history(self, cmd_id: str = ""):
+        """WEB UI 命令: 清空迁移历史(S3 终态分级保留 D3/D5, 计划 26-11-15-2340 §03.4) ——
+        转发 ctx.relocate.relocate_clear_history
+
+        确认在前端 confirmDialog + 路由层两步确认完成, 本 handler 只执行: 遍历终态账逐个
+        走 purge_terminal_chain 整链基元(done/failed/cancelled 全清, I1 缓行的账保留)。
+        回执形状: truth={cls, cleared, remaining, note}。
+        """
+        result = self.ctx.relocate.relocate_clear_history()
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok", truth=result)
+        logger.info(f"WEB UI | 清空迁移历史: cleared={result.get('cleared')} remaining={result.get('remaining')}")
+
     def _cmd_super_seeding(self, hash: str, enable: bool = False):
         self._torrent_action(hash, "torrents_set_super_seeding", f"超级做种({'开' if enable else '关'})", enable=enable)
 

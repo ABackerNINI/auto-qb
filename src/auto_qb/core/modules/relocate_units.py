@@ -92,6 +92,11 @@ PHASE_SUPERSEDED = "superseded"
 # 缺失/0 = 重构前旧账(可能携带改道机器的 plan.superseded_from 等退役字段), 1 = 已迁移
 # 到单活模型表示。新写账恒 >= 1, 迁移器据此幂等跳过(不重复转换、不重复备份)。
 MODEL_VERSION = 1
+# 成功记录滚动保留条数(D3 拍板 + Q11 修正, 计划 26-11-15-2340 §03.4): done 终态账自动
+# 滚动保留最近 20 条, 更老的经整链清理基元消亡; failed/cancelled 永不自动清(Q11: 批量
+# 搬迁不得冲掉失败账), superseded 随接管任务整链消亡不经本计数。常量非配置键(保留策略
+# 是产品决策不是用户调参面, 与 REBUILD_MAX_ATTEMPTS 同形态)。
+DONE_HISTORY_KEEP = 20
 TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED, PHASE_SUPERSEDED})
 # 收尾窗口(D16 变更承重): armed/rewritten 期间数据已在新位置、成员经别名做种 —— 此窗口内
 # 往旧根添加非本组种子, 其 save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖,
@@ -101,6 +106,45 @@ FINALIZE_WINDOW_PHASES = frozenset({PHASE_ARMED, PHASE_REWRITTEN})
 # 加上、进入终态时摘除; 标签只写不读, 迁移状态判定仍只认 state。(与 FINALIZE_WINDOW_PHASES
 # 同集: 收尾窗相位机重定义后标签窗口自动跟随, 保留独立名字以维持镜像语义的可读性。)
 PENDING_TAG_PHASES = frozenset(FINALIZE_WINDOW_PHASES)
+
+# ---- 展示状态派生(I3 单点, 计划 26-11-15-2340 §03.4「phase 是派生视图」) ----
+# phase -> 展示状态词的归并规则**只在本节一份**: 各消费面(webui views_relocate.state_of_phase
+# 等)一律调 display_state_of_phase, 不再各自维护归并表(旧 views_relocate 的 MOVING_PHASES/
+# PENDING_PHASES 本地副本已收编于此)。词表值随前端消费(decorate.js RELOCATE_STATE_TEXT),
+# 改值须同步前端词表。journal 侧的 STOP_PHASES(infra, 不反向 import core)与本文件
+# TERMINAL_PHASES 的同值配对由 tests/test_relocate_journal_merge.py 钉扎。
+DISPLAY_MOVING = "moving"  # 进行中(moving/watching)
+DISPLAY_PENDING_FINALIZE = "pending_finalize"  # 待收尾(moved/armed/rewritten)
+DISPLAY_DONE = "done"
+DISPLAY_FAILED = "failed"
+DISPLAY_CANCELLED = "cancelled"
+DISPLAY_SUPERSEDED = "superseded"  # 被接管(只读历史)
+# 前段相位/收尾窗相位两个派生中间集(展示归并的输入; 相位机判定面不消费 —— 判窗一律
+# 走 FINALIZE_WINDOW_PHASES 单点, 本集只服务「展示状态」这一个派生)。
+MOVING_PHASES = frozenset({PHASE_MOVING, PHASE_WATCHING})
+PENDING_PHASES = frozenset({PHASE_MOVED, PHASE_ARMED, PHASE_REWRITTEN})
+
+
+def display_state_of_phase(phase: str) -> str:
+    """job 相位 -> 展示状态词(未知/缺相位按 moving: 旧 state 条目补丁口径, 行为与旧
+    views_relocate.state_of_phase 逐值一致 —— 含旧账 removing/removed/finalizing 直入
+    未知支落 moving 的既有口径; 走 job_from_dict 的账已前向映射, 未知支只接账外杂值)"""
+    p = str(phase or PHASE_MOVING)
+    if p in MOVING_PHASES:
+        return DISPLAY_MOVING
+    if p in PENDING_PHASES:
+        return DISPLAY_PENDING_FINALIZE
+    if p == PHASE_DONE:
+        return DISPLAY_DONE
+    if p == PHASE_FAILED:
+        return DISPLAY_FAILED
+    if p == PHASE_CANCELLED:
+        return DISPLAY_CANCELLED
+    if p == PHASE_SUPERSEDED:
+        return DISPLAY_SUPERSEDED
+    return DISPLAY_MOVING
+
+
 # 旧账相位前向映射(S4 迁移口径: 运行中的旧 job 遇新代码按终态/非终态映射):
 # removing/removed/finalizing 都是旧链收尾窗非终态 -> 统一映射回 armed —— 别名在的照常
 # 对账, 已删的由对账 ACT_REBUILD 重建(重建路径幂等), 改写账 pending 交回收 daemon 接管;

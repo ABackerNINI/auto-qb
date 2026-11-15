@@ -702,3 +702,12 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rp-reason { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-soft, rgba(255, 255, 255, .07));
   color: var(--error, #f3766f); }
+/* 清空迁移历史按钮(S3 D3/D5, 计划 26-11-15-2340 §03.4): 终态行浮窗的footer动作, 确认框
+ * 在 relPopClearHistory; danger 口径复用 --error 令牌, 小号弱视觉(不与路径/键值行抢层级)。 */
+.rp-actions { margin-top: 7px; padding-top: 6px; border-top: 1px solid var(--border-soft, rgba(255, 255, 255, .07));
+  display: flex; justify-content: flex-end; }
+.rp-clear { font: inherit; font-size: 11px; padding: 2px 9px; cursor: pointer;
+  color: var(--error, #f3766f); background: transparent;
+  border: 1px solid var(--border-strong, #2c3944); border-radius: var(--radius-sm, 4px); }
+.rp-clear:hover { border-color: var(--error, #f3766f); }
+.rp-clear:disabled { opacity: .55; cursor: default; }

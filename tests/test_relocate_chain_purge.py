@@ -13,6 +13,8 @@
   账与盘面零触碰。
 - test_purge_keeps_non_superseded_terminal_upstream: 上游是 done/failed/cancelled 记录
   (非移交历史)不属整链消亡面, 保留(分级保留是 S3 面); 头部照常清除。
+- test_purge_spares_head_with_resume_pending: 头部带恢复确认挂账(resume_pending 非空)
+  缓行(评审 major-2) —— 账/盘面零触碰; 挂账清空后同一调用放行(闭合后可清)。
 """
 
 import os
@@ -120,3 +122,35 @@ def test_purge_keeps_non_superseded_terminal_upstream(tmp_path):
     assert mod.purge_terminal_chain("jr-2") == ["jr-2"]
     assert mod.get_job("jr-1") is not None, "done 记录不随链带走"
     assert os.path.exists(rj.journal_path(data_dir, "jr-1"))
+
+
+def test_purge_spares_head_with_resume_pending(tmp_path):
+    """挂账缓行(评审 major-2): 头部 resume_pending 非空 = 「需手动恢复」常驻提示态,
+    整链删除会把挂账/resuming 登记/前端余量行一起静默带走 —— 账/盘面零触碰; 挂账
+    清空(闭合)后同一基元放行(「闭合后可清」面)。"""
+    j1 = _job("jr-1", phase=ru.PHASE_SUPERSEDED, src="R:/src", dst="R:/mid")
+    j2 = _job(
+        "jr-2",
+        phase=ru.PHASE_DONE,
+        src="R:/mid",
+        dst="R:/end",
+        resume_hashes=("HZ", ),
+        resume_pending=("HZ", ),
+        plan={"inherited": [_entry("jr-1")]},
+    )
+    mod, data_dir = _chain_mod(tmp_path, [j1, j2])
+    for jid, phase in (("jr-1", "superseded"), ("jr-2", "done")):
+        _seed_disk(data_dir, jid, phase)
+
+    assert mod.purge_terminal_chain("jr-2") == []
+    assert mod.get_job("jr-2") is not None and mod.get_job("jr-2").resume_pending == ("HZ", )
+    assert os.path.exists(rj.journal_path(data_dir, "jr-2")), "挂账账盘面原样"
+    assert os.path.exists(rj.spec_path(data_dir, "jr-2"))
+    assert mod.get_job("jr-1") is not None, "挂账缓行连带前任保留(整链一个清理单元)"
+
+    # 挂账闭合(确认/闭账后 resume_pending 清空): 同一基元放行, 整链照常带走
+    from dataclasses import replace
+
+    mod._jobs["jr-2"] = replace(mod._jobs["jr-2"], resume_pending=())
+    assert mod.purge_terminal_chain("jr-2") == ["jr-2", "jr-1"]
+    assert mod.get_job("jr-2") is None and mod.get_job("jr-1") is None

@@ -643,6 +643,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             self._persist()  # 回写落账(状态盒; 磁盘刷盘仍由 state 服务周期兜底)
         self._sync_relocating()
         self._publish_snapshot()
+        # S3 终态分级保留(D3, 计划 26-11-15-2340 §03.4): 账接管完成后滚一次成功历史 ——
+        # 覆盖迁移器转入的旧账与停机期间累积的超限 done 账(触发面口径见 prune_success_history)
+        self.prune_success_history()
         # 账接管成功(含迁移器通过): 清热启用被拒标志(R2-1)—— 执行入口恢复按现配置放行
         self._hot_enable_rejected = False
         return n
@@ -726,6 +729,11 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._persist()
         self._publish_snapshot()
         self._sync_pending_tag(job)
+        # S3 终态分级保留(D3, 计划 26-11-15-2340 §03.4): done 落账即滚出超限旧账 ——
+        # 挂在标签镜像之后(本 job 是最新 done 恒保留, 滚出的只会是更老的 done 账),
+        # 清理基元自带落盘/快照/登记重算, 失败账(failed/cancelled)不参与计数(Q11)。
+        if job.phase == ru.PHASE_DONE:
+            self.prune_success_history()
         # 标签镜像可能改写 tag_on(_note_tag_state); 返回账上现值, 免得调用方拿旧对象继续
         # 推进相位时把「曾加标签」这一位覆盖回 False(终态就会漏摘标签)。
         return self._jobs.get(job.job_id, job)
