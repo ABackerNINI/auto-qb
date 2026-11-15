@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="flux-chip-e2e-failures">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="flux chip 两条 e2e 存量失败(干净 HEAD 同位复现)">
 <meta name="issue-summary" content="flux-cat-chip-hr-semantics 与 flux-site-chip-shape-glow 在 @fast 全量恒红, 干净 HEAD 差分实证与本分支改动无关">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-15-1359-test-flux-chip-e2e-failures</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-15 13:59</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -132,7 +132,12 @@
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
-  <div class="callout">待查(已排除: 计划 26-11-14-0624 分支改动 —— 干净 HEAD 差分同位复现)。</div>
+  <div class="callout"><b>两条都是断言过时, 实现无回归</b>(复验 2026-11-15, 单跑两条 spec 同位复现后逐条取证):
+    <ul>
+      <li><b>hr-semantics</b>: 报错为 strict mode violation —— <code>.dt01-hr .dt01-chip.is-hr</code> 命中 2 枚 chip(<code>hr-e2e</code> 标签 chip + <code>TV</code> 分类 chip)。抽屉 hero 的 HR 摘要条(<code>shared/drawer_tpl/01-general-hero-tall.js</code> <code>hrStrip</code>)按规则件渲染多枚 <code>is-hr</code> chip(hr_tag/hr_category 各一枚)是设计内行为; 桩自计划 26-11-12-1012 S3 起同时注入 <code>add_tag=hr-e2e</code>(<code>scripts/ui_harness.py</code>)与 <code>add_category=TV</code>, spec(计划 26-11-14-0001 S4, 源于 issue 26-11-12-1037)写的裸 <code>.is-hr</code> 严格定位没料到标签 chip 同场。</li>
+      <li><b>shape-glow</b>: <code>.f-on</code> hover 断言期望 <code>boxShadow === 'none'</code>, 实测拿到 <code>rgb(94, 234, 212) 2px 0px 0px 0px inset</code> = <code>--hr-done</code>(#5eead4)—— 是 <code>.cat-chip.hr-done</code> 的 <b>HR 左边线基线</b>(<code>flux/css/components.css:353</code> <code>inset 2px 0 0</code>), 不是 hover 辉光; hover 规则的 <code>:not(.f-on)</code> 排除分支完好(<code>fx-mount.css:330-335</code>)。spec 选样 <code>.cat-chip:not(.f-on).first()</code> 撞上 HR 态 chip, 文件头「基线无 box-shadow」的前提已失效。</li>
+    </ul>
+  </div>
 </section>
 
 <section id="s6">
@@ -144,11 +149,18 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 13:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-15 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-15 仍复现(两条 spec 各单跑 1 次同位红)。断言报错原文要点: ①hr-semantics —— <code>Error: 详情抽屉 hero 没有出现 HR 分类 chip(dt01-chip is-hr)…</code> 实为 <code>strict mode violation</code>, <code>.dt01-hr .dt01-chip.is-hr</code> 解析出 2 枚(<code>hr-e2e</code> / <code>TV</code>); ②shape-glow —— <code>.f-on chip hover 仍有辉光…</code> 实测 <code>Expected: "none" / Received: "rgb(94, 234, 212) 2px 0px 0px 0px inset"</code>。根因判定见 §05。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法(改断言, 与建议修法一致)</b>:</p>
+  <ul>
+    <li><code>e2e/flux-cat-chip-hr-semantics.spec.mjs</code>: 抽屉步严格定位改为 <code>drawer.locator('.dt01-hr .dt01-chip.is-hr', { hasText: /^TV$/ })</code>(按文本筛到分类 chip, 标签 chip 同场不再撞 strict), 断言仍要求文本精确 = <code>TV</code>, 未弱化。</li>
+    <li><code>e2e/flux-site-chip-shape-glow.spec.mjs</code>: f-on 样本选择改为 <code>'.cat-chip:not(.f-on):not(.hr-pending):not(.hr-done):not(.hr-excl)'</code>(排掉带 HR 左边线 box-shadow 基线的 hr-pending/hr-done chip, 并保守排掉 hr-excl —— 其左边线实为 1px dashed border, 基线 box-shadow 本就是 none), <code>'none'</code> 断言原样保留 —— 非 HR cat-chip 基线无 box-shadow, 该断言依旧精确检验「选中态不吃 hover 辉光」。</li>
+    <li>只改两条 spec 文件, 未动任何实现/CSS。</li>
+  </ul>
+  <p><b>验证方式与测试数字</b>(Windows 侧, npx playwright test, workers:1): 修复前单跑 = hr-semantics 1 failed / shape-glow 1 failed 1 passed; 修复后两条 spec 合跑 <code>3 passed (13.0s)</code>; 相邻受影响面定向组合(flux 两 spec + <code>flux-tag-cat-chip-glow</code> + <code>drawer-general-variants</code> 共 14 例)<code>14 passed (46.7s)</code>, 无新红。只改测试文件、未动实现, 按定向组合口径未跑 25 分钟 @fast 全量。</p>
 </section>
 
 <footer>

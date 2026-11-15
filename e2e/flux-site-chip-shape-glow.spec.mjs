@@ -188,8 +188,11 @@ for (const skin of FLUX) {
       await page.evaluate(() => document.documentElement.setAttribute('data-fx-preset', 'glass'));
 
       // .f-on(值已在筛选中): 点击 cat-chip 走真实筛选链路, hover 规则 :not(.f-on) 排除选中态。
-      // 用 cat-chip 做 f-on 样本: 基线无 box-shadow(border 供给), 'none' 断言不被基线 inset 干扰。
-      const cat = page.locator('.cat-chip:not(.f-on)').first();
+      // 用 cat-chip 做 f-on 样本: 基线无 box-shadow(border 供给), 'none' 断言不被基线 inset 干扰
+      // —— 必须显式排掉 HR 三态 chip: hr-pending/hr-done 的 HR 左边线是基线 box-shadow
+      // (components.css inset 2px 0 0), 撞上它 'none' 断言会被基线 inset 打红(非 hover 辉光)。
+      const cat = page.locator(
+        '.cat-chip:not(.f-on):not(.hr-pending):not(.hr-done):not(.hr-excl)').first();
       await cat.scrollIntoViewIfNeeded().catch(() => {});
       await cat.click();
       await expect(page.locator('.cat-chip.f-on').first()).toBeVisible({ timeout: 5_000 });

@@ -112,13 +112,17 @@ test.describe('flux HR 分类 chip 三态', () => {
     expect(excl.bg, `排除 chip 背景(${excl.bg})不透明 —— 排除态应转灰(transparent 底)`).toBe('rgba(0, 0, 0, 0)');
 
     // 4. 抽屉: pending 行双开详情 -> hero 出现 dt01-chip is-hr(文本 = hr_category 展开值 "TV")
+    //    hero 的 HR 摘要条按规则件渲染多枚 is-hr chip(hr_tag/hr_category 各一枚,
+    //    01-general-hero-tall.js hrStrip)—— 桩同时注入 add_tag=hr-e2e(26-11-12-1012 S3)
+    //    与 add_category=TV, 所以严格定位必须按文本筛到分类 chip, 裸 .is-hr 会撞 strict 双命中。
     await searchTorrents(page, 'x265-GROUP82', '.torrent-row.s-seeding:has(.cat-chip.hr-pending)');
     const row = page.locator('.torrent-row.s-seeding:has(.cat-chip.hr-pending)').first();
     await row.dblclick({ force: true }); // force: 整表 2s 重渲染抢点击(drawer-dock-stability 同款)
     const drawer = page.locator('.drawer-dock > .drawer');
     await expect(drawer).toBeVisible({ timeout: 5_000 });
-    await expect(drawer.locator('.dt01-hr .dt01-chip.is-hr'),
-      '详情抽屉 hero 没有出现 HR 分类 chip(dt01-chip is-hr) —— 抽屉 2 行绑定断了(D6 修复面)')
+    await expect(drawer.locator('.dt01-hr .dt01-chip.is-hr', { hasText: /^TV$/ }),
+      '详情抽屉 hero 没有出现 HR 分类 chip(dt01-chip is-hr, 文本=hr_category 展开值 "TV") ' +
+      '—— 抽屉 2 行绑定断了(D6 修复面)')
       .toHaveText('TV', { timeout: 5_000 });
   });
 });
