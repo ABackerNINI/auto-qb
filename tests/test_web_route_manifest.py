@@ -117,7 +117,7 @@ _GOLDEN_ROUTES = {
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 93 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 94 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     (2026-10-07 编辑 tracker 下线, plan 26-10-07-0055 S2: 减 POST /api/torrents/{hash}/trackers/edit, 77->76;
      2026-10-16-0541 S6: 增 3 条 /api/traffic/monitor/* —— 全局流量监视器工具联动代理;

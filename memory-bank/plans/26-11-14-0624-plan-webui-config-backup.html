@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-config-backup">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-14-0624">
-<meta name="doc-updated" content="26-11-15-1326">
+<meta name="doc-updated" content="26-11-15-1339">
 <meta name="doc-refs" content="memory-bank/issues/26-11-14-0625-feat-webui-config-import-diff.html,memory-bank/tasks/26-11-14-webui-config-backup.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 配置导出/导入（配置备份 bundle）</h1>
 <p class="lede">本篇只回答: WEBUI「配置导出/导入（配置备份 bundle）」怎么做 —— bundle 打包哪四面、敏感值与导入语义怎么定、入口与登记闸落在哪。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-14-0624 · <b>doc-updated</b> 26-11-15-1326 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-14-0624 · <b>doc-updated</b> 26-11-15-1339 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-14 用户指令「WEBUI 新增导出/导入 config/WEBUI 配置功能」· grilling 12 问拍板（D1-D12）· 三路只读取证（配置系统 / webui API 面 / gtm 机制）
 </div>
 
@@ -145,8 +145,9 @@
   "config_yaml": "&lt;掩码化 YAML 原文, 注释保留&gt;",
   "webui_keys": { "schema_version": 1, "template": "...", "overrides": { ... } },
   "gtm": { "config": { ...13 键合并树含 v2 键... }, "tool_version": "...", "captured_at": "..." },
-  "ui_prefs": { "autoqb.ui.theme": "...", "autoqb_cols_v5": { ... }, "...": "..." }
+  "ui_prefs": { "autoqb.ui.theme": "...", "autoqb_cols_v5": "...", "...": "..." }
 }</code></pre>
+<p>ui_prefs 段值恒为 localStorage 原文字符串, 不做 JSON 二次解析（<code>autoqb_cols_v5</code> 等列状态键本体是 JSON 串, 进 bundle 时仍是原文字符串）。</p>
 <ul>
   <li>gtm 离线导出时该段为 <code>null</code>；缺段 = 不含该面；导入对未知 section（顶层）<b>忽略 + warnings</b>（向前兼容）；section 信封内未知键忽略不报错——<b>gtm.config 例外</b>：未知键由工具侧校验整份拒绝（gtm/config.py:250,260-261）→ 400 → warnings → 该段不应用（见 R3）。</li>
   <li>文件名 <code>auto-qb-backup-&lt;YYYYMMDD-HHMMSS&gt;.json</code>。</li>
@@ -179,7 +180,7 @@
   <li>前端新文件 <code>static/shared/ui_prefs.js</code>：PREF_KEYS / PREF_EXCLUDED 双清单单点 + collect()/apply()（<code>window.AQB_*</code> mixin 惯例，manifest scripts 排 app.js 前）。</li>
   <li>按钮：设置页 actbar <code>.hb-actbar .ab-r</code>「放弃改动」左（<code>settings-detail.html:515-522</code>，常显不随脏态隐藏）——shared 模板四皮肤自动 parity，无 ui-diff 分支。</li>
   <li>登记闸（D8/D11）：新守阵 <code>tests/test_webui_static_ui_prefs.py</code> —— 扫 static/ 全部 JS 里 localStorage/sessionStorage 键族字面量（前缀 <code>autoqb.</code>/<code>autoqb_</code>/<code>gtm.</code> 两族形态都收，防下划线键逃出登记闸；扫描面<b>限存储键字面量及其 const 单键定义</b>——<code>document.cookie</code> 赋值（<code>autoqb_ui</code>，下文已拍板不入本期）与事件名（<code>autoqb:*</code> 冒号族）不在闸内），每个键必须 ∈ PREF_KEYS ∪ PREF_EXCLUDED 否则红；双清单与 ui_prefs.js 源码交叉验证（两侧一致性守阵先例：keys 串正则两侧守阵）；负例自钉。</li>
-  <li>脏态交互（D12）：导出恒读磁盘，<code>cfgDirty</code> 时提示「导出的是已保存配置，未保存改动不含在内」不阻断；导入时 <code>cfgDirty</code> 先弹「未保存改动将丢失」，确认后先 <code>cfgDiscard()</code> 再走三闸。</li>
+  <li>脏态交互（D12）：导出恒读磁盘，<code>cfgDirty</code> 时提示「导出的是已保存配置，未保存改动不含在内」不阻断；导入时 <code>cfgDirty</code> 先弹「未保存改动将丢失」，确认后先 <code>cfgLoad()</code> 重拉磁盘树再走三闸（不走 <code>cfgDiscard()</code>, 免双重确认弹窗）。</li>
 </ul>
 
 <h3>双清单初版（实施时以 grep 实测为准）</h3>
@@ -257,6 +258,7 @@
   <li><span class="tag">R0 · 26-11-14-0624</span> 初版：grilling 12 问拍板 D1-D12（打包形态/掩码/浏览器偏好/gtm/运行时数据/导入语义/入口/双清单/通道/机器路径/登记闸/脏态）+ 三路只读取证（配置系统、webui API 面、gtm 机制）；计划入库 Open；diff 预览移出本期入池 <a href="../issues/26-11-14-0625-feat-webui-config-import-diff.html">26-11-14-0625-feat-webui-config-import-diff</a>；S1-S5 待显式开工。</li>
   <li><span class="tag">R1 · 26-11-15-1218</span> S1-S5 落地(Done): S1 导出 fbaae3d5 + S2 导入 9b8ff460 + S3 前端 d2bba5f0 + S4 守阵 c85e53bd + S5 收尾回写; 实测 test.full/test.quick 终态 6238 passed / 2 skipped(基线切片 26-11-15-1253; 覆盖率闸缺口已回补 +19 用例, 覆盖 99.61% 过闸), e2e prism/atlas 12 例全过; 范围外列报: @fast 全量 4 例存量 e2e 失败与本分支无关(干净 HEAD 差分实证, 待入池), 真机目检(导出→改乱→导入还原 round-trip)待用户; 金清单 92→94; diff 预览仍留池 26-11-14-0625</li>
   <li><span class="tag">R2 · 26-11-15-1326</span> 评审复评 minor 补修: R1 行内容已在修复轮修订至终态(6238 passed/2 skipped, 基线切片 26-11-15-1253, 覆盖率缺口回补+19 用例 99.61%, 范围外补列「真机目检待用户」)但落盘时未抬 doc-updated —— 本行补记该次修订并抬时间戳</li>
+  <li><span class="tag">R3 · 26-11-15-1339</span> 收口接缝终审文档级漂移补修 2 条(nit): §03 脏态交互改终态口径 —— 导入脏态确认后先 cfgLoad() 重拉磁盘树再走三闸, 不走 cfgDiscard() 免双重确认弹窗; §03 bundle 示例 ui_prefs 段值改原文字符串形态并注明恒为 localStorage 原文不做 JSON 二次解析(另: tests/test_web_route_manifest.py 冻结守阵 docstring 93→94 条同步, 非本计划件)</li>
 </ul>
 
 </div>
