@@ -294,11 +294,11 @@
     const done = n.dir ? n.done : n.size * (n.prog / 100);
     const chips = isDir
       ? (n.miss > 0.5
-        ? T`<span class="dt10-stchip warn" title="子树内 ${n.files - countDone(n)} 个文件仍有缺口">未完成 ${n.files - countDone(n)} 个 · 缺 ${ctxOf().fmtSize(n.miss)}</span>`
-        : T`<span class="dt10-stchip ok" title="子树内全部文件均已完整">全部完整</span>`)
+        ? T`<span class="dt10-stchip warn">未完成 ${n.files - countDone(n)} 个 · 缺 ${ctxOf().fmtSize(n.miss)}</span>`
+        : T`<span class="dt10-stchip ok">全部完整</span>`)
       : (n.prog < 100
         ? T`<span class="dt10-stchip warn" title="按块校验存在缺口, 有源可补">缺块 ${ctxOf().fmtSize(n.miss)}</span>`
-        : T`<span class="dt10-stchip ok" title="该文件全部块均已完整">已完成</span>`);
+        : T`<span class="dt10-stchip ok">已完成</span>`);
     const skipChip = (!isDir && n.prio === 0)
       ? T`<span class="dt10-stchip skip" title="优先级为不下载: 不参与下载, 已有数据保留">不下载</span>` : "";
     const avCell = hasAv

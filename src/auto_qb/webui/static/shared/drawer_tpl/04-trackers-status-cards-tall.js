@@ -275,7 +275,7 @@
       const act = ui.filter === p.f ? " active" : "";
       const text = p.text || BUCKET[p.f].text; /* 桶名读单源表(「全部」胶囊自带文案) */
       const dot = p.cls ? T`<span class="pdot ${p.cls}"></span>` : T`<span class="pdot" style="background:var(--fg-dim)"></span>`;
-      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}" title="${p.tip}">${R(dot)}${text} <b>${cnt}</b></button>`;
+      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}">${R(dot)}${text} <b>${cnt}</b></button>`;
     }).join("");
     /* 排序分段钮(active 态读引擎 dyn 键): 手搓分段排序态退役, 直设走 dtSortSet */
     const sortKey = ctx.dtSortCell(TABLE_ID).key || "sev";

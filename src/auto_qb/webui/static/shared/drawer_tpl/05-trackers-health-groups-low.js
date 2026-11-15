@@ -310,7 +310,7 @@
     return T`<section class="dt05-group dt05-g-${g.key}${folded}${hidden ? " dt05-hide" : ""}" data-grp="${g.key}">
       <!-- P3-4: 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt05-ghead" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
-           data-fold title="点击折叠 / 展开">
+           data-fold">
         <span class="dt05-badge"><i></i>${g.text} ${ms.length}</span>
         <b>${g.text}</b>
         <span class="dt05-cnt">${g.cnt}</span>

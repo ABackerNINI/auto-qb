@@ -441,7 +441,7 @@
       }
     }
     const foot = checkedIdx.length
-      ? T`<div class="dt11-foot" title="批量优先级走 files/priority indices 数组, 一次提交">
+      ? T`<div class="dt11-foot">
           <span>已选 <b>${checkedIdx.length}</b> 个文件 · <b>${ctxOf().fmtSize(checkedSize)}</b>${R(checkedMiss > 0 ? T` · <b class="w">缺 ${ctxOf().fmtSize(checkedMiss)}</b>` : "")}</span>
           <span class="sp"></span>
           ${R(PRIO_CYCLE.map((p) => T`<button type="button" class="dt11-bp ${p === 0 ? "skip" : p === 7 ? "max" : p === 6 ? "high" : ""}" data-bp="${p}"

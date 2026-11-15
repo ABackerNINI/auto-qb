@@ -302,7 +302,7 @@
     const lan = list.filter((p) => P.isLanIp(p.ip)).length;
     const bad = list.filter(P.isBad);
     const alert = bad.length
-      ? T`<div class="dt07-alert" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示无动作(计划 P-04 口径)">
+      ? T`<div class="dt07-alert" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示无动作">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
           吸血嫌疑 <b>${bad.length}</b> · 拿 ${fmtSizeOf(bad.reduce((s, p) => s + num(p.downloaded), 0))}
           回 ${fmtSizeOf(bad.reduce((s, p) => s + num(p.uploaded), 0))}
@@ -313,7 +313,7 @@
       <div class="dt07-chips">
         <span class="dt07-chip c-accent" title="加密连接的对端数(E flag) / 总连接">加密 <b>${enc}/${total}</b></span>
         <span class="dt07-chip c-blue" title="走 uTP 传输的对端数(P flag)">uTP <b>${utp}/${total}</b></span>
-        <span class="dt07-chip c-warn" title="IPv6 地址的对端数">IPv6 <b>${v6}</b></span>
+        <span class="dt07-chip c-warn">IPv6 <b>${v6}</b></span>
         <span class="dt07-chip c-green" title="局域网直连对端(私有地址段启发式), 不占公网带宽">内网 <b>${lan}</b></span>
       </div>
       ${R(alert)}

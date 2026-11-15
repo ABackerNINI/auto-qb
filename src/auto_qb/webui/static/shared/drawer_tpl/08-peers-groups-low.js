@@ -274,7 +274,7 @@
     return T`<section class="dt08-grp g-${g.key}${folded}${hidden ? " dt08-hide" : ""}" data-grp="${g.key}">
       <!-- P3-4: 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt08-ghead" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
-           data-fold title="${g.tip} · 点击折叠 / 展开">
+           data-fold title="${g.tip}">
         <svg class="ico ico-sm dt08-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
         <span class="dt08-dot" style="background:var(${g.color})"></span>
         <span class="dt08-gname">${g.text}</span>
