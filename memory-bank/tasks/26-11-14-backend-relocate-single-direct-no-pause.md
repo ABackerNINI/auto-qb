@@ -3,10 +3,10 @@
 **Status:** In Progress
 **Added:** 2026-11-14
 **Updated:** 2026-11-15
-**Summary:** 单成员 direct 搬迁免暂停: grilling 三轮取证拍板 D1-D6/D4a + 计划 26-11-14-1741 入库 + 邻接面两件与新想法一件入池(topic relocate-move-window); S1-S3 已实施(a2c9e425, 210 行批, 评审 0 blocker/major + 1 nit 维持原文), S4(test.full + 基线切片)待跑
+**Summary:** 单成员 direct 搬迁免暂停: grilling 三轮取证拍板 D1-D6/D4a + 计划 26-11-14-1741 入库 + 邻接面两件与新想法一件入池(topic relocate-move-window); S1-S3 已实施(a2c9e425, 210 行批, 评审 0 blocker/major + 1 nit 维持原文), S4 完成(test.full 全绿见 kb.baseline, 基线切片 26-11-15-0917)
 **Topics:** backend-relocate-single-direct-no-pause
 
-**Refs:** memory-bank/plans/26-11-14-1741-plan-relocate-single-direct-no-pause.html, memory-bank/active-context/26-11-15-0900-backend-relocate-single-direct-no-pause.md
+**Refs:** memory-bank/plans/26-11-14-1741-plan-relocate-single-direct-no-pause.html, memory-bank/active-context/26-11-15-0900-backend-relocate-single-direct-no-pause.md, memory-bank/testing/baselines/26-11-15-0917-backend-relocate-single-direct-no-pause.md
 
 ## 本篇只回答
 
@@ -39,7 +39,7 @@
 | G2 | 计划 26-11-14-1741 立档(Open) | Done(2026-11-14) |
 | G3 | 邻接面/新想法三件入池(topic relocate-move-window) | Done(2026-11-14) |
 | S1-S3 | 计划实施(完成态 helper/豁免判据/电池/文档回写) | Done(2026-11-15) |
-| S4 | test.full + 基线切片 | Open |
+| S4 | test.full + 基线切片 | Done(2026-11-15) |
 
 ## 进度日志
 
@@ -56,3 +56,5 @@ S1/S2/S3 完成(commit a2c9e425, 5 文件 210 行): `relocate_units.is_complete_
 评审: 只读子代理(基 b267f0c12b27)评 210 行批 → 0 blocker/major, 1 nit(豁免 note 措辞「做种中」对 pausedUP/stoppedUP 已停完成态与实际状态不符; 措辞系计划 §03 原文, 裁决维持原文不改); 引文校验检 1/1 通过。
 
 - 2026-11-15 09:00 实施批 S1-S3 收尾回写(叙事见上方 R1); S4(test.full + 基线切片)待跑
+
+- 2026-11-15 09:18 S4 收尾: test.full 全绿(见 kb.baseline) + 基线切片 26-11-15-0917 入库, 档案 S4 翻 Done
