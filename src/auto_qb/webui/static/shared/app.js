@@ -935,6 +935,7 @@ app.mixin(window.AQB_AUTH);
 app.mixin(window.AQB_POLL);
 app.mixin(window.AQB_VIEW);
 app.mixin(window.AQB_SHORTCUTS);  // 键盘快捷键引擎(计划 26-09-28-0354 W1; data 在 state.js / 监听在 lifecycle.js)
+app.mixin(window.AQB_UI_PREFS);  // 配置备份双钮 + 浏览器偏好 ui_prefs 段(计划 26-11-14-0624 S3; 双清单/collect/apply 在 ui_prefs.js)
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
 /* 「流量与限速」合并卡(计划 26-10-18-0813 B3): 设置页二级页的一个分区整体抽成组件,
  * 卡内三区(数据来源 / 限速曲线 / 流量图采样)见 shared/tpl/traffic-card.html 头注。

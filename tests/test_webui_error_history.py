@@ -113,6 +113,8 @@ STORAGE_WRITE_BASELINE = {
         3,  # qbWinGlobal/qbWinShared + qbYAxis{Global,Torrent,Group}(纵轴固定模式, 2026-10-08) + qbFx(动效参数 autoqb.ui.qbFx, R8 plan 26-11-12-1139 §05.5)
     "view.js": 2,  # 视图选择
     "dialogs.js": 1,  # gtm.spike.ack: GTM 虚高告警本机消警键值=gtm_anomaly.ts(计划 26-11-03-1102 S7c/D5, 不写服务端)
+    "ui_prefs.js": 1,  # 配置备份导入的 ui_prefs 写回(aqbUiPrefsApply, 计划 26-11-14-0624 S3/D3): 只写 PREF_KEYS
+    # 内的既有偏好键原文字符串, 键面由双清单守阵(tests/test_webui_static_ui_prefs.py)对账, 零新键
 }
 
 
