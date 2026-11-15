@@ -189,7 +189,7 @@
     return T`<section class="dt03-sec${folded}" data-sec="${id}">
       <!-- P3-4(报告 26-10-07-0542): 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt03-sec-h" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
-           data-fold title="点击折叠 / 展开">
+           data-fold>
         <svg class="ico ico-sm dt03-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
         <b>${title}</b><span class="dt03-cnt">${count} 项</span>
       </div>
@@ -203,7 +203,7 @@
     const tone = SEEDING_STATES.indexOf(d.state) >= 0 ? ""
       : (d.state === "downloading" || d.state === "forcedDL" || d.state === "stalledDL" || d.state === "metaDL" ? " is-dl" : " is-pause");
     const pct = ((d.progress || 0) * 100).toFixed(1);
-    return T`<div class="dt03-status" title="state / progress / amount_left">
+    return T`<div class="dt03-status">
       <span class="dt03-badge${tone}"><i></i>${st}</span>
       <span class="dt03-progress"><i style="width:${pct}%"></i></span>
       <span class="dt03-pct">${pct}%</span>
@@ -241,14 +241,14 @@
 
   /* 右栏标识行(带复制) */
   function crow(label, text, act, extra, icon) {
-    return T`<div class="dt03-crow" title="${label}">
+    return T`<div class="dt03-crow">
       ${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v">${text}</span>
       <button type="button" class="dt03-act" data-act="${act}" title="复制${extra || label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>
     </div>`;
   }
 
   function sideKv(label, text, cls, icon) {
-    return T`<div class="dt03-kv" title="${label}">${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v${cls ? " " + cls : ""}">${text}</span></div>`;
+    return T`<div class="dt03-kv">${icon ? icoSvg(icon) : ""}<span class="k">${label}</span><span class="v${cls ? " " + cls : ""}">${text}</span></div>`;
   }
 
   function render(host, ctx) {
@@ -280,13 +280,13 @@
     /* ---- 右栏 ---- */
     /* 归属徽章(渐进) */
     const chipsOut = [];
-    if (present(d.site) && d.site !== "") chipsOut.push(T`<span class="dt03-chip is-accent is-mono" title="site">${d.site}</span>`);
-    if (present(d.category) && d.category !== "") chipsOut.push(T`<span class="dt03-chip is-blue" title="category">${d.category}</span>`);
+    if (present(d.site) && d.site !== "") chipsOut.push(T`<span class="dt03-chip is-accent is-mono">${d.site}</span>`);
+    if (present(d.category) && d.category !== "") chipsOut.push(T`<span class="dt03-chip is-blue">${d.category}</span>`);
     for (const tag of String(d.tags || "").split(",")) {
       const t = tag.trim();
-      if (t) chipsOut.push(T`<span class="dt03-chip is-hr" title="tags">${t}</span>`);
+      if (t) chipsOut.push(T`<span class="dt03-chip is-hr">${t}</span>`);
     }
-    if (d.private) chipsOut.push(T`<span class="dt03-chip" title="private">私有站点</span>`);
+    if (d.private) chipsOut.push(T`<span class="dt03-chip">私有站点</span>`);
     const chipsHtml = chipsOut.length
       ? T`<div class="dt03-side-sub">归属</div><div class="dt03-chips">${R(chipsOut.join(""))}</div>` : "";
 
@@ -343,7 +343,7 @@
 
     const html = T`<div class="dt03-wrap">
       <div class="dt03-main">${R(mainHtml)}</div>
-      <aside class="dt03-side" title="元信息栏: site / category / tags / 标识 / 限速 / 扩展字段">
+      <aside class="dt03-side">
         <div class="dt03-side-h"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>元信息</div>
         ${R(chipsHtml)}${R(idHtml)}${R(srcHtml)}${R(limHtml)}${R(extHtml)}
       </aside>

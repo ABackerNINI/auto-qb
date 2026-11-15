@@ -194,28 +194,28 @@
     const pct = ((d.progress || 0) * 100).toFixed(1);
     const up = ctx.fmtSpeedOrDash(d.upspeed) || "—";
     return T`<div class="dt01-hero">
-      <div title="progress / amount_left / availability">
+      <div>
         <span class="dt01-k">进度</span>
         <span class="dt01-v is-green">${pct}<span class="u">%</span></span>
         <span class="dt01-bar"><i style="width:${pct}%"></i></span>
         <span class="dt01-s">剩余 ${size(ctx, d.amount_left)} · 可用性 ${(d.availability ?? 0).toFixed(2)}</span>
       </div>
-      <div title="ratio / uploaded / downloaded">
+      <div>
         <span class="dt01-k">分享率</span>
         <span class="dt01-v">${(d.ratio ?? 0).toFixed(2)}</span>
         <span class="dt01-s">上传 ${size(ctx, d.uploaded)} · 下载 ${size(ctx, d.downloaded)}</span>
       </div>
-      <div title="upspeed / dlspeed">
+      <div>
         <span class="dt01-k">上传速度</span>
         <span class="dt01-v is-up">${up}</span>
         <span class="dt01-s">下载 ${ctx.fmtSpeedOrDash(d.dlspeed) || "—"}</span>
       </div>
-      <div title="num_seeds(num_complete) / num_leechs(num_incomplete)">
+      <div>
         <span class="dt01-k">做种数 / 用户</span>
         <span class="dt01-v">${peerNum(d.num_seeds)}<span class="u">/ ${peerNum(d.num_leechs)}</span></span>
         <span class="dt01-s">swarm ${ctx.fmtPeersQb(d.num_seeds, d.num_complete) || "—"} · 连接 ${peerNum(d.connections_count)} / ${connLimit(d.connections_limit)}</span>
       </div>
-      <div title="reannounce_in / trackers_count">
+      <div>
         <span class="dt01-k">下次重新汇报</span>
         <span class="dt01-v">${dur(ctx, d.reannounce_in || d.reannounce, "—")}</span>
         <span class="dt01-s">tracker ${d.trackers_count ?? 0} 个</span>
@@ -229,15 +229,15 @@
     const st = STATE_TEXT[d.state] || d.state || "";
     if (st) {
       const cls = SEEDING_STATES.indexOf(d.state) >= 0 ? " is-green" : (d.state === "downloading" || d.state === "forcedDL" ? " is-blue" : "");
-      out.push(T`<span class="dt01-chip${cls}" title="state">${st}</span>`);
+      out.push(T`<span class="dt01-chip${cls}">${st}</span>`);
     }
-    if (present(d.site)) out.push(T`<span class="dt01-chip is-accent is-mono" title="site">${d.site}</span>`);
-    if (present(d.category) && d.category !== "") out.push(T`<span class="dt01-chip is-blue" title="category">${d.category}</span>`);
+    if (present(d.site)) out.push(T`<span class="dt01-chip is-accent is-mono">${d.site}</span>`);
+    if (present(d.category) && d.category !== "") out.push(T`<span class="dt01-chip is-blue">${d.category}</span>`);
     for (const tag of String(d.tags || "").split(",")) {
       const t = tag.trim();
-      if (t) out.push(T`<span class="dt01-chip" title="tags">${t}</span>`);
+      if (t) out.push(T`<span class="dt01-chip">${t}</span>`);
     }
-    if (d.private) out.push(T`<span class="dt01-chip" title="private">私有站点</span>`);
+    if (d.private) out.push(T`<span class="dt01-chip">私有站点</span>`);
     if (!out.length) return "";
     return T`<div class="dt01-chips">${R(out.join(""))}</div>`;
   }
@@ -261,7 +261,7 @@
     return T`<section class="dt01-sec${folded}" data-sec="${sec.title}">
       <!-- P3-4(报告 26-10-07-0542): 折叠组头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt01-sec-h" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
-           data-fold title="点击折叠 / 展开">
+           data-fold>
         <svg class="ico ico-sm dt01-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
         <b>${sec.title}</b><span class="dt01-cnt">${sec.rows.length} 项</span>
         ${sec.sum ? R(T`<span class="dt01-sum">${sec.sum}</span>`) : ""}

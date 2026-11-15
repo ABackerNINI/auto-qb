@@ -154,7 +154,7 @@
   function limitRow(ctx, label, v) {
     if (v === undefined || v === null || v < 0) return "";
     const txt = v === 0 ? "不限" : ctx.fmtSpeed(v);
-    return T`<div class="dt02-kv" title="${label === "上传限制" ? "up_limit" : "dl_limit"}"><span class="k">${label}</span><span class="v${v === 0 ? " is-dim" : ""}">${txt}</span></div>`;
+    return T`<div class="dt02-kv"><span class="k">${label}</span><span class="v${v === 0 ? " is-dim" : ""}">${txt}</span></div>`;
   }
 
   function kv(label, text, dim, icon) {
@@ -168,7 +168,7 @@
     return T`<section class="dt02-card${folded}${tone}" data-card="${id}">
       <!-- P3-4(报告 26-10-07-0542): 折叠卡头纯 div 模拟控件补键盘达(role=button + tabindex + aria-expanded) -->
       <div class="dt02-card-h" role="button" tabindex="0" aria-expanded="${folded ? "false" : "true"}"
-           data-fold title="点击折叠 / 展开">
+           data-fold>
         <b>${title}</b><span class="dt02-cnt">${cnt}</span>
         <svg class="ico ico-sm dt02-chev" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
       </div>
@@ -210,10 +210,10 @@
       if (req.length) bits.push(T`<div class="dt02-hr-req">${req.join(" · ")}</div>`);
       if (d.hr_site_lane) {
         if (d.hr_site_need !== "" && d.hr_site_need !== undefined && d.hr_site_need !== null) {
-          bits.push(T`<div class="dt02-hr-need" title="hr_site_need"><span class="k">站点侧还需做种</span><span class="v">${ctx.fmtDuration(d.hr_site_need)}</span></div>`);
+          bits.push(T`<div class="dt02-hr-need"><span class="k">站点侧还需做种</span><span class="v">${ctx.fmtDuration(d.hr_site_need)}</span></div>`);
         }
         if (d.hr_site_remain !== "" && d.hr_site_remain !== undefined && d.hr_site_remain !== null) {
-          bits.push(T`<div class="dt02-hr-need" title="hr_site_remain"><span class="k">${d.hr_site_remain === 0 ? "站点侧已达标" : "站点侧剩余达标"}</span><span class="v">${ctx.fmtDuration(d.hr_site_remain)}</span></div>`);
+          bits.push(T`<div class="dt02-hr-need"><span class="k">${d.hr_site_remain === 0 ? "站点侧已达标" : "站点侧剩余达标"}</span><span class="v">${ctx.fmtDuration(d.hr_site_remain)}</span></div>`);
         }
       }
     }
@@ -239,15 +239,15 @@
     const st = STATE_TEXT[d.state] || d.state || "";
     if (st) {
       const cls = SEEDING_STATES.indexOf(d.state) >= 0 ? " is-green" : (d.state === "downloading" || d.state === "forcedDL" ? " is-blue" : "");
-      chipsOut.push(T`<span class="dt02-chip${cls}" title="state">${st}</span>`);
+      chipsOut.push(T`<span class="dt02-chip${cls}">${st}</span>`);
     }
-    if (present(d.site) && d.site !== "") chipsOut.push(T`<span class="dt02-chip is-accent is-mono" title="site">${d.site}</span>`);
-    if (present(d.category) && d.category !== "") chipsOut.push(T`<span class="dt02-chip is-blue" title="category">${d.category}</span>`);
+    if (present(d.site) && d.site !== "") chipsOut.push(T`<span class="dt02-chip is-accent is-mono">${d.site}</span>`);
+    if (present(d.category) && d.category !== "") chipsOut.push(T`<span class="dt02-chip is-blue">${d.category}</span>`);
     for (const tag of String(d.tags || "").split(",")) {
       const t = tag.trim();
-      if (t) chipsOut.push(T`<span class="dt02-chip is-hr" title="tags">${t}</span>`);
+      if (t) chipsOut.push(T`<span class="dt02-chip is-hr">${t}</span>`);
     }
-    if (d.private) chipsOut.push(T`<span class="dt02-chip" title="private">私有站点</span>`);
+    if (d.private) chipsOut.push(T`<span class="dt02-chip">私有站点</span>`);
     const chipsHtml = chipsOut.length ? T`<div class="dt02-chips">${R(chipsOut.join(""))}</div>` : "";
 
     /* 标识卡: 哈希 v1/v2(带复制)+ 分块(magnet 行已退役, issue 26-11-09-0639) */
@@ -279,7 +279,7 @@
     const flags = [
       ["自动管理", d.auto_tmm], ["强制启动", d.force_start], ["超级做种", d.super_seeding],
       ["按顺序下载", d.seq_dl], ["先下载首尾文件块", d.f_l_piece_prio],
-    ].map(([label, on]) => T`<span class="dt02-flag${on ? " is-on" : ""}" title="${label}"><i></i>${label}</span>`).join("");
+    ].map(([label, on]) => T`<span class="dt02-flag${on ? " is-on" : ""}"><i></i>${label}</span>`).join("");
     const storeBody = secRows(secs["路径"] || { rows: [] }) + (T`<div class="dt02-flags">${R(flags)}</div>`);
 
     const hr = hrBody(ctx, d);
