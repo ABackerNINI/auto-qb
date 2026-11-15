@@ -1,14 +1,13 @@
 # backend — 后端 / qB / 平台 · 卷 2/2
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `platform-fs.md` … `windows-relocate-traps.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `prefix-rewrite-nested-root.md` … `windows-relocate-traps.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [platform-fs.md](platform-fs.md) | Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。 | 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, C… |
 | [prefix-rewrite-nested-root.md](prefix-rewrite-nested-root.md) | `core/fastresume.rewrite_save_paths` 初版「先查新根前缀命中 ⇒ already 跳过」在 new_root 是 old_root 真前缀(父方向嵌套, new<old)时误判: 值命中新根前缀只因它命中旧根(旧根以新根开头), 并非「已在新根… | 写前缀替换, 幂等判定, already 跳过, 嵌套根, 新旧路径包含关系, 改写永不生效, 核验永不过, journal 悬挂 |
 | [qb-api.md](qb-api.md) | qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。 | 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理… |
 | [qb-content-path-semantics.md](qb-content-path-semantics.md) | qB Web API 的 `content_path` 报的是**逻辑完成形态**的路径 —— 单文件种子在文件尚未落盘、或启用了「未完成文件加 .!qB 扩展名」时, 该路径在磁盘上**不存在**, qB 不会报空也不会报后缀名。对它做存在性分流时若写「非目录即文件」(`isd… | content_path, root_path, open-path, open_path, 单文件种子, 下载中, 未落盘, .!qB, 未完成扩展名, 目标文件不存在, 打开目标文件夹失败, 定位选中, select, 解析顺序, 辅种… |
@@ -18,6 +17,7 @@
 | [recycle-daemon-p7-evidence-chain.md](recycle-daemon-p7-evidence-chain.md) | 同 profile 实例才是 N1 竞争者, 全机口径病根在此; L1 实例级证据链(owner 死证+新面孔无害化+端口拒连)成立即立即进窗, settle 30s 是有界赌注; 已知残余(时钟回拨跨 owner 创建边界/改 WebUI 端口不同步 config/同 prof… | P7, 多实例, 实例级证据链, owner 死证, 新面孔, settle, 零赌注吸收, L1 判据, 立即进窗, 全机口径, recycle daemon, 收尾窗, qb_back 可观测性, WebUI 端口改 |
 | [release-record-baseline.md](release-record-baseline.md) | 一份凭据(放行/授权/豁免记录)若靠「与签发时的状态快照比对」来判断是否失效, 快照就是 | 放行记录, verified, 签发, 锚点, 快照, 漂移, drift, 永续有效, 永久记录, 凭据, 三处写入点, 签发即作废 |
 | [relocate-restore-issued-marker.md](relocate-restore-issued-marker.md) | 「先落账、后下发」的恢复点若按相位一律置 issue=False, 崩溃窗口(外部系统从未收到指令)在两处现场上与「发了没动静」同形 ⇒ 静默等到停滞超时误判失败; 判据必须靠账上「已下发」位分流, 且两条下发路径都要落账 | 重启恢复, 崩溃恢复, 崩溃窗口, setLocation 补发, move_issued, 恢复判据, 账上事实, 下发路径, _load_jobs, recover_exec_phase, 死代码判据 |
+| [ruamel-roundtrip-mask-pitfalls.md](ruamel-roundtrip-mask-pitfalls.md) | ruamel round-trip 掩码/回填三坑: 异常文本泄敏 / 引号形态继承 / alias 爆炸面 | ruamel, CommentedMap, DuplicateKeyError, 掩码, 哨兵, unmask, 回填, 引号, PlainScalarString, alias, 锚点, 共享引用, mask_yaml_text, 异常文… |
 | [schema-stamp-writeback.md](schema-stamp-writeback.md) | 带 schema 版本链的写回(writer)若「校验走迁移后的临时副本、落盘写原始提交树 + 新版章」, | schema 迁移, 版本链, 写回, writer, 盖章, schema_version, WebUI 保存, read_tree, |
 | [sentinel-epoch-arith.md](sentinel-epoch-arith.md) | 哨兵值泄漏进算术比较: 「0 = 无位置概念」被当成 epoch 0, 覆盖判据静默恒通过 | cutoff_done, 哨兵, 0 = 没有位置概念, 位置证明, 覆盖判据, 减法, 比较, epoch 0, 恒通过, 退化, 永续放行, 缺席证明, 观察期, HR 管束 |
 | [suppress-request-vs-live-flag.md](suppress-request-vs-live-flag.md) | EventBus suppress 曾把「重放保护请求」与「事件分派相位的抑制」混在一个 `_suppressed` 字段上 —— 注释宣称"窗口只盖两个事件相位", 实现却在置位点到下轮轮首之间吞掉一切 emit, 连续两次 L2 重建时第二次的 queue_rebuilt 静… | 改 EventBus, 改 suppress, 抑制窗口, 重建窗口内 emit, 相位丢失, 事件被吞, queue_rebuilt, 重放保护, 一符两义, 注释与实现不符, set_suppressed, take_suppresse… |

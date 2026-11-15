@@ -7,9 +7,9 @@
 <title>WEBUI 配置导出/导入（配置备份 bundle）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-config-backup">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-14-0624">
-<meta name="doc-updated" content="26-11-14-0624">
+<meta name="doc-updated" content="26-11-15-1326">
 <meta name="doc-refs" content="memory-bank/issues/26-11-14-0625-feat-webui-config-import-diff.html,memory-bank/tasks/26-11-14-webui-config-backup.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 配置导出/导入（配置备份 bundle）</h1>
 <p class="lede">本篇只回答: WEBUI「配置导出/导入（配置备份 bundle）」怎么做 —— bundle 打包哪四面、敏感值与导入语义怎么定、入口与登记闸落在哪。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-14-0624 · <b>doc-updated</b> 26-11-14-0624 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-14-0624 · <b>doc-updated</b> 26-11-15-1326 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-14 用户指令「WEBUI 新增导出/导入 config/WEBUI 配置功能」· grilling 12 问拍板（D1-D12）· 三路只读取证（配置系统 / webui API 面 / gtm 机制）
 </div>
 
@@ -255,6 +255,8 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-14-0624</span> 初版：grilling 12 问拍板 D1-D12（打包形态/掩码/浏览器偏好/gtm/运行时数据/导入语义/入口/双清单/通道/机器路径/登记闸/脏态）+ 三路只读取证（配置系统、webui API 面、gtm 机制）；计划入库 Open；diff 预览移出本期入池 <a href="../issues/26-11-14-0625-feat-webui-config-import-diff.html">26-11-14-0625-feat-webui-config-import-diff</a>；S1-S5 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-15-1218</span> S1-S5 落地(Done): S1 导出 fbaae3d5 + S2 导入 9b8ff460 + S3 前端 d2bba5f0 + S4 守阵 c85e53bd + S5 收尾回写; 实测 test.full/test.quick 终态 6238 passed / 2 skipped(基线切片 26-11-15-1253; 覆盖率闸缺口已回补 +19 用例, 覆盖 99.61% 过闸), e2e prism/atlas 12 例全过; 范围外列报: @fast 全量 4 例存量 e2e 失败与本分支无关(干净 HEAD 差分实证, 待入池), 真机目检(导出→改乱→导入还原 round-trip)待用户; 金清单 92→94; diff 预览仍留池 26-11-14-0625</li>
+  <li><span class="tag">R2 · 26-11-15-1326</span> 评审复评 minor 补修: R1 行内容已在修复轮修订至终态(6238 passed/2 skipped, 基线切片 26-11-15-1253, 覆盖率缺口回补+19 用例 99.61%, 范围外补列「真机目检待用户」)但落盘时未抬 doc-updated —— 本行补记该次修订并抬时间戳</li>
 </ul>
 
 </div>

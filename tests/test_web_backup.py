@@ -81,6 +81,40 @@ S2(POST /api/backup/import, 计划 §04 S2 验收矩阵逐条):
 - test_unmask_yaml_doc_target_items_old_value: targets 路径同口径直测(空串旧值 -> missing,
   正常值按 name 配对回填)
 - test_unmask_yaml_doc_no_local_doc_all_missing: 本机无配置文件(old_doc=None)全 missing
+
+覆盖率闸回绿回归(26-11-15, S1-S4 评审轮防御闸门分支补测):
+- test_backup_import_alias_shared_reference_422: alias 共享引用闸 —— anchor/alias 文档 422
+  (磁盘未动) + _scan_yaml_doc_shape 直测(共享容器 False / 无共享 True)
+- test_backup_import_depth_gate_422: 深度上限闸(小阈值注入 _MAX_YAML_DOC_DEPTH)-> 422
+- test_backup_import_node_count_gate_422: 节点数上限闸(小阈值注入 _MAX_YAML_DOC_NODES)-> 422
+- test_backup_import_text_length_gate_422: 文本 1MiB 长度上限闸(解析前拒, 不耗解析时间)
+- test_backup_import_parse_recursion_422: 解析期 RecursionError(flow 深嵌套小文本)-> 422
+- test_backup_import_parse_failure_500_no_secret_echo: bundle 重复键解析失败 -> 500 只留类型名,
+  异常文本回显的明文凭据不进响应(D2)
+- test_backup_import_body_non_dict_400: body 非 dict -> 400(端点直调注入; TestClient JSON 非
+  dict 被 FastAPI 先拦)
+- test_backup_import_local_config_broken_commit_500: 本机 config.yml 坏 YAML -> 提交路径现读炸
+  500 只留类型名(R8 锁内读改写面), 明文不回显
+- test_backup_import_precheck_local_broken_500: keys 已有错 + 本机坏 YAML -> 聚合先验面 500
+- test_backup_import_precheck_config_error_aggregated: config 侧 load_config 校验失败 + keys 侧
+  非法 -> 同一 422 聚合两侧错误
+- test_backup_import_precheck_missing_aggregated: keys 已有错 + config 有不可 resolve 哨兵 ->
+  同一 422 含 R1 逐路径与 keys 错
+- test_backup_import_no_local_config_all_sentinels_missing: 本机无 config.yml -> 全部哨兵不可
+  resolve(R1 端点级, 走提交路径 missing 兜底闸), 未写盘
+- test_backup_import_gtm_tool_unreachable_skipped: 探活在线但 PUT /config 时 ToolUnreachable ->
+  skipped, 不阻断 config
+- test_backup_import_gtm_unexpected_status_skipped: 工具返回非预期状态码(503)-> skipped +
+  error_text 透传
+- test_write_yaml_doc_direct_write_and_residual_gate: write_yaml_doc 直测(S2 非端点落盘口)+
+  残留哨兵兜底闸 ConfigError 拒写不半写
+- test_mask_unmask_yaml_node_non_dict_passthrough: _mask_yaml_node/_unmask_yaml_node 非 dict
+  节点直通(防御分支直测)
+- test_mask_yaml_targets_non_dict_items_untouched: targets 列表非 dict 条目掩码侧原样保留(loop
+  短路弧), dict 条目照常掩码
+- test_unmask_yaml_target_items_edge_shapes: targets 还原边角 —— 旧条目非 dict/缺名不进配对表,
+  bundle 条目非 dict 跳过, 无名条目 missing 用下标
+- test_find_residual_sentinels_shared_containers_dedup: 残留哨兵扫描容器去重(dict/list 两面)
 """
 import io
 import json
@@ -1001,3 +1035,383 @@ def test_unmask_yaml_doc_no_local_doc_all_missing():
     """本机无配置文件(old_doc=None)-> 任何哨兵都不可 resolve(R1 跨机首装面)"""
     doc = _build_yaml().load(io.StringIO("config:\n    k: '********'\n"))
     assert unmask_yaml_doc(doc, None) == ["config.k"]
+
+
+# ---------------------------------------------------------------------------
+# 覆盖率闸回绿(26-11-15): S1-S4 评审轮防御闸门分支补测(以 test.full 逐行报告为准)
+# ---------------------------------------------------------------------------
+
+# YAML anchor/alias 夹具: 同一容器对象被引用两次(ruamel round-trip loader load 后是共享引用)
+ALIAS_CONFIG_TEXT = """\
+config: &c
+    schema_version: 8
+    qbittorrent:
+        host: 127.0.0.1
+        port: 8080
+        username: admin
+        password: ""
+same: *c
+"""
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_alias_shared_reference_422(web_env):
+    """alias 共享引用闸: config_yaml 含 anchor/alias(容器被引用两次)-> 422 拒, 磁盘未动"""
+    from auto_qb.webui.server.routes import backup as backup_routes
+
+    mgr, client = web_env
+    before = _read_disk(mgr)
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": ALIAS_CONFIG_TEXT}})
+    assert r.status_code == 422, r.text
+    assert "anchor/alias" in r.json()["detail"]
+    assert _read_disk(mgr) == before
+    # 直测单点: 共享容器(挂哨兵与否)一律 False; 无共享引用的文档 True
+    shared = {"k": MASK_SENTINEL}
+    errs = []
+    assert backup_routes._scan_yaml_doc_shape({"a": shared, "b": shared}, errs) is False
+    assert "anchor/alias" in errs[0]
+    assert backup_routes._scan_yaml_doc_shape({"a": {"k": 1}, "b": [1, 2]}, []) is True
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_depth_gate_422(web_env, monkeypatch):
+    """深度上限闸: 嵌套超限 -> 422(小阈值注入测闸门分支, 不造真深文档拖慢用例)"""
+    from auto_qb.webui.server.routes import backup as backup_routes
+
+    monkeypatch.setattr(backup_routes, "_MAX_YAML_DOC_DEPTH", 2)
+    mgr, client = web_env
+    before = _read_disk(mgr)
+    deep = "config:\n    a:\n        b:\n            c: 1\n"
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": deep}})
+    assert r.status_code == 422, r.text
+    assert "嵌套超过 2 层" in r.json()["detail"]
+    assert _read_disk(mgr) == before
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_node_count_gate_422(web_env, monkeypatch):
+    """节点数上限闸: 文档节点数超限 -> 422(小阈值注入; 节点计数只算值/容器, 不算映射键)"""
+    from auto_qb.webui.server.routes import backup as backup_routes
+
+    monkeypatch.setattr(backup_routes, "_MAX_YAML_DOC_NODES", 3)
+    mgr, client = web_env
+    before = _read_disk(mgr)
+    # root + config 段 + 2 个标量值 = 4 节点 > 3
+    big = "config:\n    a: 1\n    b: 2\n"
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": big}})
+    assert r.status_code == 422, r.text
+    assert "节点数超过 3" in r.json()["detail"]
+    assert _read_disk(mgr) == before
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_text_length_gate_422(web_env):
+    """文本 1MiB 长度上限闸: 解析前拒(不耗解析时间), 磁盘未动"""
+    from auto_qb.webui.server.routes import backup as backup_routes
+
+    mgr, client = web_env
+    before = _read_disk(mgr)
+    long_text = "a" * (backup_routes._MAX_BUNDLE_YAML_CHARS + 1)
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": long_text}})
+    assert r.status_code == 422, r.text
+    assert "文本超长" in r.json()["detail"]
+    assert _read_disk(mgr) == before
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_parse_recursion_422(web_env):
+    """解析期 RecursionError -> 422「解析递归溢出」(flow 深嵌套小文本, 不造 1MiB 级文档)"""
+    mgr, client = web_env
+    before = _read_disk(mgr)
+    deep_flow = "config: " + "[" * 300 + "]" * 300 + "\n"
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": deep_flow}})
+    assert r.status_code == 422, r.text
+    assert "递归溢出" in r.json()["detail"]
+    assert _read_disk(mgr) == before
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_parse_failure_500_no_secret_echo(web_env):
+    """bundle YAML 解析失败(重复键)-> 500 只留类型名; 异常文本回显的明文值不进响应(D2)"""
+    mgr, client = web_env
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": DUP_KEY_CONFIG_TEXT}})
+    assert r.status_code == 500
+    detail = r.json()["detail"]
+    assert "解析失败" in detail and "DuplicateKeyError" in detail
+    for secret in ("dup-first-pass", "dup-second-pass"):
+        assert secret not in r.text, secret
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_body_non_dict_400(web_env):
+    """body 非 dict -> 400「body 必须是对象」(TestClient JSON 非 dict 被 FastAPI 先拦成 422,
+    防御闸只能端点直调注入)"""
+    from fastapi import HTTPException as _HTTPException
+
+    mgr, client = web_env
+    # factory 把各路由包进 _IncludedRouter, 原始 APIRoute 在 original_router.routes 里
+    route = None
+    for included in client.app.routes:
+        for sub in getattr(getattr(included, "original_router", None), "routes", []):
+            if getattr(sub, "path", None) == "/api/backup/import":
+                route = sub
+    assert route is not None
+    with pytest.raises(_HTTPException) as ei:
+        route.endpoint(["not-a-dict"])
+    assert ei.value.status_code == 400
+    assert "body 必须是对象" in ei.value.detail
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": DUP_KEY_CONFIG_TEXT}], indirect=True)
+def test_backup_import_local_config_broken_commit_500(web_env):
+    """本机 config.yml 坏 YAML -> 提交路径现读炸(锁内 R8)-> 500 只留类型名, 明文不回显(D2)"""
+    mgr, client = web_env
+    bundle_yaml = mask_yaml_text(IMPORT_CONFIG_TEXT)
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": bundle_yaml}})
+    assert r.status_code == 500
+    detail = r.json()["detail"]
+    assert "本机配置文件解析失败" in detail and "DuplicateKeyError" in detail
+    for secret in ("dup-first-pass", "dup-second-pass"):
+        assert secret not in r.text, secret
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": DUP_KEY_CONFIG_TEXT}], indirect=True)
+def test_backup_import_precheck_local_broken_500(web_env):
+    """keys 已有错时锁内先验也撞本机坏 YAML -> 500(聚合面), 明文不回显(D2, 与提交路径同款)"""
+    mgr, client = web_env
+    bundle_yaml = mask_yaml_text(IMPORT_CONFIG_TEXT)
+    bad_keys = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "not-a-serial!"}}
+    r = _import(mgr, client, {"sections": {"config_yaml": bundle_yaml, "webui_keys": bad_keys}})
+    assert r.status_code == 500
+    assert "本机配置文件解析失败" in r.json()["detail"]
+    for secret in ("dup-first-pass", "dup-second-pass"):
+        assert secret not in r.text, secret
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_precheck_config_error_aggregated(web_env):
+    """config 侧 load_config 校验失败 + keys 侧结构非法 -> 同一 422 聚合两侧错误(先验面)"""
+    mgr, client = web_env
+    bad_cfg = (
+        "config:\n"
+        "    schema_version: 8\n"
+        "    qbittorrent:\n"
+        "        host: 127.0.0.1\n"
+        "        port: not-a-port\n"
+        "        username: admin\n"
+        "        password: \"\"\n"
+    )
+    bad_keys = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "not-a-serial!"}}
+    before = _read_disk(mgr)
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": bad_cfg, "webui_keys": bad_keys}})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "config_yaml" in detail and "webui_keys" in detail
+    assert "必须是整数" in detail
+    assert _read_disk(mgr) == before
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": CROSS_MACHINE_LOCAL_TEXT}], indirect=True)
+def test_backup_import_precheck_missing_aggregated(web_env):
+    """keys 已有错 + config 有不可 resolve 哨兵 -> 同一 422 同时含 R1 逐路径与 keys 错"""
+    mgr, client = web_env
+    bundle_yaml = mask_yaml_text(IMPORT_CONFIG_TEXT)
+    bad_keys = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "not-a-serial!"}}
+    before = _read_disk(mgr)
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": bundle_yaml, "webui_keys": bad_keys}})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "掩码值无法还原" in detail and "共 3 处" in detail
+    assert "config.hr_check.channel.token" in detail
+    assert "webui_keys" in detail
+    assert _read_disk(mgr) == before
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_no_local_config_all_sentinels_missing(web_env):
+    """本机无 config.yml -> 提交路径 old_doc=None, 全部哨兵不可 resolve(R1 跨机首装面, 端点级)"""
+    mgr, client = web_env
+    Path(mgr.config_path).unlink()
+    bundle_yaml = mask_yaml_text(IMPORT_CONFIG_TEXT)
+    r = _import(mgr, client, {"bundle_version": 1, "sections": {"config_yaml": bundle_yaml}})
+    assert r.status_code == 422, r.text
+    detail = r.json()["detail"]
+    assert "共 4 处" in detail
+    for path in (
+        "config.qbittorrent.password",
+        "config.hr_check.channel.token",
+        "config.web.transfer.targets[local].password",
+        "config.web.transfer.targets[local].api_key",
+    ):
+        assert path in detail, path
+    assert not Path(mgr.config_path).exists()  # 未写盘
+
+
+def _online_gtm_two_phase(monkeypatch, put_result):
+    """/status 探活在线(200)+ PUT /config 返回 put_result 的两段替身(写路径分支共用)"""
+    def fake_call_tool(base_url, path, method, token, payload=None):
+        if path == "/status":
+            return 200, {"ok": True, "config": {}}
+        assert path == "/config" and method == "PUT"
+        return put_result()
+
+    monkeypatch.setattr(tm_routes, "_call_tool", fake_call_tool)
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_gtm_tool_unreachable_skipped(web_env, tmp_path, monkeypatch):
+    """探活在线但 PUT /config 时工具掉线(ToolUnreachable)-> skipped, 不阻断 config 应用"""
+    mgr, client = web_env
+    _online_gtm_env(mgr, tmp_path, monkeypatch)
+
+    def boom(*a, **k):
+        raise tm_routes.ToolUnreachable("connection reset during PUT /config")
+
+    _online_gtm_two_phase(monkeypatch, boom)
+    bundle_yaml = mask_yaml_text(IMPORT_CONFIG_TEXT)
+    r = _import(
+        mgr, client, {
+            "bundle_version": 1,
+            "sections": {
+                "config_yaml": bundle_yaml,
+                "gtm": {
+                    "config": {
+                        "foo": 1
+                    }
+                }
+            }
+        }
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["applied"] == ["config_yaml"]
+    assert [s["section"] for s in data["skipped"]] == ["gtm"]
+    assert "工具不可达" in data["skipped"][0]["reason"]
+    assert _read_disk(mgr) == IMPORT_CONFIG_TEXT
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": IMPORT_CONFIG_TEXT}], indirect=True)
+def test_backup_import_gtm_unexpected_status_skipped(web_env, tmp_path, monkeypatch):
+    """工具返回非预期状态码(503)-> skipped + 原因透传 error_text, 不炸不阻断"""
+    mgr, client = web_env
+    _online_gtm_env(mgr, tmp_path, monkeypatch)
+    _online_gtm_two_phase(monkeypatch, lambda: (503, {"error": "overloaded"}))
+    bundle_yaml = mask_yaml_text(IMPORT_CONFIG_TEXT)
+    r = _import(
+        mgr, client, {
+            "bundle_version": 1,
+            "sections": {
+                "config_yaml": bundle_yaml,
+                "gtm": {
+                    "config": {
+                        "foo": 1
+                    }
+                }
+            }
+        }
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["applied"] == ["config_yaml"]
+    assert [s["section"] for s in data["skipped"]] == ["gtm"]
+    assert "非预期状态码 503" in data["skipped"][0]["reason"]
+    assert "overloaded" in data["skipped"][0]["reason"]
+
+
+def test_write_yaml_doc_direct_write_and_residual_gate(tmp_path):
+    """write_yaml_doc 直测(S2 非端点落盘口): 成功整份写盘; 残留哨兵兜底闸 ConfigError 拒写不半写"""
+    from auto_qb.config.errors import ConfigError
+    from auto_qb.config.writer import write_yaml_doc
+
+    p = tmp_path / "c.yml"
+    bak = tmp_path / "c.bak"
+    doc = _build_yaml().load(io.StringIO("config:\n    schema_version: 8\n    qbittorrent:\n        host: 127.0.0.1\n"))
+    write_yaml_doc(str(p), doc, str(bak))
+    text = p.read_text(encoding="utf-8")
+    assert "schema_version: 8" in text and "qbittorrent" in text
+    bad = _build_yaml().load(io.StringIO("config:\n    delete_tags:\n        - '********'\n"))
+    with pytest.raises(ConfigError, match="掩码哨兵"):
+        write_yaml_doc(str(p), bad, str(bak))
+    assert p.read_text(encoding="utf-8") == text  # 拒写后磁盘未被半写
+
+
+def test_mask_unmask_yaml_node_non_dict_passthrough():
+    """_mask_yaml_node/_unmask_yaml_node 非 dict 节点直通(防御分支直测, 端点面恒传 dict)"""
+    assert config_writer._mask_yaml_node(["x"], ()) is None
+    missing = []
+    config_writer._unmask_yaml_node("scalar", {"k": "v"}, (), missing)
+    assert missing == []
+
+
+def test_mask_yaml_targets_non_dict_items_untouched():
+    """targets 列表含非 dict 条目: 掩码侧原样保留(loop 短路弧), dict 条目照常掩码"""
+    text = (
+        "config:\n"
+        "    web:\n"
+        "        transfer:\n"
+        "            targets:\n"
+        "                - junk-string\n"
+        "                - name: t1\n"
+        "                  type: qb\n"
+        "                  base_url: \"\"\n"
+        "                  password: real-pass\n"
+    )
+    out = mask_yaml_text(text)
+    targets = yaml.safe_load(out)["config"]["web"]["transfer"]["targets"]
+    assert targets[0] == "junk-string"
+    assert targets[1]["password"] == MASK_SENTINEL
+
+
+def test_unmask_yaml_target_items_edge_shapes():
+    """targets 还原边角: 旧条目非 dict/缺名不进配对表; bundle 条目非 dict 跳过; 无名条目
+    missing 路径用下标"""
+    ry = _build_yaml()
+    target_yaml = (
+        "config:\n"
+        "    web:\n"
+        "        transfer:\n"
+        "            targets:\n"
+        "              - name: t1\n"
+        "                type: qb\n"
+        "                base_url: \"\"\n"
+        "                password: '********'\n"
+        "              - junk\n"
+        "              - password: '********'\n"
+    )
+    doc = ry.load(io.StringIO(target_yaml))
+    old_doc = {
+        "config":
+            {
+                "web":
+                    {
+                        "transfer":
+                            {
+                                "targets":
+                                    [
+                                        None,
+                                        {
+                                            "name": "",
+                                            "password": "x"
+                                        },
+                                        {
+                                            "name": "t1",
+                                            "type": "qb",
+                                            "base_url": "",
+                                            "password": "real-target-pass"
+                                        },
+                                    ]
+                            }
+                    }
+            }
+    }
+    missing = unmask_yaml_doc(doc, old_doc)
+    assert missing == ["config.web.transfer.targets[2].password"]
+    assert doc["config"]["web"]["transfer"]["targets"][0]["password"] == "real-target-pass"
+
+
+def test_find_residual_sentinels_shared_containers_dedup():
+    """残留哨兵扫描的容器去重(dict/list 两面): 共享引用只报一次路径, 不指数展开"""
+    shared_dict = {"k": MASK_SENTINEL}
+    shared_list = [MASK_SENTINEL]
+    doc = {"a": shared_dict, "b": shared_dict, "c": shared_list, "d": shared_list}
+    assert find_residual_sentinels(doc) == ["a.k", "c[0]"]

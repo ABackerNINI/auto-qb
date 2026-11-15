@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 5/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `surface-color-family-single-point.md` … `wording-audit-surface.md`(共 21 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `sticky-scrollpad-inset.md` … `wording-audit-surface.md`(共 22 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [sticky-scrollpad-inset.md](sticky-scrollpad-inset.md) | sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会… | 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl,… |
 | [surface-color-family-single-point.md](surface-color-family-single-point.md) | 同一个视觉区域(面板 / 表区)的各层表面(列头底、行板底、悬停、落影)若被多处各写一遍——表头 `--bg-card`、行板 skin 卡底 `--bg-row`、行板透明露面板、页面级吸顶列头的 `--shadow-1` 落影——就会在主题切换时露出肉眼可见的色带 / 横条,… | 表头异色, 异色背景, 色带, 横条, 表头下方颜色不一样, 背景不一致, 主题下表头发白, 抽屉表格底色, --bg-card, --bg-row, box-shadow 落影, 吸顶列头阴影, 三皮肤观感分叉 |
 | [svg-chart-mapping.md](svg-chart-mapping.md) | 内联 SVG 图表(viewBox + aspect-ratio)的鼠标坐标换算若假设"SVG 铺满容器", 一旦 CSS 把高度压扁(preserveAspectRatio 居中 letterbox)映射整体错位; 共享 CSS 里残留的固定 height 会以特异性压过主题的… | 改图表悬停, 改 SVG 尺寸, 改图表 CSS, 图表 tooltip 不跟手, 十字线偏移, 图看起来偏窄, letterbox |
 | [table-resizer-handle.md](table-resizer-handle.md) | 报「各表 / 各列的列宽拖拽把手粗细不一致」(如种子页『分类』明显更细)时, 根因**不在某一列的代码** —— 三皮肤(prism/atlas/console)的 `.h-cell .resizer` 规则逐字一致, 粗细差来自**非整数缩放下的亚像素相位**: 可见线只有 2… | 把手粗细不一致, 有的细有的粗, 列宽拖拽把手, resizer, h-cell, hover 不高亮, 某些列 hover 没反应, 首列 hover, 表头悬停无底色, 把手压住文字, 把手离文字太近, 表头文字被盖, 右对齐列, 12… |
