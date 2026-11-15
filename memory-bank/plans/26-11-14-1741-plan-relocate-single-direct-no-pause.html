@@ -7,10 +7,10 @@
 <title>单成员 direct 搬迁免暂停: 做种中种子不再按住</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-single-direct-no-pause">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-11-14-1741">
-<meta name="doc-updated" content="26-11-15-0352">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-14-backend-relocate-single-direct-no-pause.md">
+<meta name="doc-updated" content="26-11-15-0859">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-14-backend-relocate-single-direct-no-pause.md, memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>单成员 direct 搬迁免暂停: 做种中种子不再按住</h1>
 <p class="lede">本篇只回答: 单成员 direct 搬迁如何免掉「暂停做种成员」这一步 —— 豁免判据、完成态口径与回执分型;其余管线(job 账/闸门/停滞看护/校验/失败回执/D16 拦截)原样保留,多成员行为不变。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-14-1741 · <b>doc-updated</b> 26-11-15-0352 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-14-1741 · <b>doc-updated</b> 26-11-15-0859 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> grilling 会话(2026-11-14, 三轮): 用户报障观察「整组移动单种子被暂停,移动时暂停,完成后自动恢复」→ 设计比对确认管线按设计工作 → 设计变更讨论拍板 D1-D6/D4a。
 </div>
 
@@ -106,9 +106,10 @@
   <tr><th>S</th><th>内容</th><th>验收</th></tr>
   <tr><td>S1</td><td><code>relocate_units</code> 加完成态判定 helper(含过渡态排除集);<code>_start_job</code> 豁免判据 + 回执按形态分型</td><td>定向单测绿;helper 有 docstring 写明口径来源</td></tr>
   <tr><td>S2</td><td>测试电池:单成员完成态(免暂停:不发 pause、resume_hashes=()、<code>_resume_members</code> no-op、走 <code>_finish_direct</code> done)/ 单成员 downloading(仍暂停+恢复)/ 单成员 error 态(仍暂停)/ 单成员 checkingUP 态(仍暂停 —— is_complete=True 与过渡态排除集的唯一分歧态; 另附 checkingDL 断言, 其 is_complete=False 与排除集一致)/ 多成员完成态(仍全组暂停)/ dry-run(不变)/ 回执文案分型断言</td><td>电池全绿;新增测试同步文件头「## 测试计划」清单</td></tr>
-  <tr><td>S3</td><td>文档回写:本计划 §06 回填实施记录;原计划 26-10-18-1604 §4.1「暂停」行补反指注记(指向本计划);active-context 切片</td><td><code>commands run kb.check</code> 绿</td></tr>
+  <tr><td>S3</td><td>文档回写:本计划 §10 变更记录回填实施记录;原计划 26-10-18-1604 §4.1「暂停」行补反指注记(指向本计划);active-context 切片</td><td><code>commands run kb.check</code> 绿</td></tr>
   <tr><td>S4</td><td><code>commands run test.full</code> + 新建基线切片(数字实测誊写)</td><td>新基线切片入库</td></tr>
 </table>
+<p class="aside">实施状态(R2): <span class="good">S1 / S2 已完成</span>(commit a2c9e425) · <span class="good">S3 文档回写已完成</span>(随本批提交) · S4(test.full + 基线切片)待跑 —— 详见 §10 变更记录 R2。</p>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
 <p>无 —— 全部议题已在 grilling 三轮内拍板(结论迁 §06)。</p>
@@ -137,6 +138,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-14-1741</span> 初版:grilling 三轮拍板 D1-D6/D4a 后立档。要点:单成员 direct 完成态免暂停(豁免判据 + 完成态口径 + 回执分型),其余管线原样;邻接面两件(恢复契约/fuse 让路)与新想法(qB 侧回声)入池,见 issues 池 topic <code>relocate-move-window</code>。</li>
   <li><span class="tag">R1 · 26-11-15-0352</span> D5 后续: 入池两件已修(分支 fix/relocate-fuse-resume: 0f4582d2 fuse 让路 / 952d3daa+90e15489 resume 确认账与展示), 两 issue 翻 Done —— 本计划 S1-S4 范围不受影响仍待开工</li>
+  <li><span class="tag">R2 · 26-11-15-0859</span> 实施回填(S3): S1/S2 已完成(commit a2c9e425, 代码与测试改动 5 文件 210 行) · S3 文档回写已完成(随本批提交) —— relocate_units.is_complete_state helper + 过渡态排除集 7 态(口径参照 fuse _NON_COMPLETE_STATES 独立持有); _start_job 豁免判据(单成员且完成态 → 不下发 pause、resume_hashes=()) + 回执按形态分型(direct「qB 自搬中(无别名)」/ 多成员保留原文 / 豁免追加「单种子搬迁: 做种中不暂停, qB 自搬」); 测试 7 例新增(含 checkingUP 唯一分歧态钉扎、多成员不变、dry-run 不变), 另既有断言 1 处计划内更新。实测: 定向 8 例全绿(7 新增 + 1 既有更新), test.quick 6186 passed + 2 skipped。批次评审(只读子代理, 基 b267f0c12b27): 0 blocker/major, 1 nit(豁免 note 措辞「做种中」对 pausedUP/stoppedUP 已停完成态与实际状态不符, 措辞系 §03 原文, 裁决维持不改), 引文校验检 1/1 过检。S4(test.full + 基线切片)待跑; §04 补实施状态注, doc-refs 补原计划 26-10-18-1604 双向链</li>
 </ul>
 
 </div>

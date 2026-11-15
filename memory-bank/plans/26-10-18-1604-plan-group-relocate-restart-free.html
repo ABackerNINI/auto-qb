@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="group-relocate-restart-free">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-18-1604">
-<meta name="doc-updated" content="26-10-30-0211">
-<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-19-1421-group-relocate-p7.md, memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/reports/26-11-03-2306-report-relocate-same-fs-proof-options.html, memory-bank/plans/26-11-04-1042-plan-webui-relocate-visibility.html">
+<meta name="doc-updated" content="26-11-15-0900">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-19-1421-group-relocate-p7.md, memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/reports/26-11-03-2306-report-relocate-same-fs-proof-options.html, memory-bank/plans/26-11-04-1042-plan-webui-relocate-visibility.html, memory-bank/plans/26-11-14-1741-plan-relocate-single-direct-no-pause.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>免重启整组迁移(A/C)分步实施计划</h1>
 <p class="lede">开关开启时, WebUI「移动位置」与规则 <code>move_to</code> 改走「<b>qB 搬字节 → 别名接续 → 下次 qB 退出时收尾</b>」：字节一律由 qBittorrent 搬(auto-qb 不写自研搬迁代码)，auto-qb 只负责闸门、建别名、对账与收尾；关闭时逐字节保持现状。别名形态<b>按文件数分流</b>：少量文件逐文件链接（对未来种子零影响），文件多且目录专属才用目录别名。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-30-0211 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-11-15-0900 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「准备实施 A/C 方案」(26-10-18) + 五轮 grilling 拍板(14:31 / 15:34 / 16:03 / 16:31 / 16:57) + 前序报告 <code>26-10-18-0818</code> / <code>26-10-18-1300</code> + 本机(Windows 与 WSL Ubuntu)与测试客户端(<code>localhost:36595</code>, qB v5.2.3)只读探测
 </div>
 
@@ -377,7 +377,7 @@
 <h3>4.1 执行体单步（P3 状态机）</h3>
 <ol>
   <li><b>预检</b>：全闸门 + 同卷证明；任一不过 ⇒ 回执带原因，零副作用。</li>
-  <li><b>暂停</b>：暂停集合内运行中的成员，记录 <code>resume_hashes</code>；等快照回流（复用 <code>own_write_pending</code> 的等待语义）。</li>
+  <li><b>暂停</b>：暂停集合内运行中的成员，记录 <code>resume_hashes</code>；等快照回流（复用 <code>own_write_pending</code> 的等待语义）。<span class="wr">2026-11-15 收窄</span>：单成员组且成员处于完成态（做种）时免暂停 —— qB 自搬运行中种子，不下发 pause、<code>resume_hashes=()</code>；豁免判据、完成态口径与回执分型见 <a href="26-11-14-1741-plan-relocate-single-direct-no-pause.html">plan 26-11-14-1741 §03</a>（已实施，commit a2c9e425）。多成员组与下载中/error/checking 态单成员仍按本行统一暂停。</li>
   <li><b>搬</b>：对 mover 调 <code>torrents_set_location(mover, dst)</code>，每 tick 轮询 <code>save_path</code>/<code>state</code>。判失败<b>只看停滞</b>（dst 不增长且 qB 不在 moving 超过 <code>move_stall_timeout</code>）；超过 <code>move_warn_after</code> 只提示不判失败。进度用 dst 体积采样（每 5s，失败静默）。</li>
   <li><b>校验</b>：dst 侧文件数与总大小对齐（<code>verify=sample</code> 时抽样 SHA1）；不齐 ⇒ <code>failed(verify_mismatch)</code>，<b>不搬回</b>。</li>
   <li><b>建链接</b>：按 <code>plan()</code> 的形态建（逐文件：先重建目录树再逐条链接；目录别名：一条 junction/symlink）。<b>逐条落账</b>（<code>alias_paths</code> 追加式写入 state），中途失败 ⇒ 删已建链接 → <code>removed(reason=alias_partial)</code> 走收尾路径，<b>不搬回</b>。</li>
@@ -581,6 +581,7 @@
   <li><span class="tag">R14 · 26-10-18-1915</span> §08 一致性校正：标题与正文从「5 个种子 / 18:32」更新为「8 个种子 / 19:15」；资产表按组重排并补 I；aside 的「E03 是单文件⇒S14 不成立」过期结论删除；S4 改 C/F 双向、S5 补组⑤、S6 的杂项数改 9、S11 改「组①+组⑤」（与序列一致）；执行序列基线 8 份、复位写清三组；<b>修复被转义破坏的 6 处盘符路径</b>（双斜杠形态 → 正确反斜杠）。</li>
   <li><span class="tag">R15 · 26-10-18-1941</span> P0 已实施: 新 infra/alias_fs.py —— 探测走「建-可见-穿透-删」四步(junction/目录与文件 symlink/同卷硬链接)+ 链接原语(非递归删)+ §3.3 能力矩阵纯函数 platform_verdict; Windows 双盘与 WSL(/tmp POSIX 分支、/mnt/d 的 9p+aname=drvfs 反例)实测对齐 §2.4 与 §3.3 第 6 行; 注入点按 §8.6 只有 try_create; 启动/热重载接线随 P2 的 RelocateModule(P0 阶段无 relocate.enabled 可判, 且开关默认关时开机建删链接属于为关着的功能做副作用)</li>
   <li><span class="tag">R16 · 26-10-19-0759</span> P3-P6 落地: 执行体状态机(relocate_mod 任务线)/ 组判定三层物理解析与搬迁窗口让路(grouping_mod+store)/ 三入口接线与添加落点二次确认(commands+routes+transfer+前端)/ 收尾两本账与独立 guardian(infra/relocate_journal + tools/finalize_watch)/ 对账表 8 行与撤销成本确认; 新增 62 例 Fake qB 全替身, 全量 3737 passed/98%(基线切片 26-10-19-0757); 余 P7 真机验收(本机无 qB, 交他人)</li>
+  <li><span class="tag">R17 · 26-11-15-0900</span> S3 反指注记: §4.1 暂停行补单成员 direct 免暂停收窄(2026-11-15 起, 单成员且完成态不下发 pause / resume_hashes=()), 指向 plan 26-11-14-1741 §03(已实施 commit a2c9e425); 多成员与下载中/error/checking 单成员仍统一暂停; doc-refs 补 26-11-14-1741 双向链</li>
 </ul>
 
 </div>
