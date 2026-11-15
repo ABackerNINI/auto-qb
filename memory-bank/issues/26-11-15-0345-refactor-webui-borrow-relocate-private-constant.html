@@ -117,6 +117,7 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-15 03:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-15 09:56 — 认领复验（计划 26-11-15-0914 S0）：<strong>仍复现</strong>（借用面原样）—— 锚点按符号 grep 重跑：跨层借用 <code>views_relocate.py:14</code>（<code>from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX</code>）与定义单点 <code>relocate_lifecycle.py:26</code>（<code>_RESUME_RETRY_MAX = 3</code>）均未漂移，注释钉契约与测试钉扎兜底未变。按 D7 拍板<strong>维持现状零改动</strong>（当前单一消费方可接受），状态保持 <strong>Open</strong>。</li>
   </ul>
 </section>
 

@@ -49,3 +49,4 @@ S0 前置(0448 收口检查 + 5 份 issue 认领复验, 0344 锚点改判)→ S1
 
 - 2026-11-15 09:18 grilling 两轮 14 问拍板 D1-D14 全按推荐 + 只读取证(e2825b4b: register_job 零生产调用改判 exec:1583/retries job 级 int/浮窗无旁路) + 计划 26-11-15-0914 入库(Open, S0-S5 待显式开工, 0448 先行 D8) + 档案立档; 零代码改动, 5 issue 保持 Open, qb-side-move-echo 经 D1 排除不立项
 - 2026-11-15 09:41 review 两轮出口闭合: R1 检 3/3(blocker 0 / major 0 / minor 2 当场修: _member_stopped 锚改 228-238 + 计数器零读面口径收紧 / nit 1 维持现状留痕: 952d3daa 提交戳不可解析系全仓记账惯例多件沿用), R2 复评零 actionable 修复到位; 闸门键单点在提交 trailer
+- 2026-11-15 09:56 S0 开工: 0448 状态确认(D8)——doc-status 仍 Open, 但 0448 的 relocate_exec 触碰面已落库(其收尾回写=2031ba16, P4 验收=9b1a248c), D8 门条件「或其触碰面已落库」成立, 本计划开工; 随即认领 5 份 issue 并逐份补复验行(0344 锚点按 D14 改判 _start_job 裸赋值 exec:1583, register_job 生产零调用已核实), 行号漂移与改判详见各 issue §07 复验行; 零代码改动

@@ -103,7 +103,7 @@
 
 <section id="s2">
   <h2><span class="no">§02</span>证据</h2>
-<pre><code># src/auto_qb/core/modules/relocate_lifecycle.py:222-232 （取证 2026-11-15）
+<pre><code># src/auto_qb/core/modules/relocate_lifecycle.py:228-238 （复验重锚 2026-11-15, 入池时 222-232）
 def _member_stopped(self, h: str) -> bool:
     """成员当前是否停着(store 为 qB 镜像; 对照 qB 真实态判定, 不靠内存标记单点)
 
@@ -131,9 +131,9 @@ def _member_stopped(self, h: str) -> bool:
 <section id="s4">
   <h2><span class="no">§04</span>定位锚点</h2>
   <ul>
-    <li><code>relocate_lifecycle.py:222</code>（取证 2026-11-15）· <code>_member_stopped</code> · grep "def _member_stopped"</li>
-    <li>消费点 · <code>_reconcile_resume_pending</code>（relocate_lifecycle.py:270）· grep "_member_stopped(h)"</li>
-    <li>webui 如实显示口径 · <code>views_relocate.py:53-56</code> member_relocate docstring（取证 2026-11-15）</li>
+    <li><code>relocate_lifecycle.py:228</code>（复验重锚 2026-11-15, 入池时 222）· <code>_member_stopped</code> · grep "def _member_stopped"</li>
+    <li>消费点 · <code>_reconcile_resume_pending</code>（relocate_lifecycle.py:276, 调用点 :297; 入池时 270）· grep "_member_stopped(h)"</li>
+    <li>webui 如实显示口径 · <code>views_relocate.py:48</code> member_relocate（docstring 口径段 :54-57; 入池时 53-56）· 复验取证 2026-11-15</li>
   </ul>
 </section>
 
@@ -153,7 +153,7 @@ def _member_stopped(self, h: str) -> bool:
     <li>2026-11-15 03:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-15 <strong>仍复现</strong> —— 认领于计划 26-11-15-0914 S0，锚点按符号 grep 重跑：<code>_member_stopped</code> 现 relocate_lifecycle.py:228-238（入池 222-232, 漂 +6, 判「停着」逻辑含已删 rec is None 分支原样）、消费点 <code>_reconcile_resume_pending</code> 现 :276（调用点 :297）、webui 口径 <code>member_relocate</code> docstring 现 views_relocate.py:54-57 —— 符号全部仍在, 已删成员永不闭账路径未变。</p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
 </section>
