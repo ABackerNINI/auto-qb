@@ -435,9 +435,9 @@ def test_v4_day_cache_hit_and_invalidate(tmp_path, monkeypatch):
     calls = []
     real_parse = traffic_store_module.parse_v4_day_text
 
-    def counting_parse(t):
+    def counting_parse(t, **kwargs):
         calls.append(1)
-        return real_parse(t)
+        return real_parse(t, **kwargs)
 
     monkeypatch.setattr(traffic_store_module, "parse_v4_day_text", counting_parse)
     cache = V4DayCache(data_dir)
@@ -505,9 +505,9 @@ def test_v4_day_cache_budget_lru(tmp_path, monkeypatch):
     calls = []
     real_parse = traffic_store_module.parse_v4_day_text
 
-    def counting_parse(t):
+    def counting_parse(t, **kwargs):
         calls.append(1)
-        return real_parse(t)
+        return real_parse(t, **kwargs)
 
     monkeypatch.setattr(traffic_store_module, "parse_v4_day_text", counting_parse)
     cache = V4DayCache(data_dir, budget=1)  # 预算 1B: 每条都超, 恒只保最新读入的一条
@@ -713,9 +713,9 @@ def test_v4_day_cache_budget_exact_fit_and_evict_to_one(tmp_path, monkeypatch):
     calls = []
     real_parse = traffic_store_module.parse_v4_day_text
 
-    def counting_parse(t):
+    def counting_parse(t, **kwargs):
         calls.append(1)
-        return real_parse(t)
+        return real_parse(t, **kwargs)
 
     monkeypatch.setattr(traffic_store_module, "parse_v4_day_text", counting_parse)
     # 恰等 budget: 两条都驻留, 重读命中不重解析

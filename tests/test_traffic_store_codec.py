@@ -461,18 +461,20 @@ def test_v4_parse_discipline_dual_parser_same_verdict():
 
 def test_v4_parse_skeleton_single_point():
     """静态守阵: 解析纪律骨架单点(issue 26-10-29-1304 R07-T06) —— 骨架行 / 行循环 /
-    驱动器接线在 traffic_store_codec.py 各恰一处(两解析器都走 _parse_v4_text, 无行循环副本)。
+    驱动器接线在 traffic_store_codec.py 各恰一处(两解析器都走 _parse_v4_text, 无行循环副本;
+    F4-1 增量续解 resumed= 亦走同一循环, 块状态机唯一实现 _V4DayBlockMachine)。
     口径说明: 同形的空行注释跳行在 traffic_limits.parse_limits_day_text 还有一处, 但那是
     另一族解析器(无头行门闩 / 撕裂尾直接丢弃), 不在本 issue 收敛范围 —— 守阵只扫本文件"""
     src = inspect.getsource(traffic_store_codec_module)  # R5 拆分: 编解码骨架迁至 traffic_store_codec.py
     assert src.count('if not s or s.startswith("#")') == 1, "空行注释跳骨架行应只在公共驱动器"
-    assert src.count("for i, line in enumerate(lines[1:]):") == 1, "行循环应只在公共驱动器"
+    assert src.count("for i, line in enumerate(body):") == 1, "行循环应只在公共驱动器"
     assert src.count("def _parse_v4_text(") == 1
-    wiring = re.findall(r"^    key, bad, data, torn_tail = _parse_v4_text\(text, on_\w+_line\)$", src, re.M)
-    assert sorted(wiring) == [
-        "    key, bad, data, torn_tail = _parse_v4_text(text, on_agg_line)",
-        "    key, bad, data, torn_tail = _parse_v4_text(text, on_day_line)",
-    ], "两个解析器必须各自单点接线公共驱动器"
+    assert (src.count("key, bad, data, torn_tail = _parse_v4_text(text, on_agg_line)") == 1), "agg 解析器单点接线公共驱动器"
+    assert (
+        src.count("key, bad, data, torn_tail = _parse_v4_text(text, machine.feed)") == 1 and
+        src.count("_parse_v4_text(\n            text, machine.feed, resumed=") == 1
+    ), "day 解析器全量/续解两路各单点接线公共驱动器(F4-1 增量同源, 无行循环副本)"
+    assert src.count("class _V4DayBlockMachine") == 1, "块状态机唯一实现"
 
 
 def test_v4_parse_null_column_and_nn_int_guard():

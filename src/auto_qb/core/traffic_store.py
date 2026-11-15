@@ -80,8 +80,12 @@ hour 裁剪(tmp+fsync+os.replace); stop() 优雅退出全量落盘(封游程 + f
 OSError 上抛(调用方按落盘失败口径处理)。
 
 读路径(§05, Web 线程只读): 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), V4DayCache
-mtime_ns+size 键控解析缓存; 3d+ 窗只读成员 agg.dat 单文件; OSError 上抛由端点按竞态
-降级处理(回退 last-good 标 stale, 不以空态冒充无数据)。raw 段窗另合流采样模块活尾快照
+mtime_ns+size 键控解析缓存; F4-1 增量解析(计划 26-11-15-1104): 天文件只追加不变式下,
+size 增大时自上次解析的整行边界 offset 只解析新增字节(~ms 级, 前缀尾 64B 探针防伪),
+size 缩小/持平(裁剪重写/异常重写)或撕裂尾续点缺失 -> 整文件全量重解析; 解析产物对
+消费面形态不变(仍整天 V4ParsedDay)。3d+ 窗只读成员 agg.dat 单文件; OSError 上抛由端
+点按竞态降级处理(回退 last-good 标 stale, 不以空态冒充无数据)。raw 段窗另合流采样
+模块活尾快照
 (S6 验收追加, 2026-10-05): 未落盘 buffer 记录 + 开放游程经 v4_live_tail_slots 复原绝对
 槽位(head_pending 整块重算 / 否则从写侧游标倒推)—— 镜像保证下槽 ts 与落盘重算恒等,
 读侧按 ts 精确去重, 图面尾部随采样节拍实时, 不等 flush_interval 落盘。agg 段窗(3d+)
@@ -172,6 +176,7 @@ from .traffic_store_codec import (  # noqa: F401
     V4Sample,
     V4Slot,
     V4ZeroRun,
+    V4DayResume,
     _parse_v4_text,
     format_agg_row,
     format_v4_b_row,
@@ -236,8 +241,9 @@ def _read_parse(path: str, parser: Callable[[str], Any], empty: Any) -> Any:
 
     缺失/空文件返回 empty(调用方声明空态: agg = 空解析结果, day = None), 其余整读后
     交 parser(解析坏行/撕裂尾/同 epoch 取末行等纪律全在 parser 内); OSError 上抛,
-    调用方按恢复失败口径处理。TrafficV4Store 与 V4DayCache 共用 —— 缓存层与 store 层
-    同一读纪律, 防两份漂移。
+    调用方按恢复失败口径处理。TrafficV4Store(store.read_day/read_agg)共用 —— 同一读
+    纪律防两份漂移。V4DayCache.read_day 自 F4-1 起走字节形态 _read_day_bytes(增量
+    offset/探针按字节计), 缺失/空判定与 errors="replace" 解码纪律同源不分叉。
     """
     if not os.path.exists(path) or os.path.getsize(path) == 0:
         return empty
@@ -500,18 +506,85 @@ V4_DAY_CACHE_BUDGET_BYTES = 4_000_000
 V4_AGG_CACHE_MAX_ENTRIES = 64
 
 
+class _DayCacheEntry:
+    """V4DayCache 天文件条目(stat 键 + 解析产物 + 增量续点, F4-1)
+
+    - stat_key: (st_mtime_ns, st_size) | None(缺失/不可 stat 哨兵)—— 未变即命中。
+    - parsed: V4ParsedDay | None(缺失/空文件 = None); 消费面形态与全量重解析逐位等价。
+    - parsed_bytes: 已解析覆盖的字节数(整行边界; 记账与预算都以它为准 —— 读写竞态下
+      可能与 stat_key 的 size 短暂不符, 取实际解析覆盖量才与续点自洽)。
+    - resume: V4DayResume | None —— 增量续点(仅上次解析整行收尾且头行门闩已过时非
+      None; 撕裂尾/缺失/空 = None, 下次追加退全量重解析)。
+    - probe: 前缀尾探针 bytes(<= _DAY_INCREMENT_PROBE_BYTES)—— 续解前核验前缀尾未变
+      (变了 = 发生过非追加写, 退全量重解析; 追加不变式的廉价防伪)。
+    """
+
+    __slots__ = ("stat_key", "parsed", "parsed_bytes", "resume", "probe")
+
+    def __init__(
+        self,
+        stat_key: Optional[tuple],
+        parsed: Optional["V4ParsedDay"],
+        parsed_bytes: int,
+        resume: Optional["V4DayResume"],
+        probe: bytes,
+    ) -> None:
+        self.stat_key = stat_key
+        self.parsed = parsed
+        self.parsed_bytes = parsed_bytes
+        self.resume = resume
+        self.probe = probe
+
+
+#: 增量解析前缀探针字节数(F4-1): 续解前重读前缀尾 64B 与缓存比对, 不符(非追加写:
+#: 外部编辑/异常重写)退全量重解析。行型定约下行宽 ~数十字节, 64B 覆盖末行整行有余;
+#: O(1) 代价, 不求完备(只追加不变式仍是正确性前提, R3)。
+_DAY_INCREMENT_PROBE_BYTES = 64
+
+
+def _read_day_bytes(path: str) -> bytes:
+    """天文件字节整读(F4-1 增量解析底座; _read_parse 的 bytes 形态, 读纪律同源):
+    缺失/空文件 = b"", 其余整读原始字节(OSError 上抛, 调用方按恢复失败/竞态口径处理)。
+    增量 offset/探针按字节计, 解码 errors="replace" 在调用方分段进行(段边界恒为整行
+    \\n 边界, 分段解码 == 整文件解码)。"""
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return b""
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def _tail_probe(raw: bytes) -> bytes:
+    """前缀尾探针(<= _DAY_INCREMENT_PROBE_BYTES 字节)"""
+    return raw[-_DAY_INCREMENT_PROBE_BYTES:]
+
+
 class V4DayCache:
-    """按天文件解析缓存(S3a §05.2, 读侧; Web 线程调用): mtime_ns+size 键控
+    """按天文件解析缓存(S3a §05.2, 读侧; Web 线程调用): mtime_ns+size 键控 + F4-1 增量解析
 
     - 失效键 = os.stat 的 (st_mtime_ns, st_size): 天文件只在追加期变化(追加必变 size),
       裁剪/重写(tmp+replace)size 严格变小 —— 两向都使 stat 键变化而失效; 未变即命中,
       直接复用解析产物(不重读不重解析)。
-    - 内存上界: 驻留条目的文件文本字节总量 <= budget(默认 V4_DAY_CACHE_BUDGET_BYTES),
+    - 增量解析(F4-1, 计划 26-11-15-1104): 天文件「只追加」不变式(§03 写路径全是
+      open("a") 批量追加)下, size 增大 = 追加 —— 自上次解析的整行边界 offset
+      (parsed_bytes)只读新增字节, 以续点(V4DayResume: 已封口块 + 开放块 + 计数)续解,
+      追加一次解析 ~ms 级(G-D: 全量重解析整天文件是 24h 窗每请求 ~10s 停滞的成因之一)。
+      结果与全量重解析逐位等价(块/槽/坏行计数/撕裂尾同源: 行循环与块状态机唯一实现,
+      parse_v4_day_text(resume=))。防伪与退全量的判据(全部只依赖 stat 与 O(1) 字节):
+      size 缩小/持平(裁剪重写/异常重写)、前缀尾 64B 探针不符(非追加写)、上次解析
+      非整行收尾(撕裂尾, 无续点)、缺失/空文件(无续点)-> 整文件全量重解析。存储零
+      迁移: 天文件格式一行不动。
+    - 与 T5 的接缝: 本缓存只做字节级解析缓存(整天 V4ParsedDay); 桶值缓存(封口桶判定/
+      进行中桶现算)是 F4-2 的事, 本类不预做。
+    - 内存上界: 驻留条目的已解析字节总量 <= budget(默认 V4_DAY_CACHE_BUDGET_BYTES),
       超出按 LRU 逐出(命中移队尾, 最久未用先逐出; 至少保留最新一条 —— 单文件超预算时
       不自我清空)。缺失/空文件也缓存(stat 键 = None 哨兵): 文件此后出现则 stat 变化
       自然失效。
-    - 线程模型: 读侧被 Web 线程并发调用 —— 缓存表用锁保护; 解析(慢段)在锁外进行,
-      并发对同一文件重复解析无害(后写胜, 黄金法则 5 的单写线程约束不涉及只读缓存)。
+    - 线程模型: 读侧被 Web 线程并发调用 —— 缓存表用锁保护; 读文件与解析(慢段)在锁外
+      进行, 并发对同一文件重复解析无害(后写胜, 黄金法则 5 的单写线程约束不涉及只读
+      缓存)。OSError 上抛不落缓存不改条目 —— 缓存内上一份解析产物原样保留(缓存面
+      last-good), 端点面按 §08 降级回自己的 last-good 快照。
+    - last-good 两面口径(§08): 端点的 last-good 是响应快照(traffic_qb); 缓存面只保证
+      「失败不清条目」, 二者都不以空态冒充无数据。
 
     S3b 接缝: 视图端点经 read_window(窗口 -> 日期集合 -> 只读涉及文件, 24h 窗至多
     2 个日期文件)取 V4ParsedDay, 块序列交给 traffic_grid.v4_series_points 归桶;
@@ -521,34 +594,82 @@ class V4DayCache:
         self._data_dir = data_dir
         self._budget = max(1, int(budget))
         self._lock = threading.Lock()
-        # (系列键, 日期串) -> (stat 键 | None, 文本字节数, V4ParsedDay | None)
+        # (系列键, 日期串) -> _DayCacheEntry
         self._entries: OrderedDict = OrderedDict()
         # 系列键 -> (stat 键 | None, V4ParsedAgg)(agg.dat 缓存, S3b; 条目数上界独立于天文件字节预算)
         self._agg_entries: OrderedDict = OrderedDict()
 
     def read_day(self, key: str, date_str: str) -> Optional["V4ParsedDay"]:
-        """读单天文件(带缓存; 批 2 本棒起 v4 行型解析): 缺失/空文件 = None; 非法键/日期
-        fail-fast(路径纯计算)。"""
+        """读单天文件(带缓存 + 增量解析): 缺失/空文件 = None; 非法键/日期 fail-fast
+        (路径纯计算)。命中(未变)不重读不重解析; 追加(只追加不变式)增量续解 ~ms 级;
+        其余失效形态全量重解析。OSError 上抛(条目不动, 缓存面 last-good 保留)。"""
         path = v4_day_file_path(self._data_dir, key, date_str)
         try:
             st = os.stat(path)
             stat_key = (st.st_mtime_ns, st.st_size)
-            size = st.st_size
         except OSError:
             stat_key = None  # 缺失哨兵: 文件此后出现则 stat 键变化, 缓存自然失效
-            size = 0
+        cache_key = (key, date_str)
         with self._lock:
-            ent = self._entries.get((key, date_str))
-            if ent is not None and ent[0] == stat_key:
-                self._entries.move_to_end((key, date_str))
-                return ent[2]
-        parsed = _read_parse(path, parse_v4_day_text, None)  # 锁外解析(慢段; 并发重复解析无害; 读纪律单点)
+            ent = self._entries.get(cache_key)
+            if ent is not None and ent.stat_key == stat_key:
+                self._entries.move_to_end(cache_key)
+                return ent.parsed
+        # 锁外读 + 解析(慢段; prev = 失效前快照, 供增量续解; 并发重复解析无害后写胜)
+        parsed, new_ent = self._load_day(path, stat_key, ent)
         with self._lock:
-            self._entries[(key, date_str)] = (stat_key, size, parsed)
-            self._entries.move_to_end((key, date_str))
-            while len(self._entries) > 1 and sum(e[1] for e in self._entries.values()) > self._budget:
+            self._entries[cache_key] = new_ent
+            self._entries.move_to_end(cache_key)
+            while len(self._entries) > 1 and sum(e.parsed_bytes for e in self._entries.values()) > self._budget:
                 self._entries.popitem(last=False)
         return parsed
+
+    def _load_day(self, path: str, stat_key: Optional[tuple], prev: Optional[_DayCacheEntry]) -> tuple:
+        """读 + 解析(全量或增量续解, 锁外): 返回 (parsed, 新条目)。
+
+        增量路径判据(全部只依赖 stat 与 O(1) 字节, R3): prev 有续点 且 size 严格增大
+        且前缀尾探针相符 —— 追加段 = [parsed_bytes, EOF), 以 prev.resume 续解(整行边界
+        分段解码 == 整文件解码)。任一不满足走全量(字节整读一次, 探针/offset 同批取得)。
+        坏行占比告警两面同源(累计计数与全量重解析一致, 节流按文件)。
+        """
+        if (prev is not None and prev.resume is not None and stat_key is not None and stat_key[1] > prev.parsed_bytes):
+            seg = self._read_append_segment(path, prev)
+            if seg:
+                seg_text = seg.decode("utf-8", errors="replace")
+                parsed, cp = parse_v4_day_text(seg_text, resume=prev.resume, with_resume=True)
+                _warn_bad_lines_path(path, parsed)
+                return parsed, _DayCacheEntry(
+                    stat_key=stat_key,
+                    parsed=parsed,
+                    parsed_bytes=prev.parsed_bytes + len(seg),
+                    resume=cp,
+                    probe=_tail_probe(prev.probe + seg),
+                )
+        raw = _read_day_bytes(path)
+        if not raw:
+            return None, _DayCacheEntry(stat_key=stat_key, parsed=None, parsed_bytes=0, resume=None, probe=b"")
+        parsed, cp = parse_v4_day_text(raw.decode("utf-8", errors="replace"), with_resume=True)
+        _warn_bad_lines_path(path, parsed)
+        return parsed, _DayCacheEntry(
+            stat_key=stat_key,
+            parsed=parsed,
+            parsed_bytes=len(raw),
+            resume=cp,
+            probe=_tail_probe(raw),
+        )
+
+    @staticmethod
+    def _read_append_segment(path: str, prev: _DayCacheEntry) -> Optional[bytes]:
+        """追加段读取(只追加不变式的防伪核验): 重读前缀尾探针比对, 不符 = 发生过非
+        追加写 -> None(退全量重解析); 相符则读 [parsed_bytes, EOF) 追加段。OSError
+        上抛(条目不动, 缓存面 last-good 保留)。"""
+        with open(path, "rb") as f:
+            if prev.probe:
+                f.seek(prev.parsed_bytes - len(prev.probe))
+                if f.read(len(prev.probe)) != prev.probe:
+                    return None
+            seg = f.read()
+        return seg or None  # 竞态窗口文件缩回原长: 空段退全量(续点失效面, 保守)
 
     def read_window(self, key: str, start_epoch: float, end_epoch: float) -> tuple:
         """查询窗口 -> 日期集合 -> 只读涉及的天文件(§05.2 按天加载): 按日期升序返回

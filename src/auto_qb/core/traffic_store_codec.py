@@ -6,7 +6,7 @@ slot/block/天/agg 行 dataclass 与 format/parse 全在此; `_parse_v4_text` �
 """
 import math
 from dataclasses import dataclass
-from typing import Callable, List, NamedTuple, Optional
+from typing import Any, Callable, List, NamedTuple, Optional
 
 from .traffic_store_common import (
     AGG_FIELDS,
@@ -419,7 +419,7 @@ def format_agg_row(row: AggRow) -> str:
     )
 
 
-def _parse_v4_text(text: str, on_line: Callable[[List[str]], bool]) -> tuple:
+def _parse_v4_text(text: str, on_line: Callable[[List[str]], bool], *, resumed: Optional[tuple] = None) -> tuple:
     """v4 文本解析公共行循环驱动器(parse_v4_agg_text / parse_v4_day_text 纪律单点;
     issue 26-10-29-1304 R07-T06 收敛 —— 解析纪律骨架唯一实现, 行型判定留在 on_line)
 
@@ -432,19 +432,30 @@ def _parse_v4_text(text: str, on_line: Callable[[List[str]], bool]) -> tuple:
     (None, len(lines), len(lines), torn): 整文件记坏且 bad 含头行本身, 回调一次未跑,
     调用方累积器为空 => 组装即整文件坏形态。返回 (key, bad, data, torn_tail),
     结果对象(V4ParsedAgg / V4ParsedDay)由调用方各自组装。
+
+    resumed = (key, bad, data) 前缀续解状态(F4-1 增量解析, 计划 26-11-15-1104): 跳过
+    头行门闩(key 行已在前缀消费), 全部行按 data 行进入同一行循环, 计数自前缀续算 ——
+    撕裂尾/坏行/空行注释/key 重复行纪律与整文件解析完全同源(同一循环同一分支), 语义
+    等价于对 (前缀 + text) 拼接文本的整文件解析, 只是行型状态由 on_line 侧(块状态机)
+    自行复位。前缀侧 key=None(头行门闩失守)不得用于续解(调用方把关, V4DayResume 单点)。
     """
     lines = text.splitlines()
     torn = bool(text) and not text.endswith("\n")
-    header = lines[0].strip() if lines else None
-    if header != HEADER_LINE_V4:
-        # 头行缺失/不符(含旧版头行): 文件级不匹配格式 —— 每一行都算坏行(损坏判定必然命中)
-        return None, len(lines), len(lines), torn
-    key: Optional[str] = None
-    bad = 0
-    data = 0
+    if resumed is None:
+        header = lines[0].strip() if lines else None
+        if header != HEADER_LINE_V4:
+            # 头行缺失/不符(含旧版头行): 文件级不匹配格式 —— 每一行都算坏行(损坏判定必然命中)
+            return None, len(lines), len(lines), torn
+        key: Optional[str] = None
+        bad = 0
+        data = 0
+        body = lines[1:]
+    else:
+        key, bad, data = resumed
+        body = lines
     torn_tail = False
-    last_idx = len(lines) - 1
-    for i, line in enumerate(lines[1:]):
+    last_idx = len(body) - 1
+    for i, line in enumerate(body):
         data += 1
         s = line.strip()
         if not s or s.startswith("#"):
@@ -459,7 +470,7 @@ def _parse_v4_text(text: str, on_line: Callable[[List[str]], bool]) -> tuple:
         except (ValueError, IndexError):
             pass
         bad += 1  # 键名/列数不匹配或字段非法(整行跳过, 游标不推进)
-        if torn and i == last_idx - 1:
+        if torn and i == last_idx:
             torn_tail = True  # 尾部半行 = 正常崩溃残留(阈值豁免, 对齐 v3)
     return key, bad, data, torn_tail
 
@@ -692,7 +703,154 @@ def format_v4_day_text(key: str, blocks: tuple) -> str:
     return "\n".join(lines) + "\n"
 
 
-def parse_v4_day_text(text: str) -> V4ParsedDay:
+@dataclass(frozen=True)
+class V4DayResume:
+    """天文件增量解析续点(parse_v4_day_text resume=/with_resume=True; F4-1 计划
+    26-11-15-1104): 「整行收尾的前缀解析状态」—— 前缀按整行边界消费完(文本以 \\n 结束)
+    时的块状态机快照与计数。只追加不变式下, 对 (前缀 + 新增字节) 以 resume= 续解 ==
+    对拼接文本的整文件全量重解析(逐位等价; 块/槽/坏行计数/撕裂尾全同源 —— 行循环与
+    块状态机同一实现, 见 _parse_v4_text resumed= 与 _V4DayBlockMachine)。
+
+    key = 头行 key 行标识; 前缀侧 key=None(头行门闩失守/缺 key 行)不可续解(续解会
+    丢头行门闩语义) —— parse_v4_day_text 不产出这种续点(守卫在此单点)。
+    blocks = 已封口块(开放块之前); open_* = 开放块(末个 B 行的块, records 可为空,
+    None = 前缀尚无 B 行); bad_lines/data_lines = 前缀计数(续解自此累加)。
+    """
+
+    key: Optional[str]
+    bad_lines: int
+    data_lines: int
+    blocks: tuple  # Tuple[V4Block, ...](已封口, 文件序)
+    open_start: Optional[int]
+    open_interval: Optional[float]
+    open_dl_base: Optional[int]
+    open_up_base: Optional[int]
+    open_records: tuple  # Tuple[V4Sample | V4ZeroRun | V4NullRun, ...](开放块已收记录)
+
+
+class _V4DayBlockMachine:
+    """天文件块状态机(parse_v4_day_text 行型分支单点; B/r/z/n 全部行型语义唯一实现)
+
+    从 parse_v4_day_text 的闭包形态原样搬移(行为零改动, 守阵回归钉住); 类化只为
+    F4-1 增量解析能复位状态: resume= 构造即从前缀续点接续(已封口块 + 开放块状态),
+    后续行语义与前缀是同一次解析完全一致 —— 不存在第二套行型判定。
+    """
+    def __init__(self, resume: Optional[V4DayResume] = None) -> None:
+        if resume is None:
+            self._blocks: list = []
+            self._start: Optional[int] = None
+            self._interval: Optional[float] = None
+            self._dl_base: Optional[int] = None
+            self._up_base: Optional[int] = None
+            self._records: list = []
+        else:
+            self._blocks = list(resume.blocks)
+            self._start = resume.open_start
+            self._interval = resume.open_interval
+            self._dl_base = resume.open_dl_base
+            self._up_base = resume.open_up_base
+            self._records = list(resume.open_records)
+
+    def _close(self) -> None:
+        if self._start is not None and self._records:
+            self._blocks.append(
+                V4Block(
+                    start_epoch=self._start,
+                    interval_s=self._interval,
+                    dl_base=self._dl_base,
+                    up_base=self._up_base,
+                    records=tuple(self._records),
+                )
+            )
+        self._start = None
+        self._interval = None
+        self._dl_base = None
+        self._up_base = None
+        self._records = []
+
+    def feed(self, parts: list) -> bool:
+        # B/r/z/n 行型分支(纪律面全在 _parse_v4_text): True = 已消费;
+        # False / ValueError / IndexError = 记坏(驱动器统一口径, data 语义不因来源分叉)
+        if parts[0] == "B" and len(parts) in (3, 5):
+            # 二态块头: 3 列无基线 / 5 列基线; 先解析校验再切换块状态(非法 B 行整行计坏,
+            # 既有块不受影响); 基线列负值按坏行(_parse_nn_int 拒负)
+            b_start = int(parts[1])
+            b_interval = _parse_interval_s(parts[2])
+            b_dl = _parse_nn_int(parts[3]) if len(parts) == 5 else None
+            b_up = _parse_nn_int(parts[4]) if len(parts) == 5 else None
+            self._close()
+            self._start = b_start
+            self._interval = b_interval
+            self._dl_base = b_dl
+            self._up_base = b_up
+            return True
+        if self._start is None:
+            raise ValueError("块头前出现数据行")  # 游标无锚点, 记坏不消费
+        if self._dl_base is None and parts[0] in ("r", "z"):
+            raise ValueError("无基线块内出现 r/z(仅 n 游程合法)")  # 解析守卫, 整行坏
+        if parts[0] == "r" and len(parts) in (5, 6):
+            self._records.append(
+                V4Sample(
+                    dl_rate=_parse_nn_int(parts[1]),
+                    up_rate=_parse_nn_int(parts[2]),
+                    # delta 以块基线逐行复原绝对值(基线 + 本行 delta, 逐行独立 —— 坏行不传播);
+                    # 负 delta 在 _parse_nn_int 即抛(免费校验)
+                    dl_total=self._dl_base + _parse_nn_int(parts[3]),
+                    up_total=self._up_base + _parse_nn_int(parts[4]),
+                    dt_ms=_parse_dt_ms(parts[5]) if len(parts) == 6 else None,
+                )
+            )
+            return True
+        if parts[0] == "z" and len(parts) in (4, 5, 6, 7):
+            # 形态 D(plan 26-10-16-1509 §04): 6/7 列 = 携带末端快照对(块基线 + 列 delta);
+            # 4/5 列 = 旧文件无末端列 -> None(agg 摊配按开启快照退化, 向后兼容)
+            if len(parts) >= 6:
+                dl_end, up_end = self._dl_base + _parse_nn_int(parts[4]), self._up_base + _parse_nn_int(parts[5])
+                dt_ms = _parse_dt_ms(parts[6]) if len(parts) == 7 else None
+            else:
+                dl_end, up_end = None, None
+                dt_ms = _parse_dt_ms(parts[4]) if len(parts) == 5 else None
+            self._records.append(
+                V4ZeroRun(
+                    run_len=_parse_pos_int(parts[1]),
+                    dl_total=self._dl_base + _parse_nn_int(parts[2]),
+                    up_total=self._up_base + _parse_nn_int(parts[3]),
+                    dt_ms=dt_ms,
+                    dl_total_end=dl_end,
+                    up_total_end=up_end,
+                )
+            )
+            return True
+        if parts[0] == "n" and len(parts) in (2, 3):
+            self._records.append(
+                V4NullRun(
+                    run_len=_parse_pos_int(parts[1]),
+                    dt_ms=_parse_dt_ms(parts[2]) if len(parts) == 3 else None,
+                )
+            )
+            return True
+        return False  # 键名/列数不匹配(整行记坏, 游标不推进)
+
+    def resume_state(self, key: Optional[str], bad: int, data: int) -> V4DayResume:
+        """续点快照(必须在 build/_close 之前取: blocks 不含开放块, 开放块单独在 open_*)"""
+        return V4DayResume(
+            key=key,
+            bad_lines=bad,
+            data_lines=data,
+            blocks=tuple(self._blocks),
+            open_start=self._start,
+            open_interval=self._interval,
+            open_dl_base=self._dl_base,
+            open_up_base=self._up_base,
+            open_records=tuple(self._records),
+        )
+
+    def build(self, key: Optional[str], bad: int, data: int, torn_tail: bool) -> V4ParsedDay:
+        self._close()
+        return V4ParsedDay(key=key, blocks=tuple(self._blocks), bad_lines=bad, data_lines=data, torn_tail=torn_tail)
+
+
+def parse_v4_day_text(text: str, *, resume: Optional[V4DayResume] = None, with_resume: bool = False) -> Any:
     """v4 天文件文本 -> V4ParsedDay(纯函数, 无文件访问; v4 计划 §01 行型定约)
 
     头行必须恰为 HEADER_LINE_V4: 缺失/不符(含 v1/v2/v3 旧头行 —— R2 换代, 不设双读)
@@ -706,98 +864,27 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
     分母 —— 原样沿用 v3 口径。
     !解析纪律骨架(头行门闩 / data+bad 计数 / 空行注释跳 / split(",") / try-except /
     撕裂尾豁免 / key 首个消费)单点在 _parse_v4_text(issue 26-10-29-1304 R07-T06 收敛),
-    本函数只留 B/r/z/n 行型分支与块状态机(_close); 块头前数据行 / 无基线块 r/z 两个
-    解析守卫以 ValueError 抛给驱动器, 与字段非法同走吞异常计坏路径(data 不分叉)。
+    本函数只留 B/r/z/n 行型分支与块状态机(_V4DayBlockMachine); 块头前数据行 / 无基线块
+    r/z 两个解析守卫以 ValueError 抛给驱动器, 与字段非法同走吞异常计坏路径(data 不分叉)。
+
+    F4-1 增量解析(计划 26-11-15-1104, V4DayCache 消费):
+    - resume=V4DayResume: 前缀续解 —— 行循环与块状态机同一实现复位接续, 语义 = 对
+      (前缀 + text) 的整文件解析(逐位等价; 计数自前缀累加)。
+    - with_resume=True: 返回 (V4ParsedDay, V4DayResume | None) —— 续点仅在文本整行收尾
+      (以 \\n 结束)且 key 非 None(头行门闩已过)时产出; 撕裂尾/头行失守 = None(不可续,
+      读侧退全量重解析)。续解段(with_resume+resume=)同规则产出链式续点。
     """
-    blocks: list = []
-    cur_start: Optional[int] = None
-    cur_interval: Optional[float] = None
-    cur_dl_base: Optional[int] = None
-    cur_up_base: Optional[int] = None
-    cur_records: list = []
-
-    def _close() -> None:
-        nonlocal cur_start, cur_interval, cur_dl_base, cur_up_base, cur_records
-        if cur_start is not None and cur_records:
-            blocks.append(
-                V4Block(
-                    start_epoch=cur_start,
-                    interval_s=cur_interval,
-                    dl_base=cur_dl_base,
-                    up_base=cur_up_base,
-                    records=tuple(cur_records),
-                )
-            )
-        cur_start = None
-        cur_interval = None
-        cur_dl_base = None
-        cur_up_base = None
-        cur_records = []
-
-    def on_day_line(parts: list) -> bool:
-        # B/r/z/n 行型分支(纪律面全在 _parse_v4_text): True = 已消费;
-        # False / ValueError / IndexError = 记坏(驱动器统一口径, data 语义不因来源分叉)
-        nonlocal cur_start, cur_interval, cur_dl_base, cur_up_base
-        if parts[0] == "B" and len(parts) in (3, 5):
-            # 二态块头: 3 列无基线 / 5 列基线; 先解析校验再切换块状态(非法 B 行整行计坏,
-            # 既有块不受影响); 基线列负值按坏行(_parse_nn_int 拒负)
-            b_start = int(parts[1])
-            b_interval = _parse_interval_s(parts[2])
-            b_dl = _parse_nn_int(parts[3]) if len(parts) == 5 else None
-            b_up = _parse_nn_int(parts[4]) if len(parts) == 5 else None
-            _close()
-            cur_start = b_start
-            cur_interval = b_interval
-            cur_dl_base = b_dl
-            cur_up_base = b_up
-            return True
-        if cur_start is None:
-            raise ValueError("块头前出现数据行")  # 游标无锚点, 记坏不消费
-        if cur_dl_base is None and parts[0] in ("r", "z"):
-            raise ValueError("无基线块内出现 r/z(仅 n 游程合法)")  # 解析守卫, 整行坏
-        if parts[0] == "r" and len(parts) in (5, 6):
-            cur_records.append(
-                V4Sample(
-                    dl_rate=_parse_nn_int(parts[1]),
-                    up_rate=_parse_nn_int(parts[2]),
-                    # delta 以块基线逐行复原绝对值(基线 + 本行 delta, 逐行独立 —— 坏行不传播);
-                    # 负 delta 在 _parse_nn_int 即抛(免费校验)
-                    dl_total=cur_dl_base + _parse_nn_int(parts[3]),
-                    up_total=cur_up_base + _parse_nn_int(parts[4]),
-                    dt_ms=_parse_dt_ms(parts[5]) if len(parts) == 6 else None,
-                )
-            )
-            return True
-        if parts[0] == "z" and len(parts) in (4, 5, 6, 7):
-            # 形态 D(plan 26-10-16-1509 §04): 6/7 列 = 携带末端快照对(块基线 + 列 delta);
-            # 4/5 列 = 旧文件无末端列 -> None(agg 摊配按开启快照退化, 向后兼容)
-            if len(parts) >= 6:
-                dl_end, up_end = cur_dl_base + _parse_nn_int(parts[4]), cur_up_base + _parse_nn_int(parts[5])
-                dt_ms = _parse_dt_ms(parts[6]) if len(parts) == 7 else None
-            else:
-                dl_end, up_end = None, None
-                dt_ms = _parse_dt_ms(parts[4]) if len(parts) == 5 else None
-            cur_records.append(
-                V4ZeroRun(
-                    run_len=_parse_pos_int(parts[1]),
-                    dl_total=cur_dl_base + _parse_nn_int(parts[2]),
-                    up_total=cur_up_base + _parse_nn_int(parts[3]),
-                    dt_ms=dt_ms,
-                    dl_total_end=dl_end,
-                    up_total_end=up_end,
-                )
-            )
-            return True
-        if parts[0] == "n" and len(parts) in (2, 3):
-            cur_records.append(
-                V4NullRun(
-                    run_len=_parse_pos_int(parts[1]),
-                    dt_ms=_parse_dt_ms(parts[2]) if len(parts) == 3 else None,
-                )
-            )
-            return True
-        return False  # 键名/列数不匹配(整行记坏, 游标不推进)
-
-    key, bad, data, torn_tail = _parse_v4_text(text, on_day_line)
-    _close()
-    return V4ParsedDay(key=key, blocks=tuple(blocks), bad_lines=bad, data_lines=data, torn_tail=torn_tail)
+    machine = _V4DayBlockMachine(resume)
+    if resume is None:
+        key, bad, data, torn_tail = _parse_v4_text(text, machine.feed)
+    else:
+        key, bad, data, torn_tail = _parse_v4_text(
+            text, machine.feed, resumed=(resume.key, resume.bad_lines, resume.data_lines)
+        )
+    cp: Optional[V4DayResume] = None
+    if with_resume and text.endswith("\n") and key is not None:
+        cp = machine.resume_state(key, bad, data)
+    result = machine.build(key, bad, data, torn_tail)
+    if with_resume:
+        return result, cp
+    return result
