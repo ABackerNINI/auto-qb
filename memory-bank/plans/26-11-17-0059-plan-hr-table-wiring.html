@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 三表迁 aq-table grid 链路: 四项交互全量统一 + registerCell 接线(第二轮)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-table-wiring">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-17-0059">
+<meta name="doc-updated" content="26-11-17-0118">
+<meta name="doc-refs" content="memory-bank/plans/26-11-10-0027-plan-dt-table-wiring.html, memory-bank/tasks/26-11-17-webui-hr-table-grid.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: hr-table-wiring</div>
+<h1>HR 三表迁 aq-table grid 链路: 四项交互全量统一 + registerCell 接线(第二轮)</h1>
+<p class="lede">本篇只回答: HR 三表(hrDetail/hrWave/hrKv)从「零交互零持久化」死面迁入 aq-table grid 链路、四项交互(拖宽/拖序/右键隐藏/持久化)全量统一怎么接、怎么验、失控怎么停 —— 04 卡片不进本轮(已入池 issue 26-11-17-0038 待排期)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-17-0059 · <b>doc-updated</b> 26-11-17-0118 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 前序计划 <a href="26-11-10-0027-plan-dt-table-wiring.html">26-11-10-0027</a> §06 D7(HR 三表第二轮立项) · 2026-11-17 会话 grilling 两轮 8 问拍板(E1-E8, 见 §06) · 只读探查事实清单(引文见 §02)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>背景</strong>: 第一轮(dt_table 真接线, <a href="26-11-10-0027-plan-dt-table-wiring.html">26-11-10-0027</a>)把 gridTemplate/aligns 委托 <code>DT_TABLE.layout()</code> 单点后, HR 三表是 D4 例外清单里除 04 卡片外的全部残留面: 列定义无 tpl/align/width 字段, 表头与单元格手摆, 零列交互零持久化(守阵钉死, 见 §02)。第二轮目标 = 三表迁 aq-table grid 链路并入全局枚举, 四项交互与主表同一套机制、同一个 v5 store。</p>
+<p><strong>目标一句</strong>: HR 三表成为主表同款 grid 面 —— 几何走 <code>DT_TABLE.layout()</code> 单点、交互走主表既有单点、状态落 <code>autoqb_cols_v5</code> 同款 store; dt_table 六口子全活(registerCell/cellOf 顺势接, E2); 现网 HR 面信息与样式逐列保真。</p>
+<p><strong>做到什么程度算成</strong>: §04 三波判据全绿 + 用户终验(HR 三表四项交互手测 + 主表回归四面 06/09/10/11)点头关单。</p>
+<p><strong>设计底线/不变量</strong>:</p>
+<ul>
+  <li><strong>单一生产者延续</strong>: HR 三表几何只经 <code>DT_TABLE.layout()</code>(经 ALL_TABLE_DEFS 同款 computed 链), 不出现第二处拼轨。</li>
+  <li><strong>交互机制近零新增</strong>: 四项交互全部复用主表单点(<code>startResize/startColDrag/openHeadMenu/toggleColumn/persistPage</code>), HR 侧只写插头不写引擎。<strong>唯一例外(E7 兑现所需)</strong>: 拖序侧 locked 守卫 —— 引擎既有 locked 只守隐藏(<code>menu.js:39</code>/<code>columns_persist.js:99</code>), <code>columns_drag.js</code> 零 locked 检查(主表 locked 列今天全可拖序), 补 startColDrag/applyColOrder 守卫属新增引擎行为, 波及主表 locked 列拖序(§07 R7)。</li>
+  <li><strong>持久化向后兼容</strong>: HR 三表作新 page 键进 <code>autoqb_cols_v5</code>, 不升版本(<code>app.js:739-741</code> 口径「新增 page 是向后兼容扩展, 升版本会清空用户手调」), 不动存量用户数据。</li>
+  <li><strong>保守默认</strong>(黄金法则 2): hrKv k 列 <code>locked</code> —— 拆散 k/v 对的操作(隐藏 k/拖走 k)不可表达。</li>
+  <li><strong>判据前置</strong>: 验收清单在本篇写死交用户过目(10-14「判据自设+零用户验收」教训)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+  <li><strong>三表定义与渲染</strong>: <code>HR_TABLE_DEFS</code> 独立注册表(<code>src/auto_qb/webui/static/shared/hr_status.js:104-137</code>), 注释自述「不进 TABLE_PAGES, 否则列选择器/列对齐会多出分组」(:24-27) —— 零交互时代的正确理由, 交互化后列选择器分组恰是隐藏列恢复入口(E6)。hrDetail 十列全 sortable(:105-118), 借壳 <code>&lt;aq-table mode="thead"&gt;</code>(<code>tpl/settings-detail.html:338-340</code>) + tbody 手写 v-for 十 td(:343-356), 排序逐站点内存态(<code>hrs.sortSel/sortDir</code> hr_status.js:163-165, <code>hrsSetSort</code> :292-304); hrWave 八列全手写(:120-131; settings-detail.html:383-402, 行数 ≤4 注释明言不接排序); hrKv 两列 <code>header:false</code>(:133-136) 无列头原生表(settings-detail.html:370-380), 值格内嵌「确认空清单」按钮(:375-376)。</li>
+  <li><strong>零交互零持久化</strong>: 守阵钉死「HR 三表零 grid 几何」(<code>tests/test_webui_static_r4_node_batteries.py:2011-2012</code>)与「hr_status.js 无 localStorage」(<code>tests/test_webui_static_dom_page_hr.py</code>)。</li>
+  <li><strong>主表交互机制单点齐备(HR 只差插头)</strong>: 拖宽 <code>startResize</code>(<code>columns_persist.js:154-205</code>, Shift 邻列互挤; 生效宽度双轨 <code>recomputeEffective</code> :13-24)+<code>autoFitColumn</code>; 拖序 <code>startColDrag</code>(<code>columns_drag.js:45-101</code>); 右键 <code>openHeadMenu</code>/<code>headMenuHide</code>(<code>menu.js:20-45</code>, locked 拒绝)→<code>toggleColumn</code>(<code>columns_persist.js:97-113</code>); 持久化唯一漏斗 <code>persistPage</code>(:66-80)落 <code>autoqb_cols_v5</code>(<code>app.js:395</code>, <code>{pages:{&lt;tableId&gt;:{hidden,order,w}}}</code>); 新增 page 向后兼容不升版本(<code>app.js:739-741</code>)。</li>
+  <li><strong>aq-table 两形态</strong>: 组件 <code>table.js:73-104</code>; <code>mode="thead"</code> 分支自述「设置页 HR 详情表借壳专用, 不挂拖宽/重排/右键」(table.js:81-84) —— 四项交互只在 grid 模式存在; grid 表头自带全部交互入口(<code>tpl/xtpl.html:232-242</code> mousedown 拖序/contextmenu 右键/resizer 拖宽)。</li>
+  <li><strong>视图归属</strong>: settings 页 hr_check 分区(settings-detail.html:223)的 <code>.hr-full-modal</code> 全屏覆盖层(<code>v-show="hrsOpen"</code> :279-280), 不走抽屉桥、无 anchor。</li>
+  <li><strong>守阵面(迁移即翻面)</strong>: D4 例外清单守阵 <code>test_r4_dt_table_exception_list_geometry_guard</code>(test_webui_static_r4_node_batteries.py:2275, probe :1849-2044)含「HR 三表注册在盘」「HR 三表零 grid 几何」「settings-detail 零 grid 几何」「hrDetail 借壳形态在」四类断言, 迁移后全部改口径; assert 豁免层 <code>ASSERT_SKIP_FACES</code>(<code>columns_grid.js:14-17</code>)不含 HR(本就不是 grid 面); parity e2e 口径注释 <code>e2e/dt-table-layout-parity.spec.mjs:29-32</code>。</li>
+  <li><strong>数据链与可验性</strong>: HR 数据来自 <code>/api/hr/status</code> 与 <code>/api/hr/sites/&lt;site&gt;/entries</code>(hr_status.js:190/:229); e2e 跑 ui_harness 桩服 <code>--hr-scene on|empty|off</code>(<code>scripts/ui_harness.py:39-41</code>)。纯前端改造, 几何/交互桩可验, 不依赖真机 qB/HR fetch。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线(E6): 并入全局枚举 + 迁 grid 模式</strong> —— HR 三表注册进 <code>ALL_TABLE_DEFS</code>(新 page 键 <code>hrDetail/hrWave/hrKv</code>), 列定义补 tpl/align 直接喂 <code>DT_TABLE.layout()</code> 单点; 每表一对 computed 按既有模式登记(<code>columns_computed.js:139-189</code> 同构); colAlignCss 对齐注入/列选择器分组/resetAll/fitAll/assertLayouts 枚举随并入自动覆盖。settings-detail.html 原生表迁 aq-table grid 容器 + grid 行。</p>
+<p><strong>交互(E1/E3)</strong>: grid 模式表头自带四项交互入口(xtpl.html:232-242), HR 侧零新引擎; 状态经 colW/colHidden/colOrder(page 键 = 三表 tableId)走 <code>persistPage</code> 落 v5 新 page 子树, 不升版本。</p>
+<p><strong>排序(E8)</strong>: hrDetail 排序并入引擎 <code>setSort(col.key, tableId)</code>, 删 <code>hrsSetSort/hrs.sortSel/sortDir</code> 专用状态; 行为差: 排序选择从逐站点记忆变表级(拍板接受)。</p>
+<p><strong>单元格(E2)</strong>: 手写 td 迁 grid 行后, 值格渲染器(徽章/mono/num/人话)注册进 <code>DT_TABLE.CELLS</code>(registerCell), 模板经 cellOf 消费 —— dt_table 六口子全活。</p>
+<p><strong>借壳退役</strong>: <code>mode="thead"</code> 唯一消费方(hrDetail)迁走后分支整体退役(table.js/xtpl.html), 守阵同步翻面 —— 本计划的直接后果, 随迁移同笔落地。</p>
+<p><strong>范围外(E5)</strong>: 04 卡片(drawerTrackerV04)不动, 已入池 <a href="../issues/26-11-17-0038-refactor-webui-v04-card-grid.html">issue 26-11-17-0038</a> 待排期; 例外清单收缩后它成为唯一几何旁路例外。</p>
+<p><strong>分期(E4)</strong>: W1 迁壳+几何单点+守阵翻面 → W2 交互全量+持久化+单元格注册化 → W3 e2e+终验; 每波一笔提交(止损沿用第一轮 D8 条款)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>波</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td><strong>W1</strong><br>迁壳<br>几何单点<br>守阵翻面</td>
+    <td>① 三表列定义补 tpl/align(width 交双轨模型, 见 R1; hrKv 补列头「项/值」, k 列 locked —— E7); ② 并入 ALL_TABLE_DEFS(E6, 新 page 键); ③ settings-detail.html 原生表迁 aq-table grid 容器+grid 行, 手写 td 按列保真清单迁移(徽章色族/mono-cell/num 类逐列过); ④ hrDetail 排序并入 setSort, 删 hrsSetSort 专用状态(E8); ⑤ <code>mode="thead"</code> 分支退役; ⑥ 守阵翻面: 例外清单断言改钉「HR 三表经 ALL_TABLE_DEFS 走单点 + settings-detail grid 几何恰 N 处」, 删「零 grid 几何」「借壳形态在」旧断言。</td>
+    <td>守阵红绿双验(还原旧形态→红, 新形态→绿); test.quick 绿; e2e(hr-history + face-bg)绿; dev.run --dry-run 冒烟。grid 行渲染挂载形态(行容器与 aq-table slot 关系)W1 首日实证选定, 不设拍板。</td>
+  </tr>
+  <tr>
+    <td><strong>W2</strong><br>交互全量<br>持久化<br>单元格注册化</td>
+    <td>① 四项交互逐表通路: 拖宽(含 Shift 互挤/dblclick autoFit)/拖序/右键隐藏+列选择器恢复/k 列 locked 拒绝 —— 隐藏侧走既有 headMenuHide 守卫, 拖序侧补 startColDrag/applyColOrder locked 检查(新增引擎行为, §07 R7, 主表回归四面判据必过); ② 持久化: v5 store 出现三表子树, 刷新后宽/序/隐还原; resetAll/fitAll 波及 HR 面; ③ assertLayout 覆盖 HR 面(展开态; 未展开 v-show 沿用「未挂载豁免」口径); ④ 单元格渲染注册化: 值格渲染器 registerCell 进 CELLS, 模板 cellOf 消费(E2)。</td>
+    <td>交互四项逐表手测过; 守阵红绿双验(故意旁路→红); e2e 交互面绿; test.quick 绿。</td>
+  </tr>
+  <tr>
+    <td><strong>W3</strong><br>e2e 语义<br>+ 终验收单</td>
+    <td>① parity e2e CASES 增 HR 三面(钉住单点输出); ② hr-history e2e 回归; ③ 守阵/文档回写(hr_status.js 头注释、architecture/webui.md HR 节、第一轮计划 doc-refs 已在盘); ④ 基线切片; ⑤ 用户终验: settings → HR 在线核实 → 展开, 三表逐一手测四项交互+刷新持久, 主表回归四面(06/09/10/11), 点头关单。</td>
+    <td>test.full 全绿; <strong>用户终验点头才关单(D5 同款)</strong>。</td>
+  </tr>
+</table>
+<p><strong>止损(E4/D8 沿用)</strong>: 每波一笔提交, 任一波回归红且当日无法定位 → 回滚该笔; HR 面与主表链路语义结构性冲突(如 grid 行渲染在 .hr-full-modal 容器内不成立) → 当场停手回报, 不自选改道。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 2026-11-17 grilling 两轮 8 问已全部拍板, 结论见 §06。W1 首日实证细节(grid 行渲染挂载形态 / 隐藏态窗口实测策略)不设拍板, 实证后回报。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="hint">2026-11-17, grilling 两轮 8 问, 用户逐项拍板(第二轮编号 E1-E8, 衔接第一轮 D1-D8):</p>
+<table>
+  <tr><th>#</th><th>结论</th></tr>
+  <tr><td>E1</td><td>交互范围 = <strong>全量统一</strong>: 三表 × 四项(拖宽/拖序/右键隐藏/持久化), 不按表裁剪</td></tr>
+  <tr><td>E2</td><td>registerCell/cellOf = <strong>本轮接</strong>(单元格渲染注册化顺势), dt_table 六口子全活</td></tr>
+  <tr><td>E3</td><td>持久化 = <strong>复用主表 v5 同款机制</strong>(同 store 同 reset), 零第二套持久化</td></tr>
+  <tr><td>E4</td><td>节奏 = <strong>三波</strong>(W1 迁壳/W2 交互/W3 收口) + 每波一笔提交 + D8 止损条款沿用</td></tr>
+  <tr><td>E5</td><td>04 卡片 = <strong>不动</strong>, 入池 issue 26-11-17-0038 待排期</td></tr>
+  <tr><td>E6</td><td>注册面 = <strong>并入 ALL_TABLE_DEFS</strong>(列选择器 HR 分组 = 隐藏列恢复入口); 「独立注册表防多分组」旧注释作废更新</td></tr>
+  <tr><td>E7</td><td>hrKv = <strong>补列头</strong>(「项/值」), k 列 locked —— 拆散 k/v 对的操作不可表达</td></tr>
+  <tr><td>E8</td><td>hrDetail 排序 = <strong>并入引擎 setSort</strong>(逐站点记忆 → 表级, 行为差拍板接受)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>窗口实测对隐藏面无效: HR 面在 .hr-full-modal 未展开时 display:none, colW 空时的窗口实测轨(recomputeEffective)拿不到可用宽度</td><td>W1 双轨模型在 HR 面生效宽度异常</td><td>HR 三表默认走 tpl 显式宽度(固化轨)或展开后 fit, W1 实证选定并回报, 不静默放宽</td></tr>
+  <tr><td>R2</td><td>手写 td 保真迁移缺漏(徽章色族/mono-cell/num 样式类丢列)</td><td>W1 迁移</td><td>按列保真清单逐列过; e2e + 用户终验兜底</td></tr>
+  <tr><td>R3</td><td>排序并入引擎后逐站点记忆行为差引起不满</td><td>用户终验</td><td>E8 已拍板接受; 终验时点回看, 不满意再议(纯 UX, 数据无损)</td></tr>
+  <tr><td>R4</td><td>并入 ALL_TABLE_DEFS 的枚举面消费者(全表循环/断言/对齐注入)对 HR 面 v-if 隐藏态行为未定义</td><td>W1/W2 实施</td><td>逐项核实进各波判据; assert 沿用「未挂载豁免」口径</td></tr>
+  <tr><td>R5</td><td>mode="thead" 退役牵连守阵翻面遗漏(probe 借壳断言/aq-table 双向钉死断言)</td><td>W1 迁移</td><td>守阵改写与迁移同笔提交, 红绿双验</td></tr>
+  <tr><td>R6</td><td>HR 面与主表链路语义结构性冲突(grid 行渲染在 hr-full-modal 容器内不成立等)</td><td>W1 探针/实证红</td><td>当场停手回报(E4/D8 同款), 不自选改道</td></tr>
+  <tr><td>R7</td><td>拖序侧 locked 守卫是新增引擎行为: 主表 locked 列(name/site/url/act/prio 等)今天全可拖序, 补守卫后变不可拖走 —— 主表既有行为的可见变化</td><td>W2 实施后主表回归</td><td>主表回归四面(06/09/10/11)判据必过; 用户终验重点看主表 locked 列拖序变化是否在 E7 授权口径内, 超出预期即停手回报</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-17-0059</span> 初版: 来源前序计划 26-11-10-0027 §06 D7(HR 三表第二轮立项, 方向 A 迁 aq-table grid 链路); 2026-11-17 会话 grilling 两轮 8 问, 用户逐项拍板 E1-E8(§06); 事实面由只读探查代理摸底(三表列集合与渲染形态/主表四项交互机制单点/守阵断言位置/数据链桩可验), 关键引文见 §02; 04 卡片出轮入池 issue 26-11-17-0038(待排期)。</li>
+  <li><span class="tag">R1 · 26-11-17-0118</span> 评审轮1修复(1 major+2 minor 全修, 引文过检): F1 locked 拖序守卫属新增引擎行为明文化(§01 不变量收窄为「近零新增」+唯一例外, W2 判据补拖序守卫与主表回归, §07 增 R7) —— E7 拍板口径不变; F2 v-show 行号 :265/276 修正为 :279-280; F3 doc-refs 机器补链晚于建件抬戳, 随本笔消除</li>
+</ul>
+
+</div>
+</body>
+</html>
