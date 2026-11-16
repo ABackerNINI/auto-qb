@@ -2,7 +2,7 @@
 
 > 摘要: 第四条测试轨规程 —— 分工与准入、硬约束、环境守卫与假红陷阱、种子层 L0/L1/L2、切片与漂移治理、用例写法。状态与进度不在本文件, 在常驻锚 issue。
 > 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests-real, real 包, 不走闸门, 免token, 免鉴权, 跳过本地验证, 功能完工, 常用验收
-**Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/plans/26-11-01-2123-plan-real-rm08-drift.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html
+**Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/plans/26-11-01-2123-plan-real-rm08-drift.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html
 
 ## 00 定位: 四条测试轨的分工
 

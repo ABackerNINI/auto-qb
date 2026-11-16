@@ -8,7 +8,7 @@
 > / 收尾 done + 组键归一 dst。纯取证复测轮, 产品源码与用例代码零改动, 无基线更新(test.full 未跑)。
 > 基线时间: 2026-11-12 00:29-01:53(P1 截图起 + P2 ts 01:14:52-01:53:51), 清场记账 02:00-02:30(P3)
 > 基线 commit: 703ceb6c(分支 relocate-bt-backup-real-retest, 本地无远端; 实测全程 HEAD 未动)
-**Refs:** memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html, memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/testing/real-baselines/26-11-11-0804-real-relocate-bt-backup-probe.md, memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md, memory-bank/issues/26-11-12-0308-bug-bt-backup-probe-offline-timeout.html
+**Refs:** memory-bank/issues/26-11-11-2305-test-bt-backup-probe-real-retest.html, memory-bank/plans/26-11-11-0259-plan-relocate-bt-backup-scalar-probe.html, memory-bank/testing/real-baselines/26-11-11-0804-real-relocate-bt-backup-probe.md, memory-bank/tasks/26-11-11-backend-relocate-bt-backup-probe.md, memory-bank/issues/26-11-12-0308-bug-bt-backup-probe-offline-timeout.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html
 
 ## 01 三态结论(四判据)
 

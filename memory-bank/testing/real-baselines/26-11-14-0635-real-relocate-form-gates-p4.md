@@ -10,7 +10,7 @@
 > 回炉条款未触发。test.full 全绿 6115 passed + 2 skipped(覆盖 99%)。生产 16585/26586 全程零触碰(只读识别留痕)。
 > 基线时间: 2026-11-14 05:59-06:30(实验墙钟 1877s)
 > 基线 commit: 7f93de58
-**Refs:** memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html · memory-bank/reports/26-11-13-0617-report-relocate-form-aware-gates.html(T1 改码前基线, 本片逐项翻转对照) · memory-bank/testing/real-baselines/26-11-10-0435-real-relocate-rlfn-e2e.md(构造方法先例), memory-bank/testing/baselines/26-11-14-0637-relocate-form-gates-p4.md
+**Refs:** memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html · memory-bank/reports/26-11-13-0617-report-relocate-form-aware-gates.html(T1 改码前基线, 本片逐项翻转对照) · memory-bank/testing/real-baselines/26-11-10-0435-real-relocate-rlfn-e2e.md(构造方法先例), memory-bank/testing/baselines/26-11-14-0637-relocate-form-gates-p4.md, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html
 
 ## 01 验收数字
 

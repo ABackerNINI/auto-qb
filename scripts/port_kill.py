@@ -22,15 +22,32 @@ scripted, attribution-checked channel is the exemption recorded under AGENTS.md'
 taskkill red line; running taskkill directly in the AI shell is still banned. Both
 platform branches sit behind the same gate (kill_decision); the verify is not
 Windows-only.
+
+Kill safety, clone-domain gate (2026-11-17): a subagent ran dev.port-kill against
+the webui ports 38080/38081 with --yes and killed the production auto-qb.exe
+instances of two OTHER clones (D:\Projects\auto-qb, D:\Projects\auto-qb-long-seeding)
+-- the old gate only printed name/cmdline for a human to eyeball, and --yes could
+override the non-python refusal, so an unexamined attribution line plus --yes was
+enough for the accident. Since this hardening, kill_decision first checks the clone
+domain (in_clone_domain): a listener whose command line does not name THIS clone's
+repo root (derived from __file__, path-normalized, delimiter-bounded prefix match)
+is refused as outside-repo, and --yes CANNOT override that refusal. Own-clone
+listeners (python stub / uv wrapper / node / auto-qb.exe under .venv) all carry the
+repo root in their cmdline and keep the old flow; a cmdline that cannot be
+attributed to this clone is refused (fail-closed), same spirit as verify-failed.
 """
 import json
 import os
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 # POSIX 支的 /proc 根单点(守阵用假 /proc 树钉双支, 见 tests/test_legacy_review4_scripts.py)
 PROC_ROOT = "/proc"
+# 本 clone 仓库根单点: 脚本固定在 <root>/scripts/ 下, 从 __file__ 上推一层。
+# clone 域闸(in_clone_domain / kill_decision)用它判定候选进程是否归属本 clone。
+REPO_ROOT = Path(__file__).resolve().parents[1]
 # POSIX 实杀信号单点: Windows CPython 无 signal.SIGKILL 属性 -- 生产 nt 支永不评估它,
 # 但守阵把 os.name 钉成 posix 会在 nt 宿主激活本支, getattr 兜 9(SIGKILL 的 POSIX 数值)
 _SIGKILL = getattr(signal, "SIGKILL", 9)
@@ -172,6 +189,42 @@ def _process_info_posix(pids) -> dict:
     return infos
 
 
+def _norm_path_text(text) -> str:
+    """路径文本归一化: 去首尾空白与引号壳、统一分隔符为反斜杠、小写(Windows 大小写不敏感)。
+
+    `D:\\` 与 `D:/` 两形态都归到反斜杠; cmdline 里带引号的完整路径(首尾引号)剥掉,
+    免得引号挡在路径中间干扰分隔符边界判断。
+    """
+    return str(text).strip().strip('"').strip("'").lower().replace("/", "\\")
+
+
+def in_clone_domain(cmdline, repo_root) -> bool:
+    """clone 域判定单点(纯函数, 守阵可直接测): 候选进程的 cmdline 是否落在本 clone 仓库根内。
+
+    判据: 归一化(_norm_path_text)后, 仓库根(去尾分隔符)在 cmdline 中出现且其后**紧跟
+    路径分隔符** -- 带分隔符边界的前缀匹配, 不是裸子串。`...\\auto-qb-zcode-clone2\\.venv\\...`
+    命中; `...\\auto-qb\\...`(别的 clone, 只是共享 auto-qb 前缀)、`...\\auto-qb-zcode-clone2-old\\...`
+    (前缀同串的后缀变体)不命中。cmdline 恰好等于仓库根(其后无分隔符)也不算 -- 进程的
+    可执行文件必在根内某层, 形态上必然带分隔符, 恰等形态更可能是把根当普通参数提及。
+
+    cmdline 不含仓库根路径(相对路径启动/纯短名/查不到 cmdline)一律视为非本 clone
+    (fail-closed): 本 clone 进程的真实形态(.venv\\Scripts\\python.exe、uv.exe run、
+    .commands 的 node、.venv 下 auto-qb.exe)全部含仓库根路径, 见 2026-11-17 事故档案
+    memory-bank/pitfalls/ops/port-kill-prod-instance.md。
+    """
+    root = _norm_path_text(repo_root).rstrip("\\")
+    text = _norm_path_text(cmdline)
+    if not root or not text:
+        return False
+    idx = text.find(root)
+    while idx != -1:
+        end = idx + len(root)
+        if end < len(text) and text[end] == "\\":
+            return True
+        idx = text.find(root, idx + 1)
+    return False
+
+
 def _is_python_listener(name: str, cmdline: str) -> bool:
     """python-like listener = the dev/e2e stub interpreters this script cleans up.
 
@@ -199,12 +252,23 @@ def kill_decision(info, confirmed: bool):
     confirmed: whether the operator passed --yes (default off: high-risk action,
     AGENTS.md golden rule 2).
 
+    Gate order (2026-11-17 hardening): the verify-failed refusal runs first
+    (fail-safe), the clone-domain gate is next -- a listener whose cmdline does
+    not name this clone's repo root is refused as outside-repo and --yes cannot
+    override it (the 2026-11-17 accident killed two other clones' production
+    instances through exactly that override) -- then the python/non-python flow.
+
     Returns (allowed, reason); reason is ASCII and printable as-is, and for
     refusals explains why plus how to confirm explicitly.
     """
     if info is None:
         return False, "verify-failed: no process info (query failed or pid exited); refusing to kill blind"
     name, cmdline = info
+    if not in_clone_domain(cmdline, REPO_ROOT):
+        return False, (
+            "outside-repo: listener cmdline does not name this clone's repo root"
+            f" ({REPO_ROOT}); refusing even with --yes"
+        )
     if _is_python_listener(name, cmdline):
         return True, "python-listener"
     if not confirmed:
@@ -263,7 +327,16 @@ def main(argv: list) -> int:
                 print(f"[port-kill] {port}: pid {pid} = {name} : {cmdline}")
             ok, why = kill_decision(info, confirmed)
             if not ok:
-                print(f"[port-kill] {port}: pid {pid} -> REFUSED: {why}")
+                if why.startswith("outside-repo"):
+                    # clone 域闸拒绝: 显眼 WARNING(2026-11-17 事故加固) -- --yes 也越不过
+                    print(
+                        f"[port-kill] WARNING: pid {pid} is an OUTSIDE-REPO listener"
+                        f" (cmdline does not name this clone; repo root: {REPO_ROOT})"
+                        " -- kill refused, --yes cannot override this gate."
+                    )
+                    print(f"[port-kill] {port}: pid {pid} -> REFUSED(outside-repo): {why}")
+                else:
+                    print(f"[port-kill] {port}: pid {pid} -> REFUSED: {why}")
                 rc = 1
                 continue
             ok, detail = _kill_pid(pid)

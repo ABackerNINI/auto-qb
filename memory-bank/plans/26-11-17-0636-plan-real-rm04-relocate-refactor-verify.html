@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>RM04 relocate 重构真机复验分步实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-rm04-relocate-refactor-verify">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-17-0636">
+<meta name="doc-updated" content="26-11-17-0719">
+<meta name="doc-refs" content="memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html, memory-bank/tasks/26-11-15-backend-relocate-refactor.md, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/issues/26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-14-0401-bug-relocate-absence-offline-deletion-hole.html, memory-bank/testing/real-machine.md, memory-bank/testing/real-baselines/26-11-14-0635-real-relocate-form-gates-p4.md, memory-bank/testing/real-baselines/26-11-12-0229-real-relocate-bt-backup-retest.md, memory-bank/testing/real-baselines/26-11-11-0042-real-RM04-21.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-rm04-relocate-refactor-verify</div>
+<h1>RM04 relocate 重构真机复验分步实施计划</h1>
+<p class="lede">本篇只回答: relocate 重构第一批(S1-S4)落地后, RM04 片的真机实测怎么跑 —— 漂移体检结论 / acc1-4 + E1-E9 + 0420 + 0401 逐项映射到用例 / 拆片排期 / issue 翻灯 / 验收判据。执行轨纪律单点在 <code>memory-bank/testing/real-machine.md</code>(§06 定期排期七步, 本计划覆盖其中 1/2/4 步)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-17-0636 · <b>doc-updated</b> 26-11-17-0719 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「对 relocate 重构第一批做测试qb真机实测, 测完更新关联 issue 状态」; 拍板已定: 全量口径(acc1-4 复验 + E1-E9 口径复跑 + 0420/0401 欠账项), FAIL 留证不修(scope-guard 口径); 真机一律走 tests-real/ 真机轨专用测试实例, 生产 qB 与生产 config.yml 绝对不碰<br>
+  <b>执行分支</b> <code>relocate-rm-r2</code>(纯本地), 本计划撰写时 HEAD <code>946bd2e7</code> · <b>预算</b> 7 个半天片(A~G, 见 §04)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>做到什么程度算成</b>: ①现有 RM04 用例 21 条(RM04-01~21)在重构后 HEAD 上全量复跑, 三态记账(PASS/FAIL/BLOCKED); ②acc1-acc4 四项验收(任务档案 26-11-15-backend-relocate-refactor.md R1 段 + plan 26-11-15-2340 §03.6 本批状态列, 现存单点; 当时的 scratch 证据目录 <code>tmp-analysis/acc-reloc-single/</code> 已清理, 证据面以档案+用例卡为准)沉淀为耐久真机用例并首跑 PASS; ③E1-E9 矩阵(plan 26-11-13-0448 §04-P4)按 D1 拍板(2026-11-17)<b>全沉淀为耐久真机用例</b>(与 RM04-22~27 合并去重后为 7 条新增, 见 §03.2), 逐条首跑 PASS; ④0420/0401 两条欠账 issue 完成真机复验取证; ⑤测试全过后按 §06 映射表翻灯关联 issue。全量口径由用户拍板, 不做抽样。</p>
+<p><b>设计底线</b>(违反即停):</p>
+<ul>
+  <li><b>生产零触碰</b>: 生产 qB(16585/26586/webui 38080/38081)与仓库根 <code>config.yml</code> 绝对不碰; 只连白名单双环境 36595/36596 或 56589/56590, 配置由 <code>tests-real/lib/app.py</code> 的 <code>write_config()</code> 渲染派生(case 目录内, data_dir 落 case)。</li>
+  <li><b>真机轨准入</b>(real-machine §00): 本轮全部面均属「qB 真执行才成立 / 必须碰真文件系统」两类; 纯界面面(guide 三段 UI 消费、0638 探测异步化)不进真机, 见 §03.3。</li>
+  <li><b>FAIL 留证不修</b>: 当轮不修缺陷(scope-guard 口径), FAIL ⇒ 入池 bug issue 留证; 测试侧造法缺陷(假红)允许当轮修用例复跑。</li>
+  <li><b>不挂闸门</b>: <code>real.*</code> 永不进 ship 链; 用例代码由后续阶段随主提交入库, 本轮执行不 commit。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点: 漂移体检(§07 机械判据)</h2>
+<h3>2.1 基线 commit 判定</h3>
+<ul>
+  <li>锚 issue §07 RM04 行基线 = <code>b512026d</code>(2026-11-01 漂移轮)—— 本 clone <b>解析不到</b>(clone5 lineage 随合流 rebase 改写, 26-11-01 已记账的「基线 commit 失效警示」), 按 §07「写不出 commit 从首轮重来」口径处置。</li>
+  <li>片内最近真机基线三条, <b>全部不得背书本轮 HEAD</b>: 前两条经 merge-base --is-ancestor 实证非祖先(rc=1)—— <code>4b69ed4f</code>(RM04-21 轮, 2026-11-11, 与 HEAD 分叉于 <code>697472b6</code>, 该线含 rebase 改写前的启动对账实施链 4b971a50/4897d4f6/4b69ed4f 三笔 HEAD 没有的提交; 4897d4f6 与 HEAD 线 24e97439 同标题 = clone5 rebase 双份)与 <code>7f93de58</code>(form-gates P4, 2026-11-14, form-gates 分支合流分线, merge-base <code>2870cb60</code>); 第三条 <code>703ceb6c</code>(26-11-12-0229 切片)本 clone <b>解析不到</b>(对象不存在, 该切片分支本地无远端), 按行 93 对 b512026d 的同款「解析不到」口径处置。<b>机械判据下三条均不得背书</b>: 各线的复跑结论都是另一 lineage 的树, 不能背书本分支 HEAD。</li>
+  <li>按「基线必须真 HEAD」口径, 本轮等效于<b>基线重立轮</b>: 全量复跑 + 判据变项改造, 收尾按官方 suite 实跑时刻 HEAD 重立 §07 基线。</li>
+</ul>
+<h3>2.2 diff 概览(<code>git log 4b69ed4f..HEAD</code>)</h3>
+<ul>
+  <li><code>tests-real/rm04_relocate/</code>: 4 commits(新→旧: 075dd418 / 3bfe31bb / 4e54bd94 / 78416d13), 末二笔非用例沉淀 —— <code>075dd418</code>(bt_backup v8 收编时对 rm04 用例的 schema 跟随 8 行 + 窗口用例旧形状收编 18 行)与 <code>3bfe31bb</code>(窗口用例 3 行)。<b>用例面非零漂移, 但仅 v8 迁移链适配类改动, 无判据语义改动</b>(评审 R2 实证)。</li>
+  <li><code>src/auto_qb/</code>: 112 commits(评审 R2 实测复核), 其中 RM04 片 glob 文件(relocate_mod/relocate_units/grouping_mod/torrents/relocate_journal/alias_fs)<b>命中 19 commits</b> —— 有命中, 不豁免, 逐条判定见 2.3。</li>
+</ul>
+<h3>2.3 逐条判定(判据变 / 路径变 / 纯重构 → 直接影响用例)</h3>
+<table>
+  <tr><th>commit</th><th>判定</th><th>直接影响</th></tr>
+  <tr><td><code>33d7f850</code> S1a 单活任务模型核心(续迁收官+移交+统一改指)</td><td class="wr">判据变</td><td>链式/续迁断言面: RM04-16/20/21 触面; 新增 RM04-22 直接覆盖</td></tr>
+  <tr><td><code>ca820f5f</code> S1b 改道机器退役+整链清理单元+旧账迁移器</td><td class="wr">判据变</td><td>改道前任账类断言整体退役; 迁移器新面 → 新增 RM04-23</td></tr>
+  <tr><td><code>1f3f88a7</code> S2 撤销语义重做(删搬回+三段式 guide 通道下发)</td><td class="wr">判据变</td><td>RM04-19 撤销回执形态复跑(confirm 回执新增 <code>guide</code> 字段, <code>truth.cls</code> 口径不变); 新增 RM04-22</td></tr>
+  <tr><td><code>1fad4fce</code> S3 生命周期账统一(phase 派生单点+终态分级保留)</td><td class="wr">判据变</td><td>终态账/相位断言面: RM04-06/07(journal 恢复与坏账)与 RM04-20/21(<code>done(finalized)</code>)复跑重点观察</td></tr>
+  <tr><td><code>0df84475</code> S4 路径判定单点(双 <code>_norm</code> 合一+删链门候选面修复)</td><td class="wr">判据变</td><td>归一/到位/删链门: RM04-05/16/20 复跑; 新增 RM04-25</td></tr>
+  <tr><td><code>24e8d063</code> 收尾缺陷追修(启动期接管面写穿+撤销 docstring 对齐)</td><td>纯重构</td><td>RM04-21 启动接管面「重构后复验」(<code>_load_jobs</code> 尾部 <code>state.save()</code>)</td></tr>
+  <tr><td><code>728d6ac8</code> 已删成员闭账三态判据+停机计数摘要一行</td><td>新行为</td><td>0401 复验面 → 新增 RM04-27</td></tr>
+  <tr><td><code>1de5420e</code> / <code>8316ea56</code> 恢复确认账(有界补发+fuse 让路收窄)</td><td>新行为</td><td>RM04-20/21 离线窗复跑触面</td></tr>
+  <tr><td><code>dc337d29</code> 单成员 direct 搬迁免暂停</td><td>新行为</td><td>RM04-24 批量 direct 直接消费; 回归档顺带覆盖</td></tr>
+  <tr><td><code>cb470f2c</code> 归组消费点逐条隔离+待归组补偿清单</td><td>新行为</td><td>RM04-01/02/08 归组面复跑</td></tr>
+  <tr><td><code>6686b25e</code> / <code>6418e00b</code> / <code>2c8d0d56</code> form-gates R1/R2+R3/R4</td><td>新行为</td><td>E1-E9 复跑(§03.2); RM04-10(.!qB 窄域)/RM04-20 顺带回归</td></tr>
+  <tr><td><code>075dd418</code> 顶层 bt_backup 表收编为 relocate.bt_backup 标量 + v7→v8 迁移链</td><td class="wr">判据变</td><td>relocate 账 schema 迁移链; <b>RM04-23 用例卡断言点: 旧格式账含 v7 顶层 bt_backup 形态, 断言迁移链搬运</b>; RM04-01~21 复跑时账面形态按 v8 观察</td></tr>
+  <tr><td><code>24e97439</code> 启动对账实施: 终态 failed 账按物理现状重推相位(S1+S2)</td><td class="wr">判据变</td><td>RM04-21 断言主面(启动对账自愈 7 段 B1-B7)重构后复验; 触 relocate_exec/lifecycle/mod</td></tr>
+  <tr><td><code>84db10ba</code> / <code>c18a1b73</code> recycle daemon W1a/W1b 观测面(obs 文件 + _Observation 状态机)</td><td>新行为</td><td>relocate_journal 观测通道新增; 回归档顺带覆盖(RM04-05/06 journal 面)</td></tr>
+  <tr><td><code>3ab876a7</code> relocate 运行面口径收尾(lifecycle 死分支退役+标量口径)</td><td>纯重构</td><td>RM04-20/21 收尾窗「重构后复验」</td></tr>
+</table>
+<p class="aside"><b>体检结论一句话</b>: 用例面仅 v8 迁移链适配类改动(075dd418/3bfe31bb, 无判据语义变化)、产品面 <b>19 commits</b> 有命中(判据变 7[S1a/S1b/S2/S3/S4+075dd418+24e97439] + 新行为 10[form-gates 3+cb470f2c+728d6ac8/1de5420e/8316ea56/dc337d29+84db10ba/c18a1b73] + 纯重构 2[24e8d063/3ab876a7])—— 按 §07 纪律「重构不算零命中」, 全片按「重构后复验」全量复跑, 判据变面由合并后 13 条新增用例(RM04-22~34, D1 全沉淀口径)承接; 若复跑出现红, 先判测试侧改造 vs 产品回归再记账。(数字经评审 R2 实测复核并经主会话复跑验证: 112/19/4 笔均逐字可复现。)</p>
+
+<h2><span class="no">§03</span>方案总览: 覆盖映射表(核心)</h2>
+<h3>3.1 验收项 → 用例映射</h3>
+<p>现状盘面(D1 全沉淀口径, 2026-11-17 用户拍板): 现成可跑 <b>21 条</b>(RM04-01~21, 全量复跑, 其中 7 条为判据变重点观察); 需改造 <b>0 条</b>(预判无断言与新语义直接冲突 —— 现有用例无「搬回」类断言, 唯一 <code>setLocation</code> 用法均为 qB 原生跟进造数, 与撤销语义无关; 复跑若红再按 §04 处置规则判改造 vs 产品回归); 需新增 <b>13 条耐久用例</b>(acc 面 6 条 RM04-22~27 + E 面 9 条合并去重后 7 条 RM04-28~34; 合并明细见 §03.2)。13 条 &gt; 12 触发拆片线(规程 §05 规则 4), 排期按 §04 重切为 7 个半天片, 新增用例编写+耐久两遍分散到多片。</p>
+<table>
+  <tr><th>验收项</th><th>映射</th><th>要点</th></tr>
+  <tr><td><b>acc1</b> 链式 A→B→C 撤销(0528)</td><td><span class="wr">新增 RM04-22</span>; RM04-16 复跑为辅(人工 junction 链可见性, 非续迁链)</td><td>见 §03.4 用例卡</td></tr>
+  <tr><td><b>acc2</b> 迁移器 good/bad/restart 三形态</td><td><span class="wr">新增 RM04-23</span></td><td>见 §03.4 用例卡</td></tr>
+  <tr><td><b>acc3</b> 批量&gt;20 组终态分级保留(0326)</td><td><span class="wr">新增 RM04-24</span></td><td>见 §03.4 用例卡; 批量参数见 §03.5</td></tr>
+  <tr><td><b>acc4</b> 闸门面 0535+0711 + <b>E3</b> 同名仍拦</td><td><span class="wr">新增 RM04-25</span>(三腿合并: 0535 祖先 / 0711 direct / E3 同名 confirm+依赖账生命周期, 新建即 L3)</td><td>见 §03.4 用例卡</td></tr>
+  <tr><td><b>E1</b> 误拦基线取证(0448)</td><td class="wr">作废留痕 → 并入 E2/E4</td><td>E1 是「修复前红」的取证形态, R1-R4 修复已落地且 P4 已翻转验证; 修复后耐久化只剩正向断言(误拦不复现 = 异名添加零弹窗 + 组外删除放行), 恰为 E2/RM04-28 与 E4/RM04-29 的断言面 —— 单独立条必与之逐字重复, 按「不测三遍」并入, 见 §03.2 合并明细</td></tr>
+  <tr><td><b>E2</b> 异名添加放行+全链成立</td><td><span class="wr">新增 RM04-28</span>(L2)</td><td>见 §03.4 用例卡</td></tr>
+  <tr><td><b>E4</b> 组外异名带文件删除放行</td><td><span class="wr">新增 RM04-29</span>(L2)</td><td>见 §03.4 用例卡; 与 RM04-28 共用组外异名拓扑(同片)</td></tr>
+  <tr><td><b>E5</b> 成员收缩收敛</td><td><span class="wr">新增 RM04-30</span>(L3: 存活成员不误收缩负向)</td><td>见 §03.4 用例卡; 与 RM04-27(0401 停机删)互补: E5 是 armed 态在线删, RM04-27 是停机期删</td></tr>
+  <tr><td><b>E6</b> 目录级回归</td><td><span class="wr">新增 RM04-31</span>(L2)</td><td>见 §03.4 用例卡; 与 RM04-05(DIR_ALIAS 主链)切分: RM04-05 测搬迁链, RM04-31 测添加预检 confirm/深层弹窗/actual_path 展示</td></tr>
+  <tr><td><b>E7</b> 交集判据取数核验</td><td><span class="wr">新增 RM04-32</span>(L2)</td><td>见 §03.4 用例卡; 闸门面交集行为已在 RM04-28/29/25 断言, 本条只核清单取数一致性(不测三遍)</td></tr>
+  <tr><td><b>E8</b> 不可判定保守回归</td><td><span class="wr">新增 RM04-33</span>(L3: 新建即 L3, 保守两门 = 负向对照内建)</td><td>见 §03.4 用例卡; 进程内注入沿 RM04-20/21 旁路先例, 零新增旁路面</td></tr>
+  <tr><td><b>E9</b> 自愈全链(生产等价态)</td><td><span class="wr">新增 RM04-34</span>(L2)</td><td>见 §03.4 用例卡; RM04-21 的 B1-B7 全链断言不复制(引用不测三遍), 本条只断 E 专属面: 零人工干预收敛 done + 窗口期两单误拦均消失</td></tr>
+  <tr><td><b>0420</b> 零搬移假成功</td><td><span class="wr">新增 RM04-26</span>(复验定终态)</td><td>见 §03.4 用例卡; 表达性风险 → §05 D2</td></tr>
+  <tr><td><b>0401</b> 停机期删除证据不计数</td><td><span class="wr">新增 RM04-27</span>(复验定终态, 与 <code>728d6ac8</code> 三态判据对照)</td><td>见 §03.4 用例卡</td></tr>
+  <tr><td>S2 guide 三段(API 通道)</td><td>并入 RM04-22 断言(confirm 回执 <code>guide</code> 字段三段齐备)</td><td>UI 消费面不入真机(§03.3)</td></tr>
+  <tr><td>0553 组键换键占位失真</td><td>不涉真机 —— e2e 钉扎已落地(<code>relocate-key-change-pad</code> spec), 翻灯走人工复验</td><td>—</td></tr>
+</table>
+<h3>3.2 E1-E9 全沉淀与合并去重(D1 拍板, 2026-11-17)</h3>
+<p><b>原推荐 harness 方案作废留痕</b>: R0 曾推荐按 P4 切片配方重造 gitignored harness 复跑 38 判定(P4 于 2026-11-14 走 <code>tests-real/.work/relocate-form-gates/run_exp_p4.py</code> 22 相位, 用毕已清); 用户拍板改为<b>全沉淀耐久用例</b> —— E 矩阵是 R1-R4 形态感知判据的回归阵, harness 每轮重造的配方成本高于沉淀成本, 且耐久用例受用例成熟度档位与锚 §07 记账约束, 防重构回归更强。P4 切片 §03 的 38 判定账仍是各 E 用例断言面的权威对照表, 沉淀时逐项誊写为断言。</p>
+<p><b>合并去重明细</b>(9 条 E → 7 条新增, 以合并后清单为准):</p>
+<table>
+  <tr><th>E</th><th>处置</th><th>理由</th></tr>
+  <tr><td>E1 误拦基线取证</td><td class="wr">作废, 并入 RM04-28(E2)/RM04-29(E4)</td><td>「修复前红」的取证形态; 修复已落地(P4 已翻转验证 误拦①→ok 零弹窗 / 误拦②→当场成功), 修复后耐久化只剩正向断言 = E2/E4 的断言面, 单独立条必逐字重复</td></tr>
+  <tr><td>E2 异名添加放行+全链</td><td>新增 RM04-28</td><td>独立拓扑(armed 组 + 组外异名种子落旧根), 无重叠</td></tr>
+  <tr><td>E3 同名仍拦+真依赖实证</td><td class="wr">并入 RM04-25(扩为三腿)</td><td>RM04-25 原第③负向腿(注入同名真依赖必计依赖/拦)与 E3 主断言同语义; E3 增量面(confirm 场景2文案 / 删依赖种子账面 → 依赖清零 → 收尾恢复)作 RM04-25 第三腿, 拓扑同源(别名在场)</td></tr>
+  <tr><td>E4 组外异名带文件删除放行</td><td>新增 RM04-29</td><td>与 RM04-28 共用组外异名拓扑, 同片先后跑</td></tr>
+  <tr><td>E5 成员收缩收敛</td><td>新增 RM04-30</td><td>armed 态在线删成员, 与 RM04-27(停机期删)互补不重叠; 与 R4 判据(连续 3 拍缺席)一一对应</td></tr>
+  <tr><td>E6 目录级回归</td><td>新增 RM04-31</td><td>添加预检 confirm/深层弹窗/actual_path 展示面, RM04-05 未覆盖(RM04-05 只测搬迁主链)</td></tr>
+  <tr><td>E7 交集判据取数核验</td><td>新增 RM04-32</td><td>清单取数↔磁盘实况一致性为独立面; 「交集判定正确」经闸门外部可观测的行为已在 RM04-28/29/25 断言, 本条引用不复断(不测三遍)</td></tr>
+  <tr><td>E8 不可判定保守回归</td><td>新增 RM04-33</td><td>注入清单取数失败 → 两门保守(删链门计依赖/D16 照旧拦), 与 RM04-25 第③腿(真依赖)机制不同(清单不可得 vs 依赖存在); 注入沿 P4 定稿形态(TorrentRecord.files 对注入 hash raise, 落在门级消费方 try/except 内), 进程内旁路沿 RM04-20/21 授权先例零新增面</td></tr>
+  <tr><td>E9 自愈全链</td><td>新增 RM04-34</td><td>RM04-21 已钉自愈主链 B1-B7, 本条只断 E 专属面(零人工干预收敛 done + 窗口期两单误拦均消失), B 链断言引用不复写(不测三遍); 与 RM04-21 切分写进 docstring</td></tr>
+</table>
+<h3>3.3 真机轨无法表达、需改走其它轨的项(准入判据 §00)</h3>
+<table>
+  <tr><th>项</th><th>轨</th><th>理由</th></tr>
+  <tr><td>0638 探测阻塞主循环(主循环 tick 停摆 &lt; 单步预算)</td><td class="wr">不测(第二批 S6)</td><td>计划 §03.6 明载「本批未动」; 计时判据随 S6 落地设计, 现在真机跑无判据对象</td></tr>
+  <tr><td>guide 三段 UI 消费面(撤销入口+弹窗渲染)</td><td>e2e 轨</td><td>纯观感交互, 已入池 <code>26-11-17-0156</code> 单独跟进; 真机只验 API/命令通道的结构化下发(RM04-22 内)</td></tr>
+  <tr><td>0553 换键占位</td><td>e2e 轨</td><td>行高占位是 DOM 渲染面, spec 已先红后绿落地</td></tr>
+  <tr><td>0420 「磁盘名错位」若无法在双环境真机构造(qB 内部磁盘名语义不暴露盘符别名时)</td><td class="wr">单测兜底(D2 已拍板)</td><td>已拍板预案: RM04-26 先试, 双环境造不出 ⇒ 该条记 BLOCKED 留解锁条件, 0420 终态按「mock 磁盘名解析单测定语义 + 真机观测项 + 披露口径」裁决</td></tr>
+</table>
+<h3>3.4 新增用例卡(四行契约, id 沿 RM04 编号顺延)</h3>
+<table>
+  <tr><th>用例</th><th>档位</th><th>断言要点</th><th>前置 / 副作用 / 回滚 / 失败判据</th></tr>
+  <tr>
+    <td><b>RM04-22</b> 链式续迁收官 + 撤销不搬回(文件名 <code>test_rm04_chain_cancel.py</code>)</td>
+    <td>L2</td>
+    <td>①A→B 搬迁 done 后对同组发起 B→C: 旧任务立即收官为只读历史、<b>无单独删除入口</b>(API 无旧任务删除路由/删除被拒)、未完成链接工作移交新任务; ②旧路径(A/B)经 chain 端点与文件系统双证解析到 C 终位置(别名直指物理数据, 无链式锚点中间跳); ③撤销活任务(两投: 无 confirm → confirm): 数据与下载器路径<b>逐字未动</b>(qB <code>save_path</code>/root_path 前后对照)、半搬数据留新位置、自己已建链接删除; ④confirm 回执 <code>guide</code> 三段齐备(后果/半途警示/手动处置推荐); ⑤旧任务随新任务账面共存且不可单独删</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake 双成员组(alias_threshold:1)。<b>副作用</b>: 两轮真搬迁+一次撤销, junction 建立/删除, state 落账。<b>回滚</b>: real-fake 连数据删净; case 树与 R:/qbt-fake/rm04 删净; 产品优雅退出。<b>失败判据</b>: 撤销后 qB 路径变化(搬回复发); 旧路径不解析到 C; 回执缺 guide 任一段; 旧任务可单独删除; 终态后残留链接。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-23</b> 旧账迁移器三形态(文件名 <code>test_rm04_legacy_migrator.py</code>)</td>
+    <td>L2</td>
+    <td>①good: 存量旧格式账(done 历史 + 在途)迁移后<b>一条不丢</b>(逐条字段对照)、新格式可读、状态行有迁移记录; <b>断言点: 旧格式账须含 v7 顶层 bt_backup 表形态样本, 断言 v7→v8 迁移链搬运到位</b>(075dd418 触面); ②bad: 故意损坏一条旧账(非法 JSON/缺字段)不崩, 坏账隔离留痕、好账照迁; ③restart: 在途旧任务迁移后由启动对账接管续跑(RM04-21 的 B3-B6 判据复用), 收官/改指语义与 S1 一致</td>
+    <td><b>前置</b>: 空 state 骨架 + 手工注入旧格式账(产品 <code>RelocateJob</code> 真实类构造, 照 RM04-21 配方)。<b>副作用</b>: <code>state.json</code> <code>relocate.jobs</code> 改写(迁移落盘)。<b>回滚</b>: case 树删净、state 用例目录删净、real-fake 删净。<b>失败判据</b>: 任一形态丢账; 坏账致产品启动崩; 在途账未被对账接管; 迁移后旧格式字段错位。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-24</b> 批量&gt;20 组终态分级保留(文件名 <code>test_rm04_batch_retention.py</code>)</td>
+    <td class="wr">L3(负向对照: 清空历史无 confirm 必拒 + 失败/取消账不被成功滚出冲掉)</td>
+    <td>①21 组成功搬迁(参数见 §03.5)→ done 记录<b>滚动保留恰 20 条</b>、更老自动删、删除有序(最老先出); ②1 条取消(cancel)与 1 条失败账<b>不随成功滚出被冲掉</b>; ③「清空历史」无 confirm 必拒(回执 confirm)、带 confirm 后全消(连失败/取消); ④被接管旧任务随整链消亡, 不占 20 计数</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库; 21 组 real-fake 单成员。<b>副作用</b>: 21 次真搬迁(R:/qbt-fake/rm04 → dst 子目录轮换) + state 账面增长。<b>回滚</b>: real-fake 删净(连数据)、case/RAM 树删净、dst 树删净。<b>失败判据</b>: done 计数 &gt;20 未滚出或滚出乱序; 失败/取消账被自动清; 清空无 confirm 即生效; 清空后残留。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-25</b> 删链门候选面: 祖先方向(0535)+ direct 分流(0711)+ 同名依赖账(E3 并腿), 三腿(test_rm04_chain_gate_candidates.py)</td>
+    <td class="wr">L3(新建即 L3: 0711/E3 腿带负向对照)</td>
+    <td>①0535 腿: 构造祖先方向依赖(组 A 的 save_path 是组 B 迁移 dst 的祖先目录), 断言删链门依赖计数命中(<code>chain_gate_hits</code>/依赖账可见)、别名正确保留 —— 修复前该场景误清零; ②0711 腿: 单成员 direct 形态收尾窗注入依赖(组外种子与成员文件共享物理文件), 断言<b>不被顶进删链门</b>、迁移正常 done; ③E3 腿: armed 态添加同名同内容跨种种子 → confirm(场景 2 文案「与成员别名链接同名/经链接共享同一份物理数据」)→ 确认后其文件清单与链接相交 → 删链门计依赖(别名正确保留)→ 删除该种子账面 → 依赖清零 → 收尾恢复 done</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake。<b>副作用</b>: 2-3 次真搬迁 + 组外种子若干 + 一条同名依赖种子的添加/删除。<b>回滚</b>: real-fake 删净、case/RAM 树删净、别名 lstat 复核零残留。<b>失败判据</b>: 祖先依赖计数为 0(误清零复发); direct 被顶进删链门或误删链接; 同名添加零 confirm 直通(误放行)或确认后不计依赖; 删依赖种子后收尾仍卡(依赖账不清零)。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-26</b> 0420 磁盘名错位复验(文件名 <code>test_rm04_zero_move_probe.py</code>)</td>
+    <td>L2</td>
+    <td>按 issue 0420 复现节构造「磁盘名错位」样本(下载器磁盘名与实际卷语义错位 → 旧版假成功形态), 断言<b>闸门拦截不 started / 零「迁移发起」</b>零副作用; 对照: 正常样本放行 —— 复验结论直接喂 0420 终态裁决</td>
+    <td><b>前置</b>: 副实例空库; 错位样本构造配方从 issue 0420 复现节誊写(本计划不复制, 以 issue 为单点)。<b>副作用</b>: real-fake 若干 + 可能的闸门拒回执。<b>回滚</b>: real-fake 删净、case 树删净。<b>失败判据</b>: 错位样本 started(假成功复发); 正常对照被误拦; 无法构造样本(⇒ BLOCKED 转 §05 D2 裁决)。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-27</b> 0401 停机期删除闭账复验(文件名 <code>test_rm04_offline_delete_settle.py</code>)</td>
+    <td>L2</td>
+    <td>搬迁 armed/收尾窗中双实例优雅下线 → <b>停机期删成员</b>(qB 侧删种, fastresume 随 qB 删除路径走) → 重启 → 断言闭账行为符合定稿语义(<code>728d6ac8</code> 三态判据: 收缩/闭账/摘要行) + 停机计数摘要一行; 结论喂 0401 终态裁决(修复 or 披露口径维持)</td>
+    <td><b>前置</b>: 环境1(R: 在), wrapper 名册窄化旁路在位(沿 RM04-20/21 授权, 零新增旁路面)。<b>副作用</b>: 停机删种 + state 账。<b>回滚</b>: real-fake 删净、BT_backup 本用例哈希残留清除、case 树删净。<b>失败判据</b>: 停机期删除不被闭账(证据不计数的 0401 病灶复发)或误闭账吞掉存活成员; 摘要行缺失。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-28</b> [E2] 异名添加放行 + 全链路成立(文件名 <code>test_rm04_e2_alias_add_pass.py</code>)</td>
+    <td>L2</td>
+    <td>FILE_LINKS 组迁移 armed 后, 组外<b>异名</b>种子(落旧根)添加 → 添加预检 <b>ok 零弹窗</b>(误拦①不复现, E1 并入腿); 立即收尾/重启两态 → 改写 → 核验 → 删链门(豁免生效, 组外异名在场而依赖计数不含它)→ 收尾 done; 新种子照常做种、账面 1.00、零 recheck、零拒载</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake; 组外异名种子落旧根(旧根 = 迁移 src 路径下)。 <b>副作用</b>: 1 次真搬迁 + 组外异名种子在场 + 离线窗一次(重启态)。<b>回滚</b>: real-fake 删净(连数据, 组外种子文件一并)、case/RAM 树删净、别名 lstat 零残留。<b>失败判据</b>: 异名添加出现弹窗/confirm(误拦①复发); 收尾未 done 或别名残留; 新种子被 recheck/拒载。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-29</b> [E4] 组外异名带文件删除放行(文件名 <code>test_rm04_e4_outsider_delete.py</code>)</td>
+    <td>L2</td>
+    <td>armed 态删除组外异名种子(带文件, 与成员无文件交集)→ <b>当场删除成功</b>(误拦②不复现, E1 并入腿: 修复前被 D16 拒); 真实文件清干净(磁盘逐文件对照); 别名与成员做种无损(账面/状态零扰动)</td>
+    <td><b>前置</b>: 同 RM04-28 拓扑(同片先后跑, 共用组外异名种子)。<b>副作用</b>: armed 组在场 + 删一枚带文件组外种子。<b>回滚</b>: real-fake 删净、case/RAM 树删净。<b>失败判据</b>: 删除被 D16 拒(误拦②复发); 磁盘文件残留; 成员别名/做种状态受扰。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-30</b> [E5] 成员收缩收敛(文件名 <code>test_rm04_e5_member_shrink.py</code>)</td>
+    <td class="wr">L3(负向: 存活成员不误收缩)</td>
+    <td>armed 态对一枚成员「仅删除种子」→ 连续 3 拍缺席(R4 判据: 在线+新鲜快照+增量证据)→ 组账收缩(<code>job.hashes</code> 收缩)+ WARNING 留痕 + 反馈面 note(「成员已删除,组账收缩」)+ daemon 对缺失 fastresume 跳过记 settled 不失败; 再逐个删光 → 全删光 → 空集核验通过 → 删链门 → 收尾 done、别名删除; <b>负向对照</b>: 未删除的存活成员全程不被收缩(qB 同步抖动/断连不得误判)</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake 多成员组(2-3 成员)。<b>副作用</b>: armed 期删种 1-3 枚(仅删种子不删文件)。<b>回滚</b>: real-fake 删净、case/RAM 树删净、别名零残留。<b>失败判据</b>: 收缩未发生或 N 拍判据错点; WARNING/note 缺失; daemon 对缺失 fastresume 报失败; 全删光后收尾卡死; 负向腿误收缩存活成员。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-31</b> [E6] 目录级回归(文件名 <code>test_rm04_e6_dir_alias_preflight.py</code>)</td>
+    <td>L2</td>
+    <td>DIR_ALIAS 形态组(multi-member 子目录布局, ≥阈值)armed 后: ①对 dst 的 confirm 不松动(目录级二次确认保留); ②深层路径(landing 落 scope 内 = junction 所在内容根)添加 → 新弹窗出现(D10 告知语义)且 actual_path 按正 rel 展示; ③scope 外兄弟/前缀同串目录写入 → 落真实目录、零弹窗、删链门不计依赖; ④D16 目录级全量拦截原样(与成员链接同名的目录级写入仍拦)</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake DIR_ALIAS 组(2 成员 × 8 文件)。<b>副作用</b>: armed 组 + 深层/scope 外添加若干。<b>回滚</b>: real-fake 删净、case/RAM 树删净、junction lstat 零残留。<b>失败判据</b>: 目录级 confirm 缺失; 深层添加零弹窗或 actual_path 显示错(绝对/负 rel); scope 外写入被误拦或计入依赖; D16 松动。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-32</b> [E7] 交集判据取数核验(文件名 <code>test_rm04_e7_filemap_consistency.py</code>)</td>
+    <td>L2</td>
+    <td>FILE_LINKS 与 NoSubfolder 两形态组: 经产品 WEB 只读端点取成员文件清单, 与磁盘实况逐文件对照(size/rel 路径双一致, FILE_LINKS 形态经 junction 视图同证); <code>_norm</code> 归一后交集判定正确性<b>引用不复断</b> —— 闸门面行为已由 RM04-28/29(异名豁免)/RM04-25③(同名计依赖)外部可观测地钉住, 本条 docstring 写明切分(不测三遍)</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake 两形态组各一。<b>副作用</b>: 只读为主 + 两枚 armed 组账。<b>回滚</b>: real-fake 删净、case/RAM 树删净。<b>失败判据</b>: 清单与磁盘实况不一致(缺行/多行/size 错); 归一路径形态错(反斜杠/盘符大小写); 两形态任一取空却磁盘有货。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-33</b> [E8] 不可判定保守回归(文件名 <code>test_rm04_e8_undecidable_conservative.py</code>)</td>
+    <td class="wr">L3(新建即 L3: 保守两门 = 负向对照内建)</td>
+    <td>armed 组在场, 进程内对注入 hash 的 <code>TorrentRecord.files</code> raise(修后定稿形态: raise 落在两个门级消费方 <code>_file_map</code>/<code>_relocate_file_names</code> 各自 try/except 之内, 产品「清单不可得→保守」分支原码消费)→ 断言: ①删链门<b>计依赖</b>(宁拦勿漏, 不豁免不误删); ②D16 删种拦截<b>照旧拦</b>; ③产品不崩、日志有「清单不可得」保守留痕</td>
+    <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake; 进程内旁路启动(沿 RM04-20/21 start_bypass_app 先例, 零新增旁路面)。<b>副作用</b>: armed 组 + 注入 hash 的 raise(用例进程内, 不落盘)。<b>回滚</b>: real-fake 删净、case/RAM 树删净、旁路进程优雅退出。<b>失败判据</b>: 取数失败被当「无依赖」豁免(误删链接); D16 失守放行; 产品崩或 raise 逃逸到顶层。</td>
+  </tr>
+  <tr>
+    <td><b>RM04-34</b> [E9] 自愈全链·误拦消失(文件名 <code>test_rm04_e9_selfheal_nomisfire.py</code>)</td>
+    <td>L2</td>
+    <td>生产等价态(R6 场景: 组外异名种子在场 + armed 组 + 离线窗)→ <b>零人工干预</b>收敛 done(收敛行/相位链可观测); 窗口期内<b>两单误拦均消失</b>: 异名添加零弹窗(误拦①)+ 组外异名带文件删除放行(误拦②)双证; 自愈主链 B1-B7 断言引用 RM04-21 不复写(不测三遍, docstring 写明切分)</td>
+    <td><b>前置</b>: 环境1(R: 在), wrapper 名册窄化旁路在位(沿 RM04-20/21/27 授权, 零新增旁路面); 组外异名种子落旧根。<b>副作用</b>: 1 次真搬迁 + 双实例优雅下线/重启各一次。<b>回滚</b>: real-fake 删净(连数据)、BT_backup 本用例哈希残留清除、case/RAM 树删净、别名零残留。<b>失败判据</b>: 需人工干预才收敛; 窗口期内出现任一误拦(弹窗/删除被拒); 收敛 done 但组外异名种子状态受扰。</td>
+  </tr>
+</table>
+<h3>3.5 假种子与批量参数(real-fake 口径)</h3>
+<ul>
+  <li>一律 <code>real-fake</code> 标签、无 announce 纯本地(L0/L1 层, 零外连); 体量全部 ≤1MiB, 不触 <code>--allow-huge</code> 闸; 落点环境1 = <code>R:/qbt-fake/rm04/</code>(重启即清), 环境2 退 <code>.work</code> 真写盘; 收尾 <code>real.seed.clean</code>(.work 顶层疑证先挪走再 <code>--dir</code> 显式清, 照 pitfalls/ops/seed-clean-vs-evidence)。</li>
+  <li><b>RM04-24 批量参数</b>: 21 组 × 单成员单文件 256KiB(<code>piece_len</code> 16384), 组间异内容异名; dst = case 下 21 个独立子目录; 单成员 1 文件 &lt; 阈值 8 ⇒ FORM_DIRECT(qB 自搬, 免暂停面 <code>dc337d29</code> 直接消费), 无别名无 journal, 单组搬迁秒级 —— 21 组真跑预估 10-15 分钟, 半天预算内。取消样本: 第 22 组发起后立即 cancel; 失败账形态由 RM04-23 bad 腿与 RM04-27 承接, 本条不重复造。</li>
+  <li>共享文件组(多成员)照既有配方: 同内容异 <code>piece_len</code> → 异 infohash 双双校验通过(RM04 主文件 docstring 单点, 新用例复用 <code>M.fake_multi</code>)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤: 执行排期(7 个半天片)</h2>
+<p class="aside"><b>§08 升档口径(钉死)</b>: 本计划 7 片<b>合并计为一轮</b>, 全局升档 5 条(片A RM04-20 升 L3 尝试 + 片C RM04-24/25、片F RM04-30、片G RM04-33 新建即 L3)满足「每轮至少 1 条升一档」硬要求; 各片升档列只记该片动作, 不逐片重复声明。</p>
+<p>命令面: 单条 <code>commands run real.run -- --case RM04-xx --yes</code>; 整片回归 <code>commands run real.suite -- --slice RM04 --yes</code>(官方跑法, <code>-n 0</code> + 片内串行锁); 每片开工 <code>real.env</code> → <code>real.guard</code>(§2.4 假红陷阱核 <code>connection_status</code> 非 disconnected)→ 收尾核净 + <code>real.guard</code> 复跑。生产实例只做 netstat 只读识别留痕(RM04-20 A8 先例), 零请求。</p>
+<table>
+  <tr><th>片</th><th>内容(预算)</th><th>用例清单 + 档位 + 期望值</th><th>升档安排(§08)</th></tr>
+  <tr>
+    <td><b>片A</b><br>回归档<br>(环境1)</td>
+    <td>现有 21 条全量复跑(0.5 天; RM04-20/21 各独占 4-6 分钟, 含双实例起停)</td>
+    <td><code>real.suite --slice RM04</code> 一轮 + RM04-15~19 单跑(real.run)。档位维持各用例现值不虚估。期望: <b>21 PASS / 0 FAIL / 0 BLOCKED</b>; 7 条重点观察(RM04-05/06/07/16/19/20/21, 判据变触面)红 ⇒ 先判测试侧改造 vs 产品回归: 测试侧断言与新语义冲突(如终态账形态)当轮改用例复跑; 产品回归入池留证。<b>[需活跃种子]</b>: 无(全片 L1 假种子); 长期 BLOCKED 维持两项: 真跨卷半边(RM04-05)、5.3 服务端语义面(26-10-31-0711 feat 族); 环境2 无 R: ⇒ 拓扑钉死项 skip 不回退(钉死口径, 见 §03.5)。</td>
+    <td>RM04-20 升 L3: 补「dst 预置同名真实文件」负向腿(修复前必红形态), 若 D 级 NEGATIVE 造法仍不可达则明写「本轮纯回归」+原因</td>
+  </tr>
+  <tr>
+    <td><b>片B</b><br>acc1/acc2 面<br>(环境1)</td>
+    <td>RM04-22(链式撤销)+ RM04-23(迁移器)编写+首跑(0.5 天; RM04-22 含两轮搬迁+撤销窗, 编写占大头)</td>
+    <td>两条各耐久两遍惯例(首版 + 复验各一遍, RM04-20/21 同款)。期望: <b>4 遍全 PASS</b>; RM04-23 restart 腿与 RM04-21 断言重叠处按「不测三遍」写明切分。</td>
+    <td>RM04-22/23 L2 落位(升档点在本片无, 由片C 补)</td>
+  </tr>
+  <tr>
+    <td><b>片C</b><br>acc3/acc4+E3 面<br>(环境1)</td>
+    <td>RM04-24(批量分级保留)+ RM04-25(三腿, 含 E3 并腿)编写+首跑(0.5 天; RM04-24 真跑约 15 分钟, RM04-25 三腿拓扑搭建占大头)</td>
+    <td>两条各耐久两遍。期望: <b>4 遍全 PASS</b>; RM04-24 批量段 21 组真跑一轮 + 负向腿; RM04-25 三腿逐腿验。</td>
+    <td class="wr">RM04-24 L3(清空无 confirm 必拒 + 取消账幸存对照)+ RM04-25 新建即 L3 —— 本片一次升两条, 覆盖片B 无升档的缺口</td>
+  </tr>
+  <tr>
+    <td><b>片D</b><br>离线窗三连<br>(环境1)</td>
+    <td>RM04-26(0420 复验, BLOCKED 预案)+ RM04-27(0401 停机删)+ RM04-34(E9 自愈·误拦消失)(0.5 天; 三条都带离线窗/下线态, 共享 wrapper 旁路接线与开窗节奏)</td>
+    <td>期望: RM04-26 按实测三态记(双环境造不出样本 ⇒ BLOCKED 留解锁条件, D2 拍板预案); RM04-27/34 各耐久两遍 <b>4 遍全 PASS</b>。离线窗三连注意节奏: 每条独立开窗, 不合并窗口(判据互染)。</td>
+    <td>本片无新建 L3(RM04-26/27/34 均 L2); 升档由片E/F/G 承担</td>
+  </tr>
+  <tr>
+    <td><b>片E</b><br>E2/E4 面<br>(环境1)</td>
+    <td>RM04-28(异名添加放行全链)+ RM04-29(组外删除放行)编写+首跑(0.5 天; 两条共用组外异名拓扑, 搭一次跑两条)</td>
+    <td>两条各耐久两遍。期望: <b>4 遍全 PASS</b>; RM04-28 含重启态腿(离线窗一次)。</td>
+    <td>本片无新建 L3(E1 并入腿是正向断言); 升档由片F/G 承担</td>
+  </tr>
+  <tr>
+    <td><b>片F</b><br>E5/E6 面<br>(环境1)</td>
+    <td>RM04-30(成员收缩)+ RM04-31(目录级回归)编写+首跑(0.5 天; RM04-30 负向对照需要存活成员全程在场)</td>
+    <td>两条各耐久两遍。期望: <b>4 遍全 PASS</b>; RM04-31 四断言面(confirm/深层/scope 外/D16)逐项验。</td>
+    <td class="wr">RM04-30 新建即 L3(存活成员不误收缩负向对照); RM04-31 L2</td>
+  </tr>
+  <tr>
+    <td><b>片G</b><br>E7/E8 面<br>(环境1)</td>
+    <td>RM04-32(取数一致性)+ RM04-33(注入保守)编写+首跑(0.5 天; 两条都走进程内旁路启动, 接线复用)</td>
+    <td>两条各耐久两遍。期望: <b>4 遍全 PASS</b>; RM04-33 注入两门判定逐门验。</td>
+    <td class="wr">RM04-33 新建即 L3(保守两门 = 负向对照内建); RM04-32 L2</td>
+  </tr>
+</table>
+<p class="aside"><b>收尾动作(执行阶段, 不在本计划)</b>: 每片三态结论落片级记账, 全程终了 + 基线 commit(末片官方 suite 实跑时刻 HEAD)落 <code>testing/real-baselines/&lt;stamp&gt;-real-relocate-refactor-verify.md</code>; 锚 issue §07 RM04 行重立基线+更新档位分布; 用例代码(13 新用例 + 若干测试侧改造)随主提交 <code>ship.commit</code>(本轮执行不 commit, 由后续阶段统一); <b>不立 task 档案</b>(常驻锚即档案); 计划状态回写 Done。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— R0 提出的 D1/D2/D3 已于 2026-11-17 由用户全部拍板(结论见 §06), U1-U4 开工前已定。执行期若撞出新的行为面变更, 按 grilling 流程追加 D 编号, 不静默决策。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>U1</td><td>测试口径 = 全量(acc1-4 复验 + E1-E9 口径复跑 + 0420/0401 欠账项), 非抽样</td><td>2026-11-17</td></tr>
+  <tr><td>U2</td><td>FAIL 留证不修(scope-guard 口径, 当轮不入修)</td><td>2026-11-17</td></tr>
+  <tr><td>U3</td><td>真机一律走 tests-real/ 真机轨专用测试实例(real 包, 36595/36596 与 56589/56590); 生产 qB 与生产 config.yml 绝对不碰</td><td>2026-11-17</td></tr>
+  <tr><td>U4</td><td>测完更新关联 issue 状态(翻灯映射见本节翻灯表)</td><td>2026-11-17</td></tr>
+  <tr><td class="wr">D1</td><td><b>全沉淀用例</b>: E1-E9 不做一次性 harness, 全部沉淀为耐久真机用例进 RM04 片(接在 RM04-27 之后编号), 与 RM04-22~27 语义重叠处合并去重, 以合并后清单为准 —— 合并后新增 13 条(RM04-22~34, E9→7 条明细见 §03.2)。R0 原推荐 harness 方案<b>作废留痕</b>(理由与对照见 §03.2 首段)。排期相应重切: 13 条 &gt; 12 触发拆片线, 新增用例编写+耐久两遍分散到片B~片G 六片, 每片守半天预算; 现有 21 条回归片A 不变</td><td>2026-11-17 用户拍板</td></tr>
+  <tr><td>D2</td><td>磁盘名错位样本按推荐预案: 双环境造不出 ⇒ 降级「mock 磁盘名解析单测定语义 + 真机观测项」, RM04-26 记 BLOCKED 留解锁条件, 0420 终态按单测+披露口径裁决</td><td>2026-11-17 用户拍板</td></tr>
+  <tr><td>D3</td><td>环境2 补充轮按推荐预案: 视片A/C 结果定 —— 全绿则环境2 只跑 RM04-05 同卷造法一条(环境覆盖记账); 有 FAIL 则先环境1 排证</td><td>2026-11-17 用户拍板</td></tr>
+</table>
+
+<h3>issue 翻灯映射表(测试全过后执行)</h3>
+<table>
+  <tr><th>结果</th><th>issue</th><th>翻灯动作</th></tr>
+  <tr><td rowspan="5" class="good">全 PASS → 关</td><td><code>26-11-07-0528</code> 撤销断粮语义未定稿</td><td>D4/D6 定稿落地 + RM04-22 真机复验 ⇒ 关</td></tr>
+  <tr><td><code>26-11-10-0326</code> 终态任务永远留账</td><td>S3 分级保留落地 + RM04-24 真机复验 ⇒ 关</td></tr>
+  <tr><td><code>26-11-13-0535</code> 删链门漏祖先方向</td><td>S4 候选面修复 + RM04-25a 复验 ⇒ 关</td></tr>
+  <tr><td><code>26-11-13-0711</code> direct 形态绕过删链门</td><td>S4 分流修复 + RM04-25b 复验 ⇒ 关</td></tr>
+  <tr><td><code>26-11-11-0553</code> 组键换键占位失真</td><td>e2e 钉扎已落地(S3 spec 先红后绿), 人工复验翻灯 ⇒ 关(不涉本轮真机)</td></tr>
+  <tr><td rowspan="2" class="wr">按结果定终态</td><td><code>26-11-05-0420</code> 零搬移假成功</td><td>RM04-26 复验: 拦截成立 ⇒ 关; 不成立/无法构造 ⇒ 按 D2 披露口径裁决终态</td></tr>
+  <tr><td><code>26-11-14-0401</code> 停机期删除证据不计数</td><td>RM04-27 复验: 闭账行为符合定稿语义(<code>728d6ac8</code> 判据) ⇒ 关; 不符合 ⇒ 评估处置(修复或披露口径维持)</td></tr>
+  <tr><td class="bad">不在本轮</td><td><code>26-11-10-0638</code> 探测阻塞主循环</td><td>第二批 S6 未开工, 翻灯留待 S6; 本轮零动作</td></tr>
+  <tr><td class="bad">不在本轮</td><td><code>26-11-17-0156</code> cancel guide UI / <code>26-11-17-0214</code> qbmanager reload</td><td>各自 issue 单独跟进(e2e 轨 / 内核面), 不在本轮映射内</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>R: 盘缺席(环境1 不可用) ⇒ 6 条新用例拓扑钉死项全 BLOCKED</td><td>开工 <code>real.env</code> 探测 R: 不可写</td><td>换机或等 R: 恢复; RM04-23/26 可降级环境2 先跑(无 R: 依赖项), 拓扑钉死项 skip 不回退落点(不做环境自适应)</td></tr>
+  <tr><td>判据变面复跑红(如 RM04-06/07 journal 恢复在 phase 派生下账形态变化)</td><td>片A/片B 任一现有用例 FAIL</td><td>先判测试侧改造 vs 产品回归: 测试侧断言与新语义冲突当轮改用例复跑(改造记切片 §04); 产品回归入池留证不修; 不带病记账</td></tr>
+  <tr><td>7f93de58 线的 E1-E9 结论被误当已复验</td><td>有人主张「P4 已跑过 E1-E9」</td><td>机械判据: 该 commit 非 HEAD 祖先(合流分线), 结论不背书本分支 —— 本轮 harness 必跑</td></tr>
+  <tr><td>批量 21 组搬迁中环境假红( disconnected / 限速原值 / save_path 改写未还原)</td><td>§2.4 陷阱清单任一命中</td><td>每片开工核 disconnected; RM04-24 全 direct 形态不触 save_path 改写; 需要改写 save_path 的用例(RM04-05 系)finally 逐字还原并断言</td></tr>
+  <tr><td>离线窗旁路面扩大(RM04-27/28/34 及片D/E 需 daemon 窗)</td><td>新用例要开离线窗</td><td>零新增旁路面: 逐字沿用 RM04-20/21 wrapper 名册窄化接线(已授权 2026-11-10); 生产在场不挡窗(A8 实证); 片D 三条各独立开窗不合并(判据互染); 绝不外杀进程(AGENTS.md 红线, daemon 靠自扫断粮退位)</td></tr>
+  <tr><td>E 面用例编写量 13 条 &gt; 12(拆片线触发, §05 规则 4)</td><td>片B~G 编写超时挤占真跑预算</td><td>排期已按 D1 拍板重切: <b>片B/C/E/F/G 各 2 条, 片D 3 条</b>(RM04-26/27/34 共享离线窗接线, 预算最紧, 超时优先拆 RM04-34 后移); 断言面以 P4 切片 §03 的 38 判定账为权威对照逐项誊写, 不自行发明判据; 单片超半天即按规程再拆, 不硬撑</td></tr>
+  <tr><td>清场残留毒化下一轮</td><td>21 组批量 + 多用例落点交叠</td><td>每条用例 finally 四行契约收净; 片尾 <code>real.seed.clean</code> + <code>real.guard</code> 复跑 + 进程比对恰开工两枚; .work 疑似测量证据先挪走再显式清(pitfalls/ops/seed-clean-vs-evidence)</td></tr>
+  <tr><td>提交串行冲突(同分支另一子代理在改 port-kill)</td><td>本轮产物需入库时</td><td>本计划与用例代码均不 commit; 由后续阶段统一 <code>ship.commit</code>, 产物已在工作树就位</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-17-0636</span> 初版: 只读分析子代理 SA-T1 按真机轨 §06 定期排期七步的 1/2/4 步产出(定片 RM04 / 漂移体检 / 分步计划); 体检结论 = 用例面零漂移 + 产品面 14 commits 有命中(判据变 5 / 新行为 8 / 纯重构 1), 基线按「从首轮重来」口径全量复跑; 覆盖映射 21 现成 / 0 改造 / 6 新增 + E-harness; 排期 3 半天片; 翻灯映射 5 关 + 2 按结果定终态 + 0638 不在本轮。执行(第 3/5/6/7 步)待用户排期。</li>
+  <li><span class="tag">R1 · 26-11-17-0642</span> 用户拍板 D1/D2/D3 回写: D1 = E1-E9 <b>全沉淀耐久用例</b>(原推荐 harness 方案作废留痕, §03.2 重写)—— E 面与 acc 面合并去重后新增 13 条(RM04-22~34; E1 并入 RM04-28/29, E3 并入 RM04-25 三腿, E2/E4/E5/E6/E7/E8/E9 各立一条), E 面用例逐条补四行契约用例卡(§03.4); 13 条触发拆片线, 排期重切为 <b>7 个半天片</b>(片A 回归档不变 + 片B/C/E/F/G 各 2 条、片D 3 条, §04 重写); D2/D3 按推荐预案落 §03.3/§06。doc-updated → 26-11-17-0642。</li>
+  <li><span class="tag">R2 · 26-11-17-0719</span> 提交前评审回写(合并批次 716 行, 派发 2: R1 代码面 + R2 文档面, 引文校验 11/11 过检, blocker 0): 文档面 9 条(4 major + 5 minor)全修 —— §2.1 基线判定改写(<b>4b69ed4f/7f93de58 实证 merge-base 非祖先 rc=1、703ceb6c 本 clone 解析不到, 三条均不得背书</b>)、§2.2/§2.3 数字重立(src/auto_qb 112 commits / RM04 glob 命中 19, 主会话逐字复跑验证; 补漏判 5 提交: 075dd418[v7→v8 迁移链, 判据变]/24e97439[启动对账重推相位, 判据变]/84db10ba+c18a1b73[recycle daemon W1a/W1b, 新行为]/3ab876a7[纯重构], §2.3 分类账改为判据变 7+新行为 10+纯重构 2)、「用例面零漂移」改口径(仅 v8 迁移链适配类改动 075dd418/3bfe31bb)、acc 证据参照改指任务档案 R1 段(scratch 目录已清理)、配置派生改 write_config() 口径、RM04-25 卡补文件名、片表 2 条/片表述自洽化(片D 3 条)、§08 升档口径钉死(7 片合并计为一轮)+ §04/meta 残留「3 片」旧值同步改 7 片。代码面 2 条 minor(闸序描述与代码颠倒)已修(scripts/port_kill.py docstring + pitfalls/ops/port-kill-prod-instance.md)。遗留: real-machine.md:26 约束 3 的 tests-real/config/*.yml 同款漂移系规程单点既有问题, 不在本批, 报用户裁决。</li>
+</ul>
+
+</div>
+</body>
+</html>

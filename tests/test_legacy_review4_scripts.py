@@ -23,6 +23,15 @@ and a failed verify always refuses (fail-safe). The red-line side records the
 exemption in AGENTS.md's process-safety entry (hr_fetch_experiment's pinned kill got
 a comment pointing there in the same batch).
 
+2026-11-17 hardening (clone-domain gate): a subagent killed two OTHER clones'
+production auto-qb.exe instances via `dev.port-kill -- 38080/38081 --yes` -- the
+old gate let --yes override the non-python refusal after only eyeballing the
+attribution line. kill_decision now runs in_clone_domain FIRST: a listener whose
+cmdline does not name this clone's repo root is refused as outside-repo and --yes
+cannot override. All own-clone process shapes (python/uv/node/auto-qb.exe under
+.venv) carry the repo root in their cmdline and keep the old flow; the affected
+older cases were updated to build cmdlines from the real REPO_ROOT.
+
 The test cases below for port_kill are all monkeypatched (fake
 listening_pids/process_info/subprocess.run), so taskkill is never really executed --
 the kill path never actually runs in tests, only decisions and refusal wiring.
@@ -62,6 +71,9 @@ on any host.
 - test_port_kill_listening_pids_nt_parses_stdout (issue 26-11-13-0234): nt 支平台无关钉住 -- Get-NetTCPConnection PS 串含端口且钉 -State Listen 过滤(posix 支 Listen-only 的对称钉), stdout 整数解析不回归、非整数 token 过滤
 - test_e2e_selfcheck_proc_info_reuses_port_kill (issue 26-11-13-0234): _proc_info 收编进 port_kill 单点 -- 静态钉 e2e_selfcheck 无 powershell/Win32_Process 字面量(第三处 powershell 位不许复活); nt 盘符/posix 绝对路径提示位、查不到占位、截 160 旧口径不回归
 - test_e2e_selfcheck_check_port_attribution_wiring (issue 26-11-13-0234): _check_port 归属显示链行为钉 -- 归属行格式 "pid <n> <名>: <摘要>", blocking 进 problems 带 NEXT: dev.port-kill, warn 进 notes 带人工桩提示(分流+格式双钉)
+- test_port_kill_in_clone_domain_pure_fn (2026-11-17 加固): clone 域判定纯函数边界矩阵(字面钉死) -- 本 clone 真实形态(大小写/D:/ 与 D:\\ 两分隔符/引号壳/uv 包装/auto-qb.exe/node)全命中; 其它 clone(D:\\Projects\\auto-qb 与 -long-seeding)/qBittorrent/前缀同串变体(clone2-old/clone2b/同名异父)/相对路径/空 cmdline/恰等根(根后无分隔符)一律不命中(fail-closed); repo_root 尾分隔符与 Path 输入归一
+- test_port_kill_clone_domain_gate_matrix (2026-11-17 加固): kill_decision clone 域前置闸矩阵 -- (1)本 clone python 监听(cmdline 含仓库根)照旧免 --yes 放行; (2)其它 clone auto-qb.exe 形态 confirmed=True 也拒且 reason 含 outside-repo; (3)qBittorrent/浏览器/空 cmdline 拒; (4)前缀同串边界(clone2-old/-b/_bak)拒; (5)本 clone 非 python(node)无 --yes 拒、有 --yes 放行(旧语义保持); (6)verify-failed 维持 fail-safe 拒杀
+- test_port_kill_main_outside_repo_refusal_warning (2026-11-17 加固): main 接线 -- clone 域外监听即使 --yes 也拒: 显眼 WARNING 行(含仓库根要点)+ REFUSED(outside-repo) 行(区分于旧 REFUSED), rc!=0 且零 taskkill; 红验: 旧实现同输入(--yes 放行非 python)直接 taskkill
 """
 
 from __future__ import annotations
@@ -472,27 +484,42 @@ def test_port_kill_decision_matrix():
     new, it is not tautologically green.
     """
     mod_pk = _load_script("port_kill")
+
+    # 2026-11-17 加固后 kill_decision 先过 clone 域闸: 本 clone 进程的真实形态
+    # (python 桩/uv 包装/node/auto-qb.exe)cmdline 全部含仓库根路径, 用例按真实形态构造。
+    def _own(rel: str) -> str:
+        return str(mod_pk.REPO_ROOT / rel)
+
     py_cases = [
-        ("python.exe", r"C:\Python312\python.exe scripts/ui_harness.py --port 0"),
-        ("pythonw.exe", "pythonw -m uvicorn ..."),
-        ("PYTHON.EXE", "python stub.py"),  # case-insensitive
-        ("uv.exe", "uv run python scripts/ui_harness.py --port 0"),  # uv wrapping python
+        ("python.exe", f"{_own('.venv/scripts/python.exe')} {_own('scripts/ui_harness.py')} --port 0"),
+        ("pythonw.exe", f"pythonw -m uvicorn --port 0 (root {_own('scripts')})"),
+        ("PYTHON.EXE", f"python {_own('scripts/stub.py')}"),  # case-insensitive
+        ("uv.exe", f"uv run python {_own('scripts/ui_harness.py')} --port 0"),  # uv wrapping python
     ]
-    non_py = ("chrome.exe", r'"C:\Program Files\Google\Chrome\Application\chrome.exe" --user-data-dir=x')
+    # 本 clone 内的非 python 监听(node/.commands/e2e): --yes 人工确认后放行
+    non_py = ("node.exe", f'"{_own(".commands/e2e/node.exe")}" e2e.js --port 0')
+    # 非 python 且在本 clone 外(2026-11-17 事故形态): clone 域闸拒杀, --yes 越不过
+    outside_py = ("auto-qb.exe", r"D:\Projects\auto-qb\.venv\Scripts\auto-qb.exe --webui-port 38080")
 
     # python-like listeners (the stub interpreters this script cleans): old flow, no --yes needed
     for name, cmd in py_cases:
         ok, _ = mod_pk.kill_decision((name, cmd), False)
         assert ok, f"python-like listener must pass: {name}"
 
-    # non-python without --yes: refuse; the reason must say how to confirm explicitly
+    # non-python (in-clone) without --yes: refuse; the reason must say how to confirm explicitly
     ok, why = mod_pk.kill_decision(non_py, False)
     assert not ok, "non-python listener without --yes must be refused"
     assert "--yes" in why, f"refusal reason must point to --yes: {why}"
 
-    # non-python with --yes: allowed
+    # non-python (in-clone) with --yes: allowed
     ok, why = mod_pk.kill_decision(non_py, True)
-    assert ok, f"non-python listener with --yes must pass: {why}"
+    assert ok, f"non-python in-clone listener with --yes must pass: {why}"
+
+    # outside-repo listener: refused regardless of --yes (clone-domain gate, --yes cannot override)
+    for confirmed in (False, True):
+        ok, why = mod_pk.kill_decision(outside_py, confirmed)
+        assert not ok, f"outside-repo listener must be refused (confirmed={confirmed})"
+        assert "outside-repo" in why, f"refusal reason must say outside-repo: {why}"
 
     # verify failure (info=None: query failed / pid exited): always refuse, even with --yes
     for confirmed in (False, True):
@@ -575,13 +602,16 @@ def test_port_kill_main_attribution_refusal_and_yes(monkeypatch, capsys):
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
-    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("chrome.exe", "chrome.exe --headless")})
+    # 2026-11-17 加固: 非 python 监听须在本 clone 域内才走 --yes 流程(node/.commands/e2e 形态);
+    # clone 域外监听的拒杀另钉在 test_port_kill_main_outside_repo_refusal_warning。
+    in_clone_node = ("node.exe", f'"{mod_pk.REPO_ROOT / ".commands/e2e/node.exe"}" e2e.js')
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: in_clone_node})
     monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
 
     rc = mod_pk.main(["18788"])
     out = capsys.readouterr().out
     assert rc != 0, "refusal without --yes must exit non-zero"
-    assert "pid 4321 = chrome.exe : chrome.exe --headless" in out, f"attribution line must be printed first: {out!r}"
+    assert "pid 4321 = node.exe" in out, f"attribution line must be printed first: {out!r}"
     assert "REFUSED" in out and "--yes" in out, f"refusal line must explain cause and how to confirm: {out!r}"
     assert taskkill_calls == [], f"refusal path must not run taskkill, got: {taskkill_calls}"
 
@@ -608,8 +638,10 @@ def test_port_kill_main_python_listener_keeps_old_flow(monkeypatch, capsys):
 
     monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {1111} if port == 8137 else set())
     monkeypatch.setattr(
-        mod_pk, "process_info", lambda pids: {p: ("python.exe", f"python scripts/ui_harness.py pid={p}")
-                                              for p in pids}
+        mod_pk,
+        "process_info",
+        lambda pids: {p: ("python.exe", f"python {mod_pk.REPO_ROOT / 'scripts/ui_harness.py'} pid={p}")
+                      for p in pids},
     )
     monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
 
@@ -648,6 +680,156 @@ def test_port_kill_main_verify_failure_fails_safe(monkeypatch, capsys):
         assert rc != 0, f"verify failure must exit non-zero: {argv}"
         assert "verify-failed" in out, f"refusal line must say verify failed: {out!r}"
         assert taskkill_calls == [], f"verify failure must not kill ({argv}): {taskkill_calls}"
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-17 加固: clone 域硬闸(in_clone_domain + kill_decision 前置闸 + main 输出分流)。
+# 事故: 子代理 `dev.port-kill -- 38080/38081 --yes` 误杀两个其它 clone(D:\Projects\auto-qb、
+# D:\Projects\auto-qb-long-seeding)的生产 auto-qb.exe -- 旧闸只打印归属给人看, --yes 越过
+# 非 python 拒杀 = 核验输出没细看就放行。新语义: 非 clone 域监听一律拒杀, --yes 越不过。
+def test_port_kill_in_clone_domain_pure_fn():
+    """clone 域判定纯函数边界矩阵(字面钉死, 任一平台跑): 归一化(大小写/分隔符/引号壳)
+    后带分隔符边界的前缀匹配 -- 裸子串/后缀变体/无根 cmdline 一律不算命中(fail-closed)。"""
+    mod_pk = _load_script("port_kill")
+    root = r"D:\Projects\zcode\auto-qb-zcode-clone2"
+
+    # 命中面: 本 clone 进程的真实形态(全部含仓库根路径)
+    hits = [
+        r"D:\PROJECTS\ZCODE\AUTO-QB-ZCODE-CLONE2\.VENV\SCRIPTS\PYTHON.EXE -m x",  # 大小写不敏感
+        "D:/Projects/zcode/auto-qb-zcode-clone2/.venv/Scripts/python.exe scripts/ui_harness.py",  # D:/ 形态
+        r'"D:\Projects\zcode\auto-qb-zcode-clone2\.venv\Scripts\python.exe" -m ui_harness',  # 引号壳
+        r"uv.exe run python D:\projects\zcode\auto-qb-zcode-clone2\scripts\ui_harness.py --port 0",  # uv 包装
+        r"D:\projects\zcode\auto-qb-zcode-clone2\.venv\Scripts\auto-qb.exe --webui-port 38080",  # auto-qb.exe
+        r"D:\projects\zcode\auto-qb-zcode-clone2\.commands\e2e\node.exe e2e.js",  # node
+    ]
+    for cmd in hits:
+        assert mod_pk.in_clone_domain(cmd, root), f"本 clone 形态必须命中: {cmd}"
+
+    # 不命中面: 其它 clone / qBittorrent / 前缀变体 / 相对路径 / 空 / 恰等根
+    misses = [
+        r"D:\Projects\auto-qb\.venv\Scripts\auto-qb.exe --webui-port 38080",  # 事故实例: 裸 auto-qb 前缀不算
+        r"D:\Projects\auto-qb-long-seeding\.venv\Scripts\auto-qb.exe",  # 另一事故实例
+        r"D:\Projects\zcode\auto-qb-zcode-clone2-old\.venv\Scripts\python.exe",  # 前缀同串的后缀变体
+        r"C:\tools\auto-qb-zcode-clone2\bin\x.exe",  # 同名目录但不同父路径
+        r"D:\Projects\zcode\auto-qb-zcode-clone2b\x.exe",  # 后缀紧贴字符(无分隔符边界)
+        r"C:\Program Files\qBittorrent\qbittorrent.exe",  # qBittorrent 本体
+        "python scripts/ui_harness.py --port 0",  # 相对路径启动: cmdline 不含仓库根 -> 非本 clone
+        "",  # 空 cmdline(查询答不出): fail-closed
+        root,  # 恰等于根(其后无分隔符): 不算 -- 可执行文件必在根内某层, 恰等形态是把根当参数提及
+        r"D:\Projects\zcode\auto-qb-zcode-clone2 is mentioned as an argument",  # 根后跟空格非分隔符
+    ]
+    for cmd in misses:
+        assert not mod_pk.in_clone_domain(cmd, root), f"非本 clone 形态不得命中: {cmd}"
+
+    # repo_root 带尾分隔符/Path 对象输入同样归一; 空 root 拒判(不命中)
+    assert mod_pk.in_clone_domain(hits[0], root + "\\")
+    assert mod_pk.in_clone_domain(hits[0], mod_pk.Path(root))
+    assert not mod_pk.in_clone_domain(hits[0], "")
+    assert not mod_pk.in_clone_domain("", mod_pk.REPO_ROOT), "空 cmdline 对真实根也 fail-closed"
+
+    # 自证: 用真实仓库根反推 -- 本 clone 的 scripts 路径形态命中, 真实根自身恰等不命中
+    real = mod_pk.REPO_ROOT
+    assert mod_pk.in_clone_domain(str(real / "scripts" / "port_kill.py"), real)
+    assert not mod_pk.in_clone_domain(str(real), real)
+
+
+def test_port_kill_clone_domain_gate_matrix():
+    """kill_decision 的 clone 域前置闸矩阵: (1)本 clone python 监听照旧免 --yes 放行;
+    (2)其它 clone 形态(auto-qb.exe from D:\\Projects\\auto-qb)即使 confirmed=True 也拒且
+    reason 含 outside-repo; (3)qBittorrent/浏览器形态拒; (4)前缀同串边界(clone2-old)拒;
+    (5)本 clone 非 python(node)维持 --yes 放行、无 --yes 拒; (6)verify-failed 维持拒杀。"""
+    mod_pk = _load_script("port_kill")
+    real = mod_pk.REPO_ROOT
+
+    # (1) 本 clone python 监听(cmdline 含仓库根): 照旧放行, 免 --yes
+    ok, why = mod_pk.kill_decision(
+        ("python.exe", f"{real / '.venv/Scripts/python.exe'} {real / 'scripts/ui_harness.py'} --port 0"), False
+    )
+    assert ok and why == "python-listener", f"本 clone python 监听照旧放行: {why}"
+
+    # (2) 其它 clone 形态(2026-11-17 事故实例): confirmed=True 也拒
+    for name, cmd in (
+        ("auto-qb.exe", r"D:\Projects\auto-qb\.venv\Scripts\auto-qb.exe --webui-port 38080"),
+        ("auto-qb.exe", r"D:/Projects/auto-qb-long-seeding/.venv/Scripts/auto-qb.exe --webui-port 38081"),
+    ):
+        ok, why = mod_pk.kill_decision((name, cmd), True)
+        assert not ok, f"clone 域外监听 --yes 也必须拒: {cmd}"
+        assert "outside-repo" in why and "--yes" in why, f"reason 说明域外拒杀语义: {why}"
+
+    # (3) qBittorrent 本体 / 浏览器: clone 域外, 拒
+    for name, cmd in (
+        ("qbittorrent.exe", r"C:\Program Files\qBittorrent\qbittorrent.exe"),
+        ("chrome.exe", r'"C:\Program Files\Google\Chrome\Application\chrome.exe" --headless'),
+        ("auto-qb.exe", ""),  # cmdline 查不到: fail-closed
+    ):
+        ok, why = mod_pk.kill_decision((name, cmd), True)
+        assert not ok, f"域外/无归属监听必须拒: {name}"
+        assert "outside-repo" in why
+
+    # (4) 边界: 前缀同串但非本 clone 路径(假想 clone2-old / clone2b)拒
+    for suffix in ("-old", "b", "_bak"):
+        fake = f"{real}{suffix}"
+        ok, _ = mod_pk.kill_decision(("python.exe", f"{fake}\\.venv\\Scripts\\python.exe x"), True)
+        assert not ok, f"前缀同串变体路径必须拒: {fake}"
+
+    # (5) 本 clone 非 python 监听(node/.commands/e2e): 无 --yes 拒(旧语义), 有 --yes 放行(旧语义)
+    node = ("node.exe", f'"{real / ".commands/e2e/node.exe"}" e2e.js --port 0')
+    ok, why = mod_pk.kill_decision(node, False)
+    assert not ok and "--yes" in why, f"clone 域内非 python 无 --yes 仍拒: {why}"
+    ok, why = mod_pk.kill_decision(node, True)
+    assert ok, f"clone 域内非 python + --yes 仍放行: {why}"
+
+    # (6) verify-failed(info=None)维持 fail-safe 拒杀, 优先于一切
+    for confirmed in (False, True):
+        ok, why = mod_pk.kill_decision(None, confirmed)
+        assert not ok and "verify-failed" in why, f"verify-failed 维持拒杀 (confirmed={confirmed})"
+
+
+def test_port_kill_main_outside_repo_refusal_warning(monkeypatch, capsys):
+    """main 接线(全 monkeypatch, taskkill 不真执行): clone 域外监听即使 --yes 也拒 --
+    打显眼 WARNING 行(含仓库根要点)+ REFUSED(outside-repo) 行(明确区分于旧 REFUSED),
+    rc!=0 且零 taskkill; 同输入旧实现(--yes 放行非 python)会杀 -- 红验。"""
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派: taskkill 支在任一平台都跑(issue 26-11-13-0234)
+    taskkill_calls = []
+
+    def _fake_run(cmd, **kw):
+        if cmd and cmd[0] == "taskkill":
+            taskkill_calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    # 2026-11-17 事故实例形态: 其它 clone 的生产 auto-qb.exe 占 webui 端口
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
+    monkeypatch.setattr(
+        mod_pk,
+        "process_info",
+        lambda pids: {4321: ("auto-qb.exe", r"D:\Projects\auto-qb\.venv\Scripts\auto-qb.exe --webui-port 38080")},
+    )
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+
+    for argv in (["38080"], ["38080", "--yes"]):  # --yes 在场也拒
+        rc = mod_pk.main(argv)
+        out = capsys.readouterr().out
+        assert rc != 0, f"clone 域外监听必须拒 (argv={argv})"
+        assert "WARNING" in out and "OUTSIDE-REPO" in out and str(mod_pk.REPO_ROOT
+                                                                 ) in out, (f"显眼 WARNING 行须含仓库根要点: {out!r}")
+        assert "REFUSED(outside-repo)" in out, f"拒绝行须区分于旧 REFUSED: {out!r}"
+        assert "pid 4321 = auto-qb.exe" in out, "归属行仍先打印(供人看归属路径)"
+        assert taskkill_calls == [], f"clone 域闸拒杀路径零 taskkill ({argv}): {taskkill_calls}"
+
+    # 对照: 旧实现(--yes 放行非 python 监听)同输入会直接 taskkill -- 判据区分新旧, 非恒绿
+    def _old_main_yes(pids, run):
+        for pid in sorted(pids):
+            run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
+
+    _old_main_yes({4321}, _fake_run)
+    assert taskkill_calls == [["taskkill", "/F", "/PID", "4321"]], "旧实现同输入直接杀(红验面)"
 
 
 # ---------------------------------------------------------------------------
@@ -725,22 +907,24 @@ def test_port_kill_process_info_posix_reads_proc(monkeypatch, tmp_path):
     """
     mod_pk = _load_script("port_kill")
     monkeypatch.setattr(mod_pk.os, "name", "posix")  # 钉 POSIX 分派
+    # 2026-11-17 加固: clone 域闸要求 cmdline 含仓库根路径, 用例按本 clone 真实形态构造
+    own = str(mod_pk.REPO_ROOT / "scripts/ui_harness.py")
     root = _fake_proc(
         tmp_path,
         {
             "472/comm": "python3\n",
-            "472/cmdline": "uv run python scripts/ui_harness.py --port 0\x00",
+            "472/cmdline": f"uv run python {own} --port 0\x00",
             "473/comm": "python3.13\n",
-            "473/cmdline": "/usr/bin/python3.13\x00scripts/ui_harness.py\x00--port 0\x00",
+            "473/cmdline": f"/usr/bin/python3.13\x00{own}\x00--port 0\x00",
             "475/comm": "uv\n",
-            "475/cmdline": "uv\x00run\x00python\x00scripts/ui_harness.py\x00--port 0\x00",
+            "475/cmdline": f"uv\x00run\x00python\x00{own}\x00--port 0\x00",
             "476/comm": "python\n",  # comm 在但 cmdline 缺失: 查询答不全 -> 缺席
         }
     )
     monkeypatch.setattr(mod_pk, "PROC_ROOT", str(root))
     infos = mod_pk.process_info([472, 473, 475, 476, 123])
-    assert infos[472] == ("python3", "uv run python scripts/ui_harness.py --port 0")
-    assert infos[473] == ("python3.13", "/usr/bin/python3.13 scripts/ui_harness.py --port 0"), "NUL 拼回空格"
+    assert infos[472] == ("python3", f"uv run python {own} --port 0")
+    assert infos[473] == ("python3.13", f"/usr/bin/python3.13 {own} --port 0"), "NUL 拼回空格"
     assert 476 not in infos and 123 not in infos, "comm/cmdline 缺失或 raced exit -> 缺席 = verify-failure"
     for pid in (472, 473, 475):
         ok, _ = mod_pk.kill_decision(infos[pid], False)
@@ -760,9 +944,8 @@ def test_port_kill_main_posix_sigkill_gate(monkeypatch, capsys):
 
     monkeypatch.setattr(mod_pk.os, "kill", _fake_kill)
     monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
-    monkeypatch.setattr(
-        mod_pk, "process_info", lambda pids: {4321: ("python3", "uv run python scripts/ui_harness.py --port 0")}
-    )
+    own = str(mod_pk.REPO_ROOT / "scripts/ui_harness.py")
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("python3", f"uv run python {own} --port 0")})
 
     rc = mod_pk.main(["8137"])
     out = capsys.readouterr().out
@@ -771,14 +954,29 @@ def test_port_kill_main_posix_sigkill_gate(monkeypatch, capsys):
     assert "pid 4321 = python3" in out and "-> killed" in out, f"归属行与回执不回归: {out!r}"
 
     kills.clear()
-    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("chrome", "chrome --headless")})
+    # 非 python 且在本 clone 外(2026-11-17 事故形态): clone 域闸拒杀, --yes 越不过
+    monkeypatch.setattr(
+        mod_pk, "process_info", lambda pids: {4321: ("auto-qb.exe", r"D:\Projects\auto-qb\.venv\Scripts\auto-qb.exe")}
+    )
     rc = mod_pk.main(["8137"])
     capsys.readouterr()
-    assert rc != 0 and kills == [], "非 python 无 --yes: 拒杀且零 os.kill"
+    assert rc != 0 and kills == [], "clone 域外监听: 拒杀且零 os.kill"
 
     rc = mod_pk.main(["8137", "--yes"])
     capsys.readouterr()
-    assert rc == 0 and kills == [(4321, mod_pk._SIGKILL)], "--yes 放行一次 SIGKILL"
+    assert rc != 0 and kills == [], "--yes 也越不过 clone 域闸"
+
+    kills.clear()
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("node", f"{mod_pk.REPO_ROOT}/.commands/e2e/node")})
+    rc = mod_pk.main(["8137", "--yes"])
+    capsys.readouterr()
+    assert rc == 0 and kills == [(4321, mod_pk._SIGKILL)], "本 clone 非 python + --yes 放行一次 SIGKILL"
+
+    kills.clear()
+    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("node", f"{mod_pk.REPO_ROOT}/.commands/e2e/node")})
+    rc = mod_pk.main(["8137"])
+    capsys.readouterr()
+    assert rc != 0 and kills == [], "本 clone 非 python 无 --yes: 拒杀且零 os.kill"
 
     kills.clear()
     monkeypatch.setattr(mod_pk, "process_info", lambda pids: {})  # 查询答不出 = verify-failure
@@ -793,7 +991,9 @@ def test_port_kill_main_posix_kill_failure_faces(monkeypatch, capsys):
     mod_pk = _load_script("port_kill")
     monkeypatch.setattr(mod_pk.os, "name", "posix")  # 钉 POSIX 分派
     monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
-    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("python3", "python stub.py")})
+    monkeypatch.setattr(
+        mod_pk, "process_info", lambda pids: {4321: ("python3", f"python {mod_pk.REPO_ROOT / 'scripts/stub.py'}")}
+    )
 
     def _gone(pid, sig):
         raise ProcessLookupError
@@ -818,7 +1018,9 @@ def test_port_kill_main_nt_kill_failed_rc(monkeypatch, capsys):
     mod_pk = _load_script("port_kill")
     monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派
     monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {4321})
-    monkeypatch.setattr(mod_pk, "process_info", lambda pids: {4321: ("python.exe", "python stub.py")})
+    monkeypatch.setattr(
+        mod_pk, "process_info", lambda pids: {4321: ("python.exe", f"python {mod_pk.REPO_ROOT / 'scripts/stub.py'}")}
+    )
 
     def _fake_run(cmd, **kw):
         assert cmd[:3] == ["taskkill", "/F", "/PID"], f"实杀参数不回归: {cmd}"
