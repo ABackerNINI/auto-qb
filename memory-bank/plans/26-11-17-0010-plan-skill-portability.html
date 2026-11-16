@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>自制 skill 轨道可移植性改造: 移植后零改 skill 本体只改配置</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="skill-portability">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-17-0010">
+<meta name="doc-updated" content="26-11-17-0042">
+<meta name="doc-refs" content="memory-bank/reports/26-11-17-0010-report-skill-portability.md, memory-bank/tasks/26-11-17-memory-bank-skill-portability.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: skill-portability</div>
+<h1>自制 skill 轨道可移植性改造: 移植后零改 skill 本体只改配置</h1>
+<p class="lede">本篇只回答: 把自制 skill 轨道(skill 目录 + commands 引擎 + <code>.commands/</code> 包 + sync 脚本 + KB 数据件骨架 + PORTING)改造成「移植后零改 skill 本体、只改配置」—— 改哪些、按什么波次、怎么验收。改造方案与拍板单点在本篇; 移植摩擦证据单点在收编报告。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-17-0010 · <b>doc-updated</b> 26-11-17-0042 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「自制 skills 的可移植性改造」+ 四轮 grilling(D1-D20 全拍板, 见 §06); 依据 = PTSKIT-farm-helper 消费者视角移植摩擦报告(经授权收编 <code>memory-bank/reports/26-11-17-0010-report-skill-portability.md</code>) + 本仓逐项核实(2026-11-16 盘点)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>目标</b> — 移植单位是「轨道」而非单个 skill(收编报告 §2.6-1 实证: T4/T5 的一半移植工作量在 PORTING 没写的地方, 即 skill 目录之外)。改造后的成态判据: <b>最小移植 = 拷目录 + 填 ≤10 个配置键 + 0 行代码 diff</b>; 且移植到「正在开发中的项目」时, 对存量代码的评审(review.lane)开箱可用。</p>
+<p><b>六条设计原则</b>(改造判据, 源报告 §3):</p>
+<ol>
+<li><b>配置/数据与代码分离</b> — 项目词汇(领域枚举)、项目路径(sibling 工作区)、排除表、闸门清单、批次矩阵一律外置; 代码读配置, 无配置回落通用默认。判定法: <b>换项目不该需要改任何 <code>.py</code></b>。</li>
+<li><b>fail-closed 守卫必须显式 opt-in</b> — 默认检查链只允许「对新空库恒绿」的成员; 要求「某文件必须存在」的守卫属项目层, 进可选清单(PORTING 标注勿默认移植)。</li>
+<li><b>环境中立默认值</b> — 出厂 <code>python3</code> 而非 <code>uv run</code>(脚本纯 stdlib; uv 是项目偏好属配置层); 单远端假设; <b>无远端是合法稳态</b>(本地分支/离线 bootstrap)。</li>
+<li><b>测试卫生</b> — 清理路径先校验后删(非空+不在 cwd/仓库根下); <code>sys.executable</code> 派生子进程防解释器失真; 平台断言一律 <code>os.name</code> 条件化。</li>
+<li><b>协议与演进史分离</b> — SKILL.md 是协议, 历史进 references; 本轮只摘要置记, 演进史批量下沉缓行(D14, 实施开工轮入池跟踪)。</li>
+<li><b>可移植性声明</b> — 每 skill 一份移植帮助文档(依赖面清单: 需要项目提供哪些数据件/配置键/可选守卫), 双场景指导(新项目绿地 / 开发中途存量, <b>重点存量</b>)。</li>
+</ol>
+<p><b>配置落点口径</b>(D12/D19/D20): skill 面 = <code>&lt;skill&gt;/config/project.toml</code>(统一名, 项目绑定面单点) + 帮助文档 <code>&lt;skill&gt;/references/PORTING.md</code>; 包面 = 包根先例(<code>.my-commit-flow.toml</code> / 新增 <code>lane.toml</code>); sync 脚本例外 = <code>.agents/skills/.config/sync.toml</code>(点前缀, 避免被 skill 遍历误收)。<b>配置缺失回落语义</b>(D13): 校验类缺失 → 跳过对应校验 + 必打一条提示(禁止静默降级); 运行必需数据(如 lane 批次矩阵)缺失 → 引导性报错。</p>
+<p><b>不变量</b>: ①本项目(auto-qb)行为零变化 — 每批含回归验证; ②对照组(commands/create-issue/scope-guard)零改动; ③第三方 skill 本体一律不碰, 半自制件不改本体、仅按 S8 新增 PORTING 文档(与 D2/D17 口径对齐); ④跨仓红线零消耗 — 验收场地只用仓内沙箱(D5)。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>摩擦证据单点在收编报告 §2(消费者视角逐项实录); 下表为本仓逐项核实的<b>当前落地状态</b>(2026-11-16 盘点, 检索行号可复跑):</p>
+<table>
+<tr><th>改造项</th><th>现状证据</th><th>级</th><th>波次</th></tr>
+<tr><td>TASK_DOMAINS 项目词汇硬编码</td><td><code>_common.py:193</code> 八域写死; T5 实测: 不改代码 <code>kb.new task</code> 拒收</td><td>P0</td><td>1</td></tr>
+<tr><td>new_doc.py 跨 clone glob 写死</td><td><code>new_doc.py:99-103</code> <code>_sibling_tasks_dirs</code> 硬编码 <code>../auto-qb-*</code></td><td>P0</td><td>1</td></tr>
+<tr><td>check_mutation_anchor 挂 kb.check 默认链且 fail-closed</td><td><code>.commands/kb/config.toml:37</code>; T5 实测: 空库首跑必红, 被迫立锚占位后清退</td><td>P0</td><td>1</td></tr>
+<tr><td>全包 rmtree/unlink「解析值直接当路径」审计</td><td>T4 清库事故主案已修(33e3a3d6: 锚定守卫+侧信道+conftest 防呆+双防呆); 剩余为全包复核</td><td>P0</td><td>1</td></tr>
+<tr><td>red_lines/warn_lines 匹配语义反直觉</td><td><code>hit()</code>=前缀 startswith 或子串 in; <code>*.cookies*</code> 永不命中且无告警(T4 面 A 实测); <code>.my-commit-flow.toml</code> 12+ 个 gates 节深绑本项目</td><td>P1</td><td>2</td></tr>
+<tr><td>PORTING 覆盖面只有 memory-bank skill 本体</td><td><code>references/PORTING.md</code> 仅 3 步拷贝骨架; 实际移植单位是轨道; 30 个 skill 仅 1 个有移植文档</td><td>P0/P1</td><td>2</td></tr>
+<tr><td>KB 数据件无骨架模板</td><td><code>templates/</code> 已有 baseline.md, 缺 doc-forms/collaboration/real-machine 三件; T5 手写约 3000 字符/件</td><td>P1</td><td>2</td></tr>
+<tr><td>review_lane.py 项目矩阵硬编码</td><td>R1-R5 批次矩阵(约 90 行精确文件清单)/快照名 <code>auto-qb-review4-snap</code>/lane 目录/计划与 R2 报告指针/<code>BRANCH_REQUIRED="develop"</code> 全写死在脚本</td><td>P1</td><td>2</td></tr>
+<tr><td>gates 出厂最小模板缺失</td><td>T4 重写整个闸门节(12 条→3 条起步)</td><td>P1</td><td>2</td></tr>
+<tr><td>sync_agent_skills.py EXCLUDED/LINK_TARGETS 硬编码</td><td><code>scripts/sync_agent_skills.py:48-54</code></td><td>P1/P2</td><td>2</td></tr>
+<tr><td>出厂配置 uv run 环境假设</td><td>review/dev/test 等包 config <code>uv run python</code>(脚本纯 stdlib; kb 包 config 已是裸 python, 不在本项改造面)</td><td>P2</td><td>3</td></tr>
+<tr><td>SKILL.md 正文混演进史</td><td>T3 逐条 provenance 裁决成本高; 本轮缓行(D14)</td><td>P2</td><td>缓行</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线一句话</b> — 把四类绑定(项目词汇/项目路径/项目守卫/项目工作流数据)从代码移进配置与数据件, 把 PORTING 从「skill 拷贝指南」升级为「轨道移植 runbook + 每 skill 依赖面声明」。</p>
+<table>
+<tr><th>波次</th><th>内容</th><th>验证法</th></tr>
+<tr><td><b>波次 1 (P0 防复发)</b></td><td>S1 memory-bank 配置化 / S2 锚守卫摘链+空库恒绿审计 / S3 全包 rmtree 复核</td><td>本仓行为零变化回归; 删配置宽容回落验证</td></tr>
+<tr><td><b>波次 2 (P1 降手工)</b></td><td>S4 红线 glob 化 / S5 PORTING 轨道 runbook / S6 配置模板四件+数据件骨架三件 / S7 review_lane 数据外置 / S8 每 skill PORTING.md / S9 sync 配置化</td><td>迁移对照表零意图漂移; smoke 真冒烟; 模板复制填空演练</td></tr>
+<tr><td><b>波次 3 (P2 机械面+收口)</b></td><td>S10 出厂配置环境中立 / S11 沙箱重放+grep 白名单审计收口</td><td>仓内沙箱 0 行代码 diff 重放; 操作性代码零项目词</td></tr>
+</table>
+<p>每批独立可提交; 实施开工轮按记忆库 skill 走显式开工与分批评审。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>波次 1 — P0 防复发</h3>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td>建 <code>.agents/skills/memory-bank/config/project.toml</code>(<code>[domains]</code> 收编现八域; <code>[siblings]</code> 收编现 glob 语义为显式路径列表, 空=单 clone); <code>_common.py</code> 读配置, 无配置/空 domains → 跳过领域校验+打提示行; <code>new_doc.py</code> 删 <code>auto-qb-*</code> glob 改读 <code>[siblings]</code></td><td>本仓 <code>kb.new task</code> 行为零变化; 删配置文件后工具仍可用(宽容回落+提示); 领域枚举改动不再触代码</td></tr>
+<tr><td>S2</td><td><code>check_mutation_anchor.py</code> 移出 kb.check 默认链; 本项目侧显式挂载(kb 包另立 task id 如 <code>kb.anchor</code>, <code>.my-commit-flow.toml</code> 闸门与收尾口径改指它); PORTING 增「项目可选守卫勿默认移植」清单; 顺带全链审计 kb.check 其余成员是否满足「空库恒绿」</td><td>kb.check 对空库首跑绿; 本仓闸门行为不变; 审计结论(有无第二处 fail-closed)落档案</td></tr>
+<tr><td>S3</td><td>全包 <code>grep rmtree|unlink</code> 审计「解析值直接当路径」调用点(33e3a3d6 已修主案, 本步全包复核)</td><td>审计清单进 PORTING 测试卫生节; 零未校验调用点</td></tr>
+</table>
+<h3>波次 2 — P1 降手工</h3>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S4</td><td>red_lines/warn_lines 匹配升级 glob(fnmatch); 存量 12+ gates 条目逐条迁移审计保意图(前缀语义显式改 <code>x*</code>); <code>references/config.md</code>+出厂模板头注写死 glob 语义与正反例; 守阵钉语义</td><td>迁移对照表零意图漂移; <code>*.cookies*</code> 类写法可命中; 守阵红绿双验</td></tr>
+<tr><td>S5</td><td><code>references/PORTING.md</code> 扩容为轨道 runbook: 移植单位清单表(拷什么/改什么配置/建什么数据件/跑什么验收) + 双场景指导(新项目绿地 vs 开发中途存量, <b>重点存量</b>: 存量评审 lane 用法/闸门渐进启用/领域枚举对齐现状/与既有测试套共存) + 可选守卫清单 + 链接 S6 全部模板</td><td>照 runbook 在仓内沙箱可复现移植(S11 联验)</td></tr>
+<tr><td>S6</td><td>①my-commit-flow 出厂最小 gates 模板(包根 <code>config.minimal.toml</code>, 3 条起步+可选闸门注释示例+语义头注) ②test 包最小模板(node --check + pytest 两条起步) ③<code>templates/</code> 补 doc-forms/collaboration/real-machine 三件骨架(TODO 占位+三行头) ④review lane.toml 模板(随 S7) ⑤kb 包 config.toml 最小模板(标准 task id 起步, 项目可选机检注释示例)</td><td>报告 2.6-3 三份配置模板与 2.1-5 数据件骨架全部落位; T5 型手写(4 件×约 3000 字符)降为复制填空</td></tr>
+<tr><td>S7</td><td>review_lane 数据外置: <code>.commands/review/lane.toml</code>(包根, 与 <code>.my-commit-flow.toml</code> 同构)收编 R1-R5 批次矩阵/快照名/lane 目录/计划与 R2 报告指针/分支策略/分层范围含 vendor 排除; 机械流程零改; 无远端稳态(freeze 本地 HEAD 免 ls-remote); 矩阵缺失=引导性报错</td><td>本仓 smoke 真冒烟绿(行为零变化); 假矩阵/缺矩阵拿到可读引导报错; 目标项目写自己的矩阵即评存量</td></tr>
+<tr><td>S8</td><td>每 skill 一份 <code>references/PORTING.md</code>: 自制+半自制全配(名单实施时按「含项目绑定面或本仓原创」核对落表), 薄件 3-10 行, 依赖面清单表(数据件/配置键/可选守卫), 双场景段落(重点存量)</td><td>轨道内自制件全覆盖; 第三方件零触碰; 每份含双场景段</td></tr>
+<tr><td>S9</td><td>sync 配置化: <code>.agents/skills/.config/sync.toml</code>(<code>[exclude]</code> 收编 autoclaw-design-capability; <code>[link_targets]</code> 收编 <code>.codebuddy/skills</code>, P2 项一并收编), 点前缀防被 skill 遍历误收; 脚本读配置回落现默认</td><td>本仓 sync 行为零变化; 改配置可增删排除项/链接目标</td></tr>
+</table>
+<h3>波次 3 — P2 机械面+收口</h3>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S10</td><td>各包出厂/模板面 <code>uv run python</code> → <code>python3</code>; 本仓实际 task id 保持 uv(项目偏好属配置层, 不在出厂面)</td><td>模板面 grep 零 uv; 本仓 test.pkg 等零变化</td></tr>
+<tr><td>S11</td><td>收口验收: ①仓内沙箱重放 — 从改后本仓拷轨道路径到 /tmp 干净目录模拟目标项目骨架, 照 runbook 走通 = 0 行代码 diff ②grep 白名单审计 — <code>grep -rn 'auto-qb|auto_qb|qBittorrent|gitee' .agents/skills .commands scripts</code> 命中仅在白名单(收编报告/provenance 注释/历史文档), 操作性代码零命中 ③kb.check 空库首跑绿终验(删配置态模拟) ④my-commit-flow 自带测试 Linux 绿实测(D15 ⑤的 Linux 半条; Windows 半条按 D15 场地声明执行)</td><td>报告 §5 五条验收标准全过(§01/§04); 实测数字进任务档案(引用措辞, 不抄裸数)</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 — 四轮 grilling 全部拍板(2026-11-16/17), 结论见 §06。本计划按 Open 入库, S1-S11 待显式开工。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>D</th><th>拍板</th><th>轮次</th></tr>
+<tr><td>D1</td><td>改造单位 = <b>轨道级</b>(skill 目录 + commands 引擎 + .commands 包 + sync 脚本 + KB 数据件骨架 + PORTING), 不窄化为 skill 目录本身</td><td>R1</td></tr>
+<tr><td>D2</td><td>纳入面 = 报告清单: memory-bank skill / my-commit-flow 剩余 / review 包 / PORTING 升级 / sync 脚本 / test 最小模板; 对照组零改动; 第三方与半自制 design 类代码面零改动; 半自制 skill 仅 S8 新增 PORTING 文档, 本体不改; sync 脚本本体按 S9 配置化改造</td><td>R1</td></tr>
+<tr><td>D3</td><td>配置机制 = <b>分散自管</b>(每 skill/包自管配置文件 + 回落内置默认), 不设全仓集中单点</td><td>R1</td></tr>
+<tr><td>D4</td><td>check_mutation_anchor = <b>摘出默认链</b> + 可选守卫清单; 本项目侧显式挂载(kb 包另立 task id); 不做 [guards] 开关机制</td><td>R1</td></tr>
+<tr><td>D5</td><td>验收场地 = <b>仓内沙箱重放</b>(/tmp 模拟目标项目骨架); 跨仓真移植重放留未来真实移植时自然发生, 不为本计划专门授权</td><td>R1</td></tr>
+<tr><td>D6</td><td>报告收编 = 用户显式<b>授权</b>, 从 PTSKIT-farm-helper 拷入 <code>memory-bank/reports/</code>(已执行)</td><td>R1</td></tr>
+<tr><td>D7</td><td>本轮只出计划(kb.new plan 单文件 HTML 入库, Open), 不实施任何波次</td><td>R1</td></tr>
+<tr><td>D8</td><td>收编形态 = <b>直拷 .md 原样</b> + 文件头来源注记; 存档特例(reports/ 惯例 HTML, 保真优先)</td><td>R2</td></tr>
+<tr><td>D9</td><td>red_lines/warn_lines 匹配 = <b>升级支持 glob(fnmatch)</b>(选②非仅文档化); 存量条目迁移审计保意图</td><td>R2</td></tr>
+<tr><td>D10</td><td>review_lane = <b>保留在 review 包内</b>, 做可移植改造 — 目标: 移植到开发中途项目时支持对当前代码存量 code-review; 不拆独立包</td><td>R2</td></tr>
+<tr><td>D11</td><td>PORTING 位置 = <b>留在 skill 内</b> <code>references/PORTING.md</code> 扩容为轨道 runbook; 数据件骨架补三件(doc-forms/collaboration/real-machine; baseline 已有)</td><td>R2</td></tr>
+<tr><td>D12</td><td>配置落点 = skill 目录内(不进 KB 数据件); R4 修正进<b>子目录</b></td><td>R2/R4</td></tr>
+<tr><td>D13</td><td>配置缺失回落 = <b>宽容</b>(校验类跳过+必打提示, 禁静默降级); 运行必需数据(矩阵等)缺失 = 引导性报错(非守卫, 不适用宽容)</td><td>R2</td></tr>
+<tr><td>D14</td><td>P2 范围 = <b>砍文案类</b>: 演进史下沉缓行(实施开工轮入池 issue 跟踪); 只做机械面(uv→python3 + LINK_TARGETS 配置化)</td><td>R2</td></tr>
+<tr><td>D15</td><td>验收 = 报告 §5 <b>五条全收</b>(①拷目录+填配置+0 行代码 diff ②kb.check 空库首跑绿 ③grep 白名单审计 ④runbook 沙箱复现 ⑤my-commit-flow 自带测试双绿+全包无未校验 rmtree 调用点; 1/4 绑 D5 场地)。⑤的场地声明: Linux 半条本 clone 实测; Windows 半条本 clone 不可执行 —— 实施时留痕: 有 Windows 侧实例则补测, 无则以 33e3a3d6 锚定防呆守阵(语义绑数据不绑宿主 OS)+Linux 绿为过渡态并留痕(不静默收窄)</td><td>R2</td></tr>
+<tr><td>D16</td><td>PORTING 文档形态 = <b>每 skill 一份 PORTING.md 文件</b>(非 SKILL.md 内嵌段落/中央注册表), 允许薄(单文件件 3-10 行)</td><td>R3</td></tr>
+<tr><td>D17</td><td>PORTING 覆盖 = <b>自制+半自制全配</b>, 第三方来源件不动(零依赖对照基准, runbook 一句话带过); 包面不另建包级文件, 轨道 runbook 分节覆盖(my-commit-flow references/config.md 先例)</td><td>R3</td></tr>
+<tr><td>D18</td><td>review_lane 化 = <b>纯数据外置</b>(机械流程零改)到包内 config; 无远端稳态(freeze 本地 HEAD 免 ls-remote); 矩阵缺失=引导报错</td><td>R3</td></tr>
+<tr><td>D19</td><td>子目录口径 = 帮助文档 <code>&lt;skill&gt;/references/PORTING.md</code>(memory-bank 现状零搬迁) + 配置 <code>&lt;skill&gt;/config/project.toml</code>(统一名); sync 例外 <code>.agents/skills/.config/sync.toml</code>(点前缀防误遍历)</td><td>R4</td></tr>
+<tr><td>D20</td><td>帮助文档内容 = <b>双场景移植指导</b>(新项目绿地 / 开发中途存量, <b>重点存量</b>); 包面配置跟包根先例(lane.toml 包根, 与 .my-commit-flow.toml 同构; .my-commit-flow.toml 不动)</td><td>R4</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>R-1</td><td>glob 迁移误伤红线(该红不红)</td><td>S4 语义切换后现有红线意图漂移</td><td>迁移对照表逐条保意图(前缀显式化 <code>x*</code>)+守阵钉正反例+本仓闸门回归; 对照表进档案</td></tr>
+<tr><td>R-2</td><td>摘链后本项目漏挂锚守卫</td><td>S2 只摘不挂, 排期台账回写不再被拦</td><td>摘挂同批完成: kb 包 task id + 闸门引用改指 + 回归验证; 档案记行为零变化断言</td></tr>
+<tr><td>R-3</td><td>lane.toml 外置丢条目</td><td>S7 矩阵搬家漏批/漏文件</td><td>R1-R5 逐批对账(覆盖守卫现成: 全部文件恰被一批认领)+smoke 真冒烟绿才收批</td></tr>
+<tr><td>R-4</td><td>PORTING/依赖面清单漂移</td><td>改造新增绑定没回写清单</td><td>S11 grep 白名单审计进验收; 清单与审计同源复核</td></tr>
+<tr><td>R-5</td><td>跨仓红线消耗</td><td>验收想要「另一个项目」真实场地</td><td>只做 /tmp 仓内沙箱(D5); PTSKIT 重放不为本计划授权, 留未来真实移植</td></tr>
+<tr><td>R-6</td><td>演进史下沉无人接</td><td>P2 缓行后遗忘</td><td>实施开工轮入池 issue 跟踪(D14 已拍板缓行+入池待办)</td></tr>
+<tr><td>R-7</td><td>宽容回落被误读为静默降级</td><td>缺配置静默跳过校验, 用户以为校验不存在问题</td><td>回落必打提示行(坑档 tmpdir「禁止静默降级」教训同源); 提示文案进守阵</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-17-0010</span> 初版: 用户指令「自制 skills 可移植性改造」+ 四轮 grilling(D1-D20 全拍板; R2/R4 两轮带修正: glob 升级/review_lane 留包改造/子目录化/双场景指导); 依据 PTSKIT 移植摩擦报告收编(D6); 三波次 S1-S11, 演进史下沉缓行待入池(R-6); Open 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-17-0042</span> 评审修订(两轮评审 10 发现全修零入池): R1 修 6(不变量③/D2 半自制口径对齐, kb 包 uv run 例证改 review/dev/test, 轮次口径三轮改四轮, S6 补 kb 包配置模板, D15 恢复 Windows 双绿半条+场地声明, 引证 §0 改 §2.6-1); R2 修 4(D2 拆面表述区分 sync 脚本按 S9 改造, §03 S6 子项数同步, 33e3a3d6 定语改锚定防呆守阵, 修正轮次 R3 改 R4)</li>
+</ul>
+
+</div>
+</body>
+</html>
