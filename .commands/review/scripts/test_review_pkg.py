@@ -13,7 +13,7 @@
 - LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor/test_*) + registry 键齐
 - LaneScriptTest      review_lane.py 无参 rc=2(无参无动作) + --help rc=0
 - LaneStateTest       状态机直驱单测: batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/done 需进行中态/schema 校验(status 枚举/批次条目/缺文件)/require_clean lane 边界(lane 内未跟踪与修改放行/lane 外拒/lane 内改名到 lane 外拒)
-- PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(重命名只列新路径/[已删除] 同行); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 评审规模=闸门逐笔实算口径(15 行金值 + 多笔提交逐笔和≠树差 7/6 + 记账类/生成物排除面不计行不入清单 + 二进制 0 行 + --base≠锚点可见警告 + repo excludesFile 不改写未跟踪集合, 2026-11-11 统计口径对齐闸门); 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
+- PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(rename 拆删增两行与实算同口径: 旧路径带 [已删除]、新路径单独一行; 改名对提示行含两侧路径与相似度码, 不动实算行数); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 评审规模=闸门逐笔实算口径(15 行金值 + 多笔提交逐笔和≠树差 7/6 + 记账类/生成物排除面不计行不入清单 + 二进制 0 行 + --base≠锚点可见警告 + repo excludesFile 不改写未跟踪集合, 2026-11-11 统计口径对齐闸门); 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> 评审规模 0 行(闸门实算口径)且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
 - CheckTest           PASS(rc=0); 幻觉引文/超窗/缺字段/坏枚举/过短引文/非字符串字段/缺文件 REFUTE(rc=1); 窗口边界与 --window; stdin; 根外与穿越 REFUTE; 快照 root(无 .git)放行; 非 UTF-8 兜底; 行注入单行化; 非 JSON/非数组/非 UTF-8 输入 rc=2; 空数组 rc=0; 元素非对象 rc=1
@@ -390,10 +390,22 @@ class PackTest(unittest.TestCase):
         listing = self.proc.stdout.split("文件清单:", 1)[1]
         lines = [l.strip() for l in listing.splitlines() if l.strip()]
         self.assertIn("app.py", lines)
-        self.assertIn("new name.py", lines)  # 重命名只列新路径(name-status parts[-1])
+        self.assertIn("new name.py", lines)  # 新路径单独一行(name-status --no-renames, 与实算同口径)
+        self.assertIn("a b/old name.py [已删除]", lines)  # 旧路径以删除行出现, 删+增双计规模可对账
         self.assertIn("extra.py [已删除]", lines)  # 删除标记与文件同一行
-        self.assertNotIn("old name.py", " ".join(lines))  # 旧路径不应出现
+        deleted_line = _line_of(self.proc.stdout, "删除文件")
+        self.assertIn("a b/old name.py", deleted_line)  # rename 旧路径进删除专用行(本批声明面的另一半)
+        self.assertIn("extra.py", deleted_line)
         self.assertTrue(any(l.startswith("new_mod.py [未跟踪") for l in lines))
+
+    def test_rename_pair_hint_lists_both_sides(self):
+        # 改名对提示行(仅提示面): 把被实算拆成删+增的移动对亮出来供对账; 相似度码随内容增量非 R100
+        hint = _line_of(self.proc.stdout, "改名对(")
+        self.assertIn("a b/old name.py", hint)
+        self.assertIn("new name.py", hint)
+        self.assertRegex(hint, r"R\d{3}")
+        self.assertIn("仅提示", hint)  # 提示面措辞在场, 不会被误读成实算口径
+        self.assertIn("评审规模: 15 行", _line_of(self.proc.stdout, "评审规模:"))  # 提示不动实算行数
 
     def test_flags_redline_with_hit_detail(self):
         red_line = _line_of(self.proc.stdout, "红线预警:")

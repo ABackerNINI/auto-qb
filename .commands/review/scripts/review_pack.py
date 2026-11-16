@@ -5,6 +5,7 @@ code-review skill 的配套脚本(八节规程见 .agents/skills/code-review/SKI
          trailer 提交 + 工作树已跟踪 + 未跟踪可评, 排除面/锚点/实算与提交闸门共用 review_content.py
          单点 —— trailer `<N> 行` 与 `· 基` 过闸用的就是这一个数; --base ≠ 闸门锚点时打可见警告) /
          基哈希(「base -> 工作树」过滤后 diff 的确定性哈希, 与闸门同源) / 可评文件清单(树差口径,
+         --no-renames 与实算同口径: rename 拆 D 旧路径 + A 新路径两行, 另出「改名对」提示行供对账;
          记账类/生成物列进排除面行, 不进清单) / 红线与安全敏感面预警(全量路径, 排除面文件命中也
          必须亮出来)。红线清单与 my-commit-flow 闸门同源(读
          .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines / warn_lines),
@@ -150,9 +151,12 @@ def cmd_pack(args: argparse.Namespace) -> int:
 
     # 展示面(reviewer 实际要读的树差): 可评文件清单 + 记账/生成物排除面行。红线/敏感面预警仍扫
     # 全量路径(排除面文件命中红线也必须亮出来, 过滤只影响计行与清单, 不影响预警)。
+    # --no-renames 与实算面同口径: rename 拆成 D 旧路径 + A 新路径两行, 删+增双计的规模构成在
+    # 清单里当场可对账(2026-11-17 实测: name-status 默认检出 rename 时旧路径被折叠, 清单只见
+    # 新路径, 2357 行的规模却无处对账, 被误判成脚本缺陷)。改名对另出提示行(仅提示, 不进计行/清单)。
     changed_all: list[str] = []
     deleted_all: list[str] = []
-    for row in _git(root, "diff", "--name-status", base).splitlines():
+    for row in _git(root, "diff", "--name-status", "--no-renames", base).splitlines():
         parts = row.split("\t")
         if not parts or not parts[0]:
             continue
@@ -174,6 +178,15 @@ def cmd_pack(args: argparse.Namespace) -> int:
     untracked_disp = {p: untracked_counts.get(p, 0) for p in untracked_all if _counted(p, gen)}
     excluded = changed_excluded + [p for p in untracked_all if not _counted(p, gen)]
     deleted = [p for p in deleted_all if _counted(p, gen)]
+
+    # 改名对提示(仅提示面): name-status + rename 检测, 把被实算拆成 D+A 的移动对亮出来供对账;
+    # 两侧都在排除面的对不亮(与计行/清单同过滤口径)。name-status 的 rename 行是
+    # `R<相似度>\t旧路径\t新路径` 两字段真路径, 无 numstat 合成串 `a/{b => c}/d` 的解析问题。
+    rename_pairs = []
+    for row in _git(root, "diff", "--name-status", "-M", base).splitlines():
+        parts = row.split("\t")
+        if len(parts) >= 3 and parts[0].startswith("R") and (_counted(parts[1], gen) or _counted(parts[2], gen)):
+            rename_pairs.append((parts[1], parts[2], parts[0]))
 
     # 按文件归因的新增行: 只认 hunk 内的 '+' 行(+++ 头在 hunk 外, 内容以 ++ 开头也不会被误当元数据);
     # 新路径取 +++ b/<path> 头, 不再从 diff --git 行 rsplit(新旧路径本身含 " b/" 都能正确归属)。
@@ -235,6 +248,11 @@ def cmd_pack(args: argparse.Namespace) -> int:
         print(f"排除面: {len(excluded)} 个记账/生成物文件不计行不入清单: {shown}")
     if deleted:
         print(f"删除文件(引文校验将不可用): {'; '.join(deleted)}")
+    if rename_pairs:
+        shown = "; ".join(f"{o} -> {n} ({s})" for o, n, s in rename_pairs[:5])
+        more = f" 等 {len(rename_pairs)} 对" if len(rename_pairs) > 5 else ""
+        print(f"改名对(仅提示; 实算不识别 rename, 旧/新两路径各自按删+增与排除面判定, "
+              f"可评侧照常计行): {shown}{more}")
     print("文件清单:")
     for p in changed:
         mark = " [已删除]" if p in deleted else ""

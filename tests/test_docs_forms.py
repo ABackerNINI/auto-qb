@@ -8,7 +8,7 @@
 
 ## 测试计划
 
-- test_plans_reports_have_no_md: `plans/` 与 `reports/` 里除 `_index.md` 外没有 `.md` (制品一律单文件 HTML)
+- test_plans_reports_have_no_md: `plans/` 与 `reports/` 里除 `_index.md` 外没有 `.md` (制品一律单文件 HTML); 点名存档特例白名单 `ARCHIVE_MD_EXCEPTIONS` 例外且特例文件必须真实在场 (2026-11-17 用户拍板, 保真优先保 .md)
 - test_artifacts_meta_complete: 每份计划/报告的 `doc-*` meta 齐且 `doc-type` 与所在目录一致
 - test_status_vocabulary: `doc-status` ∈ 5 词表 (`Open` / `In Progress` / `Done` / `Dropped` / `Superseded`)
 - test_doc_map_flags_unknown_status: `gen_doc_map.check_status_vocabulary` 表外值退码 1 / 合法值与空值放行
@@ -53,6 +53,12 @@ NEW_NAME_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-(?:plan|report)-[a-z0-9]+(?:
 
 KIND_DIRS = {"plan": PLANS, "report": REPORTS}
 
+# 存档特例白名单 (2026-11-17 用户拍板): 经用户显式授权原样拷入的外仓档案, 保真优先保 .md
+# (件头「收编注记」声明特例; 不扩到目录级, 新特例须逐件点名 —— 白名单单点在这里)。
+ARCHIVE_MD_EXCEPTIONS = {
+    "memory-bank/reports/26-11-17-0010-report-skill-portability.md",
+}
+
 
 def _artifacts() -> list[Path]:
     out: list[Path] = []
@@ -66,12 +72,18 @@ def _meta(path: Path) -> dict[str, str]:
 
 
 def test_plans_reports_have_no_md() -> None:
-    """`plans/` 与 `reports/` 是 HTML 制品目录 —— 出现 `.md` 即违规 (2026-09-15 存量违规已随 W1 清掉)。"""
+    """`plans/` 与 `reports/` 是 HTML 制品目录 —— 白名单外出现 `.md` 即违规 (2026-09-15 存量违规已随 W1 清掉)。
+
+    白名单是逐件点名的存档特例(件头「收编注记」声明特例), 且特例文件必须真实在场 ——
+    特例被删/挪走时先同步清理白名单, 不留死条目。
+    """
     strays = [
-        p.relative_to(ROOT).as_posix() for directory in (PLANS, REPORTS)
-        for p in sorted(directory.glob("*.md")) if p.name != "_index.md"
+        p.relative_to(ROOT).as_posix() for directory in (PLANS, REPORTS) for p in sorted(directory.glob("*.md"))
+        if p.name != "_index.md" and p.relative_to(ROOT).as_posix() not in ARCHIVE_MD_EXCEPTIONS
     ]
     assert not strays, "制品目录里出现 .md (计划/报告一律单文件 HTML):\n  " + "\n  ".join(strays)
+    stale = sorted(name for name in ARCHIVE_MD_EXCEPTIONS if not (ROOT / name).is_file())
+    assert not stale, f"白名单特例文件已不在场 (请同步清理白名单):\n  " + "\n  ".join(stale)
 
 
 def test_artifacts_meta_complete() -> None:
