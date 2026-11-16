@@ -76,8 +76,9 @@
    - 拷 review 包(清单表 #3), `.commands/review/lane.toml` 就位后逐字段填空: `freeze_branch` =
      项目当前主干分支(冻结钉定: manifest 生成时点核验, 认领后拒改); 批次矩阵按**现状目录**划分路线,
      globs 宁缺勿滥 —— manifest 生成时有互斥 + 全覆盖守卫, 重叠/漏配即拒并列清单。
-   - 机械面接线状态单点 = lane.toml 头注(本批数据面骨架先行, review_lane 机械面接线由 S7 批次落地),
-     本节不复述, 以文件头注为准。
+   - 机械面已接线(S7): review_lane 从 lane.toml 读全部项目数据(批次矩阵/分层范围/指针/分支策略),
+     机械流程零改; 字段说明单点 = lane.toml 头注, 本节不复述。未配置远端时 freeze 取本地 HEAD
+     (无远端稳态, 本地分支/离线项目也能评存量)。
    - 路径: 填矩阵 → 生成 manifest 冻结基线 → 路线认领(`route-<R>.json`, 重复认领被拒)→ 按批派只读评审子代理。
    - 停手点: 矩阵缺失 / 重叠拿到的是**引导性报错**(D13, 指路 lane.toml 与具体必填字段), 照文案补字段,
      不是退回手写流程。
@@ -115,7 +116,7 @@ S6 产物七件, 四件配置模板 + 三件数据件骨架, 全部「复制 →
 | [my-commit-flow/config.minimal.toml](../../../../.commands/my-commit-flow/config.minimal.toml) | `.commands/my-commit-flow/.my-commit-flow.toml` | 3 条起步闸门 + 可选闸门注释示例; 文件头注写死 D13 回落语义与 fnmatch 匹配语义(细则单点 references/config.md「匹配语义」节); TOML 陷阱(顶层键必须写在 `[[gates]]` 表头之前)也在头注 |
 | [test/config.minimal.toml](../../../../.commands/test/config.minimal.toml) | `.commands/test/config.toml` | `node --check` + pytest 两条起步; 解释器出厂 `python3`(uv 等项目偏好不入出厂面) |
 | [kb/config.minimal.toml](../../../../.commands/kb/config.minimal.toml) | `.commands/kb/config.toml` | 标准 task id 起步超集(index / check / active / baseline / new / time / wrap / status / bump / ref; nav 归可选注释)+ 可选守卫(kb.docmap / kb.anchor)注释示例; 默认链成员资格判据见「项目可选守卫勿默认移植」 |
-| [review/lane.toml](../../../../.commands/review/lane.toml) | 同路径就地填空 | 存量评审批次矩阵数据面骨架; 字段说明与 TOML 语法自检命令在文件头注; 接线状态以头注为准 |
+| [review/lane.toml](../../../../.commands/review/lane.toml) | 同路径就地填空 | 存量评审批次矩阵(机械面已接线 S7, 本仓矩阵即真实实例); 复制后按头注字段说明整文件替换成本项目值; 引导性报错口径 D13 以头注为准 |
 | [templates/doc-forms.md](../templates/doc-forms.md) | `memory-bank/conventions/doc-forms.md` | 四工位文档形态协议骨架; 协议层(doc-* meta / 状态词表 / 认领链机制)照抄不改, 只填项目目录映射 / 命名口径 / 创建命令表 |
 | [templates/collaboration.md](../templates/collaboration.md) | `memory-bank/conventions/collaboration.md` | 协作约定骨架; 只记「用户明示」的约定, 每条标日期; 细则单点在项目 AGENTS.md, 这里只写指针 |
 | [templates/real-machine.md](../templates/real-machine.md) | `memory-bank/testing/real-machine.md` | 真机实测轨规程骨架; **没有真机轨的项目不复制本件**, SKILL.md 里引用本件的那段一并摘除 |

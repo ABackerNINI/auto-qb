@@ -25,13 +25,13 @@ note    = "批次 = 最近一条带 Review:/Review-Skip: 的提交 → 当前工
 run     = ["uv run python .commands/review/scripts/review_lane.py manifest <args>"]
 timeout = 300
 when    = "存量评审 R4（计划 26-11-05-2335）：S0 生成/重生成 manifest（批次矩阵+底册切片+覆盖守卫）"
-note    = "机器事实源生成器（D14/D17）：freeze 钉定=生成时点 develop tip（ls-remote 现查核验，未 sync 即拒；任何路线认领后拒绝重生成——冻结基线一经引用不可移动）+ 批次矩阵在冻结树临时解包上盘点（互斥+全覆盖守卫，重叠/漏配 rc=1 列清单）。产出 memory-bank/reports/attachments/legacy-review4/manifest.json。--dry-run 只演算"
+note    = "机器事实源生成器（D14/D17）：freeze 钉定=生成时点基线分支 tip（有远端 ls-remote 现查核验，未 sync 即拒；无远端稳态取本地 HEAD 免核验 D18；任何路线认领后拒绝重生成——冻结基线一经引用不可移动）+ 批次矩阵数据单点在包根 lane.toml（S7 外置：矩阵缺失/TODO 占位=引导性报错 D13），在冻结树临时解包上盘点（互斥+全覆盖守卫，重叠/漏配 rc=1 列清单）。产出 memory-bank/reports/attachments/legacy-review4/manifest.json。--dry-run 只演算"
 
 [tasks."review.lane.claim"]
 run     = ["uv run python .commands/review/scripts/review_lane.py claim <args>"]
 timeout = 120
 when    = "存量评审 R4：路线会话认领路线（claim -> ship.commit -> start）"
-note    = "--route R1..R5 --owner <标识> 必填。freeze 取 manifest 钉值（生成时点 ls-remote 核验的 develop tip，D17），校验为其 HEAD 祖先 + 本地 HEAD==远端 tip（ls-remote 现查，未 sync 即拒）+ 树净 + develop 分支。写 route-<R>.json（认领单点，重复认领拒）。认领后尽快 ship.commit 入库(防跨 clone 重复认领), 再 start"
+note    = "--route R1..R5 --owner <标识> 必填。freeze 取 manifest 钉值（生成时点核验的基线分支 tip，D17），校验为其 HEAD 祖先 + 本地 HEAD==远端 tip（ls-remote 现查，未 sync 即拒；无远端稳态免核验 D18）+ 树净 + 基线分支。写 route-<R>.json（认领单点，重复认领拒）。认领后尽快 ship.commit 入库(防跨 clone 重复认领), 再 start"
 
 [tasks."review.lane.start"]
 run     = ["uv run python .commands/review/scripts/review_lane.py start <args>"]
@@ -43,7 +43,7 @@ note    = "--route 必填；--fresh 重建快照；--snapshot 覆盖默认 <repo
 run     = ["uv run python .commands/review/scripts/review_lane.py verify <args>"]
 timeout = 120
 when    = "存量评审 R4：每批 reviewer 派遣前与交回后的开工自检/收尾复核（三件套第 3 条）"
-note    = "--route 必填。复核：快照在盘且标记==钉值 / develop 分支 / freeze 仍为祖先 / 树净（仅 legacy-review4/ 内允许落盘）。通过即打印下一批的文件清单+底册切片+三件套（可直接粘贴进派遣提示）"
+note    = "--route 必填。复核：快照在盘且标记==钉值 / 基线分支 / freeze 仍为祖先 / 树净（仅 lane 目录内允许落盘）。通过即打印下一批的文件清单+底册切片+三件套（可直接粘贴进派遣提示）"
 
 [tasks."review.lane.batch"]
 run     = ["uv run python .commands/review/scripts/review_lane.py batch <args>"]
@@ -61,4 +61,4 @@ note    = "--route 必填。校验：无 pending 批次（完成判据=批次全
 run     = ["uv run python .commands/review/scripts/review_lane.py smoke <args>"]
 timeout = 300
 when    = "存量评审 R4：S0 验收/环境变更后重验 —— 全环真冒烟（含重复认领与批次未齐两个负例断言）"
-note    = "真实跑 claim/负例/start/verify/done 负例/逐批勾选/done 全环，结束删除 route JSON、findings、小结、快照目录（树恢复干净）。需树净+网络（ls-remote）"
+note    = "真实跑 claim/负例/start/verify/done 负例/逐批勾选/done 全环，结束删除 route JSON、findings、小结、快照目录（树恢复干净）。需树净；有远端时需网络（ls-remote），无远端稳态免网络（D18）"

@@ -1,51 +1,574 @@
 # ===========================================================================
-# review 包 lane 配置模板 —— 存量评审批次矩阵的数据面骨架 (计划 26-11-17-0010 S6)
+# review 包 lane 配置 —— 存量评审 lane 的项目数据单点 (计划 26-11-17-0010 S7 数据外置)
 #
-# 定位: 与 `.commands/my-commit-flow/.my-commit-flow.toml` 同构 —— 数据在包根配置
-#       文件里, 脚本只读不写。**当前没有任何代码消费本文件**(机械面在 S7 批次接线);
-#       开一次存量评审前按下面字段说明填空。TOML 语法可用 `python3 -c "import
-#       tomllib; tomllib.load(open('lane.toml','rb'))"` 自检。
+# 定位: 与 `.commands/my-commit-flow/.my-commit-flow.toml` 同构 —— 数据在包根配置文件,
+#       脚本只读不写。review_lane.py 的全部项目数据(批次矩阵 / 分层范围含 vendor 排除 /
+#       快照与 lane 目录 / 计划与 R2 报告指针 / 分支策略)都从本文件读, 机械流程零改;
+#       本仓矩阵即真实实例, 移植到别的项目整文件替换成本项目值即可。
 #
-# 配置缺失回落语义 (计划 26-11-17-0010 D13): 本文件是**运行必需数据** —— 要开存量
-# 评审而没有批次矩阵, 属引导性报错(报错文案指路本文件与各必填字段), 不静默降级成
-# "没有矩阵也照跑"; 校验类辅助数据(如快照目录缺省值)缺失才允许跳过 + 必打提示。
+# 接线状态: review_lane.py 消费面已随本批(计划 26-11-17-0010 S7)接线 —— 本文件为其项目
+#           数据唯一来源, 无遗留硬编码; 改矩阵后须重跑 review.lane.manifest 再认领
+#           (claim 的指纹校验会拒与在库 manifest 不符的旧矩阵)。
+#
+# 配置缺失回落语义 (计划 26-11-17-0010 D13): 本文件是**运行必需数据** —— 文件缺失 /
+# 批次矩阵缺失 / 必填字段缺失 / 模板 TODO 占位未填 = 引导性报错(报错文案指路本文件与
+# 具体字段, 不静默降级成 "没有矩阵也照跑"); 校验类辅助数据(r2_report / issues_dir 指向
+# 的文件不在盘)缺失才允许跳过 + 必打提示(底册切片空, 不拦)。
+#
+# TOML 语法自检: `python3 -c "import tomllib; tomllib.load(open('lane.toml','rb'))"`
+#
+# 字段说明:
+# - [lane]
+#     campaign      评审 campaign 名(进 manifest.json 的 campaign 字段)
+#     freeze_branch 被评审的基线分支(冻结钉定: manifest 生成时点核验; 任何路线认领后拒绝
+#                   重生成 —— 冻结基线一经引用不可移动)。有远端时 ls-remote 核验本地 HEAD
+#                   ==远端 tip 才放行; 未配置远端时取本地 HEAD(无远端稳态, D18)。
+#     snapshot_root 快照导出容器目录名: 快照落仓库外 <repo 父目录>/<snapshot_root>/<repo 名>,
+#                   不切分支不动 HEAD。仓库相对**单段目录名**(不得含 '/' 或 '..')—— 仓库外
+#                   快照目录的删除授权/清理按它点名, 勿填通用名(如 tmp)
+#     lane_dir      路线状态单点目录(manifest.json / route-<R>.json / findings / 小结落这里),
+#                   仓库相对且逐段规范(不得为绝对路径, 不得含 ''/'.'/ '..' 段 —— 即禁 '//'、
+#                   './'、尾 '/' 等形态), 也不得含 '\': git porcelain 恒正斜杠, 路径字段一律
+#                   填 posix 形态(Windows 宿主尤其注意) —— 树净守卫按原串做 lane 前缀比对,
+#                   非常规段会比对不齐产生误导性误报
+#     plan_file     本 campaign 的计划文档指针(manifest 生成前先核在盘)
+#     r2_report     R2 终表报告指针(底册切片用; 不在盘打警告, 切片空, 不拦)
+#     issues_dir    Open issues 底册目录(不在盘打警告, 切片空, 不拦)
+# - [lane.scope] 分层范围: include / exclude 均为 fnmatch glob(对仓库相对整路径, `*` 跨 `/`,
+#     裸串 = 精确相等, 与 my-commit-flow 红线同一匹配口径); exclude 先判(命中即排除)。
+#     本仓口径: 评审对象 = src 代码文件(.py/.js/.css/.html) + 根 scripts/*.py; vendor
+#     第三方发行物(vue/uPlot min)与 __pycache__ 明确排除。
+# - [[route]] / [[route.batch]] 批次矩阵: 每条路线一个 [[route]] 表, 路线下逐批
+#     [[route.batch]]。生成 manifest 时做互斥 + 全覆盖守卫(重叠/漏配即拒并列清单) ——
+#     globs 宁缺勿滥, 逐批写清范围, 让"这批该看什么"可判定。批次字段:
+#     id    = <路线>-<序号>(完成判据 = 批次全覆盖无断号)
+#     desc  = 本批评审范围一句话
+#     depth = full(逐文件精评) / contract(py<->js 契约与机制) / mechanism(机制红线抽查,
+#             不逐行) / scan(快扫) —— 词表以 review_lane.py 接线实现为准
+#     exact = 精确路径清单(posix); globs = fnmatch glob —— 二者至少填一个
 # ===========================================================================
 
 [lane]
-# TODO 必填: 被评审的基线分支(冻结钉定: manifest 生成时点现查远端核验, 未同步即拒;
-# 任何路线认领后拒绝重生成 —— 冻结基线一经引用不可移动)
-freeze_branch = ""                # 例: "develop"
-# TODO 选填: 快照导出目录(留空 = <repo>/../<repo名>-snap/; 快照落在仓库之外, 不切分支不动 HEAD)
-snapshot_dir  = ""
+campaign      = "legacy-code-review-4"
+freeze_branch = "develop"
+snapshot_root = "auto-qb-review4-snap"
+lane_dir      = "memory-bank/reports/attachments/legacy-review4"
+plan_file     = "memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html"
+r2_report     = "memory-bank/reports/26-10-30-0237-report-full-code-review-2.html"
+issues_dir    = "memory-bank/issues"
 
-# ---------------------------------------------------------------------------
-# 批次矩阵: 每条路线一个 [[route]] 表, 路线下逐批 [[route.batch]]。
-# 生成 manifest 时做互斥 + 全覆盖守卫(重叠/漏配即拒并列清单) —— globs 宁缺勿滥,
-# 逐批写清范围, 让"这批该看什么"可判定。globs 为 fnmatch glob(整路径, `*` 跨 `/`,
-# 裸串 = 精确相等), 与 my-commit-flow 的 red_lines 同一匹配口径。
-# ---------------------------------------------------------------------------
+[lane.scope]
+include = [
+  "scripts/*.py",
+  "src/*.py",
+  "src/*.js",
+  "src/*.css",
+  "src/*.html",
+]
+exclude = [
+  "src/auto_qb/webui/static/shared/vendor/*",
+  "*/__pycache__/*",
+]
 
 [[route]]
-id    = "R1"                      # 路线 id, 例: R1 / R2 ...
-owner = ""                        # TODO 认领时填; 认领单点在 route-<R>.json, 重复认领会被拒
+id    = "R1"
 
   [[route.batch]]
-  id    = "R1-1"                  # 批次 id = <路线>-<序号>; 完成判据 = 批次全覆盖无断号
-  desc  = "TODO: 本批评审范围一句话(例: 某目录全域: 模块A/模块B)"
-  depth = "full"                  # full = 逐文件精评 / scan = 快扫(词表以 S7 接线实现为准)
-  globs = ["TODO: 本批覆盖的仓库根相对路径 glob, 例: src/module_a/*.py"]
+  id    = "R1-1"
+  desc  = "内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件"
+  depth = "full"
+  exact = [
+    "src/auto-qb.py",
+    "src/auto_qb/__init__.py",
+    "src/auto_qb/__main__.py",
+    "src/auto_qb/cli.py",
+    "src/auto_qb/core/__init__.py",
+    "src/auto_qb/core/qbmanager.py",
+    "src/auto_qb/core/taskqueue.py",
+    "src/auto_qb/core/module.py",
+    "src/auto_qb/core/qbapi.py",
+    "src/auto_qb/core/state.py",
+    "src/auto_qb/core/qbclient.py",
+    "src/auto_qb/core/episodes.py",
+    "src/auto_qb/core/exporter.py",
+  ]
 
   [[route.batch]]
   id    = "R1-2"
-  desc  = "TODO: 下一批范围一句话"
+  desc  = "迁移执行: relocate_units/relocate_exec/relocate_common"
   depth = "full"
-  globs = ["TODO: ..."]
+  exact = [
+    "src/auto_qb/core/modules/relocate_units.py",
+    "src/auto_qb/core/modules/relocate_exec.py",
+    "src/auto_qb/core/modules/relocate_common.py",
+  ]
 
-# [[route]]
-# id    = "R2"
-# owner = ""
-#   [[route.batch]]
-#   id    = "R2-1"
-#   desc  = "TODO ..."
-#   depth = "full"
-#   globs = ["TODO: ..."]
+  [[route.batch]]
+  id    = "R1-3"
+  desc  = "迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle"
+  depth = "full"
+  exact = [
+    "src/auto_qb/core/modules/relocate_mod.py",
+    "src/auto_qb/core/modules/relocate_plan.py",
+    "src/auto_qb/core/modules/relocate_probe.py",
+    "src/auto_qb/core/modules/relocate_proof.py",
+    "src/auto_qb/core/modules/relocate_lifecycle.py",
+  ]
+
+  [[route.batch]]
+  id    = "R1-4"
+  desc  = "traffic 存取: store/agg/codec/common/paths/grid/limits/curves"
+  depth = "full"
+  exact = [
+    "src/auto_qb/core/traffic_store.py",
+    "src/auto_qb/core/traffic_store_agg.py",
+    "src/auto_qb/core/traffic_store_codec.py",
+    "src/auto_qb/core/traffic_store_common.py",
+    "src/auto_qb/core/traffic_store_paths.py",
+    "src/auto_qb/core/traffic_grid.py",
+    "src/auto_qb/core/traffic_limits.py",
+    "src/auto_qb/core/curves.py",
+  ]
+
+  [[route.batch]]
+  id    = "R1-5"
+  desc  = "traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source"
+  depth = "full"
+  exact = [
+    "src/auto_qb/core/modules/traffic_sample_mod.py",
+    "src/auto_qb/core/modules/traffic_sample_agg.py",
+    "src/auto_qb/core/modules/traffic_sample_blocks.py",
+    "src/auto_qb/core/modules/traffic_sample_common.py",
+    "src/auto_qb/core/modules/traffic_snapshot_mod.py",
+  ]
+  globs = [
+    "src/auto_qb/core/traffic_source/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R1-6"
+  desc  = "分组与规则模块: grouping_mod/rules_mod/tvshows"
+  depth = "full"
+  exact = [
+    "src/auto_qb/core/modules/grouping_mod.py",
+    "src/auto_qb/core/modules/rules_mod.py",
+    "src/auto_qb/core/tvshows.py",
+  ]
+
+  [[route.batch]]
+  id    = "R1-7"
+  desc  = "ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker"
+  depth = "full"
+  exact = [
+    "src/auto_qb/core/modules/__init__.py",
+    "src/auto_qb/core/modules/fuse_mod.py",
+    "src/auto_qb/core/modules/logging_mod.py",
+    "src/auto_qb/core/modules/maintenance_mod.py",
+    "src/auto_qb/core/modules/notify_mod.py",
+    "src/auto_qb/core/modules/ops_common.py",
+    "src/auto_qb/core/modules/ops_jobs.py",
+    "src/auto_qb/core/modules/ops_mod.py",
+    "src/auto_qb/core/modules/ops_skip.py",
+    "src/auto_qb/core/modules/ops_verdict.py",
+    "src/auto_qb/core/modules/speed_curve_mod.py",
+    "src/auto_qb/core/modules/tracker_mod.py",
+  ]
+
+[[route]]
+id    = "R2"
+
+  [[route.batch]]
+  id    = "R2-1"
+  desc  = "校验面: config/validation 全部"
+  depth = "full"
+  globs = [
+    "src/auto_qb/config/validation/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R2-2"
+  desc  = "schema 与装载: schema 全部 + loaders + models"
+  depth = "full"
+  exact = [
+    "src/auto_qb/config/loaders.py",
+    "src/auto_qb/config/models.py",
+  ]
+  globs = [
+    "src/auto_qb/config/schema/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R2-3"
+  desc  = "写入与迁移: writer/migrations/compat/errors/impact/site_presets"
+  depth = "full"
+  exact = [
+    "src/auto_qb/config/__init__.py",
+    "src/auto_qb/config/compat.py",
+    "src/auto_qb/config/errors.py",
+    "src/auto_qb/config/impact.py",
+    "src/auto_qb/config/migrations.py",
+    "src/auto_qb/config/site_presets.py",
+    "src/auto_qb/config/writer.py",
+  ]
+
+  [[route.batch]]
+  id    = "R2-4"
+  desc  = "rules 全域: base/conditions/registry/checking_meta + expr + actions"
+  depth = "full"
+  globs = [
+    "src/auto_qb/rules/*.py",
+    "src/auto_qb/rules/expr/*.py",
+    "src/auto_qb/rules/actions/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R2-5"
+  desc  = "infra 存储: alias_fs/file_access"
+  depth = "full"
+  exact = [
+    "src/auto_qb/infra/alias_fs.py",
+    "src/auto_qb/infra/file_access.py",
+  ]
+
+  [[route.batch]]
+  id    = "R2-6"
+  desc  = "infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等"
+  depth = "full"
+  exact = [
+    "src/auto_qb/infra/__init__.py",
+    "src/auto_qb/infra/autostart.py",
+    "src/auto_qb/infra/clock.py",
+    "src/auto_qb/infra/errors.py",
+    "src/auto_qb/infra/locking.py",
+    "src/auto_qb/infra/logging.py",
+    "src/auto_qb/infra/notify.py",
+    "src/auto_qb/infra/port_owner.py",
+    "src/auto_qb/infra/relocate_journal.py",
+    "src/auto_qb/infra/store_recovery.py",
+    "src/auto_qb/infra/utils.py",
+    "src/auto_qb/infra/utils_parse.py",
+    "src/auto_qb/infra/utils_paths.py",
+    "src/auto_qb/infra/versioning.py",
+  ]
+
+[[route]]
+id    = "R3"
+
+  [[route.batch]]
+  id    = "R3-1"
+  desc  = "transfer 全域(新模块) + torrents/store"
+  depth = "full"
+  exact = [
+    "src/auto_qb/torrents/store.py",
+  ]
+  globs = [
+    "src/auto_qb/transfer/*.py",
+    "src/auto_qb/transfer/adapters/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R3-2"
+  desc  = "torrents 杂件 + tray + cli + tools"
+  depth = "full"
+  exact = [
+    "src/auto_qb/torrents/__init__.py",
+    "src/auto_qb/torrents/compat.py",
+    "src/auto_qb/torrents/record.py",
+    "src/auto_qb/torrents/view.py",
+    "src/auto_qb/tray/__init__.py",
+    "src/auto_qb/tray/app.py",
+    "src/auto_qb/tools/__init__.py",
+    "src/auto_qb/tools/finalize_watch.py",
+  ]
+  globs = [
+    "src/auto_qb/tray/*.py",
+    "src/auto_qb/tools/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R3-3"
+  desc  = "hr service 族: service_wave/service/service_common/service_status/module"
+  depth = "full"
+  exact = [
+    "src/auto_qb/hr/service_wave.py",
+    "src/auto_qb/hr/service.py",
+    "src/auto_qb/hr/service_common.py",
+    "src/auto_qb/hr/service_status.py",
+    "src/auto_qb/hr/module.py",
+  ]
+
+  [[route.batch]]
+  id    = "R3-4"
+  desc  = "hr 模型状态: model/status/resolve"
+  depth = "full"
+  exact = [
+    "src/auto_qb/hr/model.py",
+    "src/auto_qb/hr/status.py",
+    "src/auto_qb/hr/resolve.py",
+  ]
+
+  [[route.batch]]
+  id    = "R3-5"
+  desc  = "hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events"
+  depth = "full"
+  exact = [
+    "src/auto_qb/hr/runtime.py",
+    "src/auto_qb/hr/server.py",
+    "src/auto_qb/hr/channel.py",
+    "src/auto_qb/hr/worker.py",
+    "src/auto_qb/hr/threadlifecycle.py",
+    "src/auto_qb/hr/queue.py",
+    "src/auto_qb/hr/events.py",
+  ]
+
+  [[route.batch]]
+  id    = "R3-6"
+  desc  = "hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters"
+  depth = "full"
+  exact = [
+    "src/auto_qb/hr/__init__.py",
+    "src/auto_qb/hr/bencode.py",
+    "src/auto_qb/hr/discovery.py",
+    "src/auto_qb/hr/fetcher.py",
+    "src/auto_qb/hr/log.py",
+    "src/auto_qb/hr/parse.py",
+    "src/auto_qb/hr/ratelimit.py",
+    "src/auto_qb/hr/report.py",
+    "src/auto_qb/hr/store.py",
+  ]
+  globs = [
+    "src/auto_qb/hr/adapters/*.py",
+  ]
+
+[[route]]
+id    = "R4"
+
+  [[route.batch]]
+  id    = "R4-1"
+  desc  = "webui commands 面: commands*/runtime_commands"
+  depth = "full"
+  exact = [
+    "src/auto_qb/webui/commands.py",
+    "src/auto_qb/webui/commands_common.py",
+    "src/auto_qb/webui/commands_config.py",
+    "src/auto_qb/webui/commands_limit.py",
+    "src/auto_qb/webui/commands_logs.py",
+    "src/auto_qb/webui/commands_torrents.py",
+    "src/auto_qb/webui/runtime_commands.py",
+  ]
+
+  [[route.batch]]
+  id    = "R4-2"
+  desc  = "webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain"
+  depth = "full"
+  exact = [
+    "src/auto_qb/webui/__init__.py",
+    "src/auto_qb/webui/module.py",
+    "src/auto_qb/webui/relocate_chain.py",
+    "src/auto_qb/webui/runtime.py",
+    "src/auto_qb/webui/runtime_common.py",
+    "src/auto_qb/webui/runtime_stream.py",
+    "src/auto_qb/webui/runtime_views.py",
+    "src/auto_qb/webui/tool_client.py",
+    "src/auto_qb/webui/views.py",
+    "src/auto_qb/webui/views_common.py",
+    "src/auto_qb/webui/views_episodes.py",
+    "src/auto_qb/webui/views_group.py",
+    "src/auto_qb/webui/views_relocate.py",
+    "src/auto_qb/webui/views_row.py",
+    "src/auto_qb/webui/views_search.py",
+  ]
+
+  [[route.batch]]
+  id    = "R4-3"
+  desc  = "webui server 全域: factory/auth/context/routes/traffic_qb"
+  depth = "full"
+  globs = [
+    "src/auto_qb/webui/server/*.py",
+    "src/auto_qb/webui/server/routes/*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R4-4"
+  desc  = "CSS 机制面 + 模板 HTML(减配: 加载序/特异性冲突/守阵对齐/双皮肤一致)"
+  depth = "mechanism"
+  globs = [
+    "src/auto_qb/webui/static/*.css",
+    "src/auto_qb/webui/static/**/*.css",
+    "src/auto_qb/webui/static/shared/tpl/*.html",
+    "src/auto_qb/webui/static/*/index.html",
+    "src/auto_qb/webui/static/fx/showcase.html",
+  ]
+
+[[route]]
+id    = "R5"
+
+  [[route.batch]]
+  id    = "R5-1"
+  desc  = "shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/app.js",
+    "src/auto_qb/webui/static/shared/state.js",
+    "src/auto_qb/webui/static/shared/boot.js",
+    "src/auto_qb/webui/static/shared/lifecycle.js",
+    "src/auto_qb/webui/static/shared/auth.js",
+    "src/auto_qb/webui/static/shared/polling.js",
+    "src/auto_qb/webui/static/shared/fetch_low.js",
+    "src/auto_qb/webui/static/shared/ui_feedback.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-2"
+  desc  = "shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel)"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/menu.js",
+    "src/auto_qb/webui/static/shared/triggers.js",
+    "src/auto_qb/webui/static/shared/scope_audit.js",
+    "src/auto_qb/webui/static/shared/commands.js",
+    "src/auto_qb/webui/static/shared/commands_send.js",
+    "src/auto_qb/webui/static/shared/commands_optimistic.js",
+    "src/auto_qb/webui/static/shared/view.js",
+    "src/auto_qb/webui/static/shared/ctx_menu.js",
+    "src/auto_qb/webui/static/shared/ctx_menu_custom.js",
+    "src/auto_qb/webui/static/shared/overlay_fit.js",
+    "src/auto_qb/webui/static/shared/ctl_bits.js",
+    "src/auto_qb/webui/static/shared/shortcuts.js",
+    "src/auto_qb/webui/static/shared/shortcuts_panel.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-3"
+  desc  = "shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/table.js",
+    "src/auto_qb/webui/static/shared/dt_table.js",
+    "src/auto_qb/webui/static/shared/columns.js",
+    "src/auto_qb/webui/static/shared/columns_computed.js",
+    "src/auto_qb/webui/static/shared/columns_drag.js",
+    "src/auto_qb/webui/static/shared/columns_menu.js",
+    "src/auto_qb/webui/static/shared/columns_persist.js",
+    "src/auto_qb/webui/static/shared/columns_grid.js",
+    "src/auto_qb/webui/static/shared/sort.js",
+    "src/auto_qb/webui/static/shared/filters.js",
+    "src/auto_qb/webui/static/shared/selection.js",
+    "src/auto_qb/webui/static/shared/format.js",
+    "src/auto_qb/webui/static/shared/rowlang.js",
+    "src/auto_qb/webui/static/shared/decorate.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-4"
+  desc  = "shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head}"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/drawer.js",
+    "src/auto_qb/webui/static/shared/drawer_templates.js",
+    "src/auto_qb/webui/static/shared/drawer_store.js",
+    "src/auto_qb/webui/static/shared/drawer_general.js",
+    "src/auto_qb/webui/static/shared/drawer_rows.js",
+    "src/auto_qb/webui/static/shared/drawer_files.js",
+    "src/auto_qb/webui/static/shared/drawer_head.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-5"
+  desc  = "shared drawer 模板·general 与 trackers(01-09 号)"
+  depth = "contract"
+  globs = [
+    "src/auto_qb/webui/static/shared/drawer_tpl/0[1-9]-*.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-11"
+  desc  = "shared drawer 模板·content 与 peers(10-12/90 号)"
+  depth = "contract"
+  globs = [
+    "src/auto_qb/webui/static/shared/drawer_tpl/1[0-9]-*.js",
+    "src/auto_qb/webui/static/shared/drawer_tpl/9[0-9]-*.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-6"
+  desc  = "shared 对话框与流转: dialogs/add_torrent/dialogs_{meta,history}/delete_flow/transfer_{flow,targets}/relocate_chain"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/dialogs.js",
+    "src/auto_qb/webui/static/shared/add_torrent.js",
+    "src/auto_qb/webui/static/shared/dialogs_meta.js",
+    "src/auto_qb/webui/static/shared/dialogs_history.js",
+    "src/auto_qb/webui/static/shared/delete_flow.js",
+    "src/auto_qb/webui/static/shared/transfer_flow.js",
+    "src/auto_qb/webui/static/shared/transfer_targets.js",
+    "src/auto_qb/webui/static/shared/relocate_chain.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-7"
+  desc  = "shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr}"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/config_rules.js",
+    "src/auto_qb/webui/static/shared/config_editor.js",
+    "src/auto_qb/webui/static/shared/config_editor_curve.js",
+    "src/auto_qb/webui/static/shared/config_editor_form.js",
+    "src/auto_qb/webui/static/shared/config_editor_tree.js",
+    "src/auto_qb/webui/static/shared/config_hub.js",
+    "src/auto_qb/webui/static/shared/config_hub_tm.js",
+    "src/auto_qb/webui/static/shared/config_hub_tracker.js",
+    "src/auto_qb/webui/static/shared/config_hub_hr.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-8"
+  desc  = "图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/皮肤 js"
+  depth = "contract"
+  exact = [
+    "src/auto_qb/webui/static/shared/qb_traffic_chart.js",
+    "src/auto_qb/webui/static/shared/hr_status.js",
+    "src/auto_qb/webui/static/shared/hr.js",
+    "src/auto_qb/webui/static/shared/shows.js",
+    "src/auto_qb/webui/static/shared/traffic_card.js",
+    "src/auto_qb/webui/static/shared/shortcuts_engine.js",
+  ]
+  globs = [
+    "src/auto_qb/webui/static/shared/fx/*.js",
+    "src/auto_qb/webui/static/flux/*.js",
+    "src/auto_qb/webui/static/atlas/*.js",
+    "src/auto_qb/webui/static/console/*.js",
+    "src/auto_qb/webui/static/prism/*.js",
+  ]
+
+  [[route.batch]]
+  id    = "R5-9"
+  desc  = "scripts 快扫: sim_* 全族"
+  depth = "scan"
+  globs = [
+    "scripts/sim_*.py",
+  ]
+
+  [[route.batch]]
+  id    = "R5-10"
+  desc  = "scripts 快扫: qb_capture*/ui_harness/检查与实验散件"
+  depth = "scan"
+  exact = [
+    "scripts/bench_expr.py",
+    "scripts/check_command_drift.py",
+    "scripts/check_context_caps.py",
+    "scripts/dev_webui.py",
+    "scripts/e2e_selfcheck.py",
+    "scripts/gen_ext_icons.py",
+    "scripts/hr_ext_stub.py",
+    "scripts/hr_fetch_experiment.py",
+    "scripts/port_kill.py",
+    "scripts/qb_capture.py",
+    "scripts/qb_capture_cli.py",
+    "scripts/qb_capture_core.py",
+    "scripts/sync_agent_skills.py",
+    "scripts/ui_content_map.py",
+    "scripts/ui_harness.py",
+    "scripts/update_config_key_surface.py",
+  ]
+

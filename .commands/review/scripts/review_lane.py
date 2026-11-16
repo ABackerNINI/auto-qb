@@ -1,14 +1,19 @@
 """存量评审 R4 的路线机械面: review.lane —— 认领/快照/复核/勾选/终态 + manifest 生成。
 
-计划 26-11-05-2335 (legacy-code-review-4) 的配套脚本 (拍板 D13/D15):
-- manifest: 生成 manifest.json —— 冻结基线钉定(生成时点 develop tip, ls-remote 核验; 有路线
-            认领后拒绝重生成) + 批次到文件精确矩阵 + 每批撞车底册切片(R2 终表 + Open issues
-            按文件词边界映射) + 覆盖守卫(全部分层范围内文件恰被一批认领, 重叠/漏配即失败)。
+计划 26-11-05-2335 (legacy-code-review-4) 的配套脚本 (拍板 D13/D15); 数据外置见移植计划
+26-11-17-0010 S7/D18: 全部项目数据(批次矩阵/分层范围含 vendor 排除/快照与 lane 目录/计划
+与 R2 报告指针/分支策略)单点在包根 `lane.toml`, 机械流程零改只换数据源; 矩阵缺失=引导性
+报错(D13 运行必需数据不适用宽容回落); 未配置远端时 freeze 取本地 HEAD(无远端稳态, 免
+ls-remote)。各子命令:
+- manifest: 生成 manifest.json —— 冻结基线钉定(生成时点基线分支 tip: 有远端时 ls-remote 核验,
+            无远端稳态取本地 HEAD, D18; 有路线认领后拒绝重生成) + 批次到文件精确矩阵 +
+            每批撞车底册切片(R2 终表 + Open issues 按文件词边界映射) + 覆盖守卫(全部分层
+            范围内文件恰被一批认领, 重叠/漏配即失败)。
 - claim:    认领路线。freeze 取 manifest 钉值(D17), 校验为其祖先且
-            本地 HEAD == 远端 tip(ls-remote 现查, 防在落后/分叉基线上认领); 写 route JSON。
+            本地 HEAD == 远端 tip(ls-remote 现查, 防在落后/分叉基线上认领; 无远端稳态免核验); 写 route JSON。
 - start:    git archive <freeze> 导出评审快照到 repo 外目录(不切分支不动 HEAD, 不扰动
-            develop), 写 .snapshot-hash 标记, 打印存量适配三件套与首批文件。
-- verify:   每批派遣前/交回后复核 —— 快照存在且标记吻合 / 工作树净(仅 legacy-review4/ 内
+            基线分支), 写 .snapshot-hash 标记, 打印存量适配三件套与首批文件。
+- verify:   每批派遣前/交回后复核 —— 快照存在且标记吻合 / 工作树净(仅 lane 目录内
             允许脏) / 状态一致; 打印下一批派遣材料。
 - batch:    勾选批次完成(--findings 记发现数)。
 - done:     全批完成后校验 findings/小结在盘, 翻终态并提示 ship.commit。
@@ -35,178 +40,143 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 from datetime import datetime
 from pathlib import Path
 
-PLAN_REL = "memory-bank/plans/26-11-05-2335-plan-legacy-code-review-4.html"
-LANE_DIR = "memory-bank/reports/attachments/legacy-review4"
-R2_REPORT = "memory-bank/reports/26-10-30-0237-report-full-code-review-2.html"
-ISSUES_DIR = "memory-bank/issues"
-SNAP_ROOT_NAME = "auto-qb-review4-snap"
-ROUTES = ("R1", "R2", "R3", "R4", "R5")
-BRANCH_REQUIRED = "develop"
-
-# 分层范围: 评审对象 = src 代码文件 + 根 scripts; tests/.commands/assets 明确排除(计划 §03)
-CODE_EXTS = (".py", ".js", ".css", ".html")
+# 数据外置单点(S7, 计划 26-11-17-0010): 项目数据在包根 lane.toml(与本包 scripts 同目录的
+# 上一级), 本脚本只读不写; 加载与校验见 _load_lane_config。
+LANE_CONFIG = Path(__file__).resolve().parent.parent / "lane.toml"
+DEPTH_ENUM = ("full", "contract", "mechanism", "scan")
 
 
-def _is_scoped(rel: str) -> bool:
-    if rel.startswith("scripts/") and rel.endswith(".py"):
-        return True
-    if not rel.startswith("src/"):
+def _is_repo_relative(p: str) -> bool:
+    """仓库相对路径形态, 对**原串**逐段判: 非绝对路径, 不含反斜杠, 且不含 ''/'.'/ '..' 段。
+
+    不能用 Path 归一化后判: '.'/空段会被 Path 吸掉, 而 cfg 保留原串 —— _require_clean 的
+    porcelain 前缀比对用原串, 'mb/./lane' 一类形态会永不匹配, 纯 lane 内改动被误报
+    「lane 目录之外有未提交改动」(fail-closed 但报错误导), 必须在加载面拒。
+    反斜杠同理: git porcelain 路径恒正斜杠, Windows 宿主填 'a\\b' 一类原串比对必然对不齐,
+    路径字段一律填 posix 形态。
+    """
+    if Path(p).is_absolute() or "\\" in p:  # 含 Windows 盘符绝对形态; porcelain 恒正斜杠, 禁 '\' 字段
         return False
-    if "__pycache__" in rel:
-        return False
-    if rel.startswith("src/auto_qb/webui/static/shared/vendor/"):
-        return False  # 第三方发行物(vue/uPlot min), 不属评审对象
-    return rel.endswith(CODE_EXTS)
+    return all(seg not in ("", ".", "..") for seg in p.split("/"))
 
 
-# --------------------------------------------------------------------------- 批次定义
-# exact = 精确路径(posix); globs = fnmatch(posix, 大小写敏感)。定义必须互斥且覆盖全范围,
-# manifest 生成时守卫断言(重叠/漏配 -> rc=1 列出清单)。depth: full=逐文件精评 /
-# contract=py<->js 契约与机制 / mechanism=机制红线抽查(不逐行) / scan=快扫。
+# --------------------------------------------------------------------------- lane 配置加载
+# D13 口径: lane.toml 是运行必需数据 —— 文件/矩阵/必填字段缺失或模板 TODO 占位未填 = 引导性
+# 报错(文案指路 lane.toml 与具体字段), 不静默降级; 校验类辅助数据(r2_report/issues_dir 指向
+# 的文件不在盘)缺失才允许跳过 + 必打提示(见 _parse_r2/_parse_issues)。
 
 
-def _B(bid: str, route: str, title: str, depth: str, exact: tuple[str, ...] = (), globs: tuple[str, ...] = ()) -> dict:
-    return {"id": bid, "route": route, "title": title, "depth": depth, "exact": list(exact), "globs": list(globs)}
-
-
-P = "src/auto_qb/"
-BATCH_DEFS: list[dict] = [
-    # ---- R1 core ----
-    _B("R1-1", "R1", "内核执行面: qbmanager/taskqueue/module/qbapi/state + core 根杂件", "full",
-       exact=("src/auto-qb.py", P + "__init__.py", P + "__main__.py", P + "cli.py", P + "core/__init__.py",
-              P + "core/qbmanager.py", P + "core/taskqueue.py", P + "core/module.py",
-              P + "core/qbapi.py", P + "core/state.py", P + "core/qbclient.py",
-              P + "core/episodes.py", P + "core/exporter.py")),
-    _B("R1-2", "R1", "迁移执行: relocate_units/relocate_exec/relocate_common", "full",
-       exact=(P + "core/modules/relocate_units.py", P + "core/modules/relocate_exec.py",
-              P + "core/modules/relocate_common.py")),
-    _B("R1-3", "R1", "迁移规划与生命期: relocate_mod/plan/probe/proof/lifecycle", "full",
-       exact=(P + "core/modules/relocate_mod.py", P + "core/modules/relocate_plan.py",
-              P + "core/modules/relocate_probe.py", P + "core/modules/relocate_proof.py",
-              P + "core/modules/relocate_lifecycle.py")),
-    _B("R1-4", "R1", "traffic 存取: store/agg/codec/common/paths/grid/limits/curves", "full",
-       exact=(P + "core/traffic_store.py", P + "core/traffic_store_agg.py", P + "core/traffic_store_codec.py",
-              P + "core/traffic_store_common.py", P + "core/traffic_store_paths.py",
-              P + "core/traffic_grid.py", P + "core/traffic_limits.py", P + "core/curves.py")),
-    _B("R1-5", "R1", "traffic 采样: sample_mod/agg/blocks/common/snapshot + traffic_source", "full",
-       exact=(P + "core/modules/traffic_sample_mod.py", P + "core/modules/traffic_sample_agg.py",
-              P + "core/modules/traffic_sample_blocks.py", P + "core/modules/traffic_sample_common.py",
-              P + "core/modules/traffic_snapshot_mod.py"),
-       globs=(P + "core/traffic_source/*.py",)),
-    _B("R1-6", "R1", "分组与规则模块: grouping_mod/rules_mod/tvshows", "full",
-       exact=(P + "core/modules/grouping_mod.py", P + "core/modules/rules_mod.py", P + "core/tvshows.py")),
-    _B("R1-7", "R1", "ops 与维护面: ops_*/maintenance/fuse/speed_curve/logging/notify/tracker", "full",
-       exact=tuple(P + "core/modules/" + n for n in (
-           "__init__.py", "fuse_mod.py", "logging_mod.py", "maintenance_mod.py", "notify_mod.py",
-           "ops_common.py", "ops_jobs.py", "ops_mod.py", "ops_skip.py", "ops_verdict.py",
-           "speed_curve_mod.py", "tracker_mod.py"))),
-    # ---- R2 config · rules · infra ----
-    _B("R2-1", "R2", "校验面: config/validation 全部", "full",
-       globs=(P + "config/validation/*.py",)),
-    _B("R2-2", "R2", "schema 与装载: schema 全部 + loaders + models", "full",
-       globs=(P + "config/schema/*.py",),
-       exact=(P + "config/loaders.py", P + "config/models.py")),
-    _B("R2-3", "R2", "写入与迁移: writer/migrations/compat/errors/impact/site_presets", "full",
-       exact=(P + "config/__init__.py", P + "config/compat.py", P + "config/errors.py",
-              P + "config/impact.py", P + "config/migrations.py", P + "config/site_presets.py",
-              P + "config/writer.py")),
-    _B("R2-4", "R2", "rules 全域: base/conditions/registry/checking_meta + expr + actions", "full",
-       globs=(P + "rules/*.py", P + "rules/expr/*.py", P + "rules/actions/*.py")),
-    _B("R2-5", "R2", "infra 存储: alias_fs/file_access", "full",
-       exact=(P + "infra/alias_fs.py", P + "infra/file_access.py")),
-    _B("R2-6", "R2", "infra 工具: utils*/clock/notify/locking/logging/journal/recovery 等", "full",
-       exact=tuple(P + "infra/" + n for n in (
-           "__init__.py", "autostart.py", "clock.py", "errors.py", "locking.py", "logging.py", "notify.py",
-           "port_owner.py", "relocate_journal.py", "store_recovery.py", "utils.py",
-           "utils_parse.py", "utils_paths.py", "versioning.py"))),
-    # ---- R3 hr · 新代码 ----
-    _B("R3-1", "R3", "transfer 全域(新模块) + torrents/store", "full",
-       globs=(P + "transfer/*.py", P + "transfer/adapters/*.py"),
-       exact=(P + "torrents/store.py",)),
-    _B("R3-2", "R3", "torrents 杂件 + tray + cli + tools", "full",
-       exact=(P + "torrents/__init__.py", P + "torrents/compat.py", P + "torrents/record.py",
-              P + "torrents/view.py", P + "tray/__init__.py", P + "tray/app.py",
-              P + "tools/__init__.py", P + "tools/finalize_watch.py"),
-       globs=(P + "tray/*.py", P + "tools/*.py")),
-    _B("R3-3", "R3", "hr service 族: service_wave/service/service_common/service_status/module", "full",
-       exact=(P + "hr/service_wave.py", P + "hr/service.py", P + "hr/service_common.py",
-              P + "hr/service_status.py", P + "hr/module.py")),
-    _B("R3-4", "R3", "hr 模型状态: model/status/resolve", "full",
-       exact=(P + "hr/model.py", P + "hr/status.py", P + "hr/resolve.py")),
-    _B("R3-5", "R3", "hr 运行时: runtime/server/channel/worker/threadlifecycle/queue/events", "full",
-       exact=(P + "hr/runtime.py", P + "hr/server.py", P + "hr/channel.py", P + "hr/worker.py",
-              P + "hr/threadlifecycle.py", P + "hr/queue.py", P + "hr/events.py")),
-    _B("R3-6", "R3", "hr 取数解析: discovery/report/parse/fetcher/store/bencode/log/ratelimit + adapters", "full",
-       exact=(P + "hr/__init__.py", P + "hr/bencode.py", P + "hr/discovery.py", P + "hr/fetcher.py",
-              P + "hr/log.py", P + "hr/parse.py", P + "hr/ratelimit.py", P + "hr/report.py",
-              P + "hr/store.py"),
-       globs=(P + "hr/adapters/*.py",)),
-    # ---- R4 webui-py · CSS 机制 ----
-    _B("R4-1", "R4", "webui commands 面: commands*/runtime_commands", "full",
-       exact=tuple(P + "webui/" + n for n in (
-           "commands.py", "commands_common.py", "commands_config.py", "commands_limit.py",
-           "commands_logs.py", "commands_torrents.py", "runtime_commands.py"))),
-    _B("R4-2", "R4", "webui 视图与运行时: runtime*/views*/tool_client/module/relocate_chain", "full",
-       exact=tuple(P + "webui/" + n for n in (
-           "__init__.py", "module.py", "relocate_chain.py", "runtime.py", "runtime_common.py",
-           "runtime_stream.py", "runtime_views.py", "tool_client.py", "views.py", "views_common.py",
-           "views_episodes.py", "views_group.py", "views_relocate.py", "views_row.py", "views_search.py"))),
-    _B("R4-3", "R4", "webui server 全域: factory/auth/context/routes/traffic_qb", "full",
-       globs=(P + "webui/server/*.py", P + "webui/server/routes/*.py")),
-    _B("R4-4", "R4", "CSS 机制面 + 模板 HTML(减配: 加载序/特异性冲突/守阵对齐/双皮肤一致)", "mechanism",
-       globs=(P + "webui/static/*.css", P + "webui/static/**/*.css", P + "webui/static/shared/tpl/*.html",
-              P + "webui/static/*/index.html", P + "webui/static/fx/showcase.html")),
-    # ---- R5 static 契约 · scripts ----
-    _B("R5-1", "R5", "shared 启动与状态: app/state/boot/lifecycle/auth/polling/fetch_low/ui_feedback", "contract",
-       exact=tuple(P + "webui/static/shared/" + n for n in (
-           "app.js", "state.js", "boot.js", "lifecycle.js", "auth.js", "polling.js",
-           "fetch_low.js", "ui_feedback.js"))),
-    _B("R5-2", "R5", "shared 菜单·触发·命令链: menu/triggers/commands*/ctx_menu*/view/overlay_fit/ctl_bits/scope_audit/shortcuts(+panel)", "contract",
-       exact=tuple(P + "webui/static/shared/" + n for n in (
-           "menu.js", "triggers.js", "scope_audit.js", "commands.js", "commands_send.js",
-           "commands_optimistic.js", "view.js", "ctx_menu.js", "ctx_menu_custom.js",
-           "overlay_fit.js", "ctl_bits.js", "shortcuts.js", "shortcuts_panel.js"))),
-    _B("R5-3", "R5", "shared 表格与列: table/dt_table/columns*/sort/filters/selection/format/rowlang/decorate", "contract",
-       exact=tuple(P + "webui/static/shared/" + n for n in (
-           "table.js", "dt_table.js", "columns.js", "columns_computed.js", "columns_drag.js",
-           "columns_menu.js", "columns_persist.js", "columns_grid.js", "sort.js", "filters.js",
-           "selection.js", "format.js", "rowlang.js", "decorate.js"))),
-    _B("R5-4", "R5", "shared drawer 族: drawer/drawer_templates/drawer_store/drawer_{general,rows,files,head}", "contract",
-       exact=tuple(P + "webui/static/shared/" + n for n in (
-           "drawer.js", "drawer_templates.js", "drawer_store.js", "drawer_general.js",
-           "drawer_rows.js", "drawer_files.js", "drawer_head.js"))),
-    _B("R5-5", "R5", "shared drawer 模板·general 与 trackers(01-09 号)", "contract",
-       globs=(P + "webui/static/shared/drawer_tpl/0[1-9]-*.js",)),
-    _B("R5-11", "R5", "shared drawer 模板·content 与 peers(10-12/90 号)", "contract",
-       globs=(P + "webui/static/shared/drawer_tpl/1[0-9]-*.js", P + "webui/static/shared/drawer_tpl/9[0-9]-*.js")),
-    _B("R5-6", "R5", "shared 对话框与流转: dialogs/add_torrent/dialogs_{meta,history}/delete_flow/transfer_{flow,targets}/relocate_chain", "contract",
-       exact=tuple(P + "webui/static/shared/" + n for n in (
-           "dialogs.js", "add_torrent.js", "dialogs_meta.js", "dialogs_history.js",
-           "delete_flow.js", "transfer_flow.js", "transfer_targets.js", "relocate_chain.js"))),
-    _B("R5-7", "R5", "shared config 族: config_rules/config_editor{,_curve,_form,_tree}/config_hub{,_tm,_tracker,_hr}", "contract",
-       exact=tuple(P + "webui/static/shared/" + n for n in (
-           "config_rules.js", "config_editor.js", "config_editor_curve.js", "config_editor_form.js",
-           "config_editor_tree.js", "config_hub.js", "config_hub_tm.js", "config_hub_tracker.js",
-           "config_hub_hr.js"))),
-    _B("R5-8", "R5", "图表·hr 面板·快捷键引擎·fx: qb_traffic_chart/hr_status/hr/shows/traffic_card/shortcuts_engine + fx/皮肤 js", "contract",
-       exact=(P + "webui/static/shared/qb_traffic_chart.js", P + "webui/static/shared/hr_status.js",
-              P + "webui/static/shared/hr.js", P + "webui/static/shared/shows.js",
-              P + "webui/static/shared/traffic_card.js", P + "webui/static/shared/shortcuts_engine.js"),
-       globs=(P + "webui/static/shared/fx/*.js", P + "webui/static/flux/*.js",
-              P + "webui/static/atlas/*.js", P + "webui/static/console/*.js",
-              P + "webui/static/prism/*.js")),
-    _B("R5-9", "R5", "scripts 快扫: sim_* 全族", "scan",
-       globs=("scripts/sim_*.py",)),
-    _B("R5-10", "R5", "scripts 快扫: qb_capture*/ui_harness/检查与实验散件", "scan",
-       exact=tuple("scripts/" + n for n in (
-           "bench_expr.py", "check_command_drift.py", "check_context_caps.py", "dev_webui.py",
-           "e2e_selfcheck.py", "gen_ext_icons.py", "hr_ext_stub.py", "hr_fetch_experiment.py",
-           "port_kill.py", "qb_capture.py", "qb_capture_cli.py", "qb_capture_core.py",
-           "sync_agent_skills.py", "ui_content_map.py", "ui_harness.py", "update_config_key_surface.py"))),
-]
+def _load_lane_config(path: Path | None = None, need_matrix: bool = False) -> dict:
+    path = path or LANE_CONFIG
+    if not path.is_file():
+        _die(
+            f"lane 配置缺失: {path} —— 存量评审的项目数据单点(批次矩阵/分层范围/快照与 lane 目录/"
+            f"指针/分支策略), 照 `.commands/review/lane.toml` 模板复制或按其头注逐字段填写后重试"
+        )
+    try:
+        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError, OSError) as exc:
+        _die(f"lane 配置解析失败: {path} ({exc}) —— TOML 语法自检命令见文件头注")
+    lane = raw.get("lane")
+    if not isinstance(lane, dict):
+        _die(f"lane 配置缺 [lane] 节: {path} —— 各字段说明在文件头注")
+    cfg: dict = {}
+    for key in ("campaign", "freeze_branch", "snapshot_root", "lane_dir", "plan_file", "r2_report", "issues_dir"):
+        val = lane.get(key)
+        if not isinstance(val, str) or not val.strip():
+            _die(f"lane 配置缺必填字段 [lane].{key}: {path} —— 各字段说明在文件头注")
+        cfg[key] = val
+    # 路径形态校验: lane_dir/snapshot_root 写出仓库外 = 配置错误, 按 D13 引导报错
+    # (snapshot_root 还参与 _guard_snap_path 的删除授权, 误填通用名/多层路径会放大误删面)
+    if not _is_repo_relative(cfg["lane_dir"]):
+        _die(
+            f"lane 配置 [lane].lane_dir 必须是仓库相对路径(不得为绝对路径, 不得含 '\\\\' 或 ''/'.'/ '..' 段"
+            f" —— 路径字段一律填 posix 形态, git porcelain 恒正斜杠): "
+            f"{cfg['lane_dir']!r} ({path}) —— 状态单点不允许写出仓库外, 也不允许 lane 前缀比对对不齐的非常规段"
+        )
+    if not _is_repo_relative(cfg["snapshot_root"]) or "/" in cfg["snapshot_root"]:
+        _die(
+            f"lane 配置 [lane].snapshot_root 必须是仓库相对的单段目录名(不得含 '/'、'\\\\' 或 '..'): "
+            f"{cfg['snapshot_root']!r} ({path}) —— 仓库外快照容器目录的授权/清理按它点名, 勿填通用名"
+        )
+    scope = lane.get("scope")
+    if not isinstance(scope, dict):
+        _die(f"lane 配置缺 [lane.scope] 节(分层范围 include/exclude): {path} —— 口径在文件头注")
+    for name in ("include", "exclude"):
+        vals = scope.get(name, [])
+        if not isinstance(vals, list) or any(not isinstance(v, str) or not v.strip() for v in vals):
+            _die(f"lane 配置 [lane.scope].{name} 必须是非空字符串列表(fnmatch glob, 口径在文件头注): {path}")
+    if need_matrix and not scope.get("include"):
+        _die(f"lane 配置 [lane.scope].include 为空(分层范围不可为空, 否则无文件可评): {path} —— 口径在文件头注")
+    cfg["scope_include"] = list(scope.get("include", []))
+    cfg["scope_exclude"] = list(scope.get("exclude", []))
+    cfg["routes"] = []
+    cfg["batch_defs"] = []
+    if not need_matrix:
+        return cfg  # 矩阵只有 manifest 生成与 claim 指纹校验消费, 其余子命令不拦
+    defs = raw.get("route")
+    if not isinstance(defs, list) or not defs:
+        _die(
+            f"lane 配置批次矩阵缺失: {path} 里没有任何 [[route]] 路线 —— 开存量评审先按头注说明"
+            f"按现状目录划分路线与批次([[route]] id + 逐批 [[route.batch]] id/desc/depth/exact/globs)"
+        )
+    seen_route: set[str] = set()
+    seen_batch: set[str] = set()
+    for r in defs:
+        rid = r.get("id") if isinstance(r, dict) else None
+        if not isinstance(rid, str) or not rid.strip():
+            _die(f"lane 配置 [[route]] 缺非空 id: {path}")
+        if rid in seen_route:
+            _die(f"lane 配置路线 id 重复: {rid} ({path})")
+        seen_route.add(rid)
+        batches = r.get("batch")
+        if not isinstance(batches, list) or not batches:
+            _die(f"lane 配置路线 {rid} 没有任何 [[route.batch]] 批次: {path} —— 每条路线至少一批")
+        rows = []
+        for b in batches:
+            bid = b.get("id") if isinstance(b, dict) else None
+            if not isinstance(bid, str) or not bid.strip():
+                _die(f"lane 配置路线 {rid} 下有批次缺非空 id: {path}")
+            if not bid.startswith(rid + "-"):
+                _die(f"lane 配置批次 id {bid} 不以路线前缀 {rid}- 开头: {path} (口径: 批次 id = <路线>-<序号>)")
+            if bid in seen_batch:
+                _die(f"lane 配置批次 id 重复: {bid} ({path})")
+            seen_batch.add(bid)
+            desc = b.get("desc")
+            if not isinstance(desc, str) or not desc.strip() or "TODO" in desc:
+                _die(f"lane 配置批次 {bid} 缺 desc 或仍是模板 TODO 占位: {path} —— 填本批评审范围一句话")
+            depth = b.get("depth")
+            if depth not in DEPTH_ENUM:
+                _die(f"lane 配置批次 {bid} depth 非法: {depth!r} (词表: {'/'.join(DEPTH_ENUM)}, 说明在文件头注)")
+            exact = b.get("exact", [])
+            globs = b.get("globs", [])
+            for name, vals in (("exact", exact), ("globs", globs)):
+                if not isinstance(vals, list) or any(not isinstance(v, str) or not v.strip() for v in vals):
+                    _die(f"lane 配置批次 {bid} 的 {name} 必须是非空字符串列表: {path} (口径在文件头注)")
+            if not exact and not globs:
+                _die(
+                    f"lane 配置批次 {bid} 的 exact/globs 全空(本批该看什么不可判定): {path} —— "
+                    f"exact 填精确路径清单, globs 填 fnmatch glob"
+                )
+            if any("TODO" in v for v in (*exact, *globs)):
+                _die(f"lane 配置批次 {bid} 的 exact/globs 仍是模板 TODO 占位: {path} —— 逐批填实际覆盖范围")
+            rows.append(
+                {
+                    "id": bid,
+                    "route": rid,
+                    "title": desc,
+                    "depth": depth,
+                    "exact": list(exact),
+                    "globs": list(globs)
+                }
+            )
+        cfg["routes"].append({"id": rid, "batches": rows})
+        cfg["batch_defs"].extend(rows)
+    return cfg
 
 
 # --------------------------------------------------------------------------- 基础设施
@@ -273,30 +243,33 @@ def _porcelain(root: Path) -> list[str]:
     return rows
 
 
-def _require_clean(root: Path, allow_lane: bool = False) -> None:
-    """树净守卫。allow_lane=True 时仅放行 legacy-review4/ 下的路径(路线期间 findings/状态单点的正常落盘)。
+def _require_clean(root: Path, cfg: dict, allow_lane: bool = False) -> None:
+    """树净守卫。allow_lane=True 时仅放行 lane 目录(cfg.lane_dir)下的路径(路线期间 findings/状态单点的正常落盘)。
 
     rename/copy 条目的 porcelain 路径形态是「old -> new」: 必须拆开两侧分别校验,
     否则旧路径在 lane 内的「lane 内 -> lane 外」重命名会整段命中前缀被放行。
     """
+    lane_dir = cfg["lane_dir"]
     rows = _porcelain(root)
     if not rows:
         return
     if allow_lane:
+
         def in_lane(p: str) -> bool:
-            return p.strip('"').startswith(LANE_DIR + "/")
-        bad = [p for st, p in rows
-               if not all(in_lane(q) for q in ((p,) if " -> " not in p else p.split(" -> ")))]
+            return p.strip('"').startswith(lane_dir + "/")
+
+        bad = [p for st, p in rows if not all(in_lane(q) for q in ((p, ) if " -> " not in p else p.split(" -> ")))]
         if not bad:
             return
-        _fail("工作树在 legacy-review4/ 之外有未提交改动, 先处理再继续:\n  " + "\n  ".join(f"{st} {p}" for st, p in rows))
+        _fail("工作树在 lane 目录(" + lane_dir + "/)之外有未提交改动, 先处理再继续:\n  " + "\n  ".join(f"{st} {p}" for st, p in rows))
     _fail("工作树不净(先 commit/stash 处理):\n  " + "\n  ".join(f"{st} {p}" for st, p in rows))
 
 
-def _require_branch(root: Path) -> str:
+def _require_branch(root: Path, cfg: dict) -> str:
     branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    if branch != BRANCH_REQUIRED:
-        _fail(f"当前分支 {branch} != {BRANCH_REQUIRED}, 路线认领与执行一律在 {BRANCH_REQUIRED} 上")
+    required = cfg["freeze_branch"]
+    if branch != required:
+        _fail(f"当前分支 {branch} != {required}, 路线认领与执行一律在 {required} 上")
     return branch
 
 
@@ -306,9 +279,16 @@ def _require_ancestor(root: Path, freeze: str) -> None:
         _fail(f"freeze {freeze} 不是 HEAD 的祖先(历史被改写?), 停手人工介入")
 
 
-def _require_tip(root: Path, remote: str) -> None:
-    branch = _require_branch(root)
+def _require_tip(root: Path, cfg: dict, remote: str) -> str:
+    """基线分支 tip 核验。有远端: 本地 HEAD == 远端 tip 才放行(防在落后/分叉基线上钉 freeze);
+    未配置远端: 无远端稳态(D18), freeze 取本地 HEAD 免 ls-remote(本地分支/离线项目也能用)。
+    """
+    branch = _require_branch(root, cfg)
     head = _git(root, "rev-parse", "HEAD").stdout.strip()
+    probe = _git(root, "remote", "get-url", remote, check=False)
+    if probe.returncode != 0:
+        print(f"[note] 未配置远端 {remote}: freeze 取本地 HEAD {head[:12]}(无远端稳态, 免 ls-remote 核验)")
+        return branch
     proc = _git(root, "ls-remote", remote, f"refs/heads/{branch}", check=False)
     if proc.returncode != 0:
         _fail(f"ls-remote {remote} 失败(离线? 先 commands run my-commit-flow.sync): {proc.stderr.strip()}")
@@ -321,12 +301,13 @@ def _require_tip(root: Path, remote: str) -> None:
         _fail(f"ls-remote 输出里没有 refs/heads/{branch}")
     if head.lower() != tip:
         _fail(f"本地 HEAD {head[:12]} != 远端 {remote}/{branch} tip {tip[:12]} —— 先 commands run my-commit-flow.sync 再认领")
+    return branch
 
 
-def _load_manifest(root: Path) -> dict:
-    path = root / LANE_DIR / "manifest.json"
+def _load_manifest(root: Path, cfg: dict) -> dict:
+    path = root / cfg["lane_dir"] / "manifest.json"
     if not path.is_file():
-        _die(f"manifest 不存在: {LANE_DIR}/manifest.json —— 先跑 review.lane.manifest 生成")
+        _die(f"manifest 不存在: {cfg['lane_dir']}/manifest.json —— 先跑 review.lane.manifest 生成")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
@@ -339,10 +320,10 @@ def _load_manifest(root: Path) -> dict:
     return data
 
 
-def _load_route(root: Path, route: str) -> dict:
-    path = root / LANE_DIR / f"route-{route}.json"
+def _load_route(root: Path, cfg: dict, route: str) -> dict:
+    path = root / cfg["lane_dir"] / f"route-{route}.json"
     if not path.is_file():
-        _fail(f"路线未认领: {LANE_DIR}/route-{route}.json 不存在 —— 先 review.lane.claim")
+        _fail(f"路线未认领: {cfg['lane_dir']}/route-{route}.json 不存在 —— 先 review.lane.claim")
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
@@ -361,14 +342,16 @@ def _load_route(root: Path, route: str) -> dict:
     if not isinstance(data["batches"], list) or not data["batches"]:
         _fail(f"route JSON batches 非非空列表 ({rel}) —— 手工修复或删除后重新认领")
     for b in data["batches"]:
-        if (not isinstance(b, dict) or "id" not in b or b.get("status") not in ("pending", "done")
-                or "findings" not in b or "done_at" not in b):
+        if (
+            not isinstance(b, dict) or "id" not in b or b.get("status") not in ("pending", "done") or
+            "findings" not in b or "done_at" not in b
+        ):
             _fail(f"route JSON 批次条目非法({rel}): {_flat(b)} —— 手工修复或删除后重新认领")
     return data
 
 
-def _save_route(root: Path, route: str, data: dict) -> None:
-    path = root / LANE_DIR / f"route-{route}.json"
+def _save_route(root: Path, cfg: dict, route: str, data: dict) -> None:
+    path = root / cfg["lane_dir"] / f"route-{route}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     # 原子写: 状态单点不允许留半截 JSON(崩溃窗口内旧版或完整新版二选一)
     tmp = path.with_name(path.name + ".tmp")
@@ -376,22 +359,23 @@ def _save_route(root: Path, route: str, data: dict) -> None:
     os.replace(tmp, path)
 
 
-def _snapshot_dir(root: Path, explicit: str | None) -> Path:
+def _snapshot_dir(root: Path, explicit: str | None, cfg: dict) -> Path:
     if explicit:
         return Path(explicit).resolve()
-    return (root.parent / SNAP_ROOT_NAME / root.name).resolve()
+    return (root.parent / cfg["snapshot_root"] / root.name).resolve()
 
 
-def _guard_snap_path(root: Path, snap: Path) -> None:
+def _guard_snap_path(root: Path, snap: Path, cfg: dict) -> None:
     """快照目录容器守卫: 与仓库根重合/互含一律拒绝; 删除类操作另要求标记或专用目录名。"""
+    snap_root = cfg["snapshot_root"]
     root_r = root.resolve()
     snap_r = Path(snap).resolve()
     if snap_r == root_r or snap_r.is_relative_to(root_r) or root_r.is_relative_to(snap_r):
         _die(f"快照目录与仓库根重合或互含, 拒绝: {snap_r}")
     has_marker = (snap_r / ".snapshot-hash").is_file()
-    in_snap_root = SNAP_ROOT_NAME in snap_r.parts
+    in_snap_root = snap_root in snap_r.parts
     if not has_marker and not in_snap_root:
-        _die(f"快照目录既无 .snapshot-hash 标记也不在 {SNAP_ROOT_NAME}/ 专用目录下, 拒绝操作: {snap_r}")
+        _die(f"快照目录既无 .snapshot-hash 标记也不在 {snap_root}/ 专用目录下, 拒绝操作: {snap_r}")
 
 
 def _batches_of(manifest: dict, route: str) -> list[dict]:
@@ -424,11 +408,11 @@ def _mentions(text: str, base: str) -> bool:
     return re.search(r"(?<![\w-])" + re.escape(base) + r"(?![\w.-])", text) is not None
 
 
-def _parse_r2(root: Path, all_files: list[dict]) -> list[dict]:
+def _parse_r2(root: Path, all_files: list[dict], cfg: dict) -> list[dict]:
     """R2 终表切片: ID -> 命中的 basename 集合 + 一句话。找不到终表节则返回空(不静默, 打警告)。"""
-    path = root / R2_REPORT
+    path = root / cfg["r2_report"]
     if not path.is_file():
-        print(f"[warn] R2 报告不在盘: {R2_REPORT}, 底册切片将没有 R2 条目")
+        print(f"[warn] R2 报告不在盘: {cfg['r2_report']}, 底册切片将没有 R2 条目")
         return []
     text = path.read_text(encoding="utf-8")
     start = text.find("8.1 合并终表")
@@ -447,11 +431,11 @@ def _parse_r2(root: Path, all_files: list[dict]) -> list[dict]:
     return entries
 
 
-def _parse_issues(root: Path, all_files: list[dict]) -> list[dict]:
+def _parse_issues(root: Path, all_files: list[dict], cfg: dict) -> list[dict]:
     """Open/In Progress issue 底册: 按正文/标题 basename 命中映射(辅助指针, S6 终验兜底)。"""
-    issues_dir = root / ISSUES_DIR
+    issues_dir = root / cfg["issues_dir"]
     if not issues_dir.is_dir():
-        print(f"[warn] issues 目录不在盘: {ISSUES_DIR}, 底册切片将没有 issue 条目")
+        print(f"[warn] issues 目录不在盘: {cfg['issues_dir']}, 底册切片将没有 issue 条目")
         return []
     base_of = {f["path"]: f["path"].rsplit("/", 1)[-1] for f in all_files}
     entries = []
@@ -471,64 +455,76 @@ def _parse_issues(root: Path, all_files: list[dict]) -> list[dict]:
         hits = sorted({p for p, b in base_of.items() if _mentions(text, b)})
         if not hits:
             continue
-        entries.append({
-            "issue": f"{ISSUES_DIR}/{path.name}",
-            "id": path.name.split("-", 3)[-1].rsplit(".", 1)[0] if "-" in path.name else path.name,
-            "type": m_type.group(1) if m_type else "?",
-            "title": _flat(m_title.group(1))[:80] if m_title else "?",
-            "status": status,
-            "files": hits,
-        })
+        entries.append(
+            {
+                "issue": f"{cfg['issues_dir']}/{path.name}",
+                "id": path.name.split("-", 3)[-1].rsplit(".", 1)[0] if "-" in path.name else path.name,
+                "type": m_type.group(1) if m_type else "?",
+                "title": _flat(m_title.group(1))[:80] if m_title else "?",
+                "status": status,
+                "files": hits,
+            }
+        )
     return entries
 
 
-def _scoped_files(root: Path) -> list[str]:
+def _scoped_files(root: Path, cfg: dict) -> list[str]:
+    """分层范围盘点(lane.toml [lane.scope]): include/exclude 均为 fnmatch 整路径 glob,
+    exclude 先判(命中即排除, vendor 第三方发行物/ __pycache__ 不属评审对象)。
+    """
     out: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d != "__pycache__"]
         for name in filenames:
             rel = Path(dirpath, name).resolve().relative_to(root).as_posix()
-            if _is_scoped(rel):
+            if any(fnmatch.fnmatchcase(rel, g) for g in cfg["scope_exclude"]):
+                continue
+            if any(fnmatch.fnmatchcase(rel, g) for g in cfg["scope_include"]):
                 out.append(rel)
     out.sort()
     return out
 
 
-def _defs_fingerprint() -> str:
-    """BATCH_DEFS 定义的指纹: manifest 是否由当前脚本版本生成, 与树无关 ——
+def _defs_fingerprint(defs: list[dict]) -> str:
+    """批次定义(lane.toml 矩阵)的指纹: manifest 是否由当前矩阵版本生成, 与树无关 ——
     manifest 描述的是冻结树, 树在 campaign 期间照常演进, 拿树当指纹会让后认领的路线永远对不上。"""
-    defs = json.dumps(
-        [[b["id"], b["route"], b["depth"], b["exact"], b["globs"]] for b in BATCH_DEFS],
-        ensure_ascii=False, separators=(",", ":"),
+    defs_json = json.dumps(
+        [[b["id"], b["route"], b["depth"], b["exact"], b["globs"]] for b in defs],
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
-    return hashlib.sha256(defs.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(defs_json.encode("utf-8")).hexdigest()[:16]
 
 
 def cmd_manifest(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    if not (root / PLAN_REL).is_file():
-        _die(f"计划文件不在盘: {PLAN_REL}")
-    # 0) 冻结基线钉定(D17): manifest 生成时点的 develop tip, ls-remote 现查核验(未 sync 即拒)。
+    cfg = _load_lane_config(need_matrix=True)
+    defs = cfg["batch_defs"]
+    route_ids = [r["id"] for r in cfg["routes"]]
+    if not (root / cfg["plan_file"]).is_file():
+        _die(f"计划文件不在盘: {cfg['plan_file']}")
+    # 0) 冻结基线钉定(D17): manifest 生成时点的基线分支 tip —— 有远端时 ls-remote 现查核验
+    #    (未 sync 即拒), 未配置远端时取本地 HEAD(无远端稳态, D18)。
     #    任何路线认领后禁止重生成 —— 冻结基线一经 route JSON 引用即不可移动。
-    _require_tip(root, args.remote)
+    branch = _require_tip(root, cfg, args.remote)
     freeze = _git(root, "rev-parse", "HEAD").stdout.strip()
-    claimed = [r for r in ROUTES if (root / LANE_DIR / f"route-{r}.json").is_file()]
+    claimed = [r for r in route_ids if (root / cfg["lane_dir"] / f"route-{r}.json").is_file()]
     if claimed:
         _fail(f"已有路线认领状态({','.join(claimed)}) —— 冻结基线一经引用不可移动, 重钉须先清理全部路线状态")
     # 1) 分层范围盘点 —— 在冻结树的临时解包上做: manifest 描述评审目标(冻结树),
-    #    与 develop 后续演进(其它 clone 合流的新文件)无关, 覆盖守卫不随树漂移误报
+    #    与基线分支后续演进(其它 clone 合流的新文件)无关, 覆盖守卫不随树漂移误报
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     with tempfile.TemporaryDirectory(prefix="lane-manifest-tree-") as td:
         tree = Path(td).resolve()  # 与子路径 resolve 同基准: TEMP 含符号链接/8.3 短名时纯词法 relative_to 不炸
         with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tf:
             tf.extractall(tree, filter="data")
-        scoped = _scoped_files(tree)
+        scoped = _scoped_files(tree, cfg)
         # 2) 按批次定义分配(互斥 + 全覆盖)
-        files_of: dict[str, list[dict]] = {b["id"]: [] for b in BATCH_DEFS}
+        files_of: dict[str, list[dict]] = {b["id"]: [] for b in defs}
         overlap: list[str] = []
         unassigned: list[str] = []
         for rel in scoped:
-            hits = [b["id"] for b in BATCH_DEFS if rel in b["exact"] or any(fnmatch.fnmatchcase(rel, g) for g in b["globs"])]
+            hits = [b["id"] for b in defs if rel in b["exact"] or any(fnmatch.fnmatchcase(rel, g) for g in b["globs"])]
             if len(hits) > 1:
                 overlap.append(f"{rel} -> {','.join(hits)}")
             elif not hits:
@@ -544,11 +540,12 @@ def cmd_manifest(args: argparse.Namespace) -> int:
             print(f"[FAIL] 范围内未分配文件 {len(unassigned)} 个(补进对应批次定义):")
             for rel in unassigned:
                 print(f"  {rel}")
+        print("[note] 批次矩阵在 .commands/review/lane.toml 的 [[route.batch]] —— 按上面清单补 exact/globs")
         raise SystemExit(1)
-    all_files = [f for b in BATCH_DEFS for f in files_of[b["id"]]]
+    all_files = [f for b in defs for f in files_of[b["id"]]]
     # 3) 撞车底册切片
-    r2 = _parse_r2(root, all_files)
-    issues = _parse_issues(root, all_files)
+    r2 = _parse_r2(root, all_files, cfg)
+    issues = _parse_issues(root, all_files, cfg)
     base_by_file: dict[str, list[str]] = {}
     for e in r2:
         for p in e["files"]:
@@ -558,49 +555,82 @@ def cmd_manifest(args: argparse.Namespace) -> int:
         for p in e["files"]:
             issue_by_file.setdefault(p, []).append(e)
     batches = []
-    for b in BATCH_DEFS:
+    for b in defs:
         files = files_of[b["id"]]
         reg_r2 = sorted({fid for f in files for fid in base_by_file.get(f["path"], [])})
         reg_issues = sorted({e["issue"] for f in files for e in issue_by_file.get(f["path"], [])})
-        batches.append({
-            "id": b["id"], "route": b["route"], "title": b["title"], "depth": b["depth"],
-            "total_lines": sum(f["lines"] for f in files if f["lines"] >= 0),
-            "files": files,
-            "registry": {"r2_ids": reg_r2, "r2_index": {e["id"]: e["gist"] for e in r2 if e["id"] in reg_r2},
-                         "issues": [e for e in issues if e["issue"] in reg_issues]},
-        })
+        batches.append(
+            {
+                "id": b["id"],
+                "route": b["route"],
+                "title": b["title"],
+                "depth": b["depth"],
+                "total_lines": sum(f["lines"] for f in files if f["lines"] >= 0),
+                "files": files,
+                "registry":
+                    {
+                        "r2_ids": reg_r2,
+                        "r2_index": {
+                            e["id"]: e["gist"]
+                            for e in r2 if e["id"] in reg_r2
+                        },
+                        "issues": [e for e in issues if e["issue"] in reg_issues]
+                    },
+            }
+        )
     manifest = {
-        "campaign": "legacy-code-review-4",
-        "plan_file": PLAN_REL,
-        "generated_at": _now(),
-        "freeze": freeze,
-        "note": "机器事实源(计划 §04/D17): freeze = 生成时点经 ls-remote 核验的 develop tip; "
-                "有路线认领后本命令拒绝重生成(冻结基线一经引用不可移动)",
-        "routes": {r: [b["id"] for b in batches if b["route"] == r] for r in ROUTES},
-        "batches": batches,
-        "fingerprint": {"defs": _defs_fingerprint(), "batches": len(BATCH_DEFS),
-                        "files": len(all_files), "total_lines": sum(b["total_lines"] for b in batches)},
-        "coverage": {
-            "ok": True,
-            "scoped_files": len(scoped),
-            "assigned_files": len(all_files),
-            "total_lines": sum(b["total_lines"] for b in batches),
-            "registry": {"r2_findings": len(r2), "open_issues_matched": len(issues)},
+        "campaign":
+            cfg["campaign"],
+        "plan_file":
+            cfg["plan_file"],
+        "generated_at":
+            _now(),
+        "freeze":
+            freeze,
+        "note":
+            "机器事实源(计划 §04/D17): freeze = 生成时点核验的 " + branch + " tip"
+            "(有远端 ls-remote 核验, 无远端稳态取本地 HEAD, D18); "
+            "有路线认领后本命令拒绝重生成(冻结基线一经引用不可移动)",
+        "routes": {
+            r: [b["id"] for b in batches if b["route"] == r]
+            for r in route_ids
         },
+        "batches":
+            batches,
+        "fingerprint":
+            {
+                "defs": _defs_fingerprint(defs),
+                "batches": len(defs),
+                "files": len(all_files),
+                "total_lines": sum(b["total_lines"] for b in batches)
+            },
+        "coverage":
+            {
+                "ok": True,
+                "scoped_files": len(scoped),
+                "assigned_files": len(all_files),
+                "total_lines": sum(b["total_lines"] for b in batches),
+                "registry": {
+                    "r2_findings": len(r2),
+                    "open_issues_matched": len(issues)
+                },
+            },
     }
-    out = root / LANE_DIR / "manifest.json"
+    out = root / cfg["lane_dir"] / "manifest.json"
     if args.dry_run:
         print(f"[dry-run] manifest 将写入 {out}")
     else:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"冻结基线: {freeze[:12]} (生成时点 develop tip, ls-remote 已核验; 有认领后重生成即拒)")
-    print(f"覆盖守卫: 通过 —— 范围内 {len(scoped)} 文件恰被 {len(BATCH_DEFS)} 批认领, 共 {manifest['coverage']['total_lines']} 行")
+    print(f"冻结基线: {freeze[:12]} (生成时点 {branch} tip 已核验; 有认领后重生成即拒)")
+    print(f"覆盖守卫: 通过 —— 范围内 {len(scoped)} 文件恰被 {len(defs)} 批认领, 共 {manifest['coverage']['total_lines']} 行")
     print(f"底册切片: R2 终表 {len(r2)} 条 / Open·In-Progress issues 命中 {len(issues)} 条")
-    for route in ROUTES:
+    for route in route_ids:
         rows = [b for b in batches if b["route"] == route]
-        print(f"  {route}: {len(rows)} 批 / {sum(b['total_lines'] for b in rows)} 行  " +
-              "  ".join(f"{b['id']}={b['total_lines']}行" for b in rows))
+        print(
+            f"  {route}: {len(rows)} 批 / {sum(b['total_lines'] for b in rows)} 行  " +
+            "  ".join(f"{b['id']}={b['total_lines']}行" for b in rows)
+        )
     return 0
 
 
@@ -609,45 +639,60 @@ def cmd_manifest(args: argparse.Namespace) -> int:
 
 def cmd_claim(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    manifest = _load_manifest(root)
+    cfg = _load_lane_config(need_matrix=True)
+    manifest = _load_manifest(root, cfg)
     owner = _flat(args.owner).strip()
     if not owner:
         _die("--owner 不能为空(认领记录是跨 clone 判责的协调身份)")
     fp = manifest.get("fingerprint")
-    if not fp or fp.get("defs") != _defs_fingerprint() or fp.get("batches") != len(BATCH_DEFS):
-        _fail(f"manifest 与当前脚本批次定义不符(defs={fp.get('defs') if fp else '缺失'} vs {_defs_fingerprint()})"
-              " —— 重跑 review.lane.manifest 并入库后再认领")
+    if not fp or fp.get("defs") != _defs_fingerprint(cfg["batch_defs"]) or fp.get("batches") != len(cfg["batch_defs"]):
+        _fail(
+            f"manifest 与当前 lane.toml 批次矩阵不符(defs={fp.get('defs') if fp else '缺失'} vs "
+            f"{_defs_fingerprint(cfg['batch_defs'])}) —— 重跑 review.lane.manifest 并入库后再认领"
+        )
     route = args.route
     if route not in manifest["routes"]:
         _fail(f"未知路线 {route} (合法: {'/'.join(manifest['routes'])})")
-    rpath = root / LANE_DIR / f"route-{route}.json"
+    rpath = root / cfg["lane_dir"] / f"route-{route}.json"
     if rpath.is_file():
         old = json.loads(rpath.read_text(encoding="utf-8"))
         _fail(f"{route} 已被认领(owner={old.get('owner')}, {old.get('claimed_at')}) —— 认领记录是协调单点, 争议走用户")
-    _require_branch(root)
-    _require_tip(root, args.remote)
-    _require_clean(root)
-    freeze = manifest["freeze"]  # 钉值来自 manifest(生成时点 ls-remote 核验的 tip, D17), 非 claim 时点解析
+    _require_branch(root, cfg)
+    _require_tip(root, cfg, args.remote)
+    _require_clean(root, cfg)
+    freeze = manifest["freeze"]  # 钉值来自 manifest(生成时点核验的 tip, D17), 非 claim 时点解析
     _require_ancestor(root, freeze)
-    batches = [{"id": b["id"], "title": b["title"], "status": "pending", "done_at": None, "findings": 0}
-               for b in _batches_of(manifest, route)]
+    batches = [
+        {
+            "id": b["id"],
+            "title": b["title"],
+            "status": "pending",
+            "done_at": None,
+            "findings": 0
+        } for b in _batches_of(manifest, route)
+    ]
     data = {
-        "route": route, "owner": owner, "claimed_at": _now(),
-        "freeze": freeze, "freeze_note": "manifest 钉值 (生成时点 develop tip, D17)",
-        "snapshot": None, "status": "claimed", "batches": batches,
+        "route": route,
+        "owner": owner,
+        "claimed_at": _now(),
+        "freeze": freeze,
+        "freeze_note": f"manifest 钉值 (生成时点 {cfg['freeze_branch']} tip, D17)",
+        "snapshot": None,
+        "status": "claimed",
+        "batches": batches,
     }
     if args.dry_run:
         print(f"[dry-run] 将写 {rpath.relative_to(root)}: owner={owner} freeze={freeze[:12]} 批次 {len(batches)} 个")
         return 0
-    _save_route(root, route, data)
+    _save_route(root, cfg, route, data)
     print(f"认领成功: {route} owner={data['owner']} freeze={freeze[:12]} (共 {len(batches)} 批)")
     print("下一步: commands run ship.commit  # 认领入库(其他 clone 可见, 防重复认领)")
     print(f"然后:   commands run review.lane.start --route {route}  # 导出快照并开始")
     return 0
 
 
-def _extract_snapshot(root: Path, freeze: str, snap: Path) -> int:
-    _guard_snap_path(root, snap)
+def _extract_snapshot(root: Path, freeze: str, snap: Path, cfg: dict) -> int:
+    _guard_snap_path(root, snap, cfg)
     raw = _git_bytes(root, "archive", "--format=tar", freeze)
     if snap.exists():
         if snap.is_dir() and not any(snap.iterdir()) and not (snap / ".snapshot-hash").is_file():
@@ -666,8 +711,13 @@ def _extract_snapshot(root: Path, freeze: str, snap: Path) -> int:
         count = len(tf.getnames())
     (snap / ".snapshot-hash").write_text(freeze + "\n", encoding="utf-8")
     (snap / ".snapshot-info.json").write_text(
-        json.dumps({"freeze": freeze, "generated_at": _now(), "source": str(root)}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8")
+        json.dumps({
+            "freeze": freeze,
+            "generated_at": _now(),
+            "source": str(root)
+        }, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8"
+    )
     return count
 
 
@@ -675,25 +725,33 @@ def _check_snapshot(root: Path, data: dict) -> Path:
     snap = Path(data["snapshot"])
     marker = snap / ".snapshot-hash"
     if not snap.is_dir() or not marker.is_file():
-        _fail(f"快照目录/标记缺失: {snap} —— start 仅放行 claimed: 手工把 route JSON 的 status 回退 claimed 后"
-              f"重跑 review.lane.start --route {data['route']} 重建")
+        _fail(
+            f"快照目录/标记缺失: {snap} —— start 仅放行 claimed: 手工把 route JSON 的 status 回退 claimed 后"
+            f"重跑 review.lane.start --route {data['route']} 重建"
+        )
     got = marker.read_text(encoding="utf-8").strip()
     if got != data["freeze"]:
-        _fail(f"快照标记 {got[:12]} != 路线钉值 {data['freeze'][:12]} —— 手工把 route JSON 的 status 回退 claimed 后"
-              f"重跑 review.lane.start --route {data['route']} --fresh")
+        _fail(
+            f"快照标记 {got[:12]} != 路线钉值 {data['freeze'][:12]} —— 手工把 route JSON 的 status 回退 claimed 后"
+            f"重跑 review.lane.start --route {data['route']} --fresh"
+        )
     return snap
 
 
 def _print_triplet(root: Path, data: dict, manifest: dict, batch: dict | None) -> None:
     snap = Path(data["snapshot"])
     print("== 三件套(存量适配, 照抄派遣) ==")
-    print("1. 只读契约: 禁止一切写操作 —— git 状态变更(sync/rebase/merge/stash/checkout/commit/push)、"
-          "写任何文件、跑 kb 等写类 task id 一律禁止, 只允许读命令; AGENTS.md 的开工同步对本任务豁免。")
+    print(
+        "1. 只读契约: 禁止一切写操作 —— git 状态变更(sync/rebase/merge/stash/checkout/commit/push)、"
+        "写任何文件、跑 kb 等写类 task id 一律禁止, 只允许读命令; AGENTS.md 的开工同步对本任务豁免。"
+    )
     print(f"2. 评审目标钉死: 快照目录 {snap}")
     print(f"   (冻结 {data['freeze'][:12]} 的 git archive 导出, 非 git 仓库, 纯只读树; 发现的 file/line/quote 一律以快照内容为准)")
     print("3. 开工自检: 快照存在且 .snapshot-hash == 钉值; 收尾复核: review.lane.verify 通过才采信发现。")
     if batch:
-        print(f"当前批: {batch['id']} {batch['title']} [{batch['depth']}] — {len(batch['files'])} 文件 / {batch['total_lines']} 行")
+        print(
+            f"当前批: {batch['id']} {batch['title']} [{batch['depth']}] — {len(batch['files'])} 文件 / {batch['total_lines']} 行"
+        )
         for f in batch["files"]:
             print(f"  {f['path']} ({f['lines']})")
         reg = batch["registry"]
@@ -708,17 +766,18 @@ def _print_triplet(root: Path, data: dict, manifest: dict, batch: dict | None) -
 
 def cmd_start(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    manifest = _load_manifest(root)
-    data = _load_route(root, args.route)
+    cfg = _load_lane_config()
+    manifest = _load_manifest(root, cfg)
+    data = _load_route(root, cfg, args.route)
     if data["status"] != "claimed":
         _fail(f"{args.route} 状态为 {data['status']}, 仅 claimed 可 start")
-    _require_branch(root)
+    _require_branch(root, cfg)
     _require_ancestor(root, data["freeze"])
     # 放行 lane 目录内落盘(认领 JSON 可能尚未入库): 树净保的是「无混入的无关改动」,
-    # 跨 clone 重复认领防护靠认领 JSON 入库 develop, 与此检查无关(claim 输出已指引)。
-    _require_clean(root, allow_lane=True)
-    snap = _snapshot_dir(root, args.snapshot)
-    _guard_snap_path(root, snap)  # --snapshot 任意路径 + --fresh 整删的组合必须先过容器守卫
+    # 跨 clone 重复认领防护靠认领 JSON 入库基线分支, 与此检查无关(claim 输出已指引)。
+    _require_clean(root, cfg, allow_lane=True)
+    snap = _snapshot_dir(root, args.snapshot, cfg)
+    _guard_snap_path(root, snap, cfg)  # --snapshot 任意路径 + --fresh 整删的组合必须先过容器守卫
     if args.dry_run:
         tmp = Path(tempfile.mkdtemp(prefix="lane-smoke-snap-"))
         try:
@@ -739,12 +798,12 @@ def cmd_start(args: argparse.Namespace) -> int:
         else:
             _fail(f"快照目录标记 {got[:12]} != 钉值 {data['freeze'][:12]}: {snap} —— --fresh 重建")
     else:
-        n = _extract_snapshot(root, data["freeze"], snap)
+        n = _extract_snapshot(root, data["freeze"], snap, cfg)
         print(f"快照导出完成: {snap} ({n} 个文件, freeze={data['freeze'][:12]})")
     data["snapshot"] = str(snap)
     data["status"] = "in-progress"
     data["started_at"] = _now()
-    _save_route(root, args.route, data)
+    _save_route(root, cfg, args.route, data)
     first = next((b for b in data["batches"] if b["status"] == "pending"), None)
     mb = next((b for b in manifest["batches"] if b["id"] == first["id"]), None) if first else None
     _print_triplet(root, data, manifest, mb)
@@ -754,16 +813,21 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_verify(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    manifest = _load_manifest(root)
-    data = _load_route(root, args.route)
+    cfg = _load_lane_config()
+    manifest = _load_manifest(root, cfg)
+    data = _load_route(root, cfg, args.route)
     if data["status"] != "in-progress":
         _fail(f"{args.route} 状态为 {data['status']}, 仅 in-progress 可 verify")
-    _require_branch(root)
+    _require_branch(root, cfg)
     _require_ancestor(root, data["freeze"])
     snap = _check_snapshot(root, data)
-    _require_clean(root, allow_lane=True)
+    _require_clean(root, cfg, allow_lane=True)
     done = sum(1 for b in data["batches"] if b["status"] == "done")
-    print(f"Review passed: snapshot {snap} marker matches, tree clean (in legacy-review4/ {sum(1 for st, p in _porcelain(root) if p.startswith(LANE_DIR))} entries on disk), progress {done}/{len(data['batches'])}")
+    print(
+        f"Review passed: snapshot {snap} marker matches, tree clean (in {cfg['lane_dir']}/ "
+        f"{sum(1 for st, p in _porcelain(root) if p.startswith(cfg['lane_dir']))} entries on disk), "
+        f"progress {done}/{len(data['batches'])}"
+    )
     mb_sel = None
     if args.batch:
         row = next((b for b in data["batches"] if b["id"] == args.batch), None)
@@ -789,7 +853,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_batch(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    data = _load_route(root, args.route)
+    cfg = _load_lane_config()
+    data = _load_route(root, cfg, args.route)
     if data["status"] != "in-progress":
         _fail(f"{args.route} 状态为 {data['status']}, 仅 in-progress 可勾选批次")
     rows = [b for b in data["batches"] if b["id"] == args.id]
@@ -801,7 +866,7 @@ def cmd_batch(args: argparse.Namespace) -> int:
     row["status"] = "done"
     row["done_at"] = _now()
     row["findings"] = max(0, args.findings)
-    _save_route(root, args.route, data)
+    _save_route(root, cfg, args.route, data)
     done = sum(1 for b in data["batches"] if b["status"] == "done")
     print(f"批次勾选: {args.id} (findings={row['findings']}) —— 进度 {done}/{len(data['batches'])}")
     if done < len(data["batches"]):
@@ -813,13 +878,14 @@ def cmd_batch(args: argparse.Namespace) -> int:
 
 def cmd_done(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    data = _load_route(root, args.route)
+    cfg = _load_lane_config()
+    data = _load_route(root, cfg, args.route)
     if data["status"] != "in-progress":
         _fail(f"{args.route} 状态为 {data['status']}, 仅 in-progress 可收尾")
     pending = [b["id"] for b in data["batches"] if b["status"] != "done"]
     if pending:
         _fail(f"还有未勾选批次: {', '.join(pending)} —— 完成判据=批次全覆盖无断号")
-    lane = root / LANE_DIR
+    lane = root / cfg["lane_dir"]
     findings = lane / f"route-{args.route}-findings.json"
     notes = lane / f"route-{args.route}-notes.md"
     missing = [str(p.relative_to(root)) for p in (findings, notes) if not p.is_file()]
@@ -831,7 +897,7 @@ def cmd_done(args: argparse.Namespace) -> int:
         _fail(f"findings JSON 非法: {exc}")
     data["status"] = "done"
     data["done_at"] = _now()
-    _save_route(root, args.route, data)
+    _save_route(root, cfg, args.route, data)
     total = sum(b["findings"] for b in data["batches"])
     print(f"路线终态: {args.route} done —— findings {total} 条 / 批次 {len(data['batches'])}/{len(data['batches'])}")
     print("下一步: commands run ship.commit  # findings + 小结 + 状态单点入库; 之后由聚合会话 S6 合并")
@@ -850,10 +916,11 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     守卫真失效时 _fail 不会再被自己的 except 吞掉(评审实证的自吞缺陷)。
     """
     root = _resolve_root(args.root)
+    cfg = _load_lane_config()
     ns = argparse.Namespace
     route = args.route
-    snap = _snapshot_dir(root, None) / f"_smoke-{route}"
-    lane = root / LANE_DIR
+    snap = _snapshot_dir(root, None, cfg) / f"_smoke-{route}"
+    lane = root / cfg["lane_dir"]
     rpath = lane / f"route-{route}.json"
 
     def step(msg: str) -> None:
@@ -872,7 +939,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
                 return
             try:
                 snap.parent.rmdir()  # 本 smoke 创建的父空壳随手带走; 父内有他路线快照时 rmdir 必败, 忽略
-                snap.parent.parent.rmdir()  # 顶层容器 auto-qb-review4-snap/ 同理(仅空时可移除)
+                snap.parent.parent.rmdir()  # 顶层快照容器(snapshot_root)/ 同理(仅空时可移除)
             except OSError:
                 pass
         print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / smoke 快照子目录已删", flush=True)
@@ -919,8 +986,8 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             _fail("批次未齐时 done 未被拒绝 —— 完成判据守卫失效")
         print("[smoke] 批次未齐按预期拒绝 (rc=1)", flush=True)
         step("[smoke 6/7] 逐批勾选后 done (真实终态)")
-        manifest = _load_manifest(root)
-        data = _load_route(root, route)
+        manifest = _load_manifest(root, cfg)
+        data = _load_route(root, cfg, route)
         findings = lane / f"route-{route}-findings.json"
         notes = lane / f"route-{route}-notes.md"
         findings.write_text("[]\n", encoding="utf-8")
@@ -964,7 +1031,7 @@ def main() -> int:
 
     p = sub.add_parser("start", help="导出冻结快照(repo 外)并打印三件套")
     p.add_argument("--route", required=True)
-    p.add_argument("--snapshot", help="快照目录(默认 <repo>/../auto-qb-review4-snap/<repo名>)")
+    p.add_argument("--snapshot", help="快照目录(默认 <repo>/../<lane.toml snapshot_root>/<repo名>)")
     p.add_argument("--fresh", action="store_true", help="删除既有快照重建")
     p.add_argument("--root")
     p.add_argument("--dry-run", action="store_true")
@@ -991,8 +1058,13 @@ def main() -> int:
 
     args = parser.parse_args()
     return {
-        "manifest": cmd_manifest, "claim": cmd_claim, "start": cmd_start, "verify": cmd_verify,
-        "batch": cmd_batch, "done": cmd_done, "smoke": cmd_smoke,
+        "manifest": cmd_manifest,
+        "claim": cmd_claim,
+        "start": cmd_start,
+        "verify": cmd_verify,
+        "batch": cmd_batch,
+        "done": cmd_done,
+        "smoke": cmd_smoke,
     }[args.cmd](args)
 
 

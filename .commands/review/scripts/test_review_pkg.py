@@ -12,7 +12,10 @@
 - ConfigTomlTest      config.toml 可解析 + [pack].name == "review" + 十 task(review.pack/check/trace + review.lane 七子命令)必备键 + run 指向对应包内脚本(lane 系含子命令 token, trace 系裸 python) + 带 <args>
 - LaneManifestTest    提交在库的 manifest.json 结构守阵: coverage.ok=true + 批次 id 唯一且前缀==route + routes 映射一致 + 文件跨批不重 + 批内不重 + 全部路径在分层范围内(src 代码文件/scripts py, 无 vendor/test_*) + registry 键齐
 - LaneScriptTest      review_lane.py 无参 rc=2(无参无动作) + --help rc=0
-- LaneStateTest       状态机直驱单测: batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/done 需进行中态/schema 校验(status 枚举/批次条目/缺文件)/require_clean lane 边界(lane 内未跟踪与修改放行/lane 外拒/lane 内改名到 lane 外拒)
+- LaneConfigTest      lane.toml 数据外置守阵(S7): 本仓真实配置可加载(路线/批次数钉值+depth 词表+批次前缀+路径形态仓库相对) + 指纹与在库 manifest 同源(矩阵搬家零漂移钉, 改矩阵须显式重生成 manifest) + 分层范围行为(伪树上 src/scripts 收、vendor/tests/根散件排除) + 引导性报错守阵表(rc=2 含指路文案): 缺文件/缺矩阵/TODO 占位/坏 depth + 坏 TOML/缺节/缺必填字段/scope 形态/矩阵形态(路线缺 id、id 重复、路线无批、批次前缀、批次 id 重复、exact/globs 全空或类型错) + 路径形态(lane_dir 绝对或含 ../././/尾斜杠等非常规段原串逐段拒/snapshot_root 含 / 或绝对)
+- LaneTipTest         _require_tip 三分支直驱(临时真仓, 本地 bare 仓当远端, 零网络): 无远端 note+本地 HEAD(D18) / remote 可解析但 ls-remote 失败 rc=1 / 远端无该分支 ref rc=1 / HEAD!=远端 tip rc=1 / 同步态放行且无 note
+- LaneManifestGuardTest cmd_manifest 守卫直驱(临时真仓, 无远端 D18): 有路线认领状态即拒重生成(rc=1, 不写 manifest) / 分层范围内漏配文件即拒并列清单(rc=1, 列出漏配文件, 不写 manifest)
+- LaneStateTest       状态机直驱单测(签名带 cfg): batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/done 需进行中态/schema 校验(status 枚举/批次条目/缺文件)/require_clean lane 边界(lane 内未跟踪与修改放行/lane 外拒/lane 内改名到 lane 外拒)
 - PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(rename 拆删增两行与实算同口径: 旧路径带 [已删除]、新路径单独一行; 改名对提示行含两侧路径与相似度码, 不动实算行数); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 评审规模=闸门逐笔实算口径(15 行金值 + 多笔提交逐笔和≠树差 7/6 + 记账类/生成物排除面不计行不入清单 + 二进制 0 行 + --base≠锚点可见警告 + repo excludesFile 不改写未跟踪集合, 2026-11-11 统计口径对齐闸门); 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> 评审规模 0 行(闸门实算口径)且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
@@ -25,7 +28,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fnmatch
+import io
 import json
 import os
 import shutil
@@ -228,6 +233,363 @@ class LaneScriptTest(unittest.TestCase):
         self.assertIn("smoke", proc.stdout + proc.stderr)
 
 
+class LaneConfigTest(unittest.TestCase):
+    """lane.toml 数据外置守阵(S7, 计划 26-11-17-0010): 真实配置可加载 + 与在库 manifest 同源 + 引导性报错。
+
+    R-3 对账锚: 指纹/批次数钉值 == 在库 manifest.json(旧硬编码 BATCH_DEFS 生成的在库事实),
+    矩阵搬家零漂移; 谁改矩阵导致钉值红, 谁显式重生成 manifest 并同步本钉。
+    """
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("review_lane_cfg_test", LANE_SCRIPT)
+        cls.lane = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.lane)
+        cls.cfg = cls.lane._load_lane_config(need_matrix=True)
+
+    # 引导报错守阵用的最小合法矩阵模板(改字段构造各失败形态)
+    MATRIX_TOML = (
+        '[lane]\ncampaign = "t"\nfreeze_branch = "main"\nsnapshot_root = "snap"\n'
+        'lane_dir = "mb/lane"\nplan_file = "p.html"\nr2_report = "r.html"\nissues_dir = "i"\n'
+        '[lane.scope]\ninclude = ["src/*.py"]\nexclude = []\n'
+        '[[route]]\nid = "R1"\n  [[route.batch]]\n  id = "R1-1"\n  desc = "d"\n'
+        '  depth = "full"\n  globs = ["src/*.py"]\n'
+    )
+
+    def _expect_guided(self, content, *fragments):
+        """引导性报错断言: rc=2(_die 用法/环境错误档)且 stderr 文案含指路片段, 不是裸栈。
+
+        content = lane.toml 全文(str) 或写入回调(callable(path))。
+        """
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "lane.toml"
+        if callable(content):
+            content(path)
+        else:
+            path.write_text(content, encoding="utf-8")
+        err = io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+            self.lane._load_lane_config(path=path, need_matrix=True)
+        self.assertEqual(cm.exception.code, 2)
+        for frag in fragments:
+            self.assertIn(frag, err.getvalue(), f"引导文案缺指路片段: {frag!r}")
+
+    def test_real_config_matrix_shape(self):
+        routes = [r["id"] for r in self.cfg["routes"]]
+        self.assertEqual(routes, ["R1", "R2", "R3", "R4", "R5"])
+        counts = {r["id"]: len(r["batches"]) for r in self.cfg["routes"]}
+        self.assertEqual(counts, {"R1": 7, "R2": 6, "R3": 6, "R4": 4, "R5": 11})
+        self.assertEqual(len(self.cfg["batch_defs"]), 34)
+        for b in self.cfg["batch_defs"]:
+            self.assertIn(b["depth"], self.lane.DEPTH_ENUM, b["id"])
+            self.assertTrue(b["id"].startswith(b["route"] + "-"), b["id"])
+            self.assertTrue(b["exact"] or b["globs"], f"{b['id']} exact/globs 全空")
+            self.assertTrue(b["title"] and "TODO" not in b["title"], b["id"])
+        self.assertEqual(self.cfg["freeze_branch"], "develop")
+        self.assertTrue(self.cfg["scope_include"])
+        self.assertTrue(self.cfg["scope_exclude"])
+
+    def test_fingerprint_matches_committed_manifest(self):
+        manifest = json.loads(
+            (ROOT / "memory-bank" / "reports" / "attachments" / "legacy-review4" /
+             "manifest.json").read_text(encoding="utf-8")
+        )
+        fp = self.lane._defs_fingerprint(self.cfg["batch_defs"])
+        self.assertEqual(
+            fp, manifest["fingerprint"]["defs"], "lane.toml 矩阵与在库 manifest 漂移(R-3 锚) —— 改矩阵须显式重生成 manifest 并同步本钉"
+        )
+        self.assertEqual(len(self.cfg["batch_defs"]), manifest["fingerprint"]["batches"])
+
+    def test_scope_excludes_vendor_and_outside(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        tree = Path(tmp.name)
+        for rel in (
+            "src/a.py", "src/deep/x.js", "scripts/sim_x.py", "src/auto_qb/webui/static/shared/vendor/vue.min.js",
+            "tests/test_x.py", "README.md"
+        ):
+            p = tree / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("x\n", encoding="utf-8")
+        scoped = self.lane._scoped_files(tree, self.cfg)
+        self.assertEqual(scoped, ["scripts/sim_x.py", "src/a.py", "src/deep/x.js"], "vendor/tests/根散件必须被分层范围排除")
+
+    def test_missing_config_file_guided(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self._expect_guided(lambda p: None, "lane 配置缺失", "lane.toml", "头注")
+
+    def test_missing_matrix_guided(self):
+        self._expect_guided(self.MATRIX_TOML.split("[[route]]")[0], "批次矩阵缺失", "[[route]]", "头注")
+
+    def test_todo_placeholder_and_bad_depth_guided(self):
+        self._expect_guided(
+            lambda p: p.write_text(self.MATRIX_TOML.replace('desc = "d"', 'desc = "TODO: 填我"'), encoding="utf-8"),
+            "TODO 占位",
+            "R1-1",
+            "desc",
+        )
+        self._expect_guided(
+            lambda p: p.write_text(self.MATRIX_TOML.replace('depth = "full"', 'depth = "deep"'), encoding="utf-8"),
+            "depth 非法",
+            "deep",
+            "R1-1",
+        )
+
+    def test_guided_loader_branches(self):
+        """_load_lane_config 各 _die 分支代表性钉样(D13): rc=2 + 指路片段, 不裸栈。"""
+        second_route = (
+            '[[route]]\nid = "R2"\n  [[route.batch]]\n  id = "R2-1"\n  desc = "d2"\n'
+            '  depth = "full"\n  globs = ["scripts/*.py"]\n'
+        )
+        cases = [
+            ("坏 TOML", "[lane\n", ("解析失败", "TOML 语法自检")),
+            ("缺 [lane] 节", "[settings]\nx = 1\n", ("缺 [lane] 节", )),
+            ("缺必填字段", self.MATRIX_TOML.replace('issues_dir = "i"\n', ""), ("[lane].issues_dir", )),
+            ("缺 [lane.scope] 节", self.MATRIX_TOML.split("[lane.scope]")[0], ("缺 [lane.scope]", )),
+            (
+                "include 类型错",
+                self.MATRIX_TOML.replace('include = ["src/*.py"]', 'include = "src/*.py"'),
+                ("[lane.scope].include", "非空字符串列表"),
+            ),
+            ("include 空", self.MATRIX_TOML.replace('include = ["src/*.py"]', "include = []"), ("include 为空", )),
+            ("路线缺 id", self.MATRIX_TOML + "[[route]]\n", ("[[route]] 缺非空 id", )),
+            (
+                "路线 id 重复", self.MATRIX_TOML + second_route.replace('"R2"', '"R1"').replace('"R2-1"', '"R1-9"'),
+                ("路线 id 重复", )
+            ),
+            ("路线无批", self.MATRIX_TOML + '[[route]]\nid = "R2"\n', ("没有任何 [[route.batch]]", "R2")),
+            (
+                "批次前缀错",
+                self.MATRIX_TOML.replace('id = "R1-1"', 'id = "X9-1"'),
+                ("不以路线前缀 R1-", "X9-1"),
+            ),
+            (
+                "批次 id 重复",
+                self.MATRIX_TOML +
+                '  [[route.batch]]\n  id = "R1-1"\n  desc = "d2"\n  depth = "full"\n  globs = ["x"]\n',
+                ("批次 id 重复", "R1-1"),
+            ),
+            ("exact/globs 全空", self.MATRIX_TOML.replace('  globs = ["src/*.py"]\n', ""), ("exact/globs 全空", )),
+            (
+                "globs 类型错",
+                self.MATRIX_TOML.replace('globs = ["src/*.py"]', 'globs = "src/*.py"'),
+                ("globs 必须是非空字符串列表", ),
+            ),
+        ]
+        for name, text, frags in cases:
+            with self.subTest(case=name):
+                self._expect_guided(text, *frags)
+
+    def test_path_form_guided(self):
+        """lane_dir/snapshot_root 路径形态校验(写出仓库外或 lane 前缀比对对不齐 = 配置错误, D13 引导报错)。"""
+        cases = [
+            ("lane_dir 绝对路径", 'lane_dir = "mb/lane"', 'lane_dir = "/tmp/lane"', ("[lane].lane_dir", "仓库相对路径")),
+            ("lane_dir 含 ..", 'lane_dir = "mb/lane"', 'lane_dir = "a/../lane"', ("[lane].lane_dir", "..")),
+            ("lane_dir 含 . 段", 'lane_dir = "mb/lane"', 'lane_dir = "mb/./lane"', ("[lane].lane_dir", "仓库相对路径")),
+            ("lane_dir 双斜杠", 'lane_dir = "mb/lane"', 'lane_dir = "mb//lane"', ("[lane].lane_dir", "仓库相对路径")),
+            ("lane_dir 尾斜杠", 'lane_dir = "mb/lane"', 'lane_dir = "mb/lane/"', ("[lane].lane_dir", "仓库相对路径")),
+            # TOML 字面串(literal string, 不转义)才装得下裸反斜杠; basic string "mb\lane" 会先死在 TOML 转义
+            ("lane_dir 反斜杠", 'lane_dir = "mb/lane"', "lane_dir = 'mb\\\\lane'", ("[lane].lane_dir", "posix")),
+            (
+                "snapshot_root 含 /",
+                'snapshot_root = "snap"',
+                'snapshot_root = "a/b"',
+                ("[lane].snapshot_root", "单段目录名"),
+            ),
+            (
+                "snapshot_root 绝对",
+                'snapshot_root = "snap"',
+                'snapshot_root = "/tmp/snap"',
+                ("[lane].snapshot_root", "单段目录名"),
+            ),
+        ]
+        for name, old, new, frags in cases:
+            with self.subTest(case=name):
+                self._expect_guided(self.MATRIX_TOML.replace(old, new), *frags)
+
+    def test_is_repo_relative_segment_forms(self):
+        """_is_repo_relative 原串逐段判正反例: '.'/'..' 空段/绝对/尾斜杠/反斜杠全拒, 常规相对串放行。"""
+        for bad in ("/abs/lane", "a/../b", "mb/./lane", "mb//lane", "mb/lane/", ".", "..", "./mb", "mb\\lane"):
+            self.assertFalse(self.lane._is_repo_relative(bad), bad)
+        for good in ("mb/lane", "mb/lane/routes", "auto-qb-review4-snap"):
+            self.assertTrue(self.lane._is_repo_relative(good), good)
+
+    def test_real_config_paths_are_repo_relative(self):
+        """本仓真实配置的路径字段必须过同款形态校验(守阵与加载面同源)。"""
+        self.assertTrue(self.lane._is_repo_relative(self.cfg["lane_dir"]))
+        self.assertTrue(self.lane._is_repo_relative(self.cfg["snapshot_root"]))
+        self.assertNotIn("/", self.cfg["snapshot_root"])
+
+
+class LaneTipTest(unittest.TestCase):
+    """_require_tip 三分支直驱单测(临时真仓; 远端用本地 bare 仓路径, 零网络):
+    无远端 note+本地 HEAD(D18) / remote 可解析但 ls-remote 失败 rc=1 / 远端无该分支 ref rc=1 /
+    HEAD != 远端 tip rc=1 / 同步态放行。
+    """
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("review_lane_tip_test", LANE_SCRIPT)
+        cls.lane = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.lane)
+
+    def _git(self, cwd, *args):
+        proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, f"git {' '.join(args)} 失败: {proc.stderr}")
+        return proc
+
+    def _make_repo(self, root: Path) -> str:
+        root.mkdir(parents=True)
+        self._git(root, "init", "-q")
+        self._git(root, "config", "user.email", "t@example.test")
+        self._git(root, "config", "user.name", "t")
+        (root / "f.txt").write_text("v1\n", encoding="utf-8")
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-q", "-m", "v1")
+        return self._git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+
+    def _expect_tip(self, root: Path, cfg: dict, remote: str):
+        out, err = io.StringIO(), io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.lane._require_tip(root, cfg, remote)
+        return cm.exception.code, err.getvalue()
+
+    def test_no_remote_uses_local_head_with_note(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "repo"
+        branch = self._make_repo(root)
+        cfg = {"freeze_branch": branch}
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            got = self.lane._require_tip(root, cfg, "origin")
+        self.assertEqual(got, branch, "无远端稳态(D18): 返回本地分支, 不抛")
+        self.assertIn("[note] 未配置远端 origin", out.getvalue())
+        self.assertIn("无远端稳态", out.getvalue())
+
+    def test_unreachable_remote_fails(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "repo"
+        branch = self._make_repo(root)
+        missing = Path(tmp.name) / "no-such-remote"
+        self._git(root, "remote", "add", "origin", str(missing))  # get-url 可解析, ls-remote 必败
+        code, err = self._expect_tip(root, {"freeze_branch": branch}, "origin")
+        self.assertEqual(code, 1)
+        self.assertIn("ls-remote", err)
+        self.assertIn("my-commit-flow.sync", err)
+
+    def test_remote_without_branch_ref_fails(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "repo"
+        branch = self._make_repo(root)
+        bare = Path(tmp.name) / "empty.git"
+        self._git(root, "init", "-q", "--bare", str(bare))  # 空裸仓: ls-remote 成功但没有任何 ref
+        self._git(root, "remote", "add", "origin", str(bare))
+        code, err = self._expect_tip(root, {"freeze_branch": branch}, "origin")
+        self.assertEqual(code, 1)
+        self.assertIn(f"没有 refs/heads/{branch}", err)
+
+    def test_head_differs_from_remote_tip_fails_and_synced_passes(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "repo"
+        branch = self._make_repo(root)
+        bare = Path(tmp.name) / "upstream.git"
+        self._git(root, "clone", "-q", "--bare", str(root), str(bare))
+        self._git(root, "remote", "add", "origin", str(bare))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(self.lane._require_tip(root, {"freeze_branch": branch}, "origin"), branch)
+        self.assertEqual(out.getvalue(), "", "同步态(HEAD==tip)放行且不打 note")
+        (root / "f.txt").write_text("v2\n", encoding="utf-8")  # 领先远端一笔
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-q", "-m", "v2")
+        code, err = self._expect_tip(root, {"freeze_branch": branch}, "origin")
+        self.assertEqual(code, 1)
+        self.assertIn("!=", err)
+        self.assertIn("my-commit-flow.sync", err)
+
+
+class LaneManifestGuardTest(unittest.TestCase):
+    """cmd_manifest 两条守卫直驱单测(临时真仓, 无远端走 D18 本地 freeze):
+    有路线认领状态即拒重生成(rc=1) / 分层范围内漏配文件即拒并列清单(rc=1)。
+    """
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("review_lane_manifest_guard", LANE_SCRIPT)
+        cls.lane = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.lane)
+
+    def _make_repo(self, root: Path, files: dict) -> str:
+        root.mkdir(parents=True)
+
+        def git(*args):
+            proc = subprocess.run(["git", *args], cwd=str(root), capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, f"git {' '.join(args)} 失败: {proc.stderr}")
+            return proc
+
+        for cmd in (("init", "-q"), ("config", "user.email", "t@example.test"), ("config", "user.name", "t")):
+            git(*cmd)
+        for rel, content in files.items():
+            p = root / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+        for cmd in (("add", "-A"), ("commit", "-q", "-m", "base")):
+            git(*cmd)
+        return git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+
+    def _write_lane_toml(self, root: Path, branch: str, globs: str) -> None:
+        # LANE_CONFIG 是脚本相对解析(包随 clone 走); 测试仓是独立 root, 把模块单点改指测试配置
+        cfg_path = root / ".commands" / "review" / "lane.toml"
+        cfg_path.parent.mkdir(parents=True)
+        cfg_path.write_text(
+            f'[lane]\ncampaign = "t"\nfreeze_branch = "{branch}"\nsnapshot_root = "snap"\n'
+            f'lane_dir = "mb/lane"\nplan_file = "plan.html"\nr2_report = "r2.html"\nissues_dir = "mb/issues"\n'
+            f'[lane.scope]\ninclude = ["src/*.py"]\nexclude = []\n'
+            f'[[route]]\nid = "R1"\n  [[route.batch]]\n  id = "R1-1"\n  desc = "src"\n'
+            f'  depth = "full"\n  globs = [{globs}]\n',
+            encoding="utf-8"
+        )
+        old = self.lane.LANE_CONFIG
+        self.lane.LANE_CONFIG = cfg_path
+        self.addCleanup(setattr, self.lane, "LANE_CONFIG", old)
+
+    def _run_manifest(self, root: Path):
+        out, err = io.StringIO(), io.StringIO()
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.lane.cmd_manifest(argparse.Namespace(root=str(root), remote="origin", dry_run=False))
+        return cm.exception.code, out.getvalue(), err.getvalue()
+
+    def test_claimed_route_blocks_manifest_regeneration(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "repo"
+        branch = self._make_repo(root, {"src/a.py": "x\n", "plan.html": "p\n"})
+        self._write_lane_toml(root, branch, '"src/*.py"')
+        (root / "mb" / "lane").mkdir(parents=True)
+        (root / "mb" / "lane" / "route-R1.json").write_text("{}", encoding="utf-8")  # 认领状态单点在盘
+        code, out, err = self._run_manifest(root)
+        self.assertEqual(code, 1)
+        self.assertIn("已有路线认领状态", err)
+        self.assertIn("冻结基线一经引用不可移动", err)
+        self.assertFalse((root / "mb" / "lane" / "manifest.json").exists(), "拒重生成时不得写 manifest")
+
+    def test_unassigned_file_fails_with_listing(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "repo"
+        branch = self._make_repo(root, {"src/a.py": "x\n", "src/b.py": "y\n", "plan.html": "p\n"})
+        self._write_lane_toml(root, branch, '"src/a.py"')  # b.py 落在矩阵外
+        code, out, err = self._run_manifest(root)
+        self.assertEqual(code, 1)
+        self.assertIn("范围内未分配文件", out)
+        self.assertIn("src/b.py", out)
+        self.assertIn("[note] 批次矩阵在", out)
+        self.assertFalse((root / "mb" / "lane" / "manifest.json").exists(), "守卫失败时不得写 manifest")
+
+
 class LaneStateTest(unittest.TestCase):
     """review_lane 状态机单测: 临时目录直驱 cmd_batch/cmd_done/_load_route(不依赖 git 网络面)。
 
@@ -247,6 +609,7 @@ class LaneStateTest(unittest.TestCase):
         (self.root / ".git").mkdir()  # _resolve_root 只验 .git 存在
         self.lane_dir = self.root / "memory-bank" / "reports" / "attachments" / "legacy-review4"
         self.lane_dir.mkdir(parents=True)
+        self.cfg = {"lane_dir": self.lane_dir.relative_to(self.root).as_posix()}  # 状态机单测只消费 lane_dir
         self._write_route(
             {
                 "route":
@@ -323,11 +686,11 @@ class LaneStateTest(unittest.TestCase):
     def test_load_route_schema_guards(self):
         good = self._read_route()
         self._write_route(dict(good, status="weird"))
-        self._expect_rc(self.lane._load_route, self.root, "R9")
+        self._expect_rc(self.lane._load_route, self.root, self.cfg, "R9")
         self._write_route(dict(good, batches=[{"id": "R9-1", "status": "half"}]))
-        self._expect_rc(self.lane._load_route, self.root, "R9")
+        self._expect_rc(self.lane._load_route, self.root, self.cfg, "R9")
         (self.lane_dir / "route-R9.json").unlink()
-        self._expect_rc(self.lane._load_route, self.root, "R9")
+        self._expect_rc(self.lane._load_route, self.root, self.cfg, "R9")
 
     def test_done_requires_in_progress(self):
         self._write_route(dict(self._read_route(), status="claimed"))
@@ -352,16 +715,16 @@ class LaneStateTest(unittest.TestCase):
         subprocess.run(["git", "commit", "-q", "-m", "lane keep"], cwd=self.root, check=True)
         # 仅 lane 内未跟踪: 放行
         (rf / "route-R9.json").write_text("{}", encoding="utf-8")
-        self.lane._require_clean(self.root, allow_lane=True)
+        self.lane._require_clean(self.root, self.cfg, allow_lane=True)
         # lane 外未跟踪: 拒
         (self.root / "outside.txt").write_text("x\n", encoding="utf-8")
-        self._expect_rc(self.lane._require_clean, self.root, True)
+        self._expect_rc(self.lane._require_clean, self.root, self.cfg, True)
         (self.root / "outside.txt").unlink()
         # 已提交的 lane 文件 rename 到 lane 外: 拒(porcelain「old -> new」两侧都必须在 lane 内)
         subprocess.run(["git", "add", "route-R9.json"], cwd=str(rf), check=True)
         subprocess.run(["git", "commit", "-q", "-m", "route"], cwd=self.root, check=True)
         subprocess.run(["git", "mv", str(rf / "route-R9.json"), "moved.txt"], cwd=self.root, check=True)
-        self._expect_rc(self.lane._require_clean, self.root, True)
+        self._expect_rc(self.lane._require_clean, self.root, self.cfg, True)
 
     def test_script_exists(self):
         self.assertTrue(SCRIPT.is_file())
