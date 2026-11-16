@@ -1,0 +1,19 @@
+# sync_agent_skills.py 配置单点 (计划 26-11-17-0010 S9)。
+# 落点口径 D19: 点前缀目录 .config/ 防被 skill 遍历/链接当成 skill ——
+# 脚本 list_source_skills 过滤点前缀名, CLI scanSkillsDirectory 只收 SKILL.md
+# 所在目录, 本目录不放 SKILL.md。
+# 回落语义: 本文件缺失 / [节] 缺失 / 形态不对 -> 脚本回落内置默认并打一行提示
+# (禁静默降级); 坏 TOML -> fail-fast 不回落; 显式空列表 = 合法配置(不回落不提示)。
+
+[exclude]
+# 收编自脚本硬编码 EXCLUDED (2026-11-17 S9)。体积型包: 单个目录内含 193 个嵌套
+# SKILL.md(设计预设), 挂载成本高, 不排除会把 213 条技能挤进系统提示上下文。
+# (曾有的完整副本 autoclaw-design-capability_noqa 2026-09-20 已删除, 故不在此列。)
+names = ["autoclaw-design-capability"]
+
+[link_targets]
+# 收编自脚本硬编码 LINK_TARGETS (2026-11-17 S9)。挂载目标: 相对仓库根的路径
+# (也可写绝对路径)。只有 .codebuddy/skills —— codebuddy CLI 实际扫描的项目级
+# 路径; 产品文档写的 .workbuddy-ai/skills 该 CLI 不读, 不保留兼容链接
+# (2026-09-18 移除), 免得两处都要维护。
+paths = [".codebuddy/skills"]
