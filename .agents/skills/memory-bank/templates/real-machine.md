@@ -7,8 +7,7 @@
 复制填空模板(memory-bank skill templates/, 骨架先例: baseline.md): 复制到
 memory-bank/testing/real-machine.md 后逐节填空, 全部填完删掉本注释块。
 没有真机轨的项目**不复制本件** —— memory-bank skill SKILL.md 里引用本件的那段
-一并不移植(引用面见 PORTING.md 的「最小移植 (3 步)」节; 移植单位清单表待轨道
-runbook 扩容补入)。
+一并不移植(引用面见 PORTING.md 的「移植单位清单表」节)。
 真机 = 项目外任何真实环境(真实服务 / 真实硬件 / 真实账号), 不是指某一种系统。
 -->
 

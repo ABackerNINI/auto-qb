@@ -96,8 +96,8 @@ KB 正文 (`tasks/` + `active-context/`) 不写裸测试数字(`2772 passed` 这
 ## 任务档案规范
 
 - 路径 `memory-bank/tasks/YY-MM-DD-<slug>.md` —— **日期到天, 不带时分**; 日期取 `Added:`/`Started:`(创建日), 不是修改日; 日期本身取 `commands run kb.time date`。
-- `<slug>` 由**专题**决定, 不由序号决定: `<领域>-<专题>`; 领域用固定枚举(不够用先扩枚举再建档): `webui`/`backend`/`rule`/`memory-bank`/`docs`/`test`/`deps`/`config`。
-- **立档第一步是查重, 不是取号**: 本 clone `ls memory-bank/tasks/` **且**跨工作区 `ls ../auto-qb-*/memory-bank/tasks/`(2026-09-20 起多 clone 模式: 各工作区平级、各有独立 `.git`), 按 **slug 部分**比对(忽略日期前缀); 命中同名 → **追加不新建**。
+- `<slug>` 由**专题**决定, 不由序号决定: `<领域>-<专题>`; 领域枚举**单点在** `<skill>/config/project.toml` 的 `[domains]`(计划 26-11-17-0010 S1 配置化; 不足用先扩枚举再建档 —— 改配置即生效, 不触代码)。
+- **立档第一步是查重, 不是取号**: 本 clone `ls memory-bank/tasks/` **且**跨工作区查重(2026-09-20 起多 clone 模式: 各工作区平级、各有独立 `.git`), 查重范围**单点在** `<skill>/config/project.toml` 的 `[siblings] tasks_dirs`(显式目录列表, 不再按 `../<项目名>-*` glob 扫描; 空 = 单 clone 不查跨 clone), 按 **slug 部分**比对(忽略日期前缀); 命中同名 → **追加不新建**。
 - **slug 禁止出现**: 轮次(`round9`/`r10`/`第十轮`)、日期(已在文件名前缀)、会话序号、编号、分支名 —— 轮次属于档案内"子任务状态表"的一行, 不属于文件名。不带时分是**特性**: 同一天同一专题必然撞到同一路径, 重复才能当场暴露(显式 add/add 冲突), 而不是静默变成两份。
 - 必备章节: `# <文件名> — 名称`、状态行(`Status`/`Added`/`Updated`/`Summary`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。
 - **`**Status:**` 只能取这 4 个英文词**: `In Progress`/`Open`/`Done`/`Dropped` —— 守卫用正则匹配, `kb.status` 翻转与新建件检查(`check_doc_templates`)都按词表校验; 写成中文「完成」或加前缀(`✅ 完成`)会被判**非法状态行**。旧词映射见 [doc-forms 约定](../../../memory-bank/conventions/doc-forms.md)(`Pending`→Open · `Completed`→Done · `Abandoned`→Dropped)。
