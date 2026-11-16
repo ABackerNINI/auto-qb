@@ -85,6 +85,11 @@
 ### 单元边角
 - test_supersede_handover_stray_alias_skipped: 移交别名不在声明源下 = 跳过重定向只计数
   (账不自洽留痕, 不猜不动); _rel_under 三支(等值/根下/根外 None)
+- test_supersede_handover_lexical_fork_both_plan_branches: 三代链续迁叠加词法分叉(S4
+  判定口径)—— _start_job「字面同串才复用/分叉保留第二算」两支都触到(第二跳 mover 账面
+  回旧根、锚点解析到前任 dst = 分叉支; 第三跳账面根 = 物理根字面同串 = 复用支); 前任
+  dst 携带分隔符形词法分叉(_norm 等值字面不同)时, handover 改指经 _rel_under
+  (fold_case=False) 换算无误, 三代别名(A/B/C 侧)全部直指现任终位置
 - test_supersede_handover_dedupes_carried_entry_by_job_id: 结转条目与活集认领同 id 相撞
   (major-R2-2 其一)—— 当前账面值原位替换, plan.inherited 同 job_id 恒恰一条
 - test_supersede_repoint_cursor_isolated_per_entry: 改指进度游标按条目独立
@@ -107,9 +112,17 @@ from auto_qb.infra import alias_fs as afs
 
 from auto_qb.infra import relocate_journal as rj
 
-from helpers import FakeTorrent, pin_disk_usage
+from helpers import FakeTorrent, pin_disk_usage, relocate_env
 
-from relocate_exec_support import _armed_env, _bare_mod, _job, _run_ticks
+from relocate_exec_support import (
+    _armed_env,
+    _bare_mod,
+    _job,
+    _run_ticks,
+    _simulate_moved,
+    _spy_spawn,
+    _stub_probe_pass,
+)
 
 
 def _c_root(tmp_path):
@@ -1032,3 +1045,65 @@ def test_build_links_skips_twin_links_already_pointing_at_target(tmp_path):
     assert mod._build_links(job, rt) is True
     assert rt["links"] == [str(link)], "孪生直接入账(不重建不报错)"
     assert mod.get_job("j2").alias_paths == (str(link), )
+
+
+def test_supersede_handover_lexical_fork_both_plan_branches(tmp_path, monkeypatch):
+    """三代链 x 词法分叉(S4 判定口径): J1(A→B, dst 分叉串)→J2(B→C, mover 账面回旧根 =
+    分叉支第二算)→J3(C→D, 账面根字面同串 = 复用支)—— handover 改指经
+    _rel_under(fold_case=False) 换算无误, 三代别名全部直指现任终位置"""
+    pin_disk_usage(monkeypatch)
+    _stub_probe_pass(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    spawned = []
+    _spy_spawn(mod, spawned)
+    files_ha = client.files_map["HA"]
+    # 词法分叉: 分隔符形(_norm 归一等值, 字面不同) —— J1 的 dst 即分叉串
+    dst_forked = dst.replace("\\", "/")
+    j1 = mod.relocate_execute(["HA"], dst_forked)[0]["job_id"]
+    _simulate_moved(mgr, dst, files_ha, content)
+    _run_ticks(mod, 6)
+    job1 = mod.get_job(j1)
+    assert job1.phase == ru.PHASE_ARMED, job1.phase
+    assert job1.dst == dst_forked, "前任 dst 携带分叉串(词法分叉的源头)"
+
+    # 第二跳(分叉支): mover 账面回旧根 A(N10 形态: qB 经前任别名做种), 锚点解析到前任
+    # dst —— src(物理根) != facts.save_path(账面根) = 分叉支, 保留第二算
+    mgr.store.by_hash["HA"].save_path = src
+    dst_c = _c_root(tmp_path)
+    out2 = mod.relocate_execute(["HA"], dst_c)
+    assert out2[0]["cls"] == "started", str(out2[0].get("reasons")) + " /// " + str(out2[0].get("notes"))
+    j2 = out2[0]["job_id"]
+    job2 = mod.get_job(j2)
+    assert job2.src == dst_forked, "分叉支: job src = 锚点物理根(前任 dst 分叉串原样)"
+    _simulate_moved(mgr, dst_c, files_ha, os.path.join(dst, "Show"))
+    _run_ticks(mod, 8)
+    job2 = mod.get_job(j2)
+    assert job2.phase == ru.PHASE_ARMED, job2.phase
+    assert job2.plan.get("handover_done") is True, "J2 改指收敛(A 侧移交别名 -> C)"
+    _points_at_c(mod, job1, src, dst_c)
+    _points_at_c(mod, job2, dst_forked, dst_c)  # B 侧自有别名(分叉串根下)换算后直指 C
+
+    # 第三跳(复用支): mover 账面 = 物理根 C 字面同串, 双算复用不重算
+    dst_d = os.path.join(str(tmp_path), "dstD")
+    os.makedirs(dst_d)
+    out3 = mod.relocate_execute(["HA"], dst_d)
+    assert out3[0]["cls"] == "started", out3
+    j3 = out3[0]["job_id"]
+    job3 = mod.get_job(j3)
+    assert job3.src == dst_c, "复用支: src = 账面根(字面同串, 不再第二算)"
+    ids = [e["job_id"] for e in (job3.plan or {}).get("inherited") or []]
+    assert ids == [j2, j1], "展平归集照常(J2 自有 + J1 祖父辈)"
+    _simulate_moved(mgr, dst_d, files_ha, os.path.join(dst_c, "Show"))
+    _run_ticks(mod, 8)
+    job3 = mod.get_job(j3)
+    assert job3.phase == ru.PHASE_ARMED, job3.phase
+    assert job3.plan.get("handover_done") is True, "J3 改指收敛(移交条目含分叉串 src)"
+    # I2: 三代别名(A 侧祖父辈 / B 侧父辈[分叉串根下] / C 侧自有)全部直指 D —— 分叉串经
+    # _rel_under(fold_case=False) 归一取尾, 换算目标与物理路径一致
+    for link in _inherited_aliases(job3) + list(job3.alias_paths):
+        rel = mod._rel_under(src, link) or mod._rel_under(dst_forked, link) or mod._rel_under(dst_c, link)
+        assert rel is not None, link
+        assert afs.alias_points_to(link, os.path.join(dst_d, *rel.split("/"))), (link, rel)
+    with open(_inherited_aliases(job3)[0], "rb") as f:
+        assert f.read() == b"x" * 64, "穿透校验: 经分叉串根下链接读到 D 的数据"

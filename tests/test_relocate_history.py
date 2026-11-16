@@ -22,6 +22,10 @@ purge_terminal_chain 消亡(整链消亡: superseded 前任连带, 不受计数�
 - test_clear_history_clears_all_terminal_and_reports_deferred: 清空历史遍历终态账全清;
   被活任务引用的账 I1 缓行保留, 回执 note 说明剩余
 - test_clear_history_spares_inflight: 在途账(armed)无清空面, 撤销走 relocate_cancel 不在本入口
+- test_clear_history_done_chain_and_failed_share_upstream_i1_deferred: 分级保留组合面 ——
+  done 链头(带 superseded 上游)与挂账 failed 账引用同一上游共存时清空: done 链头照清
+  (引用随记录消亡), 上游被挂账 failed(缓行账)引用 = I1 缓行不删; 回执 note 双归因
+  (挂账缓行 + I1 兜底)与 remaining 逐条点名; 挂账闭合前重复清空幂等零动作
 - test_clear_history_dry_run_blocked: dry-run 回 blocked 不执行
 - test_web_relocate_history_clear_route: 路由级 403(关)/ 两步确认(confirm 缺省零动作回
   现场说明, confirm=true 入队 relocate_clear_history)/ 命令登记(deferred 回执族 + handler 表)
@@ -31,6 +35,8 @@ import os
 from auto_qb.infra import relocate_journal as rj
 
 from auto_qb.core.modules import relocate_units as ru
+
+from helpers import capture_logs
 
 from relocate_exec_support import _bare_mod, _job
 
@@ -242,7 +248,8 @@ def test_clear_history_clears_all_terminal_and_reports_deferred(tmp_path):
     for j in jobs:
         _seed_disk(data_dir, j.job_id, j.phase)
 
-    result = mod.relocate_clear_history()
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        result = mod.relocate_clear_history()
 
     assert result["cls"] == "ok"
     assert result["cleared"] == 4, result
@@ -268,7 +275,8 @@ def test_clear_history_spares_inflight(tmp_path):
     for j in jobs:
         _seed_disk(data_dir, j.job_id, j.phase)
 
-    result = mod.relocate_clear_history()
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        result = mod.relocate_clear_history()
 
     assert result["cleared"] == 1 and result["remaining"] == 0
     assert mod.get_job("jr-run").phase == ru.PHASE_MOVING
@@ -317,3 +325,56 @@ def test_web_relocate_history_clear_route(web_env):
     assert is_deferred_receipt("relocate_clear_history")
     src = io.open("src/auto_qb/webui/commands.py", encoding="utf-8").read()
     assert '"relocate_clear_history": self._cmd_relocate_clear_history' in src, "命令表漏挂"
+
+
+def test_clear_history_done_chain_and_failed_share_upstream_i1_deferred(tmp_path):
+    """清空历史 x 分级保留组合面: done 链头(带 superseded 上游)与挂账 failed 账引用
+    同一上游共存 —— done 链头照清(其移交引用随记录消亡, 不悬空); 上游被挂账 failed
+    引用 = I1 缓行不删(强删会让挂账账的移交条目悬空失主); 回执 note 双归因
+    (挂账缓行 + I1 兜底), remaining 逐条点名; 挂账闭合前重复清空幂等零动作"""
+    jobs = [
+        _job("jr-sup", phase=ru.PHASE_SUPERSEDED, updated_at=10.0, src="R:/sUp", dst="R:/dUp"),
+        _job(
+            "jr-done",
+            phase=ru.PHASE_DONE,
+            updated_at=100.0,
+            src="R:/sUp",
+            dst="R:/dDone",
+            plan={"inherited": [_entry("jr-sup")]},
+        ),
+        _job(
+            "jr-fail",
+            phase=ru.PHASE_FAILED,
+            updated_at=101.0,
+            src="R:/sUp",
+            dst="R:/dFail",
+            plan={"inherited": [_entry("jr-sup")]},
+            resume_hashes=("HZ", ),
+            resume_pending=("HZ", ),
+        ),
+    ]
+    mod, data_dir = _mod(tmp_path, jobs)
+    for j in jobs:
+        _seed_disk(data_dir, j.job_id, j.phase)
+
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        result = mod.relocate_clear_history()
+
+    assert result["cls"] == "ok" and result["cleared"] == 1, result
+    assert mod.get_job("jr-done") is None and _disk_gone(data_dir, "jr-done"), "done 链头照清(手动面)"
+    # I1: 上游被挂账 failed(缓行账)引用 -> 不删, 引用不悬空
+    assert mod.get_job("jr-sup") is not None and os.path.exists(
+        rj.journal_path(data_dir, "jr-sup")
+    ), "上游被缓行账引用: I1 缓行不删"
+    assert mod.get_job("jr-fail") is not None, "挂账 failed 缓行(Q11/major-2: 挂账是常驻提示态)"
+    assert mod.get_job("jr-fail").resume_pending, "挂账原样"
+    # 回执双归因: 挂账缓行 + I1 兜底各占一句; remaining = 计数(逐条点名走程序日志)
+    assert result["remaining"] == 2, result
+    assert "恢复确认挂账" in result["note"], result["note"]
+    assert "未能清除" in result["note"], "I1 兜底归因在 note(不点名单一原因, 明细交程序日志)"
+    # 逐条点名走程序日志(note 只带计数, 评审 minor-R2-2 口径): 挂账行点 jr-fail, I1 行点 jr-sup
+    assert any("缓行(恢复确认挂账)" in m and "jr-fail" in m for m in cap.messages), cap.text
+    assert any("未清除(I1 引用保护或盘面删除失败)" in m and "jr-sup" in m for m in cap.messages), cap.text
+    # 挂账未闭合: 重复清空幂等零动作(黄金法则 1)
+    result2 = mod.relocate_clear_history()
+    assert result2["cleared"] == 0 and result2["remaining"] == 2, result2

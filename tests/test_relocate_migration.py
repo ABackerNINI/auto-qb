@@ -34,17 +34,32 @@
 - test_migration_no_legacy_stamps_marker_without_backup: 有账无 legacy 标记 -> 只盖章,
   不建备份目录。
 - test_migration_dry_run_skips: dry-run 启动不动手(迁移留给下一次真启动)。
+- test_takeover_write_through_stamp_and_ledger_converge_disk: 接管面写穿(真机缺陷1)——
+  盖章+转换后盘面(state.json)已是迁移后真相; 模拟 run() 的 _reload_state 整体重读章仍在;
+  落一笔 job 账 + 周期刷盘后章仍在; 二启迁移器幂等跳过(无第二份备份)。
+- test_prune_write_through_periodic_flush_disk_matches_memory: 接管面写穿(真机缺陷2)——
+  _load_jobs -> prune 滚出超限 done 后盘面与内存一致; 模拟 reload 整体重读 + 多次周期
+  刷盘, 滚出账不复活(真机曾三次刷盘仍写滚出前账面)。
+- test_migrated_successor_cancel_semantics_moving_window: 迁移器产物 x 撤销语义 —— 迁移器
+  建账(dst 自 superseded_from 还原、带 plan.inherited)的 MOVING job 撤销: 未确认先回
+  三段式 guide; 确认后清理面 = 自建链接, inherited 不删不撤(改指收敛前的撤销窗, 继承
+  别名仍指前任 dst, 悬空为已接受遗留风险), 零 qB 写, 前任历史零触碰。
 """
 
 import json
 import os
 import types
+from dataclasses import replace
 
 import pytest
 
 from auto_qb.config.models import RelocateConfig
 
 from auto_qb.core import fastresume as frmod
+
+from auto_qb.core.state import StateService
+
+from auto_qb.infra import alias_fs as afs
 
 from auto_qb.infra import relocate_journal as rj
 
@@ -115,6 +130,43 @@ def _migration_env(tmp_path, box, journals=None):
         data=json.loads(state_path.read_text(encoding="utf-8")), state_file=str(state_path)
     )
     return mod, data_dir, state_path
+
+
+def _svc_env(tmp_path, box, journals=None):
+    """真实 StateService 盘面环境(接管面写穿断言用): state.json 落盘 + journal 预置
+
+    返回 (mod, svc, data_dir, state_path) —— svc 是真 StateService(save/maybe_flush 可用),
+    盘面断言一律重读 state.json 文件(不信任内存)。
+    """
+    data_dir = str(tmp_path / "data")
+    os.makedirs(os.path.join(data_dir, "relocate"), exist_ok=True)
+    state_path = tmp_path / "state.json"
+    payload = {"relocate": {"jobs": box, "probe_salt": "s1"}}
+    state_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    for jid, body in (journals or {}).items():
+        rj.write_journal(data_dir, jid, body)
+    svc = StateService(str(state_path))
+    svc.data = svc.load()
+    mod = _bare_mod(data_dir=data_dir)
+    mod._ctx.state = svc
+    return mod, svc, data_dir, state_path
+
+
+def _disk(state_path):
+    """盘面真值(重读文件, 不经任何内存态)"""
+    return json.loads(state_path.read_text(encoding="utf-8"))
+
+
+class _ApiSpy:
+    """全方法记账的 api 替身(撤销面「零 qB 写」断言用)"""
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        def _rec(*a, **k):
+            self.calls.append((name, a, k))
+
+        return _rec
 
 
 def test_migration_converts_legacy_redirect_chain_zero_loss(tmp_path):
@@ -442,3 +494,114 @@ def test_migration_dry_run_skips(tmp_path):
     assert mod._ctx.state.data["relocate"]["jobs"]["jr-0"]["phase"] == "rewritten", "账面原样"
     assert "model_version" not in mod._ctx.state.data["relocate"], "未盖章"
     assert not os.path.exists(os.path.join(data_dir, "relocate-migration-backup"))
+
+
+def test_takeover_write_through_stamp_and_ledger_converge_disk(tmp_path):
+    """接管面写穿(真机缺陷1): 盖章+转换后盘面已是迁移后真相; 模拟 run() 的
+    _reload_state 整体重读章仍在; 落一笔 job 账 + 周期刷盘后章仍在; 二启幂等跳过"""
+    mod, svc, data_dir, state_path = _svc_env(tmp_path, _legacy_box())
+
+    mod._load_jobs()
+
+    # 写穿: 接管收敛即落盘(在任何周期刷盘之前), 盘面已是迁移后真相
+    disk = _disk(state_path)
+    assert disk["relocate"]["model_version"] == ru.MODEL_VERSION, "版本标记随接管写穿落盘"
+    assert disk["relocate"]["jobs"]["jr-0"]["phase"] == ru.PHASE_SUPERSEDED, "转换账随写穿落盘"
+    assert "superseded_from" not in (disk["relocate"]["jobs"]["jr-0"].get("plan") or {}), "改道字段已摘除"
+    # 模拟 run() 启动序列的 _reload_state: state.data 从磁盘整体重读替换(启动期突变曾在此被丢弃)
+    svc.data = svc.load()
+    assert svc.data["relocate"]["model_version"] == ru.MODEL_VERSION, "reload 重读后章仍在"
+    assert svc.data["relocate"]["jobs"]["jr-1"]["dst"] == "R:/dstB", "原始落点还原随重读保持"
+    # 二启(新模块同一 state 服务): 迁移器幂等跳过, 不建第二份备份
+    mod2 = _bare_mod(data_dir=data_dir)
+    mod2._ctx.state = svc
+    backup_root = os.path.join(data_dir, "relocate-migration-backup")
+    stamps_before = os.listdir(backup_root)
+    mod2._load_jobs()
+    assert os.listdir(backup_root) == stamps_before, "二启不再迁移(幂等跳过)"
+    # 落一笔 job 账(_persist 整段重写 jobs 箱)+ 周期刷盘: 盘面章仍在、账一致
+    mod2._set_job(replace(mod2.get_job("jr-2"), phase=ru.PHASE_WATCHING))
+    svc.maybe_flush(svc.next_flush_at + 10.0, 30.0)
+    disk2 = _disk(state_path)
+    assert disk2["relocate"]["model_version"] == ru.MODEL_VERSION, "落账+刷盘后章仍在(_persist 不抹章)"
+    assert disk2["relocate"]["jobs"]["jr-2"]["phase"] == ru.PHASE_WATCHING, "账面动作照常落盘"
+
+
+def test_prune_write_through_periodic_flush_disk_matches_memory(tmp_path, monkeypatch):
+    """接管面写穿(真机缺陷2): _load_jobs -> prune 滚出超限 done 后盘面与内存一致;
+    模拟 reload 整体重读 + 多次周期刷盘, 滚出账不复活(真机曾三次刷盘仍写滚出前账面)"""
+    monkeypatch.setattr(ru, "DONE_HISTORY_KEEP", 2)
+    box = {f"jr-done-{i}": _legacy_job(f"jr-done-{i}", f"R:/s{i}", f"R:/d{i}", "done", 100.0 + i) for i in range(4)}
+    box["jr-live"] = _legacy_job("jr-live", "R:/sl", "R:/dl", "armed", 500.0)
+    mod, svc, data_dir, state_path = _svc_env(tmp_path, box)
+
+    mod._load_jobs()
+
+    mem = set(mod._jobs)
+    assert mem == {"jr-live", "jr-done-2", "jr-done-3"}, "内存账已滚出最老 2 条 done"
+    disk = _disk(state_path)
+    assert set(disk["relocate"]["jobs"]) == mem, "写穿: 盘面与内存一致(不写滚出前账面)"
+    assert disk["relocate"]["model_version"] == ru.MODEL_VERSION, "章随写穿落盘"
+    # 模拟 run() reload 整体重读 + 三次周期刷盘: 盘面不回滚到滚出前
+    svc.data = svc.load()
+    for _ in range(3):
+        svc.maybe_flush(svc.next_flush_at + 40.0, 40.0)
+        disk = _disk(state_path)
+        assert set(disk["relocate"]["jobs"]) == mem, "周期刷盘不再写回滚出前账面"
+        assert disk["relocate"]["model_version"] == ru.MODEL_VERSION, "章随每次刷盘保留"
+
+
+def test_migrated_successor_cancel_semantics_moving_window(tmp_path):
+    """迁移器产物 x 撤销语义(D6/D7): 迁移器建账(dst 自 superseded_from 还原、带
+    plan.inherited)的 MOVING job 撤销 —— 未确认先回三段式 guide; 确认后清理面 =
+    自建链接, inherited 不删不撤(改指收敛前的撤销窗, 继承别名仍指前任 dst, 悬空为
+    已接受遗留风险), 全程零 qB 写, 前任历史零触碰"""
+    src_root = str(tmp_path / "srcRoot")  # 前任 src(继承别名所在旧根)
+    old_root = str(tmp_path / "oldRoot")  # 前任原始落点(迁移器还原进 dst)
+    flipped = str(tmp_path / "flippedRoot")  # 改道机器翻转值(继任 dst)
+    os.makedirs(os.path.join(old_root, "Show"))
+    with open(os.path.join(old_root, "Show", "file.bin"), "wb") as f:
+        f.write(b"x" * 8)
+    own_link = os.path.join(old_root, "own-alias")  # 继任自建链接(MOVING 期, src 侧)
+    inh_link = os.path.join(src_root, "pred-alias")  # 前任别名(继承条目, 指前任 dst)
+    os.makedirs(src_root)
+    afs.create_dir_alias(own_link, os.path.join(old_root, "Show"), afs.KIND_JUNCTION)
+    afs.create_dir_alias(inh_link, os.path.join(old_root, "Show"), afs.KIND_JUNCTION)
+    pred = _legacy_job("jr-p", src_root, flipped, "rewritten", 100.0)
+    pred["plan"]["superseded_from"] = old_root
+    pred["alias_paths"] = [inh_link]
+    succ = _legacy_job("jr-s", old_root, flipped, "moving", 200.0)
+    succ["alias_paths"] = [own_link]
+    mod, svc, data_dir, state_path = _svc_env(tmp_path, {"jr-p": pred, "jr-s": succ})
+    mod._ctx.api = _ApiSpy()
+
+    mod._load_jobs()
+
+    job_s = mod.get_job("jr-s")
+    assert job_s.phase == ru.PHASE_MOVING, "在途继任零触碰(迁移器不改变相位)"
+    entries = (job_s.plan or {}).get("inherited") or []
+    assert [e["job_id"] for e in entries] == ["jr-p"], "移交条目归集进继任"
+    assert entries[0]["dst"] == old_root, "条目 dst = 原始落点(superseded_from 还原)"
+    assert entries[0]["alias_paths"] == [inh_link], "前任别名随条目移交"
+    job_p = mod.get_job("jr-p")
+    assert job_p.phase == ru.PHASE_SUPERSEDED and job_p.dst == old_root, "前任转历史, 原始落点还原"
+    # 未确认: 三段式 guide 下发(D7), 不动任何东西
+    out0 = mod.relocate_cancel("jr-s", cost_confirmed=False)
+    assert out0["cls"] == "confirm" and set(out0["guide"]) == {"consequence", "halfway", "manual"}, out0
+    assert os.path.lexists(own_link) and os.path.lexists(inh_link), "确认面零盘面动作"
+    assert mod.get_job("jr-s").phase == ru.PHASE_MOVING, "确认面零账面动作"
+    # 确认撤销: 清理面 = 自建链接; 继承别名不删不撤
+    out = mod.relocate_cancel("jr-s", cost_confirmed=True)
+    assert out["cls"] == "ok", out
+    saved = mod.get_job("jr-s")
+    assert saved.phase == ru.PHASE_CANCELLED and saved.alias_paths == (), "撤销落 CANCELLED 清自有链接账"
+    assert (saved.plan or {}).get("inherited"), "inherited 不删不撤(账面保留)"
+    assert not os.path.lexists(own_link), "自建链接删净(清理面 = 自己已建的链接)"
+    assert afs.alias_kind_of(inh_link) is not None, "继承别名仍在盘(不删不撤)"
+    assert afs.alias_points_to(inh_link, os.path.join(old_root, "Show")), "继承别名指向原样(前任 dst)"
+    assert mod._ctx.api.calls == [], f"撤销链零 qB 写(零 setLocation/零 resume): {mod._ctx.api.calls}"
+    svc.save()
+    disk = _disk(state_path)
+    assert disk["relocate"]["jobs"]["jr-p"]["phase"] == ru.PHASE_SUPERSEDED, "前任历史零触碰"
+    assert disk["relocate"]["jobs"]["jr-s"]["phase"] == ru.PHASE_CANCELLED, "撤销账落盘"
+    assert disk["relocate"]["model_version"] == ru.MODEL_VERSION, "章保留"

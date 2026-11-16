@@ -2096,8 +2096,10 @@ class ExecMixin:
         #      新位置、缺件由下载器自行补下, 成员恢复时的短暂 missingFiles 属预期并由确认面
         #      三段式其二警示(D7);
         # 其二 cancel_inherited 过渡守卫(S1a): 撤销搬回会留下悬空继承别名指向已搬空目标;
-        #      新语义下继承别名本就不在清理面(不删不撤, 见下), 数据留在新位置后别名与服务
-        #      连续性成立, 悬空前提消失;
+        #      新语义下继承别名本就不在清理面(不删不撤, 见下), 数据留在新位置消除了旧语义
+        #      「搬回后悬空」的前提 —— 但 handover 改指收敛(moved 段)之前的撤销窗
+        #      (MOVING/WATCHING)继承别名仍指前任 dst, 撤销后 qB 搬完即清空该处, 悬空仍在,
+        #      已接受为遗留风险(与方法 docstring 同口径);
         # 其三 cancel_rewritten 冻结守卫(REWRITE_SETTLED_FROZEN 判据): 删别名+搬回会留下
         #      指向 dst 的 fastresume 而数据已回源(冻结态无人兜底); 新语义下数据就在 dst,
         #      fastresume 改写与数据位置一致, 冻结态前提消失。member_gone 不冻结的既有边界

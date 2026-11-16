@@ -265,6 +265,12 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         - 在途账(无 superseded_from)零触碰: 相位语义原样, 由既有启动对账(_startup_reconcile)
           与 _recover 接管跑完 —— 迁移器不改变任何在途相位。
 
+        盖章与转换的落盘时机(真机验收缺陷1, 2026-11-17): 本方法只动内存 state.data, 落盘
+        单点在 _load_jobs 尾部的接管面写穿(启动序列 run() 在 start_all 之后还有一次
+        _reload_state 把 ctx.state.data 从磁盘整体重读替换, 只依赖「state 服务周期刷盘」
+        的话, 盖章/转换会在刷盘前被那次替换静默丢弃 —— 真机实测 relocate.model_version
+        永不落盘)。
+
         R1 备份/回滚: 有账可迁时先备份 state(+.bak)与 relocate 目录到
         <data_dir>/relocate-migration-backup/<时间戳>/; 备份/转换/journal 落盘任一步异常 =
         回滚(state 覆写还原 + relocate 目录镜像还原 + **内存 jobs_box 还原迁移前快照**;
@@ -640,12 +646,25 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             }
             n += 1
         if reconciled:
-            self._persist()  # 回写落账(状态盒; 磁盘刷盘仍由 state 服务周期兜底)
+            self._persist()  # 回写落账(状态盒; 磁盘刷盘由接管面写穿与 state 服务周期双兜底)
         self._sync_relocating()
         self._publish_snapshot()
         # S3 终态分级保留(D3, 计划 26-11-15-2340 §03.4): 账接管完成后滚一次成功历史 ——
         # 覆盖迁移器转入的旧账与停机期间累积的超限 done 账(触发面口径见 prune_success_history)
         self.prune_success_history()
+        # 接管面写穿(真机验收缺陷1/2, 2026-11-17): run() 的启动序列在 start_all 之后还有
+        # 一次 _reload_state(qbmanager.run)把 ctx.state.data 从磁盘整体重读替换 —— start_all
+        # 阶段(迁移器盖章/转换、启动对账回写、prune 滚出)写进 state.data 的全部突变都会被
+        # 那次替换静默丢弃, 周期刷盘随后把「磁盘旧版」原样写回(真机实测: prune 滚出后三次
+        # 刷盘仍是滚出前账面、relocate.model_version 永不落盘, 直到首个账面动作 _persist 才
+        # 收敛)。接管面在内存收敛完成后立即写穿一次(save 原子写+.bak, 持锁已在
+        # QbManager.__init__, 单一写线程不变), run() 的 reload 重读到的即收敛后的真相;
+        # 运行期接管点(热启用 apply)多付一次落盘, 换「接管即持久」不变量。dry-run 不动手
+        # (真写); state 服务缺失/替身无 save 时跳过(测试替身形态, 与 _state_jobs 同容错)。
+        if not self._dry_run():
+            save = getattr(getattr(self._ctx, "state", None), "save", None)
+            if callable(save):
+                save()
         # 账接管成功(含迁移器通过): 清热启用被拒标志(R2-1)—— 执行入口恢复按现配置放行
         self._hot_enable_rejected = False
         return n
