@@ -58,3 +58,9 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 - **S2 偏离**(用户拍板 2026-11-17): 「上界面」降级为 API/命令通道结构化下发(_CANCEL_GUIDE 经 confirm 回执 guide 字段); 前端撤销入口+弹窗消费面入池 issue 单独跟进。
 - **收尾(本轮)**: test.full 主体全绿(数字见 kb.baseline), 覆盖率闸门未达 Windows 阈(缺口净额与点名模块见基线切片; relocate 家族新增路径为缺口主体, 补测属后续轮); 计划 HTML 回写 R1 注记/§03.3 偏离注记/§04-S4 判据回写/§03.6 本批状态列; 基线切片落位。第二批 S5/S6 待显式开工。
 - **内核级通用隐患裁决(2026-11-17)**: qbmanager.run() 的 _reload_state 在 start_all 之后整体重读磁盘替换 ctx.state.data(qbmanager.py:547→:435→:371), 任何模块启动期写 state 被静默丢弃 —— relocate 发病点(迁移盖章/对账回写/prune 滚出)已由 cd786499 写穿规避(_load_jobs 尾部 ctx.state.save()), 内核面曾「未修待裁决」, 现已裁决入池 issue 26-11-17-0214(question: reload 挪到 start_all 之前 vs 显式接管协议), 坑档随该 issue 处置一并落。
+
+### R1-A · rebase hash 映射注记 (2026-11-17)
+
+- 2026-11-17 为合流远端推进(origin/develop=3840ba10, 含 2e2ffe1f columns_grid 行窗口化), 本专题 8 笔提交被 rebase 线性重放, hash 全部改写。映射表(旧→新): f0004ef9→33d7f850 / 785ad5ae→ca820f5f / dae75d34→1f3f88a7 / df15af5f→1fad4fce / 3692616c→0df84475 / cd786499→24e8d063 / 11fc721d→4040c93d / 0c0caab3→2b78e9d7。 二次 rebase(origin/develop=12ff9a1e)后再改写, 上表为终值; 白名单机制终由上游 ARCHIVE_MD_EXCEPTIONS 承担, 我方重复实现于合流中弃用。
+- df15af5f' 解 columns_grid 冲突(双方语义共存), 两追加修(ASCII 圈号/stub filteredGroups)折进 1fad4fce。上文 R1 段引用的旧 hash 为当时实测原值, 不回改, 追溯按本映射表换算。
+- 树同一性核实(git diff --stat 逐对): 每对旧→新 hash 的树差 = 远端推进面(36 files, +2437/-71: columns_grid.js 行窗口化、webui static scan 测试面、skill-portability 文档面等), 我方各笔提交内容不变; 两基线切片(26-11-17-0159/26-11-17-0319)的实测数字继续有效。

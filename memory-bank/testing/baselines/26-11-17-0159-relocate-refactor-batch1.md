@@ -21,5 +21,6 @@ FAIL Required test coverage of 99.5% not reached. Total coverage: 99.31%
 ## 本改动面
 
 - 测量树 = 第一批 S1-S4 六笔提交链(f0004ef9 → 785ad5ae → dae75d34 → df15af5f → 3692616c → cd786499) + 收尾回写(计划 26-11-15-2340 R1 注记/任务档案 R1 段/issue 26-11-17-0156, 纯文档零代码)。
+- rebase 注记(2026-11-17): 切片实测树对应旧 hash cd786499, rebase 后现对应新 hash 24e8d063; 逐对 `git diff --stat cd786499..24e8d063` 核实, 树差 = 远端推进面(36 files, +2437/-71: columns_grid.js 行窗口化、webui static scan 测试面、skill-portability 文档面等, 含 26-11-17-0010 .md 报告), 我方各笔提交内容不变 —— 内容同一性由 rebase 重放保证, 本片实测数字继续有效(映射表见任务档案 R1-A 段/计划 §10 R2)。
 - 六笔提交的逐笔实测(test.quick 与评审轮次)见各提交信息与任务档案 R1 段; 本片只记录收尾时点全量。
 - 覆盖率缺口补测未在本轮做: 第一批验收行「test.full 全绿」的覆盖率半边未达成, 已如实上报, 补测与阈值裁量由用户定。
