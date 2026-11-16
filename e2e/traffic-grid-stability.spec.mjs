@@ -9,24 +9,26 @@ import { installRouteCleanup } from './lib/route-cleanup.mjs';
 installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route.fetch 桩(收尾竞态兜底, 合流接线)
 
 /**
- * A4(计划 26-11-14-1313 §01): 1m 窗 2s 桶连续观测(>=10 分钟)—— rewin 0 次、x 轴 split 集
+ * A4(计划 26-11-14-1313 §01): 1m 窗 2s 桶连续观测(>=10 分钟)—— 显示列点数恒定、x 轴 split 集
  * 稳定(仅视口边界的自然滑入滑出, 无中段 pop)。
  *
  * 为什么不真跑 10 分钟: 真实轮询节奏 2s/拍 x 300 拍 = 600s 墙钟, e2e 预算内不可行 —— 量法
  * 等价在**数据时间**不在墙钟: F3(栅格 ceil->floor+1)要钉的判据本体是「W 恰为桶宽整倍时
- * n 与轮询相位无关」(rewin 判据 st.n !== n 因此恒 false), 本用例用「每次轮询恰好推进一整窗
+ * n 与轮询相位无关」, 本用例用「每次轮询恰好推进一整窗
  * (30 桶 = 60s 数据时间)」的压缩桩连续喂 10 轮(累计 300 桶 = 600s >= 10 分钟的 2s 桶连续
  * payload), 每轮都让数据窗整体右移。观测性质边界: 桩恒填 31 点, n 在本用例结构上不可能
  * 漂移(后端 ceil 栅格回潮时本用例不可见 —— 该面由 B1 的相位不变性电池承接, 本用例只钉
- * 前端消费面: n 恒定下 rewin 判据恒 false + splits 稳定的显示面)。又: 每轮 dx0 = 30 格 >
- * step x 2, 生产走瞬时落地路径, roll 动画期的逐帧面不在本用例域(由 traffic-fx-frames 的
- * 左移连续性用例承接)。10 轮真轮询(2s 周期)约 22s 墙钟, @fast 预算内。后端保证面: B1
- * 电池(相位不变性/t1 边界)已钉 _floor_buckets 的 n 恒等; 前端 rewin 判据面 =
- * qb_traffic_chart.js _qbBeatStart 的 st.n !== n(点数变化才 rewin) —— 两面在本用例的显示面合流。
+ * 前端消费面: 显示列点数恒定 + splits 稳定的显示面)。又: 每轮 dx0 = 30 格 >
+ * step x 2, 生产走瞬时落地路径(26-11-15-1104 F5 后 = 跨窗换档判据 |dx0| > 2 格翻真, 显示
+ * 面同旧: 瞬时落地; 补尾格也不触发 —— 补点只在 1-2 整格滚动拍), roll 动画期的逐帧面不在
+ * 本用例域(由 traffic-fx-frames 的左移连续性用例承接)。10 轮真轮询(2s 周期)约 22s 墙钟,
+ * @fast 预算内。后端保证面: B1 电池(相位不变性/t1 边界)已钉 _floor_buckets 的 n 恒等;
+ * 前端判据面 = qb_traffic_chart.js _qbRollJudge(F5: 桶宽/窗起点不连续才换档, 点数退役) ——
+ * 两面在本用例的显示面合流。
  *
  * 断言面(observational, 不碰生产内部变量):
- *   · rewin 0 次: rewin 的可观测定义就是点数变化(st.n !== n) —— 全采样窗 xsLen 恒 31
- *     (floor+1: 1m 窗 2s 桶 = 30 整桶 + 1 进行中桶)即 rewin 恒 false;
+ *   · 显示列点数恒 31(floor+1: 1m 窗 2s 桶 = 30 整桶 + 1 进行中桶): dx0 = 30 格非整格滚动,
+ *     F5 补尾格不触发(补点只在 1-2 整格滚动拍), 点数漂移即显示面回潮;
  *   · split 集稳定: u.axes[0].splits(uPlot 网格/轴标刻位真值)逐帧长度恒定(A4 量法「split 数
  *     分布单峰」的压缩等价: 分布退化为单值)+ 首刻位逐帧单调不减(窗口右移 -> 刻度只自然
  *     滑入滑出, 无回跳 pop)。
@@ -135,11 +137,11 @@ function makeHourPayload(base) {
 
 /* ============================================================================ */
 
-test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: rewin 0 + split 集稳定(plan 26-11-14-1313)', () => {
+test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: 显示列点数恒定 + split 集稳定(plan 26-11-14-1313)', () => {
   installRuntimeErrorGuard(test);
 
   for (const skin of SKINS) {
-    test(`[${skin}] 10 轮压缩轮询(600s 数据时间): 点数恒 31(rewin 恒 false) + splits 长度恒定 + 首刻位不回跳 @fast`, async ({ page }) => {
+    test(`[${skin}] 10 轮压缩轮询(600s 数据时间): 点数恒 31(F5 补尾格不触发) + splits 长度恒定 + 首刻位不回跳 @fast`, async ({ page }) => {
       /* 10 轮真轮询(2s 周期)约 22s 墙钟 + 开场手势链 —— 默认 30s 用例上限不够, 抬到 120s */
       test.setTimeout(120_000);
       await stubFlags(page);
@@ -183,10 +185,10 @@ test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: rewin 0 + split 
       expect(frames.length, `采样窗应覆盖 >= ${POLLS + 1} 帧(判定帧全被观察到, 量具没空转)`)
         .toBeGreaterThanOrEqual(POLLS + 1);
 
-      /* A4 本体 1: 点数恒 31 -> rewin(st.n !== n)恒 0 次(可观测定义 = 点数不变) */
+      /* A4 本体 1: 显示列点数恒 31(dx0 = 30 格非整格滚动, F5 补尾格不触发 —— 点数漂移即回潮) */
       const lens = [...new Set(frames.map((f) => f.xsLen))];
       expect(lens, `全采样窗点数集合必须单值 [31](实测 ${JSON.stringify(lens)}) —— 点数漂移即 `
-        + 'rewin 判据 st.n !== n 翻真(瞬时多格跳回潮: 旧 ceil 栅格的 k/k+1 方波)').toEqual([31]);
+        + '显示列形态回潮(旧 ceil 栅格的 k/k+1 方波 / 补尾格误触发)').toEqual([31]);
 
       /* A4 本体 2: split 集稳定 —— 长度恒定(A4 量法「split 数分布单峰」) */
       const slens = [...new Set(frames.map((f) => f.splitsLen))];
