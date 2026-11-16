@@ -49,6 +49,10 @@
 - **skill 面**: `<skill>/config/project.toml` —— 统一名, 项目绑定面(领域枚举 / 兄弟 clone 清单 / …)单点。
 - **帮助文档**: `<skill>/references/PORTING.md` —— 每 skill 一份(D16, 允许薄); **包面不另建包级移植文件**,
   由本轨道 runbook 分节覆盖(D17, my-commit-flow `references/config.md` 先例)。
+  每份随各自 skill 目录自动带走(拷目录即得), 依赖面以各文件为准, 本文件不汇总复制;
+  覆盖口径 = 自制+半自制全配、第三方件不配(零依赖对照基准) —— 本项目实例: 已配 commands /
+  create-issue / scope-guard / code-review / deps-upgrade / release / mutation-testing /
+  autoclaw-design-capability / delivery-artifact 九份, memory-bank 本文件即轨道 runbook。
 - **包面**: 跟包根先例 —— `.commands/my-commit-flow/.my-commit-flow.toml` 与 `.commands/review/lane.toml`
   (两者同构: 数据在包根文件, 脚本只读不写)。
 - **sync 脚本例外**: `.agents/skills/.config/sync.toml`(点前缀, 防被 skill 遍历误收)—— S9 批次落地;
