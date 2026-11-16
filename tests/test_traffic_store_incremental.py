@@ -7,7 +7,9 @@
   下一步续解锚点无漂移); 每步确走增量路径(resume= 非 None)
 - test_incremental_size_shrink_and_same_size_full_reparse: R3 守卫 —— size 缩小(裁剪/重写)
   -> 全量重解析(resume=None); size 持平 mtime 变(同尺寸重写)-> 全量重解析; 结果均与
-  全量重解析等价
+  全量重解析等价(同尺寸步显式 os.utime 推进 mtime: 连续快速写入可能落同一 mtime 刻度
+  —— 键相同会命中陈旧缓存, 实测 flake; 全文件唯一同尺寸重写步, 探针/撕裂/OSError 等
+  用例的重写均伴随 size 变化不依赖 mtime, 产物逻辑不动)
 - test_incremental_torn_tail_full_parse_and_repair: 撕裂尾两面 —— (a) 首读即撕裂(末行有效
   无换行 / 末行坏半行两形态): 结果与全量重解析等价(torn_tail 口径同源), 不产续点;
   (b) 撕裂后追加(写侧 repair 前缀 \\n)-> 全量重解析(无续点可续), 结果等价; (c) 增量段内
@@ -173,7 +175,12 @@ def test_incremental_size_shrink_and_same_size_full_reparse(tmp_path, monkeypatc
     same_size = small[:-2] + "9\n"  # 末行改一位数字: 尺寸持平
     assert len(same_size.encode("utf-8")) == len(small.encode("utf-8"))
     calls.clear()
-    _write_day(data_dir, "global", same_size)
+    path = _write_day(data_dir, "global", same_size)
+    # 显式推进 mtime: 同尺寸重写只靠 (mtime_ns, size) 键的 mtime 分量失效, 连续快速写入
+    # 可能落进同一 mtime 刻度(键相同 -> 缓存命中返回陈旧解析, 实测 flake)—— 测试面对
+    # mtime 确定性(现值 +1ms 钉确定不同值), 产物逻辑不动(R3 口径内既有弱点, 重写罕见)
+    st = os.stat(path)
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
     got = cache.read_day("global", _DATE)
     assert got == real_parse(same_size)
     assert calls == [None], "size 持平(mtime 变)必须全量重解析"

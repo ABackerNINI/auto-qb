@@ -17,12 +17,12 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
 - window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
 - 读盘 v4(plan 26-10-04-1957 R2 换代立, 只读 qb-traffic-v4/ 新目录): raw 段窗(1m-24h)经
   V4DayCache.read_window 按窗口日期集合只读涉及天文件(窗首种子外扩一个桶宽, 24h 窗常态
-  2 个/窗首跨本地午夜边界时至多 3 个), 块序列 -> traffic_grid.v4_series_points 点位归属
-  归桶(26-11-15-1104 F2: 样本按 floor(ts/B)xB 落格, 桶速率 = 桶内样本差分和 / 覆盖时长
-  一次算定; D3 窗首种子 = 读文件外扩 grid.interval, 窗前样本作首桶差分基线) ->
-  v4_grid_obs 直映栅格桶观测; agg 段窗(3d/7d/30d/6mo/1y/all)经
-  V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶(3d+ 组图由
-  M×31 -> M×1 次文件读取; dl_avg 已是真均值, 不做差分变换)。
+  2 个/窗首跨本地午夜边界时至多 3 个), 块序列 -> traffic_grid 桶值单调缓存(F4-2/3,
+  26-11-15-1104 S2-2: 封口桶不可变按 系列 x 窗 驻留, 每请求只折增量槽 + 现算非封口桶,
+  折叠语义与 v4_series_points 同一实现) -> v4_grid_obs 直映栅格桶观测; agg 段窗
+  (3d/7d/30d/6mo/1y/all)经 V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按
+  kind 直映栅格桶(3d+ 组图由 M×31 -> M×1 次文件读取; dl_avg 已是真均值, 不做差分变换;
+  agg 段行直映本就毫秒级, 不设桶值缓存面)。
 - 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
   不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏;
@@ -49,6 +49,7 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
 from fastapi import HTTPException
 
 from ...core import traffic_grid as tg
+from ...core.traffic_grid import V4SeriesBucketCache
 from ...core.traffic_limits import LimitsCache, limits_events_for_window
 from ...core.traffic_store import (
     GLOBAL_KEY,
@@ -94,6 +95,11 @@ class QbTrafficChartApi:
         # data_dir 缺字段(测试替身 config)时落空串 = 未启用防御语义, 用法仍由 _feature_on 兜底
         self._v4cache = V4DayCache(getattr(manager.config, "data_dir", ""))
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
+        # 桶值单调缓存(26-11-15-1104 F4-2/3, S2-2): 封口桶不可变(T2/T3 定影定义单点对齐)
+        # 按 系列 x 窗 LRU 驻留, 每请求只折增量槽 + 现算开放面; 组图 Σ 成员查表复用同一
+        # 缓存(成员系列键即键面, 成员集变化 = 新成员首请求冷算, 组图无二级缓存, D5)。
+        # 实例随本装配体每域一份 —— 实例身份即隔离边界(qB 多实例不同 data_dir 不同实例)
+        self._bucketcache = V4SeriesBucketCache()
         # 限速历史读侧缓存(plan 26-10-12-0535 D3″): 构造期预建(同 issue 26-10-06-0028 时序
         # 契约); data_dir 缺字段时落空串 = 未启用防御语义(read_day 恒空)
         self._limitscache = LimitsCache(getattr(manager.config, "data_dir", ""))
@@ -104,6 +110,11 @@ class QbTrafficChartApi:
     def v4cache(self) -> V4DayCache:
         """v4 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; 构造期预建, 只读引用)"""
         return self._v4cache
+
+    @property
+    def bucketcache(self) -> V4SeriesBucketCache:
+        """桶值单调缓存(F4-2/3; 构造期预建, 只读引用)"""
+        return self._bucketcache
 
     @property
     def limitscache(self) -> LimitsCache:
@@ -272,6 +283,8 @@ class QbTrafficChartApi:
         if seg == "raw":
             grid = self._grid(window)
             seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 读文件外扩一个响应桶宽, 窗前样本作首桶差分基线
+            gap_bound = self._tail_gap_bound(grid)
+            sample = self._sample_interval()
             member_obs = []
             member_blocks = []
             member_has_tail = []
@@ -282,20 +295,22 @@ class QbTrafficChartApi:
             for h in tuple(members):
                 tail_slots = ()
                 try:
-                    days = self.v4cache.read_window(TORRENT_KEY_PREFIX + h, seed_t0, grid.t1)
+                    mkey = TORRENT_KEY_PREFIX + h
+                    days = self.v4cache.read_window(mkey, seed_t0, grid.t1)
                     blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
-                    tail = self._live_tail(TORRENT_KEY_PREFIX + h)
+                    tail = self._live_tail(mkey)
                     # F4 活尾延伸(仅 raw 段窗): 链端持有限界延伸到请求时刻 —— 尾桶恒有观测,
                     # 曲线终点恒落判定线(计划 26-11-14-1313; 停滞/断连不延伸, codec 侧裁决)
                     tail_slots = (
-                        v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
-                        if tail is not None else ()
+                        v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=gap_bound) if tail is not None else
+                        ()
                     )
+                    # F4-3 组图 Σ 成员缓存(26-11-15-1104 S2-2): 成员桶值查表(桶值单调缓存,
+                    # 成员系列键即键面)+ 开放面现算 —— 组聚合 Σ 仍每请求现算(§04.1 纯函数层,
+                    # M×~1ms 无需二级缓存, D5); 成员集变化 = 新成员首请求冷算(组图冷态豁免)
                     member_obs.append(
                         tg.v4_grid_obs(
-                            tg.v4_series_points(
-                                blocks, grid, tail_slots=tail_slots, gap_bound_s=self._tail_gap_bound(grid)
-                            ), grid
+                            self._bucketcache.series_points(mkey, days, grid, tail_slots, gap_bound, sample), grid
                         )
                     )
                 except OSError:
@@ -380,7 +395,6 @@ class QbTrafficChartApi:
             seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 读文件外扩一个响应桶宽, 窗前样本作首桶差分基线
             try:
                 days = self.v4cache.read_window(key, seed_t0, grid.t1)
-                blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                 tail = self._live_tail(key)
                 # F4 活尾延伸(仅 raw 段窗): 链端持有限界延伸到请求时刻 —— 尾桶恒有观测,
                 # 曲线终点恒落判定线(计划 26-11-14-1313; 停滞/断连不延伸, codec 侧裁决)
@@ -388,8 +402,10 @@ class QbTrafficChartApi:
                     v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
                     if tail is not None else ()
                 )
-                points = tg.v4_series_points(
-                    blocks, grid, tail_slots=tail_slots, gap_bound_s=self._tail_gap_bound(grid)
+                # F4-2 桶值单调缓存(26-11-15-1104 S2-2): 封口桶不可变(T2/T3 定影定义单点
+                # 对齐)按 系列 x 窗 驻留, 命中恒安全; 每请求只折增量槽 + 现算非封口桶
+                points = self._bucketcache.series_points(
+                    key, days, grid, tail_slots, self._tail_gap_bound(grid), self._sample_interval()
                 )
                 obs = tg.v4_grid_obs(points, grid)
                 degraded = False

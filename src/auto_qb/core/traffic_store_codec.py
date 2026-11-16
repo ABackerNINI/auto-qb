@@ -138,6 +138,103 @@ def v4_block_slots(block: "V4Block") -> tuple:
     return tuple(slots)
 
 
+#: 块级槽游标(F4-2 桶值单调缓存): (rec_idx, slots_done, anchor_t, run_base, run_spacing)
+#: - rec_idx = 消费停驻的记录下标; slots_done = 该记录已消费槽数(0 = 记录边界)。
+#: - slots_done == 0: anchor_t = dt 链锚点(上一已消费记录的槽位终点; rec_idx == 0 时 =
+#:   block.start_epoch), run_base/run_spacing 恒 None。
+#: - slots_done > 0: 停驻在游程记录(records[rec_idx], z/n 行)中部 —— anchor_t = 该游程
+#:   的槽位推算锚点(t), run_base/run_spacing = 该游程的 base/spacing(r 槽单槽记录不产
+#:   部分游标, 消费即整记录)。存锚点而非末槽 ts: 续展槽位表达式与全量展开逐位同式
+#:   (t + base + spacing x k), 浮点零漂移。
+_V4_BLOCK_CURSOR_START = (0, 0, None, None, None)
+
+
+def v4_block_slots_from(block: "V4Block", cursor: tuple, t1: Optional[float] = None) -> tuple:
+    """v4_block_slots 的游标续展形(F4-2, 计划 26-11-15-1104; dt 链定约同一实现的第二入口):
+    从游标 cursor 接续展开 block 的槽序, 返回 (slots, next_cursor, exhausted)。
+
+    - slots = 本段展开的全部槽(V4Slot 升序, 含 ts >= t1 的窗尾外槽 —— 调用方消费面
+      按 v4_series_points 同款窗尾过滤逐槽裁决, 本函数不代滤; 游标仍停在首个 ts >= t1
+      的槽, 窗尾外的槽下轮请求重展重判 —— 与全量现算「每请求按当时窗界消费」语义一致)。
+    - next_cursor 同构游标; exhausted = True 表示整块槽序展完(next_cursor 停块尾)。
+    - t1 = None: 全量展开(next_cursor 停块尾)。同游标起点 _V4_BLOCK_CURSOR_START、
+      t1=None 时 slots 与 v4_block_slots(block) 逐位相等(同一 dt 链实现的两形态, 槽位
+      表达式逐字同式; 守阵 test_traffic_grid_bucket_cache::test_block_slots_from_full_
+      equivalence 钉住)。
+    - 只认 V4 记录型(与 v4_block_slots 同判); 未知型 TypeError fail-fast。
+    """
+    rec_idx, slots_done, anchor_t, run_base, run_spacing = cursor
+    records = block.records
+    interval = float(block.interval_s)
+    slots: list = []
+    if slots_done:
+        # 游程中段续展: 余下槽 k = slots_done..run_len-1, ts = t + base + spacing x k
+        # (与全量展开同式逐位相等; 游标推进 = 游程实测终点, 同式)
+        rec = records[rec_idx]
+        if isinstance(rec, V4Sample) or not isinstance(rec, (V4ZeroRun, V4NullRun)):
+            raise TypeError(f"游标停驻记录须为游程型(z/n): {type(rec).__name__}")
+        run_len = rec.run_len
+        is_z = isinstance(rec, V4ZeroRun)
+        obs = (0, 0, rec.dl_total, rec.up_total) if is_z else None
+        t = anchor_t
+        base, spacing = run_base, run_spacing
+        for k in range(slots_done, run_len):
+            ts = t + base + spacing * k
+            if t1 is not None and ts >= t1:
+                return tuple(slots), (rec_idx, k, t, base, spacing), False
+            slots.append(V4Slot(ts=ts, dt_s=spacing, obs=obs, is_zero=is_z))
+        t += base + spacing * (run_len - 1)  # 游标 = 末槽 = 游程实测终点(链式自洽)
+        rec_idx += 1
+        slots_done = 0
+        anchor_t, run_base, run_spacing = t, None, None
+    else:
+        t = float(block.start_epoch) if anchor_t is None else anchor_t
+    for idx in range(rec_idx, len(records)):
+        rec = records[idx]
+        first = idx == 0
+        if isinstance(rec, V4Sample):
+            if first:
+                advance = 0.0  # 块首记录槽位恰在 B.start(其 dt 列无语义, 不消费)
+                dt_s = interval
+            else:
+                advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else interval
+                dt_s = advance
+            ts = t + advance
+            if t1 is not None and ts >= t1:
+                return tuple(slots), (idx, 0, t, None, None), False
+            slots.append(
+                V4Slot(
+                    ts=ts,
+                    dt_s=dt_s,
+                    obs=(rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total),
+                    is_zero=False,
+                )
+            )
+            t = ts
+            continue
+        if isinstance(rec, (V4ZeroRun, V4NullRun)):
+            run_len = rec.run_len
+            if first:
+                spacing = (rec.dt_ms / 1000.0) / (run_len - 1) if (rec.dt_ms is not None and run_len > 1) else interval
+                base = 0.0
+            else:
+                advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else run_len * interval
+                spacing = advance / run_len
+                base = spacing
+            is_z = isinstance(rec, V4ZeroRun)
+            obs = (0, 0, rec.dl_total, rec.up_total) if is_z else None
+            for k in range(run_len):
+                ts = t + base + spacing * k
+                if t1 is not None and ts >= t1:
+                    # 部分消费: 游标停驻游程中部(存锚点 t + base/spacing, 续展同式零漂移)
+                    return tuple(slots), (idx, k, t, base, spacing), False
+                slots.append(V4Slot(ts=ts, dt_s=spacing, obs=obs, is_zero=is_z))
+            t += base + spacing * (run_len - 1)  # 游标 = 末槽 = 游程实测终点(链式自洽)
+            continue
+        raise TypeError(f"未知块记录型: {type(rec).__name__}")
+    return tuple(slots), (len(records), 0, t, None, None), True
+
+
 def v4_z_totals_ramp(dl_open: int, up_open: int, dl_end: Optional[int], up_end: Optional[int], n: int) -> tuple:
     """z 游程 agg 累计快照逐槽摊配(形态 D, plan 26-10-16-1509 §04; 在线 _agg_feed 与
     离线 _agg_credit_day_file 共用同一纯函数 —— 镜像靠同源)。
