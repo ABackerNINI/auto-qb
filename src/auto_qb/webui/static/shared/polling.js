@@ -15,6 +15,14 @@ function _esDisconnectEdge(prev) {
  * 跨文件不变式: AQB_POLL_STALL_MS >= AQB_FETCH_TIMEOUT_MS(守阵 test_frontend_api_request_timeout)。 */
 const AQB_POLL_STALL_MS = 30000;
 
+/* immediate 轮询(F8/plan 26-11-15-1104 D4)首拍未真实执行前的重排间隔(ms): 首拍在途被 mutex
+ * 挡掉时, 重排不继承 arm 时刻读到的 period —— 冷开起拍时 meta 未落袋, ms() 常回 fallback
+ * 长周期(30s), 照搬就是「首拍立即了、下一拍仍在 30s 外干等」(G-F/D4 的原始症状面)。取
+ * 1500 = 采样间隔配置下限(qb_traffic_chart.js _QB_POLL_MIN_MS 同值): 直拉落定后下一拍即
+ * 回归节律, 落定前的重排只是空转计时(零请求), 不构成负载面(R6)。首拍真实执行后
+ * (st.first 清位)恢复全等旧语义 —— 非 immediate 调用方零行为变化。 */
+const AQB_POLL_FIRST_RETRY_MS = 1500;
+
 /* P-02 二期 S2a ingestion 物化的缺项待补队列(计划 26-11-11-0630 §03): key(组行 key) ->
  * 组行裸对象。物化时某个成员 hash 在索引(singles ∪ torrents)查不到 => 该槽保留原 hash
  * 字符串(绝不产 undefined 进消费位)并把行登记在此, 后续 applyStateRows 轮次经
@@ -154,6 +162,11 @@ window.AQB_POLL = {
      *     stallMs number              卡死阈值(ms), 默认 AQB_POLL_STALL_MS
      *     onStall () => void          超时后的补偿(默认只留一条警告痕)
      *     chain   bool                true = 等 fn 落定再排下一拍(不堆叠请求, 主轮用)
+     *     immediate bool              true = 首拍立即(不等首段 period; F8/plan 26-11-15-1104 D4:
+     *                                 冷开首拍不再 arm 成 30s fallback 干等 —— 打开路径直拉
+     *                                 在途时首拍被 mutex 挡掉, 首拍未真实拉数前按
+     *                                 AQB_POLL_FIRST_RETRY_MS 短重试重排, 直拉落定/首拍真实
+     *                                 执行后恢复节律周期; 不传 = 旧语义, 主轮/抽屉不受影响)
      *
      *   awaitPoll(key, opts) —— 有界等待(返回 Promise, 收敛即兑现, 耗尽/叫停兑现 null):
      *     ms      (n, prevMs) => number   节拍(定间隔返回常量; 退避曲线按 prevMs 翻倍)
@@ -195,12 +208,14 @@ window.AQB_POLL = {
     startPoll(key, opts) {
       this.stopPoll(key);
       if (!this._polls) this._polls = {};
-      const st = { alive: true, timer: null, stallAt: 0, period: 0 };
+      // first = immediate 轮询的「首拍尚未真实执行」记账: 首拍真实执行(或被 mutex 挡掉重排)
+      // 期间重排按 AQB_POLL_FIRST_RETRY_MS 短间隔, 首拍跑过 fn 即清位恢复节律(F8/D4)。
+      const st = { alive: true, timer: null, stallAt: 0, period: 0, first: opts.immediate === true };
       this._polls[key] = st;
       const arm = () => {
         if (!st.alive) return;
         st.period = opts.ms();
-        st.timer = setTimeout(beat, st.period);
+        st.timer = setTimeout(beat, st.first ? Math.min(st.period, AQB_POLL_FIRST_RETRY_MS) : st.period);
       };
       const beat = async () => {
         if (!st.alive) return;
@@ -221,11 +236,20 @@ window.AQB_POLL = {
           }
           if (opts.chain) await opts.fn();
           else opts.fn();
+          st.first = false;  // 首拍已真实执行: 后续重排恢复节律周期(F8; 首拍失败回 30s 兜底
+                             // 是既有 fallback 语义, 不在本项范围)
         }
         if (!st.alive) return;
         arm();
       };
-      arm();
+      if (opts.immediate === true) {
+        // F8(D4): 首拍立即 —— 冷开不再 arm 成 30s fallback 干等; 与开门直拉经 loading 互斥
+        // 兜底不双发(在途首拍被 mutex 挡掉, 按 AQB_POLL_FIRST_RETRY_MS 短重试直到直拉落定)。
+        st.period = opts.ms();
+        st.timer = setTimeout(beat, 0);
+      } else {
+        arm();
+      }
     },
     awaitPoll(key, opts) {
       if (key) this.stopPoll(key);

@@ -79,6 +79,7 @@ function makePayload(window, base) {
     meta: {
       window,                                  // 回显查询串: 同一份桩跨 window 重拉也不说谎
       interval_s: INTERVAL,                    // 30m/24h 同为 raw 段窗, 桶宽 = 采样间隔 30s(契约真值)
+      sample_interval_s: INTERVAL,             // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔
       source: 'qb',
       stale: false,
       // 远在「链末桶前一桶起点」之前 => _qbSeamHint 出 null(不给「数据接缝中」行)。本 spec 不
@@ -267,6 +268,7 @@ test.describe('种子流量图 · R5 末桶为进行中桶且无观测(不做伪
           meta: {
             window: w,
             interval_s: INTERVAL,
+            sample_interval_s: INTERVAL,   // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔
             source: 'qb',
             stale: false,
             // 远在链末桶之前 -> _qbSeamHint 出 null(「非重启贴近链末」形态, 伪接缝面的对照前提)

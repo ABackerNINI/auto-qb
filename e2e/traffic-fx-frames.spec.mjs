@@ -55,7 +55,10 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * 真契约形状的 60 桶帧。A 用 interval_s=2(轮询 2s 一拍 = beat 800ms, 三拍 ~7s 采完)且
  * **每次请求恰推进一格**(计数器递增 base, 与墙钟解耦 —— roll 判据 dx0 <= 2 格恒成立);
  * 值恒定 -> L1 静默(needsTail=false), 拍只剩 L0 视口左移, 边界断言不被数值收敛干扰。
- * B 用 interval_s=30(轮询 30s 一拍, 断言窗内无真拍来抢预览)且 base 固定(数据静止)。
+ * B 用 interval_s=30(si=30 -> 轮询 30s 一拍)且 base 固定(数据静止): F8 后开场 ~1.5s 有一发
+ * 首拍重试拉数(真零变化拍, F6 后带 fx-only anim), 其后 30s 内无真拍 —— 预览交互前经
+ * waitForFirstRetryBeat 等第二笔真拍落地, 预览语义断言吃 isPreview 令牌过滤(真拍帧不进
+ * 预览断言域)。
  *
  * S3a 复核(plan 26-11-14-1313, B5 批): F3 栅格 floor+1(尾桶恒「进行中桶」)与 F1 恒 >=Lv.1
  * 落地后逐条对照本文件的判据面 —— 结论:
@@ -84,6 +87,10 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * 判据误判换档即签名缺席); 翻动拍二(497->498 形: 起点不动/末点 +1 格/点数 +1)不 rewin 且
  * 入 roll(dx0=0 位移在 max 侧 —— 评审轮1 finding1 roll 放宽): L0 照播(min 恒驻/max 滑一格),
  * 旧判据瞬跳或 roll 门未放宽缺席即签名红。
+ *
+ * A3 零变化拍环境层解绑(F6/D3, plan 26-11-15-1104)追加在文件尾部: 稳态零变化拍(base 固定
+ * -> dx0=0, 值恒正 -> needsTail false)每拍 anim.fx 在场 lv>=1 + needsShift/needsTail 双 false
+ * 签名 + 数据/视口面零改写 —— G-C「粒子时有无」根治面的真机钉(旧判据该类拍整拍静默)。
  *
  * C(裁剪面机制探针, F5/plan 26-11-14-1313, A6 的真机面; B5 改渲染对齐记账): 原版在 rAF
  *   渲染间读右缘带像素 —— 本环境实测渲染管线落定后的画布读不到装饰墨(B5 取证: 装饰墨只在
@@ -115,6 +122,8 @@ function makePayload(base, interval, vals) {
     meta: {
       window: '24h',                 // 前端不校验 points 长度 vs window(traffic-gap-zones 同款偏差)
       interval_s: interval,
+      // F7(plan 26-11-15-1104 D6)后轮询节奏读生效采样间隔 —— 生产 _meta 单点全窗携带, 桩对齐
+      sample_interval_s: interval,
       source: 'qb',
       stale: false,
       server_started_at: base - 3600,  // 远在链末前 -> 接缝提示出 null, 不干扰
@@ -141,12 +150,24 @@ async function stubTrafficAdvancing(page) {
 }
 
 
-/** B 用: base 固定(数据静止), interval_s=30 -> 断言窗内无真拍 */
+/** B 用: base 固定(数据静止), si=30 -> 轮询 30s 一拍: F8 后开场 ~1.5s 有一发首拍重试真拍,
+ * 其后 30s 内无真拍(预览交互前经 waitForFirstRetryBeat 垫过首拍窗口) */
 async function stubTrafficStill(page) {
   const interval = 30;
   const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
   await page.route('**/api/traffic/qb/torrent/*', (route) =>
     route.fulfill({ json: makePayload(b0, interval) }));
+}
+
+/** A3 零变化拍用(F6/D3, plan 26-11-15-1104): base 固定(窗起点不动 -> dx0=0 -> roll=false)
+ * + 值恒正(稳态流) -> 每拍 needsShift/needsTail 双 false(零变化拍); interval_s=2 快拍。
+ * 旧判据(spawn 在早退门后)这类拍整拍静默 —— F6 后每拍出环境层。 */
+async function stubTrafficZeroChange(page) {
+  const interval = 2;
+  const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;
+  await page.route('**/api/traffic/qb/torrent/*', (route) =>
+    route.fulfill({ json: makePayload(b0, interval) }));
+  return interval;
 }
 
 /** A3 用: 每次请求恰推进一格 + 两轨速率恒 0(真 0 稳态流 —— A3 的「零流量但采样活跃」形态) */
@@ -240,6 +261,7 @@ async function stubTrafficScripted(page, n0, interval, windowLabel, script) {
       meta: {
         window: windowLabel,
         interval_s: interval,
+        sample_interval_s: interval,   // F7/D6: 轮询节奏读生效采样间隔, 桩对齐生产契约
         source: 'qb',
         stale: false,
         server_started_at: t0 - 3600,
@@ -284,6 +306,22 @@ async function rearmTrafficPoll(page, drawer) {
   await expect.poll(() => readInst(page, 'vm._qbPollMs("torrent")'), {
     message: '轮询周期未重排到 interval_s 档(数据未落袋时的 fallback 30s 还在)', timeout: 15_000,
   }).toBeLessThanOrEqual(2100);
+}
+
+/** F8 首拍重试窗口垫(预览两案 B/B5 用, 评审轮1 minor): 判定帧只挂续拉快路(_qbBeatStart
+ * 唯一调用点), 开门直拉走全量建图不起判定帧 —— fxBeatAt 的**首次写入恰 = F8 首拍重试拉数
+ * (~1.5s)落地的真拍判定**(诊断实测: 直拉落袋 meta 已在而 fxBeatAt 恒 0, 重试拍判定才写)。
+ * 再等 anim 归位(主区 ~0.6s + 次区 ~2s 全清)—— 下一真拍在 30s 档之外, 预览点击从此既不会
+ * 被快路真值抢占(把预览采样窗截断在硬钉 >=3 帧之前, 间歇红面), 也不会撞上真拍主区在途
+ * (§05.4 第 4 条: 主区在途预览被忽略不起拍 -> 预览永不收场)。页面侧状态判定, 零睡等。 */
+async function waitForFirstRetryBeat(page) {
+  await expect.poll(() => readInst(page, `(() => {
+    const u = vm._qbCharts && vm._qbCharts.torrent;
+    return (vm.fxBeatAt || 0) > 0 && !!u && !!u._qbBeat && !u._qbBeat.anim;
+  })()`), {
+    message: 'F8 首拍重试真拍未完全落地归位(fxBeatAt 未写或 anim 未清 —— 预览窗会被真值抢占'
+      + '/主区在途忽略截断)', timeout: 15_000,
+  }).toBe(true);
 }
 
 /** 图记录快照(xs 界值/尾值/x 尺) —— 预览前后各取一次, 断言「真值零改写 + 末帧还原」 */
@@ -474,6 +512,7 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
       await stubTrafficStill(page);
       await openApp(page, skin);
       const drawer = await openTorrentTraffic(page);
+      await waitForFirstRetryBeat(page);   // 评审轮1 minor: F8 首拍重试真拍落地后才开预览(抢占截断间歇红)
 
       /* 开面板 -> 高级折叠 -> 把竖扫回声行程钉到 100px(真手势改字段; 回声 span 100 让
        * 探针点 R-130 站在装饰行程之外) */
@@ -595,23 +634,25 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
        * 下限 3 只吃「预览在途 rAF 完全饿死」的病理形态, 常规负载余量一个量级。
        * 逐帧不变性断言(min/max/xsCks/背景两点)与帧数无关 —— 帧距变大只降低采样密度。 */
       expect(frames.length, '采样窗应有 >= 3 帧(采样器须跨过预览收场边界)').toBeGreaterThanOrEqual(3);
-      const animFrames = frames.filter((f) => f.anim);
-      expect(animFrames.length, '预览动画必须有采样帧(预览一拍真的跑了; 600ms 窗在慢机约 3-4 帧)')
+      /* F8/F6 后本桩(静态正值)开场 ~1.5s 处有一次首拍重试拉数 -> 真零变化拍(anim 在场但非
+       * 预览)。预览语义断言只吃**预览帧**(isPreview 令牌过滤); 全帧不变量(min/max/xsCks/
+       * 背景两点)仍吃全窗 —— 零变化拍零视口/数据提交, 装饰行程不达探针点, 两类帧同窗成立。 */
+      const previewFrames = frames.filter((f) => f.isPreview);
+      expect(previewFrames.length, '预览动画必须有采样帧(预览一拍真的跑了; 600ms 窗在慢机约 3-4 帧)')
         .toBeGreaterThanOrEqual(3);
 
-      /* 全帧不变量: xs 列与 x 尺逐帧不变(§05.9: 预览不动数据面) */
+      /* 全帧不变量: xs 列与 x 尺逐帧不变(§05.9: 预览不动数据面; 零变化真拍同不改写) */
       for (const f of frames) {
-        expect(f.min, 'u.scales.x.min 逐帧不变(预览零 setScale x)').toBe(snap.min);
+        expect(f.min, 'u.scales.x.min 逐帧不变(预览/零变化拍零 setScale x)').toBe(snap.min);
         expect(f.max, 'u.scales.x.max 逐帧不变').toBe(snap.max);
         expect(f.xsCks, 'u.data[0] 逐帧不变(窗口列零变化)').toBe(snap.xsCks);
       }
       /* 预览帧语义: preview 令牌在场 + dx ≡ 0 + 粒子预算 */
-      for (const f of animFrames) {
-        expect(f.isPreview, '动画帧必须携带 preview 令牌(不是真拍)').toBe(true);
+      for (const f of previewFrames) {
         expect(f.dx0, '预览 dx ≡ 0(不动窗口)').toBe(0);
         expect(f.parts, '粒子 spawn 清单合计必须 <= 32(I9 两轨合计)').toBeLessThanOrEqual(32);
       }
-      expect(animFrames[0].parts, '预览假 Δ(Lv.2+)必须有装饰清单在场(零装饰=探针空转)').toBeGreaterThanOrEqual(2);
+      expect(previewFrames[0].parts, '预览假 Δ(Lv.2+)必须有装饰清单在场(零装饰=探针空转)').toBeGreaterThanOrEqual(2);
 
       /* G5 背景两点: 整窗每帧 alpha 恒 0(任何铺底/呼吸即红)且两点相等(均未落墨) */
       for (const f of frames) {
@@ -649,6 +690,7 @@ test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; 
       await stubTrafficBottom(page);
       await openApp(page, skin);
       const drawer = await openTorrentTraffic(page);
+      await waitForFirstRetryBeat(page);   // 同 B: F8 首拍重试真拍落地后才开预览(记账窗被抢占截断)
 
       await drawer.locator('.qb-chart-host').click({ button: 'right' });
       const panel = page.locator('.fx-panel');
@@ -1197,6 +1239,92 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
           + '一格 —— 旧点数判据误判换档或 roll 门未放宽致该拍瞬跳/缺席即红)'
           + ` 实测拍段签名: ${runSig}`).toBe(true);
       }
+    });
+  }
+});
+
+test.describe('节拍动效 · A3 零变化拍环境层解绑(F6/D3, plan 26-11-15-1104)', () => {
+  installRuntimeErrorGuard(test);
+
+  for (const skin of SKINS) {
+    test(`[${skin}] 24h 窗零变化拍: 每拍 anim.fx 恒在场 lv>=1(环境层与早退门解绑)+ 数据/视口面零动画 @fast`, async ({ page }) => {
+      /* A3(计划 §04 S3 行 / §06 D3): 稳态流量(尾桶值恒定且 >0)在零变化拍(needsShift/
+       * needsTail 双 false —— 24h 生产窗 cellPx < 0.75 阈值 -> needsShift 恒 false, 稳态尾值
+       * 不变 -> needsTail false)每拍出环境层(扫描/粒子/环, Lv.1 下限)—— G-C「粒子时有无」
+       * 的根治面: 旧 spawn 判定帧在早退门之后, 稳态零变化拍整拍被挡。桩 = base 固定(窗起点
+       * 不动, dx0=0 -> roll=false)+ 值恒正; 数据面零动画保留面同步钉(anim 不带 shift/tail,
+       * 视口/尾值逐帧恒真值)。真 0 对照面(值恒 0 -> spawn null 整拍静默)归既有 A3 零流量用例。 */
+      await stubFlags(page);
+      await stubTrafficZeroChange(page);
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      await rearmTrafficPoll(page, drawer);
+
+      /* 页面侧 rAF 采样器(A1 同款拍段计数): 每帧记 anim 相位/fx 等级/needsShift/needsTail/
+       * x 尺/尾值。零变化拍签名 = anim 在场但 needsShift/needsTail 双 false(与 L0 拍区分)。 */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        const u = vm._qbCharts && vm._qbCharts.torrent;
+        if (!u || !u.ctx || !u.bbox) throw new Error('unbuilt');
+        window.__a3z = { frames: [], starts: 0, prevImpact: false, done: false };
+        const tick = () => {
+          const s1 = window.__a3z;
+          if (s1.done) return;
+          const u2 = vm._qbCharts && vm._qbCharts.torrent;
+          if (u2 && u2.ctx && u2.data && u2.data.length) {
+            const a = u2._qbBeat && u2._qbBeat.anim;
+            const xs = u2.data[0];
+            const n = xs.length;
+            s1.frames.push({
+              anim: !!a,
+              phase: a ? a.phase : null,
+              fxLv: a && a.fx ? a.fx.lv : 0,
+              shift: a ? !!a.needsShift : null,
+              tail: a ? !!a.needsTail : null,
+              min: u2.scales.x.min,
+              max: u2.scales.x.max,
+              tailUp: u2.data[1] ? u2.data[1][n - 1] : null,
+              tailDl: u2.data[2] ? u2.data[2][n - 1] : null,
+            });
+            const inImpact = !!(a && a.phase !== 'tail');
+            if (inImpact && !s1.prevImpact) s1.starts++;
+            s1.prevImpact = inImpact;
+            if (s1.starts >= 3 && !inImpact) s1.done = true;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      })()`);
+      await expect.poll(() => readInst(page, 'window.__a3z === undefined ? false : window.__a3z.done === true'), {
+        message: '三个零变化拍段未在预算内采满(轮询 2s 一拍, 三拍约 7s; 超时=轮询/节拍链路断了)',
+        timeout: 30_000,
+      }).toBe(true);
+      const frames = await page.evaluate(() => window.__a3z.frames);
+      const runs = beatRuns(frames);
+      expect(runs.length, '采样窗内应记录到 >= 3 个零变化拍段').toBeGreaterThanOrEqual(3);
+
+      /* A3 本体: 每个零变化拍 anim.fx 在场且 lv>=1(F6/D3 —— spawn 与早退门解绑), 且该拍
+       * anim 不带 shift/tail(数据面零动画保留面)。needsShift=false 的签名与 L0 拍(A1)区分
+       * —— 旧判据下这类拍 anim 整段缺席(整拍静默), anim 在场即解绑生效。 */
+      for (let i = 0; i < runs.length; i++) {
+        const lvMax = Math.max(...runs[i].map((f) => f.fxLv));
+        expect(lvMax, `第 ${i + 1} 拍 anim.fx 最大等级 ${lvMax} 必须 >= 1(A3/F6: 零变化拍环境层`
+          + '每拍在场 —— 旧判据整拍静默即缺席)').toBeGreaterThanOrEqual(1);
+        expect(runs[i].every((f) => f.shift === false),
+          `第 ${i + 1} 拍 needsShift 恒 false(零变化拍签名 —— 桩 base 固定)`).toBe(true);
+        expect(runs[i].every((f) => f.tail === false),
+          `第 ${i + 1} 拍 needsTail 恒 false(数据面零动画保留面)`).toBe(true);
+      }
+
+      /* 数据/视口面零改写(I4/L0 零 rAF 保留): 尾值与 x 尺全程恒定(无 L0 摆回、无 L1 收敛) */
+      const f0 = frames[0];
+      for (const f of frames) {
+        expect(f.tailUp, '上传尾值逐帧恒定(数据面零改写)').toBe(f0.tailUp);
+        expect(f.tailDl, '下载尾值逐帧恒定').toBe(f0.tailDl);
+        expect(f.min, 'x 尺 min 逐帧恒定(零变化拍零视口提交)').toBe(f0.min);
+        expect(f.max, 'x 尺 max 逐帧恒定').toBe(f0.max);
+      }
+      expect(f0.tailUp, '稳态流尾值应为正值(值>0 前提)').toBeGreaterThan(0);
     });
   }
 });

@@ -312,7 +312,8 @@ window.AQB_DRAWER_STORE = {
       } else if (tab === "content") this._fetchDrawerFiles(false, seq);
       // 流量页签(S5b, plan 26-10-03-0946 §07 表(2)): 数据源 /api/traffic/qb/torrent/{hash};
       // 打开时拉取一次 + 打开期间按采样间隔低频续拉(qb_traffic_chart.js _qbPollStart,
-      // meta.interval_s 取间隔), 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收 ——
+      // F7/26-11-15-1104 D6 起 meta.sample_interval_s 取间隔全窗统一, 首拍 immediate 不再
+      // arm 成 30s fallback), 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收 ——
       // hash 上下文竞态(换目标后旧响应)在 _qbLoad 的 stale 判定里丢弃
       else if (tab === "traffic" && this.qbTrafficOn) {
         this._qbLoad("torrent");

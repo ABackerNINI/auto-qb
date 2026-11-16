@@ -36,8 +36,9 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *        (双保险同结果) —— 锚不出现。
  *
  * 桩口径(traffic-fx-frames 同款): 只翻 qb_traffic_enabled; /api/traffic/qb/torrent/* 造真
- * 契约形状的 60 桶帧, base 固定 + interval_s=30 —— 断言窗内无真拍(数据静止, 锚位稳定,
- * 对齐断言不被 L0/L1 收敛干扰)。
+ * 契约形状的 60 桶帧, base 固定 + si=30(轮询 30s 一拍)—— 数据静止锚位稳定; F8 后开场
+ * ~1.5s 有一发首拍重试真拍(零变化拍: 数据/锚位/显示值都不动), 其后 30s 内无真拍 ——
+ * 断言读锚位与真值面, 与拍无关, 不受首拍窗口影响。
  */
 
 const N = 60;
@@ -57,6 +58,7 @@ function makePayload(base, interval) {
     meta: {
       window: '24h',
       interval_s: interval,
+      sample_interval_s: interval,   // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔, 桩对齐生产契约
       source: 'qb',
       stale: false,
       server_started_at: base - 3600,
@@ -71,7 +73,8 @@ async function stubFlags(page) {
   });
 }
 
-/** base 固定(数据静止) + interval_s=30 -> 断言窗内无真拍(traffic-fx-frames B 用同款) */
+/** base 固定(数据静止) + si=30(轮询 30s 一拍; F8 后开场 ~1.5s 一发首拍重试零变化拍,
+ * 数据/锚位不动, traffic-fx-frames B 用同款) */
 async function stubTrafficStill(page) {
   const interval = 30;
   const b0 = Math.floor(Date.now() / 1000 / interval) * interval - (N - 1) * interval;

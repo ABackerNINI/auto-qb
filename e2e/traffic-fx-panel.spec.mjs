@@ -33,6 +33,8 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *     的 strict-mode 计数靠「面板不进该选择器」成立, 这里显式钉住。
  *   · 状态行采样口径两形态(F6/plan 26-11-14-1313 A7): sample_interval_s != interval_s ->
  *     「采样 X s · 桶宽 Y s」两值; 相等/缺键 -> 维持单值(B1 后端只增键的前端消费面)。
+ *   · 两行同源(F7/plan 26-11-15-1104 A7): beat/周期派生量与采样行都从 sample_interval_s 来
+ *     —— si=1.5/iv=174 下 beat 600ms(旧口径吃桶宽恒 1000ms 即回潮)+ _qbPollMs 实算 1500。
  *
  * 桩口径(traffic-gap-zones.spec 同款纪律): 只翻 qb_traffic_enabled 一个比特, 其余放行真值;
  * /api/traffic/qb/torrent/* 造一份真契约形状的**恒定**帧(60 桶, 桶值不变) —— 恒定数据下
@@ -422,8 +424,49 @@ test.describe('动效数值面板 · 状态行采样口径两形态(F6/A7, plan 
         .toContainText('采样 20.0 s · 桶宽 30.0 s');
       await expect(status, '两值形态不得再把桶宽冒充采样值(旧口径「采样 30.0 s」即回潮)')
         .not.toContainText('采样 30.0 s');
-      /* beat/周期派生量仍锚 interval_s(F6 口径不变面): beat = _qbBeatMs(30000) = 1000ms */
+      /* beat/周期派生量自 F7/D6(26-11-15-1104)锚 sample_interval_s: beat = _qbBeatMs(20000)
+       * = 1000ms(x0.4 后撞 1s 夹顶 —— 与旧口径吃 interval_s=30 的数值恰同, 判别面在 A7 同源
+       * 用例 si=1.5/iv=174 -> beat 600ms) */
       await expect(status).toContainText('beat 1000 ms');
+    });
+
+    test(`[${skin}] A7 两行同源(F7/D6): si=1.5/iv=174 -> 「采样 1.5 s · 桶宽 174.0 s」+ beat 600 ms(拍/周期派生量与采样行同源, 不再吃桶宽) @fast`, async ({ page }) => {
+      /* A7(plan 26-11-15-1104): F7/D6 后 beat/周期派生量(_qbFxCurPeriodMs -> _qbPollMs)与
+       * 采样行(qbFxSampleText)都从 meta.sample_interval_s 来 —— 状态行两组值同源一致。
+       * 判别面: 24h 形(si=1.5, 桶宽 174)下 beat = _qbBeatMs(1500) = 600ms; 旧口径(吃桶宽
+       * 174s)beat 恒 1000ms 即回潮。轮询实算面同步钉 _qbPollMs === 1500。 */
+      await stubFlags(page);
+      const IV = 174;
+      const base = Math.floor(Date.now() / 1000 / IV) * IV - (N - 1) * IV;
+      const points = [];
+      const totals = [];
+      for (let i = 0; i < N; i++) {
+        const t = base + i * IV;
+        points.push({ t, dl: 2000, up: 1000 });
+        totals.push({ t, dl: 2000, up: 1000 });
+      }
+      await page.route('**/api/traffic/qb/torrent/*', (route) => route.fulfill({ json: {
+        points, totals, limits: [],
+        meta: {
+          window: '24h',
+          interval_s: IV,
+          sample_interval_s: 1.5,   // F7/D6: 轮询节奏 = 生效采样间隔(生产 si=1.5)
+          source: 'qb',
+          stale: false,
+          server_started_at: base - 3600,
+        },
+      } }));
+      await openApp(page, skin);
+      const drawer = await openTorrentTraffic(page);
+      const panel = await openFxPanelByRightClick(page, drawer.locator('.qb-chart-host'));
+      const status = panel.locator('.fx-status');
+      await expect(status, '采样行显示两值形态(采样 1.5 / 桶宽 174)')
+        .toContainText('采样 1.5 s · 桶宽 174.0 s');
+      await expect(status, 'beat 600ms = _qbBeatMs(1500): 拍/周期派生量与采样行同源(si)'
+        + ' —— 显示 1000 ms 即旧口径吃桶宽回潮').toContainText('beat 600 ms');
+      await expect.poll(() => readInst(page, 'vm._qbPollMs("torrent")'), {
+        message: '轮询实算未落到采样间隔档(F7/D6 全窗统一 —— 读回桶宽即旧口径回潮)', timeout: 15_000,
+      }).toBe(1500);
     });
 
     test(`[${skin}] 单值形态: sample_interval_s == interval_s(30) -> 维持「采样 30.0 s」单值 @fast`, async ({ page }) => {

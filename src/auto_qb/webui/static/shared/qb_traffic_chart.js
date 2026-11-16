@@ -18,11 +18,11 @@
  * 同一拖拽高度(drawerHeightPx)与同一段正文块(drawer.html qbTrafficActive), 故建图落点统一
  * ref="qbChartHost"(同一时刻只渲染一个流量形态)。
  *
- * 低频轮询(§07 表「轮询/取数」列): 打开期间按采样间隔续拉 —— 间隔从最近响应 meta.interval_s
- * 取(raw 段窗(1m-24h)即采样间隔; agg 段窗(3d/7d/30d/6mo/1y/all) meta 是桶宽(3600s/86400s/
- * 标称月长)而非采样间隔, 夹取到配置校验上界 600s), 取不到回退 30s 常量; 页面隐藏跳过由轮询
- * 骨架(polling.js::startPoll)恒等守卫兜; 关闭/切走形态由 _stopDrawerPoll / _qbTeardown 显式
- * stopPoll —— 只挂打开期间, 不后台常驻。
+ * 低频轮询(§07 表「轮询/取数」列): 打开期间按采样间隔续拉 —— 间隔从最近响应
+ * meta.sample_interval_s(生效采样间隔, F7/26-11-15-1104 D6 起全窗统一, 「低频轮询=桶宽」
+ * 旧口径已反转)取, [1.5s,600s] 防御夹取, 缺键/非法(旧缓存降级响应)回退 30s 常量; 页面隐藏
+ * 跳过由轮询骨架(polling.js::startPoll)恒等守卫兜; 关闭/切走形态由 _stopDrawerPoll /
+ * _qbTeardown 显式 stopPoll —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
  * 静默续拉(2026-10-04 修「每隔几秒闪一次」; 2026-10-05 补齐空态/错误态): 续拉对用户不可见 ——
@@ -120,10 +120,12 @@
  */
 /* global uPlot */
 
-/* 轮询间隔边界(ms): 夹取下界 = 配置校验下限 1.5s(§06, A4: 采样间隔下限放宽后同步对齐,
- * 上界 = 配置校验上限 600s (hour 及以上段窗(3d/7d/30d/6mo/1y/all) meta.interval_s 是桶宽
- * 而非采样间隔(3600s/86400s/标称月长), 按它直拉等于一小时不刷新 —— 夹到上界保低频续拉
- * 语义); meta 缺失/非法回退 30s 常量(plan §07「采样间隔」基准值)。 */
+/* 轮询间隔边界(ms): 夹取下界 = 配置校验下限 1.5s(§06, A4: 采样间隔下限放宽后同步对齐),
+ * 上界 = 配置校验上限 600s(纯防御夹取 —— 正常配置恒不触界)。F7(plan 26-11-15-1104 D6)
+ * 起轮询读 meta.sample_interval_s(生效采样间隔, 后端 _meta 装配单点全窗携带)全窗统一,
+ * 「低频轮询 = 桶宽」旧口径(interval_s, 长窗一拍迟钝至 30s~174s)正式反转 —— 上界不再是
+ * hour 段窗桶宽的续拉语义, 只防后端异常值; meta 缺失/非法回退 30s 常量(plan §07「采样
+ * 间隔」基准值)。 */
 const _QB_POLL_MIN_MS = 1500;
 const _QB_POLL_MAX_MS = 600000;
 const _QB_POLL_FALLBACK_MS = 30000;
@@ -1285,9 +1287,10 @@ window.AQB_QB_TRAFFIC = {
     },
     /* F6 显示口径(plan 26-11-14-1313): 「采样」读 meta.sample_interval_s(B1 只增键, 生效采样
      * 间隔), 与 meta.interval_s(桶宽)不等时两值「X s · 桶宽 Y s」; 相等或缺失回落现状单值
-     * (qbFxPeriodS = _qbPollMs 实算, 口径不变)。两值面读 raw meta(采样间隔/桶宽都是事实值,
-     * 不吃轮询夹取 —— hour 段窗桶宽 3600s 夹到 600s 就读错值了); beat/轮询派生量仍单点锚
-     * _qbFxCurPeriodMs(interval_s 夹取), 本 computed 只改显示文案不改节律。 */
+     * (qbFxPeriodS = _qbPollMs 实算)。两值面读 raw meta(采样间隔/桶宽都是事实值,
+     * 不吃轮询夹取 —— hour 段窗桶宽 3600s 夹到 600s 就读错值了)。F7(plan 26-11-15-1104 D6)
+     * 后 beat/轮询派生量单点锚 _qbFxCurPeriodMs 同读 sample_interval_s 夹取 —— 状态行两组值
+     * (采样/beat·周期)同源一致, 本 computed 只改显示文案不改节律。 */
     qbFxSampleText() {
       const s = this.qbCurScope;
       const d = s ? this[_QB_SCOPES[s].data] : null;
@@ -1913,17 +1916,28 @@ window.AQB_QB_TRAFFIC = {
       const n = (d.points && d.points.length) || 0;
       return { buckets: n, up: sum("up"), down: sum("dl") };
     },
-    /* ---------------- 低频轮询(§07; 打开期间挂, 关闭/切走即清) ---------------- */
+    /* ---------------- 低频轮询(§07; 打开期间挂, 关闭/切走即清) ----------------
+     * F7(plan 26-11-15-1104 D6): 节拍 = meta.sample_interval_s(生效采样间隔)夹取, 全窗统一
+     * —— 「低频轮询 = 桶宽」旧口径(读 meta.interval_s)正式反转: 桶宽加宽后长窗一拍迟钝至
+     * 30s~174s, 与毫秒级读侧能力错配(G-F)。sample_interval_s 是后端 _meta 装配单点全窗携带
+     * 的键(26-11-14-1313 F6 只增键, 后端零改); 面板「采样」行(qbFxSampleText)与 beat/周期
+     * 派生量(qbFxPeriodS/qbFxBeatMs -> _qbFxCurPeriodMs)自此同源。缺键/非法(旧缓存降级响应,
+     * 只带 interval_s 的旧形状)回退 30s。 */
     _qbPollMs(scope) {
       const def = _QB_SCOPES[scope];
       const d = this[def.data];
-      const s = Number(d && d.meta && d.meta.interval_s);
+      const s = Number(d && d.meta && d.meta.sample_interval_s);
       if (!(s > 0)) return _QB_POLL_FALLBACK_MS;
       return Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000));
     },
     /* 低频轮询走长驻骨架(polling.js::startPoll 单点, 2026-10-22): 这里只声明差异 ——
-     *   - 节拍 = 采样间隔夹取(_qbPollMs); 骨架每拍重读间隔 => 换窗跨段(raw <-> hour)自动重排,
-     *     不再需要单独的 resync 钩子(旧 _qbPollResync 随本轮收敛删除)。
+     *   - 节拍 = 采样间隔夹取(_qbPollMs, F7/26-11-15-1104 D6 起读 meta.sample_interval_s);
+     *     骨架每拍重读间隔 => 换窗跨段(raw <-> hour)自动重排, 不再需要单独的 resync 钩子
+     *     (旧 _qbPollResync 随本轮收敛删除)。
+     *   - 首拍立即(F8/D4, immediate: true): 打开路径 = _qbLoad 直拉 + _qbPollStart 同拍先后
+     *     脚 —— 起拍时 meta 多半未落袋, 旧骨架首拍 arm 成 30s fallback 干等一整个周期; 首拍
+     *     立即后该拍与直拉经 loading 互斥兜底(在途被 mutex 跳过, 按短重试重排到直拉落定),
+     *     不双发; 冷开 30s 干等消失。 R6: loading 互斥 + 骨架 stall 兜底保留不变。
      *   - 守卫 = 图还活跃(def.active); 页面隐藏由骨架恒等守卫兜, 不再手写。
      *   - 在途互斥(loading, 在 _qbLoad finally 归位)+ 悬挂兜底: 骨架统一做 —— 卡死判据就是
      *     loading 本身, 未超时前挡拍(mutex), 超阈值强制续拉并留一次警告痕(issue 26-10-16-0954
@@ -1932,6 +1946,7 @@ window.AQB_QB_TRAFFIC = {
     _qbPollStart(scope) {
       this._qbPollStop(scope);
       this.startPoll(`qb:${scope}`, {
+        immediate: true,
         ms: () => this._qbPollMs(scope),
         fn: () => this._qbLoad(scope),
         guard: () => _QB_SCOPES[scope].active(this),
@@ -2839,9 +2854,26 @@ window.AQB_QB_TRAFFIC = {
       const needsTail = !rewin && ((tr.up.live && tr.up.prev !== tr.up.target)
         || (tr.dl.live && tr.dl.prev !== tr.dl.target));
       if (!needsShift && !needsTail) {
-        // 零变化拍/不可见位移拍: 瞬时落地(u.data 未被改写本就是真值), 零 rAF(D2 静默)
+        // 零变化拍/不可见位移拍: 数据面瞬时落地(u.data 未被改写本就是真值), L0/L1 零 rAF
+        // 优化保留(不播视口摆回/数值收敛 —— D2 的数据静默半边)。
         tr.up.shown = tr.up.target;
         tr.dl.shown = tr.dl.target;
+        // F6 环境层解绑(plan 26-11-15-1104 D3): fx spawn 判据 = lead 等级 >=1, 与本
+        // needsShift||needsTail 早退门解绑 —— 26-11-14-1313 D1(值>0 恒 >=Lv.1)贯彻到全窗,
+        // 稳态流量零变化拍不再整拍静默(G-C「粒子时有时无」根治: 24h 窗 cellPx < 0.75 阈值
+        // -> needsShift 恒 false, 叠加稳态尾值不变 -> needsTail false, 旧 spawn 在门之后
+        // 整拍被挡)。spawn 返回 null(双轨真 0/缺口, lead=null)仍零装饰零 anim(I10/D2,
+        // 数据面与装饰面同口径静默); 带 fx 的拍只跑 fx 的 impact 窗: anim 不带 shift/tail,
+        // 帧循环 L0/L1 块整体跳过(数据面零 rAF), 收敛帧照常清场(补点摘除/锚同步/次区衔接
+        // 全走既有单点 —— dxMin0/dxN/pad 等视口字段在 needsShift=false 下为惰性, 恒 0/直传
+        // 保持 anim 形态与主路同构)。
+        const fx = this._qbFxSpawn(u, tl, dxN, false, yMax);
+        if (fx) {
+          st.anim = { dx0: 0, dxN: 0, dxMin0: 0, padPrev, needsShift: false, needsTail: false,
+            n, pad, tl, yMax, clock: 0, lastT: 0, lastDx: null, lastDxMax: null, fx,
+            phase: "impact", easeF: _qbFxCurve(cfg ? cfg.ease : undefined) };
+          st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
+        }
         return;
       }
       // I4 纵轴瞬时定档: 动画期每次提交都会让 uPlot 重推 y(vendor qn: Kl.x 非 null -> An(!0)
@@ -2878,7 +2910,9 @@ window.AQB_QB_TRAFFIC = {
       // 同为判定帧定型(S3 已接线): 曲线引用冻结进 anim.easeF(_qbFxCurve 单点), 拍内不换式、
       // 下一拍起用 —— D21 唯一例外条款, 避免中途换曲线造成位置跳变。
       // 条件: cfg.on === true(有效值单点)且 lead 等级 ≥ 1 —— reduce 已在上方短路(I7);
-      // enabled=false 与 Δ≈0/零流量/缺口轨零装饰但 L0/L1 照常(§05.6/D2/I10)。
+      // enabled=false 与 Δ≈0/零流量/缺口轨零装饰但 L0/L1 照常(§05.6/D2/I10)。F6/D3 起
+      // 零变化拍(needsShift/needsTail 双 false)的 spawn 已前置到早退门内(本行只接
+      // needsShift||needsTail 至少一真的拍), 判据同本单点。
       const fx = this._qbFxSpawn(u, tl, dxN, needsShift, yMax);   // F5: tip 位移按 max 侧(评审轮1 finding3)
       // easeF = 判定帧冻结的数值插值曲线(S3, _qbFxCurve 单点): 本拍全程只用它, 拍中改 ease
       // 不换式(D21 例外条款) —— L1 帧循环经 _qbFxShown(track, 原始进度, easeF) 消费。

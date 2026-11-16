@@ -57,6 +57,7 @@ function makePayload(base) {
     meta: {
       window: '1m',                  // 前端不校验 points 长度 vs window(traffic-fx-frames 同款偏差)
       interval_s: 2,                 // 2s 桶宽 -> 轮询 2s 一拍
+      sample_interval_s: 2,          // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔, 桩对齐生产契约
       source: 'qb',
       stale: false,
       server_started_at: base - 3600,
@@ -128,6 +129,7 @@ function makeHourPayload(base) {
     meta: {
       window: '3d',
       interval_s: HOUR_INTERVAL,
+      sample_interval_s: 1.5,        // F7(26-11-15-1104 D6): 轮询节奏=生效采样间隔(全窗统一, 不再吃桶宽)
       source: 'qb',
       stale: false,
       server_started_at: base - 3600,
@@ -205,15 +207,17 @@ test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: 显示列点数�
   }
 });
 
-test.describe('R1 处置 · hour 段窗(3天档)栅格语义: floor+1 形状 + 桶宽 3600 消费(plan 26-11-14-1313 §07)', () => {
+test.describe('R1 处置 · hour 段窗(3天档)栅格语义: floor+1 形状 + 轮询节奏=采样间隔(F7/D6 全窗统一, plan 26-11-14-1313 §07)', () => {
   installRuntimeErrorGuard(test);
 
   for (const skin of SKINS) {
-    test(`[${skin}] 切「3天」: meta.interval_s=3600 被消费(轮询周期抬到 600s 夹取上限)+ 点数形状 73=72+1(末桶=进行中桶且有观测) @fast`, async ({ page }) => {
+    test(`[${skin}] 切「3天」: 轮询节奏=采样间隔 1.5s(F7/D6 全窗统一, 不吃桶宽 3600)+ 点数形状 73=72+1(末桶=进行中桶且有观测) @fast`, async ({ page }) => {
       /* R1(plan §07)处置行「hour 面 e2e 回归」的最小落点: 3d/7d/30d 消费 agg hour 行,
        * 桶宽恒 3600s(traffic_grid.py:69-71); F3 floor+1 后 3天窗 = 72 整小时 + 1 进行中
        * 桶 = 73 点(30天窗同口径 721=720+1)。桩恒回同一份 hour 帧(窗口档回切不换数据),
-       * 静图断言; 轮询周期被 meta.interval_s 抬到 1h, 断言窗内无第二拍。 */
+       * 形状断言全走 expect.poll; 轮询节奏自 F7/D6(26-11-15-1104)= meta.sample_interval_s
+       * 全窗统一(桩 si=1.5 -> 1.5s/拍) —— 旧口径「桶宽 3600 被夹到 600s 上界」正式反转,
+       * 长窗一拍迟钝 10 分钟的形态即回潮。 */
       test.info().annotations.push({ type: 'note', description: 'R1 hour 面 e2e 回归' });
       await stubFlags(page);
       const b0 = Math.floor(Date.now() / 1000 / HOUR_INTERVAL) * HOUR_INTERVAL - (HOUR_N - 1) * HOUR_INTERVAL;
@@ -232,12 +236,12 @@ test.describe('R1 处置 · hour 段窗(3天档)栅格语义: floor+1 形状 + �
       await expect.poll(async () => readInst(page, 'vm.qbTorrentWindow'),
         { message: 'qbSetWindow 未生效(窗口不是 3d)', timeout: 15_000 }).toBe('3d');
 
-      /* R1 面 1: meta.interval_s=3600 被前端消费 —— 轮询周期实算 3600000ms, 被节奏内核
-       * 夹取上限钳到 600s(_qbPollMs = clamp(interval_s x 1000, 1.5s, 600s), I1 口径;
-       * 最初 fallback 30s 在 meta 落袋后的下一臂被抬到该档) */
+      /* R1 面 1(F7/D6 改判, plan 26-11-15-1104): 轮询节奏 = meta.sample_interval_s(生效
+       * 采样间隔)全窗统一 —— hour 段窗桶宽 3600s 不再被消费成轮询周期; 桩 si=1.5 -> 1.5s */
       await expect.poll(() => readInst(page, 'vm._qbPollMs("torrent")'), {
-        message: '轮询周期未抬到夹取上限档(meta.interval_s=3600 未被消费)', timeout: 15_000,
-      }).toBe(600000);
+        message: '轮询节奏未落到采样间隔档(F7/D6 全窗统一 —— 读回 interval_s 桶宽即旧口径回潮)',
+        timeout: 15_000,
+      }).toBe(1500);
 
       /* R1 面 2: 点数形状 = floor+1 的 73 = 72 整小时 + 1 进行中桶, 且窗口跨度恰 72 格 */
       await expect.poll(() => readInst(page,
