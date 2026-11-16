@@ -2,13 +2,13 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_hr_detail_table_wiring: HR 表 1 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表 1 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表 1 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
-- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表 1 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(26-10-29 修复 issue 26-10-29-1348: 列定义补齐 sortable: true —— HRS_SORT_VAL 十键全有访问器; P5 起 markup 收敛到表壳组件 thead 模式, 本守阵改钉 <tr is="vue:aq-table" mode="thead"> 接线 + HR_TABLE_DEFS 注册表十列键 + thead sortable 类/箭头门控同源 col.sortable)而表 2 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 与死件 hrsArrowHref 零残留; 表 1 排序箭头绝对定位不占流(计划 26-10-06-1009 §7: 原 display:inline-block 恒占 14px, 把右对齐 num 列表头文字整体左顶)
+- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表 1 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定; 26-11-17-0059 W1(3)(4) 翻面: 迁 grid 链路 + 排序并入引擎 E8) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(26-10-29 修复 issue 26-10-29-1348: 列定义补齐 sortable: true —— HRS_SORT_VAL 十键全有访问器; markup 收敛到表壳组件 grid 根, 本守阵改钉 <aq-table table-id="hrDetail"> 接线 + :cols="visibleHrDetailCols" + dyn 排序键 dtSortCell('hrDetail') 绑定 + HR_TABLE_DEFS 注册表十列键 + grid sortable 类/箭头门控同源 col.sortable; thead 借壳形态与 hrsSetSort 专用三态机零残留)而表 2 波次表无 sortable; 三态状态机单点在 sort.js setSort dyn 分支(test_r4_sort_domain 钉), 行消费侧 hrsDetailRows 走 dtSortCell(E8: 逐站点记忆→表级, 拍板接受); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 成对(.hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 .wrap + .hr-full-modal 放开; th.sortable 箭头四条随 thead 退役, 表头样式归三皮肤 .h-cell 规则); 旧列辅助 hrsVerifiedText/hrsStatusText 与死件 hrsArrowHref 零残留
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复); 装载序前提(26-11-17-0059 W1(1)(2) E6 并入): hr_status.js 在四皮肤 manifest 里必须先于 app.js(window 桥 HR_DEFS_BRIDGE 模块级求值, 序错 = HR 三表从列模型全集静默掉队)
-- test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 1. 六个组件都 app.component 注册 2. 表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 3. groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 4. thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留; thead 可排序性判据同源 col.sortable(sortable 类与箭头 v-if 由它驱动, issue 26-10-29-1348)
+- test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 1. 六个组件都 app.component 注册 2. 表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 3. groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 4. 表壳单根(26-11-17-0059 W1(5) 翻面): P5 thead 借壳模式已随 HR 三表迁 grid 退役 —— mode="thead" 零残留、模板单 grid 根; 设置页 HR 三表各挂一座 <aq-table>(table-id=hrDetail/hrWave/hrKv), 段内联 `<th>` 零残留; 可排序性判据同源 col.sortable(sortable 类与箭头 v-if 由它驱动, issue 26-10-29-1348)
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
 - test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效; shared/fx/* 豁免 —— fx 只挂 flux, 计划 26-10-31-2316 D14 隔离拍板)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: 1. 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); 2. 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 四皮肤 views.css 补 search-hit 首格镜像(90deg 渐层, 停靠点 2026-11-11 收紧定案为固定 220px + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
-- test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 各皮肤 .h-cell.sortable:focus-visible(atlas/prism 落 views.css; console/flux 落 components.css —— 后者曾顶 700 行 cap; flux S5 收编); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
+- test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + headActivate 直连 $root.setSort(key, tableId)(mode 分派/$emit 旁路零残留, thead 借壳已退役 26-11-17-0059 W1(5)) + 各皮肤 .h-cell.sortable:focus-visible(atlas/prism 落 views.css; console/flux 落 components.css —— 后者曾顶 700 行 cap; flux S5 收编); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
 - test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 1. 行板过渡仍以 `background var(--dur)` 声明(时长基准) 2. 各皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) 3. 首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) 4. 首格过渡**只在各皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。flux 收编定案(S5, plan 26-10-31-2316): 随 _UI_ALL 自动罩住 —— fork 后规则逐字同 console 天然满足; S6 挂 fx 动效时若要动行板/首格过渡, 必须仍守「views.css 单点 + var(--dur) 同源」前提, 破前提先改本守阵。钉 5(2026-11-14, 修「新增种子固定列 hover 竖带」= 第9条反向形态): fx 层运行时改写必须带复位 —— fx-mount.css `html[data-fx-preset] .group-row[data-fx]` 复位规则在位且逐字含 background/border-color 的 var(--dur) var(--ease)(fx.css [data-fx] 基线把被 stamp 行的行板过渡换成 opacity/transform, 悬停行板瞬切/首格 160ms 渐入)。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 与 e2e/main-table-pinned-matrix.spec.mjs(通用行 + 状态/组合态 + stamped 新增行悬停/生命周期)真浏览器采
 - test_frontend_pinned_first_cell_selected_row_keeps_base: 选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」) —— 旧规则 `.group-row.selected { background: var(--sel-bg) }` 用半透明 tint **替换**行底(而非叠在行底上), 行板露出页底 `--bg`, 而吸左首格按 `--bg-row` 合成 ⇒ 两侧承光底分家, 选中行名称列整列异色竖带(真浏览器逐像素: atlas Δ9/255、prism Δ5/255, 三主表×双皮肤全中, 未选中行 Δ0); 钉 1. `.group-row.selected`/`.group-row.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红) 2. 行板与首格镜像的 tint 同字面(`var(--sel-bg, var(--accent-soft))`) 3. 首格镜像合成基色与行板同令牌 4. 拆分后 `.member-row.selected` 仍在(成员行无吸左首格, 保持裸柔底)。行为面(行板与首格计算背景逐字相等, 选中/悬停选中)由 e2e/main-table-pinned-selected.spec.mjs 采
 - test_frontend_pinned_first_cell_expanded_row_keeps_base: 展开行「保留行底」守阵(2026-10-20 与选中态同轮收, 用户「group 一同修」) —— `.group-row.expanded { background: var(--bg-sunken) }` 同样把行底**替换**成半透明下沉底, 行板承光层变页底 `--bg`, 而首格按 `--bg-row` 合成; 真浏览器逐像素: 展开行 atlas Δ5/255、prism Δ2/255(低于可辨阈, 上轮按范围守恒未动); 钉 1. 三皮肤 `.group-row.expanded` 的 background 末层是 `var(--bg-row)`(prism 在 views.css, atlas/console 在 components.css, 按选择器找) 2. 首格镜像同基色 3. console 独享的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`(否则悬停那一下又分家)。行为面由 e2e/main-table-pinned-selected.spec.mjs 的展开行用例采
@@ -82,11 +82,12 @@ def test_frontend_table_shell_single_point():
        (种子页表头自 P3/P4 起也已迁移 —— 原 `.h-cell` 内联例外已删), **drawer-tabs.html 3 个**
        (W2: trackers / peers / content 三页签各一张), 且各模板里 `.h-cell` 内联零残留;
        各页面还必须有对应行模型渲染器的调用点(漏挂 = 该页值格全空)。
-    4. thead 模式(P5, 计划 26-10-11-1722): 同一个表壳的第二根 —— 原生 <table> 表头行, 设置页
-       HR 详情表借壳。占位必须写成 `<tr is="vue:aq-table" mode="thead">`(in-DOM 表内容模型),
-       且该段内联 `<th>` 零残留(回潮 = 表头 markup 又有第二份)。可排序性判据同源 col.sortable ——
-       sortable 类与箭头 v-if 都由它驱动(issue 26-10-29-1348: 曾硬编码 class="sortable" 而行为侧
-       headActivate 早退, HR 表排序整表静默失效)。
+    4. 表壳单根(26-11-17-0059 W1(3)(5) 翻面): P5 时代的 thead 借壳模式(原生 <table> 表头行,
+       `<tr is="vue:aq-table" mode="thead">` 占位)随 HR 三表迁 grid 链路整体退役 —— 表壳回归
+       单一 grid 形态, 模板里 mode="thead" 零残留; 设置页 HR 三表各挂一座 `<aq-table>`(grid 根
+       带 table-id), 段内联 `<th>` 零残留。可排序性判据同源 col.sortable —— sortable 类与箭头
+       v-if 都由它驱动(issue 26-10-29-1348: 曾硬编码 class="sortable" 而行为侧 headActivate
+       早退, HR 表排序整表静默失效)。
     """
     app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
     comps = (
@@ -120,27 +121,23 @@ def test_frontend_table_shell_single_point():
     shell = shell[:shell.index("</script>")]
     for handle in ('class="h-cell"', 'class="h-label"', 'class="arrow"', 'class="resizer"', 'class="col-drop-line"'):
         assert handle in shell, (f"#tpl-aq-table 缺 {handle} —— 表壳四件交互把手(列名/排序箭头/拖宽把手/重排指示线)缺一即静默失效")
-    # thead 模式(P5, 计划 26-10-11-1722): 原生 <table> 表头行 —— 设置页 HR 详情表借壳。表头 markup
-    # (sortable + 排序箭头)只此一份; 占位必须写成 `<tr is="vue:aq-table" mode="thead">` —— 根模板是
-    # in-DOM 的(#app innerHTML), 浏览器只认表格内容模型, 自定义元素直接放 <thead> 会被 foster-parent
-    # 移出表格(表现为表头整个消失), 故借 <tr> 占位 + `vue:` 前缀让编译器当组件。
-    # 可排序性唯一判据 = 列定义 col.sortable(issue 26-10-29-1348): thead 曾硬编码 class="sortable"
-    # 且箭头恒渲染, 而 headActivate 按 col.sortable 早退 —— 唯一调用方 HR 表十列全无标记,
-    # 「看着能排」点着没反应。sortable 类与箭头门控必须与行为侧同源, 不得回退硬编码。
-    assert 'mode="thead"' in shell and "#i-arrow-up" in shell, \
-        "#tpl-aq-table 缺 thead 模式分支(sortable 表头行 + 排序箭头) —— HR 详情表借壳会退回内联副本"
-    thead_seg = shell.split("<tr v-if=\"mode === 'thead'\">", 1)[1].split("</tr>", 1)[0]
-    assert ':class="{ sortable: col.sortable, num: col.num }"' in thead_seg, \
-        "thead 列头 sortable 类必须由 col.sortable 驱动(硬编码 class=\"sortable\" 与 headActivate 门控分叉, issue 26-10-29-1348)"
-    assert '<span v-if="col.sortable" class="arrow"' in thead_seg, \
-        "thead 排序箭头必须由 col.sortable 门控(不可排序列不得摆箭头位, issue 26-10-29-1348)"
+    # 表壳单根(26-11-17-0059 W1(5) 翻面): thead 借壳模式已随 HR 三表迁 grid 退役 —— 模板里
+    # mode="thead" 零残留(复活即第二套表头 markup 回潮), 排序箭头单份在 grid 分支。
+    # 可排序性唯一判据 = 列定义 col.sortable(issue 26-10-29-1348): grid 列头曾硬编码 class="sortable"
+    # 且箭头恒渲染, 而 headActivate 按 col.sortable 早退 —— 「看着能排」点着没反应。
+    # sortable 类与箭头门控必须与行为侧同源, 不得回退硬编码。
+    assert 'mode="thead"' not in shell and 'mode === "thead"' not in shell, \
+        "#tpl-aq-table 又出现 thead 模式 —— 借壳分支已随 HR 三表迁 grid 退役(26-11-17-0059 W1(5)), 复活即表头 markup 第二份回潮"
+    assert "#i-arrow-up" in shell, "#tpl-aq-table 缺排序箭头 sprite(表头 markup 单份在 grid 分支)"
+    assert '<span v-if="col.sortable" class="arrow"' in shell, \
+        "grid 排序箭头必须由 col.sortable 门控(不可排序列不得摆箭头位, issue 26-10-29-1348)"
     settings = open(os.path.join(STATIC_ROOT, "shared", "tpl", "settings-detail.html"), encoding="utf-8").read()
     settings_text = re.sub(r"<!--.*?-->", "", settings, flags=re.S)
-    assert 'is="vue:aq-table" mode="thead"' in settings_text, \
-        "settings-detail.html 的 HR 详情表表头未借表壳 thead 模式(须 <tr is=\"vue:aq-table\" mode=\"thead\">)"
+    assert settings_text.count('<aq-table table-id="hr') == 3, \
+        "settings-detail.html 的 HR 三表应各挂一座表壳组件(grid 根带 table-id=hrDetail/hrWave/hrKv) —— 迁移回潮或漏挂"
     hrd = settings.split("aqb:hr-detail-table:begin")[1].split("aqb:hr-detail-table:end")[0]
     assert not re.search(r"<th[\s>]", hrd), \
-        "HR 详情表段又出现内联 <th> —— 表壳单点回潮(表头应走 <tr is=\"vue:aq-table\" mode=\"thead\">)"
+        "HR 详情表段又出现内联 <th> —— 表壳单点回潮(表头应走 <aq-table> grid 根)"
     # 页面模板接线: <aq-table> 调用点数(注释里提到不算) + 行模型渲染器调用点 + .h-cell 内联零残留
     for tpl, want_tables, cells in (
         ("tpl/groups.html", 2, ("aq-group-cells", )),
@@ -160,15 +157,16 @@ def test_frontend_table_head_a11y():
     """引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C)
 
     D3「排序并引擎」后旧手搓表头的 P3-4 件套随载体退役, 而引擎 aq-table 表头**从未具备** ——
-    全域(主视图 4 + 抽屉 3 + 桥变体 8 + HR thead 1)表头键盘不可达、读屏不知排序态。方案 C 要点:
+    全域(主视图 4 + 抽屉 3 + 桥变体 8 + HR 三表)表头键盘不可达、读屏不知排序态。方案 C 要点:
     语义载体用 role="columnheader"(不是 button —— aria-sort 只对该 role 生效), 件套收进表壳组件
-    单点, grid / thead 两模式同轮。钉五条(缺一即静默退化):
+    单点。钉五条(缺一即静默退化):
     1. 件套单点: AQ_TABLE_COMPONENT 有 headAriaSort/headActivate 两方法(散在模板即回潮);
     2. grid 模式: .h-cell 有 role=columnheader + :aria-sort + :tabindex + Enter/Space keydown;
        .group-head 有 role=row、.col-drop-line 有 role=presentation(容器语义);
-    3. thead 模式: <th> 有 :aria-sort + :tabindex + keydown(原生 th 隐含 columnheader);
-    4. 激活单点: click 与 keydown 同走 headActivate(grid→$root.setSort / thead→$emit('sort'));
-    5. 三皮肤焦点可见: 各皮肤有 .h-cell.sortable:focus-visible(键盘能聚焦但看不见焦点 = 没做)。
+    3. 激活单点: click 与 keydown 同走 headActivate(直连 $root.setSort, 表 id 即 scope);
+    4. 三皮肤焦点可见: 各皮肤有 .h-cell.sortable:focus-visible(键盘能聚焦但看不见焦点 = 没做)。
+    (原第 3 条「thead 模式 <th> 件套」随 thead 借壳模式退役删除, 26-11-17-0059 W1(5) 翻面:
+     HR 三表同走 grid 表头, a11y 件套不再有第二载体。)
     """
     table_js = open(os.path.join(STATIC_ROOT, "shared", "table.js"), encoding="utf-8").read()
     comp = table_js[table_js.index("window.AQ_TABLE_COMPONENT"):]
@@ -177,15 +175,15 @@ def test_frontend_table_head_a11y():
         "表壳组件缺 headAriaSort/headActivate 件套单点(a11y 属性/激活各写一份即回潮)"
     assert re.search(r"headAriaSort\(col\) \{.*?sortDir === 1 \? \"ascending\" : \"descending\"", comp, re.S), \
         "headAriaSort 未按 sortDir 出 ascending/descending(aria-sort 方向会与箭头分叉)"
-    assert re.search(r'headActivate\(col\) \{.*?this\.mode === "thead".*?\$emit\("sort", col\.key\)', comp, re.S), \
-        "headActivate 未按模式分派(thead 借壳须 emit, grid 走引擎单点)"
+    assert re.search(r'headActivate\(col\) \{\s*\n\s*if \(!col\.sortable\) return;\s*\n\s*this\.\$root\.setSort\(col\.key, this\.tableId\);', comp), \
+        "headActivate 未直连引擎排序单点(借壳模式已退役, 不得出现 mode 分派 / $emit 旁路)"
     assert "this.$root.setSort(col.key, this.tableId)" in comp, \
-        "headActivate 的 grid 分支未调 $root.setSort(tableId 当 scope)"
+        "headActivate 未把 tableId 当排序 scope 传下去(scope 断了会按视图回落: 点 HR 表头排的是主视图)"
+    assert "mode" not in comp, "表壳组件残留 mode prop/分支 —— thead 借壳模式已退役(26-11-17-0059 W1(5)), 单根形态不许回潮"
     xtpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl.html"), encoding="utf-8").read()
     shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
     shell = shell[:shell.index("</script>")]
-    thead_seg = shell.split("<tr v-if=\"mode === 'thead'\">", 1)[1].split("</tr>", 1)[0]
-    grid_seg = shell.split("<div v-else", 1)[1]
+    grid_seg = shell
     assert 'role="columnheader"' in grid_seg, \
         "grid .h-cell 缺 role=columnheader(aria-sort 只对该 role 生效, 挂 button 上读屏忽略)"
     assert ':aria-sort="headAriaSort(col)"' in grid_seg, "grid .h-cell 缺 :aria-sort 绑定"
@@ -196,9 +194,6 @@ def test_frontend_table_head_a11y():
     assert '@click="headActivate(col)"' in grid_seg, "grid .h-cell click 未走 headActivate 单点"
     assert 'role="row"' in grid_seg, "表头容器 .group-head 缺 role=row"
     assert 'role="presentation"' in grid_seg, "重排指示线 .col-drop-line 缺 role=presentation(污染 row 内容模型)"
-    assert ':aria-sort="headAriaSort(col)"' in thead_seg, "thead <th> 缺 :aria-sort(HR 详情表读屏不知排序态)"
-    assert '@keydown.enter.prevent="headActivate(col)"' in thead_seg, "thead <th> 缺 keydown 转发(键盘不可达)"
-    assert ":tabindex=" in thead_seg, "thead <th> 缺 tabindex(键盘不可聚焦)"
     # atlas 落 views.css 而非 components.css: 后者顶 700 行 cap(views.css 首注有约定); console/flux
     # (flux fork 自 console)与 prism 各按 .h-cell.sortable 现有落点。
     for ui, rel in (
@@ -903,7 +898,9 @@ def test_frontend_hr_detail_table_wiring():
     阶段1 交付), 四类"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
     1. 模板绑定: 档位 chips(本地过滤不回后端)/ 已删除种子切换钮(阶段3)/ 明细行 / 空态 / 失踪行挂钩 /
       「数据截至」时间戳(拍板 6)+ 三列重组列名「核实结论」「在列」(阶段3 拍板 4, 口径钉在列名)——
-      缺一处该功能消失;
+      缺一处该功能消失; 表格骨架自 26-11-17-0059 W1(3) 起是 aq-table grid 容器
+      (.group-table 引擎行容器家族 + .drawer-table/.hr-detail-table 派生样式锚, 翻面自
+      `class="drawer-table hr-detail-table"` 原生表骨架);
     2. 拍板守卫: remain_seconds 不得进表(拍板 3, 2026-09-25 误读教训)/ 不挂 hr-pop 不做行内跳转
       (拍板 5)/ 单元格无原生 title(hr-tooltip-overlap: 与悬停弹窗叠出遮挡)/ 表 1 段无 <details>
       (排障视图在 aqb:hr-diag 独立段, 阶段3 交付)/ 来源徽章类名是 hr-vsrc —— .hr-src 是列表页已退役
@@ -927,7 +924,7 @@ def test_frontend_hr_detail_table_wiring():
         ("hrsToggleOld(", "已删除种子切换钮点击(阶段3)"),
         ("hrsOldBtnText(", "已删除种子切换钮文案计数(阶段3)"),
         ('v-for="e in hrsDetailRows', "明细行渲染"),
-        ('class="drawer-table hr-detail-table"', "表格骨架(同挂 .drawer-table 一类)"),
+        ('class="group-table drawer-table hr-detail-table"', "表格骨架(aq-table grid 容器: 引擎行容器家族 + 派生样式锚, W1(3) 翻面)"),
         ("hrsEmptyText(s.site)", "空态文案单点(阶段3: 区分本地无 HR/档位暂无/已删除视图空)"),
         ("数据截至", "「数据截至」时间戳(拍板 6)"),
         (':class="{ missing: !e.active }"', "失踪行弱化挂钩"),
@@ -975,7 +972,7 @@ def test_frontend_hr_detail_table_wiring():
         assert ".hr-detail-table" in css, f"{name} 缺 .hr-detail-table 段 —— 各套 UI 必须成对改(计划 §5.6)"
         for lane in ("a", "b", "c", "d"):
             assert f".hr-detail-table .hr-lane-{lane}" in css, f"{name} 缺 .hr-lane-{lane} 档位色义(计划 §5.4)"
-        assert ".hr-detail-table tr.missing .hr-lane" in css, f"{name} 缺失踪行 --paused 描边弱化规则"
+        assert ".hr-detail-table .missing .hr-lane" in css, f"{name} 缺失踪行 --paused 描边弱化规则(26-11-17-0059 W1(3) 翻面: 行是 .group-row 引擎容器, tr.missing 改类命中)"
         assert ".hr-vsrc" in css, f"{name} 缺来源小徽章(.hr-vsrc)样式"
     for ui in ("atlas", "console", "prism", "flux"):
         own = _ui_css_aggregate(ui)
@@ -990,26 +987,28 @@ def test_frontend_hr_detail_table_wiring():
 
 
 def test_frontend_hr_table_sort_filter_reorg_wiring():
-    """HR 表 1 未做种过滤 + 三态排序 + 三列重组守阵(2026-10-02, 计划 26-10-02-1936 阶段3)
+    """HR 表 1 已删除种子过滤 + 三态排序 + 三列重组守阵(2026-10-02, 计划 26-10-02-1936 阶段3)
 
     三块新交互"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
     1. 已删除种子切换钮(§3.3 决策点 3a): 默认文案「显示已删除种子 (N)」、oldOn 默认关(只看本地仍在列 =
       local_present true), 切换后「只看本地仍在列 (M)」; 计数在站点全行集现算;
-    2. 三态排序(§3.4, 对齐 shared/sort.js): 表头十列全 sortable 而表 2 波次表不接排序;
-      P5(计划 26-10-11-1722)起表头 **markup** 收敛到表壳组件 thead 模式(<tr is="vue:aq-table"
-      mode="thead">, 与主视图同一份表壳), 列定义单点在 HR_TABLE_DEFS.hrDetail —— 本守阵改为钉
-      表 1 自己的接线(占位 + :cols/:sort-key 绑定 + @sort="hrsSetSort(s.site, $event)")与注册表
-      十列键(26-10-29-1348 修复: 注册表十列全标 sortable: true, thead sortable 类/箭头门控同源 col.sortable), markup 面由 test_frontend_table_shell_single_point 钉; 状态机 = 首点降 → 再点升 →
-      第三击恢复后端默认序, 换列直接降序; 比较器纯函数 hrsCompareRows 用 node 真跑语义电池
-      (空值恒末位两方向不反转 / 0 哨兵 / 档位 A<B<C<D 固定秩 / 字符串·数值分型 / 同值稳定),
-      无 node 的机器静默跳过本项(不引入 pytest skip, 基线 0 skipped);
+    2. 三态排序(§3.4): 表头十列全 sortable 而表 2 波次表不接排序; 表头 markup 收敛到表壳组件,
+      26-11-17-0059 W1(3)(4) 翻面: HR 明细表迁 grid 链路, 排序并入引擎 setSort(E8, 逐站点记忆
+      → 表级 dyn 状态 dtSortState.hrDetail, 拍板接受) —— 本守阵改钉表 1 自己的接线
+      (<aq-table table-id="hrDetail" + :cols="visibleHrDetailCols" + dyn 排序键绑定)与注册表
+      十列键(26-10-29-1348 修复: 注册表十列全标 sortable: true, grid 表头 sortable 类/箭头门控
+      同源 col.sortable), markup 面由 test_frontend_table_shell_single_point 钉; 三态状态机
+      (首点降 → 再点升 → 第三击恢复后端默认序, 换列直接降序)单点在 sort.js setSort dyn 分支
+      (test_r4_sort_domain 钉), 这里钉行消费侧 hrsDetailRows 走 dtSortCell; 比较器纯函数
+      hrsCompareRows 用 node 真跑语义电池(空值恒末位两方向不反转 / 0 哨兵 / 档位 A<B<C<D 固定秩 /
+      字符串·数值分型 / 同值稳定), 无 node 的机器静默跳过本项(不引入 pytest skip, 基线 0 skipped);
     3. 三列重组(§3.6 决策点 4): 模板新列结构(核实结论徽章 hr-vsrc + 副行 / 在列·失踪徽章
-      hr-pres + 副行)+ CSS 三处成对(th.sortable 箭头激活 accent·hover faint / .hr-sub 副行小字 /
-      .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText /
-      hrsStatusText 随列退役, 零残留。
-    4. 几何归正(2026-10-06, 计划 26-10-06-1009 §7 · 报告 26-10-06-0945 B1): 表 1 排序箭头改
-      **绝对定位不占流**(原 display:inline-block 恒占 11px + 3px, 把右对齐 num 列表头文字整体左顶
-      14px); 静态断言看不见盒子模型, 只钉「不再参与行内布局」这一必要条件, 几何量测见坑档。
+      hr-pres + 副行)+ CSS 成对(.hr-sub 副行小字 / .hr-pres 徽章 / 名称列限宽钩子 +
+      .hr-full-modal 放开; 原 th.sortable 箭头四条随 thead 借壳退役删除 —— grid 表头箭头样式
+      走三皮肤 .h-cell 规则(本守阵只钉 th 死代码零残留), 对齐右缘走 colAlignCss 注入; 箭头
+      不占流(26-10-06-1009 §7 B1 拍板意图: 标题不随排序切换位移)由 shared/console_hub_panels.css
+      的 .hr-full-modal .h-cell .arrow 恒占位规则承担, 本守阵下方生效面循环钉住);
+      旧列辅助 hrsVerifiedText / hrsStatusText 随列退役, 零残留。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
@@ -1028,29 +1027,31 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
     assert "hrsToggleOld(s.site)" in frag and "hrsOldBtnText(s.site)" in frag, "工具条缺已删除种子切换钮绑定"
     assert "e.local_present" in js, "行集过滤必须消费后端 local_present(决策点 3a), 前端不得自算 join"
 
-    # 2. 三态排序: 表头接线 + 列模型单点 + 状态机 + 纯函数
-    #    表头 markup(class="sortable" + 排序箭头)自 P5(计划 26-10-11-1722)起收敛到表壳组件的
-    #    thead 模式(shared/tpl/xtpl.html#tpl-aq-table), 由 test_frontend_table_shell_single_point 钉;
-    #    这里钉表 1 自己的**接线**(占位形态 + 列/键绑定 + 排序事件)与列模型注册表单点。
-    assert 'is="vue:aq-table" mode="thead"' in frag, (
-        "表 1 表头未借表壳组件(thead 模式占位 <tr is=\"vue:aq-table\" mode=\"thead\">) —— 排序表头退回内联副本"
-    )
-    assert ':cols="hrsCols()"' in frag and ':sort-key="hrsSortKeyOf(s.site)"' in frag, "表 1 表头列模型/排序键接线缺失"
-    assert '@sort="hrsSetSort(s.site, $event)"' in frag, \
-        "表 1 表头排序事件未接 hrsSetSort(D3=B: 只借壳, 排序仍走 HR 自己的三态机)"
+    # 2. 三态排序: 表头接线(grid, E8 并引擎) + 列模型单点 + 行消费侧 + 纯函数
+    #    表头 markup(sortable + 箭头)在表壳组件 grid 分支(shared/tpl/xtpl.html#tpl-aq-table),
+    #    由 test_frontend_table_shell_single_point / test_frontend_table_head_a11y 钉;
+    #    这里钉表 1 自己的**接线**(aq-table 挂点 + 列/键绑定)与列模型注册表单点。
+    #    26-11-17-0059 W1(3)(4) 翻面: 原 thead 借壳形态(<tr is="vue:aq-table" mode="thead">
+    #    + @sort="hrsSetSort")随排序并入引擎退役, 零残留。
+    assert '<aq-table table-id="hrDetail"' in frag, \
+        "表 1 表头未挂表壳组件(grid 根 <aq-table table-id=\"hrDetail\">) —— 排序表头退回内联副本"
+    assert 'mode="thead"' not in frag and "hrsSetSort" not in frag, \
+        "表 1 残留 thead 借壳/专用排序事件 —— E8 并引擎后零残留(26-11-17-0059 W1(4))"
+    assert ':cols="visibleHrDetailCols"' in frag, "表 1 表头列模型接线缺失(须走 visibleHrDetailCols computed 单点)"
+    assert ':sort-key="dtSortCell(\'hrDetail\').key"' in frag and ':sort-dir="dtSortCell(\'hrDetail\').dir"' in frag, \
+        "表 1 dyn 排序键绑定缺失(dtSortCell('hrDetail'), E8 表级状态)"
     xtpl = open(os.path.join(shared, "tpl", "xtpl.html"), encoding="utf-8").read()
     shell = xtpl[xtpl.index('id="tpl-aq-table"'):]
     shell = shell[:shell.index("</script>")]
     assert "#i-arrow-up" in shell and "#i-arrow-down" in shell, \
-        "表壳 thead 模式缺 sprite 双箭头(P5: 表 1 表头 markup 收敛到表壳, 与种子页同款图标)"
-    thead_seg = shell.split("<tr v-if=\"mode === 'thead'\">", 1)[1].split("</tr>", 1)[0]
-    assert ':class="{ sortable: col.sortable, num: col.num }"' in thead_seg \
-        and '<span v-if="col.sortable" class="arrow"' in thead_seg, \
-        "thead 可排序性判据必须同源 col.sortable(issue 26-10-29-1348: 曾硬编码 sortable/恒画箭头" \
+        "表壳缺 sprite 双箭头(表 1 表头 markup 收敛到表壳, 与种子页同款图标)"
+    assert '<span v-if="col.sortable" class="arrow"' in shell, \
+        "可排序性判据必须同源 col.sortable(issue 26-10-29-1348: 曾硬编码 sortable/恒画箭头" \
         "而 headActivate 早退, HR 表列头点着没反应)"
     mreg = re.search(r"const HR_TABLE_DEFS = \{(.*?)\n\};", js, re.S)
     assert mreg, "hr_status.js 缺 HR 表注册表 HR_TABLE_DEFS(P5 表身份单点)"
-    assert "return HR_TABLE_DEFS.hrDetail.columns" in js, "hrsCols() 未取 HR 表注册表(列定义单点断了)"
+    assert 'cols: "visibleHrDetailCols"' in mreg.group(1), \
+        "hrDetail 描述符 cols 未指向 visibleHrDetailCols(模板 :cols 的单点断了)"
     mdet = re.search(r"\n  hrDetail: \{(.*?)\n  \},", mreg.group(1), re.S)
     assert mdet, "HR_TABLE_DEFS 缺 hrDetail 表(或段落格式变了, 同步本守阵)"
     keys = re.findall(r'key: "([a-z_]+)"', mdet.group(1))
@@ -1068,19 +1069,36 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         "列定义存在缺 HRS_SORT_VAL 访问器的 key —— 标 sortable 后点该列 hrsCompareRows 会 TypeError"
     srt = re.findall(r"sortable: true", mdet.group(1))
     assert len(srt) == 10, \
-        f"表 1 十列必须全部标 sortable: true(漏标 = thead 行为侧 headActivate 静默早退, issue 26-10-29-1348), 实得 {len(srt)}"
-    mo = re.search(r"hrsSetSort\(site, key\) \{\n(.*?)\n    \},", js, re.S)
-    assert mo, "hr_status.js 缺 hrsSetSort 三态状态机"
-    body = mo.group(1)
-    assert "!== key" in body and "sortDir[site] = -1" in body, "换列必须直接降序开始(sort.js 同款)"
-    assert 'hrsSortDirOf(site) === -1' in body and "sortDir[site] = 1" in body, "第二击必须转升序"
-    assert 'hrsSortKeyOf(site) = ""' in body or 'sortSel[site] = ""' in body, "第三击必须恢复后端默认序"
+        f"表 1 十列必须全部标 sortable: true(漏标 = grid 表头行为侧 headActivate 静默早退, issue 26-10-29-1348), 实得 {len(srt)}"
+    # E8 排序并入引擎(26-11-17-0059 W1(4)): 描述符 dyn 形态在盘(三态机单点在 sort.js setSort,
+    # test_r4_sort_domain 真跑), 行消费侧 hrsDetailRows 读 dtSortCell; 专用三态机零残留。
+    assert "sort: { dyn: true" in mdet.group(1), "hrDetail 描述符缺 sort dyn 形态(E8: 引擎 dyn 状态 dtSortState.hrDetail)"
+    for dead in ("hrsSetSort", "hrsSortKeyOf", "hrsSortDirOf"):
+        js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+        js_code = re.sub(r"//[^\n]*", "", js_code)
+        assert dead not in js_code, f"{dead} 专用三态机应随 E8 并引擎退役, 不得残留(死代码)"
     for fn in ("HRS_LANE_RANK", "HRS_SORT_VAL", "hrsValEmpty", "hrsCompareRows"):
         assert re.search(rf"\b{fn}\b", js), f"hr_status.js 缺排序纯函数 {fn}(模块级单例, 供 node 单测)"
     # 排序必须作用在当前过滤后的行集上(hrsDetailRows 内, 而不是另一个未过滤的行集)
     mo = re.search(r"hrsDetailRows\(site\) \{\n(.*?)\n    \},", js, re.S)
     assert mo and "hrsCompareRows" in mo.group(1) and "local_present" in mo.group(1), \
         "hrsDetailRows 必须做 chips × 未做种 AND 过滤后再排序(计划 §3.4)"
+    assert "dtSortCell(" in mo.group(1), "hrsDetailRows 排序键须取引擎 dtSortCell('hrDetail')(E8 并引擎, W1(4))"
+    # 右键排序路径钉法(评审 major 修复, 26-11-17-0059): headMenuSort 的 scope 必须直传 m.page
+    # —— 曾写死 `m.page === "detail" ? "detail" : undefined`, HR 列头右键排序落 undefined 回落
+    # 当前视图表, HR 列键写进主表排序态。dyn 分支走 dtSortSet 直设单点(指定方向语义, 非三态
+    # 循环), 经典表 gk/gd 形态逐位不变(硬判据: 主表排序回归零变化)。
+    mhm = re.search(r"headMenuSort\(dir\) \{\n(.*?)\n    \},", read_shared("menu.js"), re.S)
+    assert mhm, "menu.js 缺 headMenuSort(表头右键排序入口) —— 同步本守阵"
+    hbody = mhm.group(1)
+    assert "this._sortKeys(m.page)" in hbody, \
+        "headMenuSort 未把 m.page 直传 _sortKeys(回落 undefined 会把 HR/变体列键写进主视图排序态)"
+    assert "k.dyn" in hbody and "dtSortSet(" in hbody, \
+        "headMenuSort 缺 dyn 分支(dyn 表须走 dtSortSet 引擎直设单点; 裸解构 {gk,gd} 对 dyn 形态取 undefined)"
+    # 判定只认代码态(方法体注释里解释旧坑的 "undefined" 字样不算残留)
+    hbody_code = re.sub(r"/\*.*?\*/", "", hbody, flags=re.S)
+    hbody_code = re.sub(r"//[^\n]*", "", hbody_code)
+    assert "undefined" not in hbody_code, "headMenuSort 残留 undefined 回落(m.page 直传后旧三目特判已退役)"
     # 表 2 波次表不接排序(行数 <=4)
     md = re.search(r"<!-- aqb:hr-diag:begin.*?-->(.*?)<!-- aqb:hr-diag:end.*?-->", tpl, re.S)
     assert md and "sortable" not in md.group(1), "表 2 波次表不得接排序(计划 §3.4)"
@@ -1122,53 +1140,33 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
     assert "missing_streak" not in mo.group(1), "退役行主徽章不得再用 missing_streak(B4)"
     for dead in ("hrsVerifiedText", "hrsStatusText", "hrsArrowHref"):
         # 判定只认代码态(剥块/行注释 —— 历史注释里提旧名不算残留)
-        # hrsArrowHref 自 P5 起退役: 箭头 href 由表壳组件 thead 模式按 sortKey/sortDir 现算
+        # hrsArrowHref 自 P5 起退役: 箭头 href 由表壳组件 grid 分支按 sortKey/sortDir 现算(thead 借壳已退役)
         js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
         js_code = re.sub(r"//[^\n]*", "", js_code)
         tpl_code = re.sub(r"<!--.*?-->", "", tpl, flags=re.S)
         assert dead not in js_code and dead not in tpl_code, f"{dead} 随旧列退役, 不得残留(死代码)"
-    # 生效面(聚合 + shared): 排序头/箭头/限宽钩子已收敛进 shared/console_hub.css(各皮肤逐条同),
+    # 生效面(聚合 + shared): 限宽钩子收敛进 shared/console_hub_panels.css(各皮肤逐条同),
     # 徽章底形族仍各皮肤自带 —— 两处都在这张面上, 判据不变(各皮肤都得吃到; flux 收编 S5)。
+    # 26-11-17-0059 W1(3)(5) 翻面: 原 th.sortable 箭头四条随 thead 借壳退役(排序头样式归
+    # 三皮肤 .h-cell 规则, 焦点可见由 test_frontend_table_head_a11y 钉); td.wrap 钩子改类命中。
     for css, name in (
         (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
         (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
         (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
         (_ui_css_effective("flux"), "flux 生效样式面(聚合 + shared)"),
     ):
+        assert ".hr-detail-table th" not in css, \
+            f"{name} 残留 .hr-detail-table th 规则 —— thead 借壳退役后表头由 .h-cell 渲染, th 系规则是死代码"
         for rule, what in (
-            (".hr-detail-table th.sortable", "排序表头"),
-            (".hr-detail-table th .arrow", "排序箭头位"),
-            (".hr-detail-table th.sortable .arrow.on", "激活列箭头 accent"),
-            (".hr-detail-table th.sortable:hover .arrow", "非激活列 hover 浅色占位"),
             (".hr-detail-table .hr-sub", "副行小字(--fg-dim 等宽)"),
             (".hr-detail-table .hr-pres", "在列/退役徽章底形"),
             (".hr-detail-table .hr-pres.hr-pres-on", "在列徽章色义"),
             (".hr-detail-table .hr-pres.hr-pres-out", "已移出徽章 --blue 色义"),
-            (".hr-detail-table td.wrap { max-width", "名称列限宽钩子(卡片上下文)"),
-            (".hr-full-modal .hr-detail-table td.wrap { max-width: none", "全屏态名称列放开限宽"),
+            (".hr-detail-table .wrap { max-width", "名称列限宽钩子(卡片上下文, W1(3) 翻面: td.wrap 改类命中)"),
+            (".hr-full-modal .hr-detail-table .wrap { max-width: none", "全屏态名称列放开限宽"),
+            (".hr-full-modal .h-cell .arrow { min-width", "HR 头排序箭头恒占位(26-10-06-1009 §7 B1 意图: 标题不随排序切换位移, 评审翻面)"),
         ):
             assert rule in css, f"{name} 缺 {rule}({what}) —— 三套 UI 必须成对改(计划 §5.6)"
-
-    # 5. 几何归正(2026-10-06, 计划 26-10-06-1009 §7 · 报告 26-10-06-0945 B1): 表 1 排序箭头必须
-    #    **绝对定位不占流** —— 原 display:inline-block 恒占 11px + margin-left 3px = 14px, 把右对齐
-    #    (num)列的表头文字整体左顶(实测 14px, 三主题一致; 表头文字右缘 vs 值文字右缘)。静态断言
-    #    看不见盒子模型, 这里只钉「不再参与行内布局」这一必要条件(几何量测见
-    #    pitfalls/web-ui/header-cell-gutter.md: DOM 复现 14px -> 0px)。
-    for css, name in (
-        (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
-        (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
-        (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
-        (_ui_css_effective("flux"), "flux 生效样式面(聚合 + shared)"),
-    ):
-        mo = re.search(r"\.hr-detail-table th \.arrow\s*\{([^}]*)\}", css)
-        assert mo, f"{name} 缺 .hr-detail-table th .arrow 规则体(计划 26-10-06-1009 §7)"
-        body = mo.group(1)
-        assert "position: absolute" in body, (
-            f"{name} 排序箭头未脱离行内布局(应为 position:absolute) —— 右对齐(num)列表头会被顶 14px(报告 26-10-06-0945 B1)"
-        )
-        assert "display: inline-block" not in body, (
-            f"{name} 排序箭头仍在行内布局(display:inline-block 恒占 11px + 3px) —— 见 pitfalls/web-ui/header-cell-gutter.md"
-        )
 
 
 def test_frontend_frozen_column_boundary_wiring():

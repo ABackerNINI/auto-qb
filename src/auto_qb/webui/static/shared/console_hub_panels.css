@@ -406,10 +406,12 @@
 .modal-detail-row.is-error { background: var(--error-soft); border-radius: 4px;
   box-shadow: inset 2px 0 0 var(--error-line); padding: 2px 6px; margin: 0 -6px; }
 
-/* ---- D · HR 表1 件(.hr-detail-table: 表头过滤栏 / 档位徽章 / 排序头 / 名称列限宽) ----
- * 骨架 .drawer-table 与徽章**底形族**(.hr-vsrc / .hr-pres / .hr-sub)不在这里: prism 描边取
- * --border-soft、另两皮肤取 --border, 副行字体 prism 走 --font-mono 而另两皮肤写字面栈 ——
- * 差异是事实, 按 issue「三皮肤确实有视觉差异的规则留在皮肤内」处置。 */
+/* ---- D · HR 表1 件(.hr-detail-table: 表头过滤栏 / 档位徽章 / 失踪行 / 名称列限宽) ----
+ * 26-11-17-0059 W1(3) 迁 grid 后: 表头由表壳组件 .group-head/.h-cell 渲染(排序头/箭头/hover
+ * 全走三皮肤既有 .h-cell 规则, 本段原 th.* 五条随 thead 借壳退役删除); 行 = .group-row 引擎行
+ * 容器(卡板/hover 由皮肤 views.css 消费)。徽章**底形族**(.hr-vsrc / .hr-pres / .hr-sub)不在这
+ * 里: prism 描边取 --border-soft、另两皮肤取 --border, 副行字体 prism 走 --font-mono 而另两
+ * 皮肤写字面栈 —— 差异是事实, 按 issue「三皮肤确实有视觉差异的规则留在皮肤内」处置。 */
 .hr-detail-table-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
 .hr-chip { cursor: pointer; user-select: none; }
 .hr-chip.on { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
@@ -420,22 +422,31 @@
 .hr-detail-table .hr-lane-b { border-color: var(--green-line); color: var(--green); background: var(--green-soft); }
 .hr-detail-table .hr-lane-c { border-color: var(--error-line); color: var(--error); background: var(--error-soft); }
 .hr-detail-table .hr-lane-d { border-color: var(--blue-line); color: var(--blue); background: var(--blue-soft); }
-.hr-detail-table tr.missing .hr-lane { border-color: var(--paused); color: var(--paused); background: transparent; }
-.hr-detail-table th.sortable { position: relative; cursor: pointer; user-select: none; }
-.hr-detail-table th.sortable:hover { color: var(--fg); }
-/* 排序箭头绝对定位不占流(2026-10-06, 计划 26-10-06-1009 §7 · 报告 26-10-06-0945 B1):
- * 原 display:inline-block 恒占 11px + margin-left 3px = 14px, 把右对齐(num)列的表头文字整体
- * 左顶(实测 14px, 三主题一致)。改绝对定位后无偏移 = 取静态位置(仍紧贴标签右缘, opacity 揭示
- * 与 hover 语义不变), 但不再参与行内布局 => 标签回到列右缘, 与值文字同缘。
- * 别改回 inline-block, 也别补内层 v-if(切换排序列时标题会左右跳, 与主表 P3 同形)。 */
-.hr-detail-table th .arrow { position: absolute; margin-left: 3px; color: var(--accent); opacity: 0; }
-.hr-detail-table th .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
-.hr-detail-table th.sortable:hover .arrow { opacity: .45; }
-.hr-detail-table th.sortable .arrow.on { opacity: 1; }
+.hr-detail-table .missing .hr-lane { border-color: var(--paused); color: var(--paused); background: transparent; }
 /* 名称列限宽钩子(计划 §3.6 mockup 同款): 卡片上下文收窄换行、全屏覆盖层放开 —— 表1 自
- * 阶段2 拍板(展开即全屏)后只存在于 .hr-full-modal 内, 限宽自然被放开规则盖住, 成对保留作双态钩子 */
-.hr-detail-table td.wrap { max-width: 150px; }
-.hr-full-modal .hr-detail-table td.wrap { max-width: none; }
+ * 阶段2 拍板(展开即全屏)后只存在于 .hr-full-modal 内, 限宽自然被放开规则盖住, 成对保留作双态钩子
+ * (选择器曾钉 td.wrap, 迁 grid 后值格是 div/span, 改类命中; 表3 原生表的 td.wrap 同被类命中, 口径不变) */
+.hr-detail-table .wrap { max-width: 150px; }
+.hr-full-modal .hr-detail-table .wrap { max-width: none; }
+/* HR grid 行不可点(与主表行点击语义分家; .drawer-body .group-row cursor:default 同款先例):
+ * .group-row 引擎基形带 cursor:pointer, HR 三表行无点击行为, 指针手型是语义谎报 */
+.hr-full-modal .group-row { cursor: default; }
+/* HR 表容器放开横滚裁剪(.group-table 引擎基形 overflow-x:auto + hscroll.css 藏原生横条 ——
+ * 那套是主视图「容器内滚 + 底部指示条」的消费形态; HR 模态无指示条接线, 容器内滚会变成
+ * 无滚动条可看的静默溢出)。放开后 head 与行(fit-content)一起溢进 .hr-full-modal-bd
+ * (overflow:auto), 模态体原生横滚与旧原生表同款, 表头/行天然同源滚动, 无需 syncHeadScroll。 */
+.hr-full-modal .group-table { overflow: visible; }
+/* HR 表头不吸顶(.group-head 引擎基形 position:sticky + top:--head-h 是主视图吸顶列头的落位,
+ * 模态体纵滚会把表头压到顶栏高度偏移处悬浮 —— .drawer-body .group-head position:static 同款
+ * 先例; W1(3) T2 拍板 stickyHead:false 已摘 sticky-head 标记类, 基形 position 在此归位)。 */
+.hr-full-modal .group-head { position: relative; top: auto; }
+/* HR 表头排序箭头恒占位(26-10-06-1009 §7 B1 拍板意图保持, 26-11-17-0059 评审翻面): grid 引擎
+ * 表头的 .arrow 外层 span 恒在(模板 v-if 只在内层 svg), 激活列宽 0 -> 11px —— 右对齐 num 列
+ * (order:-1 注入)的标题随排序切换左右跳(旧 thead 面 B1 用绝对定位修的正是这一族)。HR 头改
+ * 恒占位: min-width 撑住 svg 宽(四皮肤 .h-cell .arrow .ico 统一 11px), 内层 v-if 切换零位移,
+ * 恒占位而非绝对定位的理由: .h-cell 是 flex(gap 4px), 绝对定位的静态位置随 justify-content
+ * (对齐注入)在左右缘漂移, 恒占位对左/右对齐列几何都确定。 */
+.hr-full-modal .h-cell .arrow { min-width: 11px; }
 
 /* 键位编辑全屏覆盖层(2026-11-03 改版)复用 .hr-full-mask/.hr-full-modal 骨架(皮肤 dialogs.css),
  * 只补头部按钮组一条: 头部基线规则是 `.hr-full-modal-hd .hb-btn { margin-left: auto }`

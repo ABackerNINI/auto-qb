@@ -99,7 +99,7 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   font-variant-numeric: tabular-nums; }
 /* 数值列右对齐(2026-09-29 列对齐审计 P2): 抽屉表无列模型, 对齐挂模板 th/td 的 .num 类 */
 .drawer-table th.num, .drawer-table td.num { text-align: right; }
-.drawer-table td.wrap { white-space: normal; overflow-wrap: anywhere; }
+.drawer-table .wrap { white-space: normal; overflow-wrap: anywhere; }
 .drawer-table tr.virtual td { color: var(--fg-dim); }
 .drawer-table .mono-cell { font-family: var(--font-mono); font-size: 12px; }
 .drawer-table tr.skipped td { color: var(--fg-dim); }
@@ -134,10 +134,10 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hrs-diag { margin-top: 8px; }
 .hrs-diag summary { cursor: pointer; user-select: none; color: var(--fg-muted); font-size: 12px; }
 .hrs-diag summary:hover { color: var(--fg); }
-.hrs-diag td.warn { color: var(--warn); }
-.hrs-diag td.error { color: var(--error); }
+.hrs-diag .warn { color: var(--warn); }
+.hrs-diag .error { color: var(--error); }
 .hr-diag-kv { margin-top: 6px; }
-.hr-diag-kv td:first-child { width: 1%; white-space: nowrap; color: var(--fg-dim); }
+.hr-diag-kv .kv-k { white-space: nowrap; color: var(--fg-dim); }
 .hr-wave-table { margin-top: 8px; }
 /* ---------------- HR 表3 拉取历史(计划 26-10-04-0312 §3.5) ----------------
  * 骨架复用 .drawer-table + .hr-detail-table(徽章底形/mono/num 列对齐全继承), chips 行与

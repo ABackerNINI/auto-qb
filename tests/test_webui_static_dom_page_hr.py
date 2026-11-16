@@ -1,7 +1,7 @@
 """test_webui_static_dom_page_hr 测试计划: webui 前端静态守阵: 页面 / 列模型 / 视图
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_hr_diag_view_wiring: HR 表 2 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表 1 徽章色义)
+- test_frontend_hr_diag_view_wiring: HR 表 2 排障视图前端接线守阵(计划 26-10-01-2216 阶段3; 26-11-17-0059 W1(3) 翻面: kv/波次两表迁 aq-table grid 容器, kv 补列头「项/值」E7) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 两表表头走表壳组件 grid 根(table-id=hrKv/hrWave, :cols=visibleHr*Cols) + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表 1 徽章色义)
 - test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+x)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
 - test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4 + 26-10-02-1936 阶段3 扩) —— 从前端源码提取消费键(表 1 e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助与行集函数; 表 2 s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表 2 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格; local_present 是响应层 mark_local_present 追加的合法豁免)
 - test_frontend_hr_history_wiring: HR 表 3 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
@@ -54,9 +54,12 @@ def test_frontend_hr_diag_view_wiring():
     3. CSS 三处成对(计划 §5.6): .hrs-diag / .hr-diag-kv / .hr-wave-table 在 atlas / console /
       prism 聚合各 ≥1 —— 波次表同挂 .hr-detail-table 继承表 1 徽章色义, 那一段的成对由
       test_frontend_hr_detail_table_wiring 钉住, 这里钉表 2 自己的新类。
-    4. 列定义单点(P5, 计划 26-10-11-1722): 波次表表头改由模板按 HR 表注册表摆列(hrsWaveCols,
-      hr_status.js 的 HR_TABLE_DEFS.hrWave) —— 原来 8 个 <th> 是硬编码字面量; 表头仍不接排序
-      (sortable 零残留, 排序面由 test_frontend_hr_table_sort_filter_reorg_wiring 钉)。
+    4. 列定义单点(P5, 计划 26-10-11-1722; 26-11-17-0059 W1(3) 翻面: 两表迁 grid 链路):
+      kv 表补列头「项/值」(E7, header:false 已删)、波次表表头改由表壳组件 <aq-table> grid 根渲染
+      (:cols="visibleHrWaveCols" 消费 HR 表注册表经 _visibleCols 的 computed, 列定义单点仍是
+      hr_status.js 的 HR_TABLE_DEFS.hrWave) —— 原 8 个 <th> 硬编码字面量与 hrsWaveCols() 取法
+      随迁移退役; 表头仍不接排序(列定义无 sortable, headActivate 按 col.sortable 早退,
+      排序面由 test_frontend_hr_table_sort_filter_reorg_wiring 钉)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
@@ -72,9 +75,12 @@ def test_frontend_hr_diag_view_wiring():
         ("排障视图", "summary 文案"),
         ("hrsKvRows(s)", "站点级 kv 行渲染"),
         ('v-for="ls in s.lanes"', "各档波次明细行渲染(lanes[].detail 展示位)"),
-        ('class="drawer-table hr-diag-kv"', "kv 表骨架(同挂 .drawer-table 一类)"),
+        ('class="group-table drawer-table hr-diag-kv"', "kv 表骨架(aq-table grid 容器, W1(3) 翻面)"),
         ("hr-wave-table", "波次明细表类名(同挂 .hr-detail-table 继承徽章色义)"),
-        ("hrsWaveCols()", "波次表列定义取 HR 表注册表(计划 26-10-11-1722 P5 表身份单点)"),
+        ('table-id="hrKv"', "kv 表表头走表壳组件(E7: 补列头「项/值」)"),
+        ('table-id="hrWave"', "波次表表头走表壳组件 grid 根"),
+        (':cols="visibleHrKvCols"', "kv 表列定义取 _visibleCols computed(E7 列模型单点)"),
+        (':cols="visibleHrWaveCols"', "波次表列定义取 _visibleCols computed(注册表单点的派生口, W1(3) 翻面)"),
     ):
         assert needle in frag, f"排障视图缺 {what}(应有 `{needle}`)"
 

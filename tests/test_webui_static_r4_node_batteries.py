@@ -33,7 +33,9 @@
   契约层路径段 下载路径/根路径 wide 改条件式(值非空才 wide:true, 空值/缺失/null 行 wide 不置位
   按普通行渲染, text 兜底「—」保留, 真值行 wide 与文本透传不变); 沙箱口径与哨兵电池同式
 - test_r4_dt_table_layout_geometry_equivalence: dt_table 几何等价性探针(计划 26-11-10-0027 W1(1),
-  「先证后改」) —— 对 ALL_TABLE_DEFS 全部 13 张表的真实列定义(全列有 tpl 前提显式钉住)× 5 类
+  「先证后改」; 覆盖面 13 张**不含 HR 三表**(沙箱不加载 hr_status.js, HR 等价性由例外清单
+  守阵静态形态钉承担, 真跑喂桩归 W3 parity e2e —— 函数 docstring 有口径)—— 对 ALL_TABLE_DEFS
+  全部 13 张表的真实列定义(全列有 tpl 前提显式钉住)× 5 类
   colWidths/列态场景(无覆盖/单列覆盖/全列覆盖/隐藏一列(其固化宽不漏轨)/自定义列序), 断言现役
   columns_grid._gridTemplate 轨道串 ≡ DT_TABLE.layout().gridTemplate(逐字符)、colAlignCss 实测
   CSS 的 text-align 序列 ≡ layout().aligns(逐列; 每一面两侧消费同一份列定义与宽度输入); 页数实算
@@ -55,8 +57,8 @@
   (grid-template-columns)命中表面容器(.group-head/.group-row/.group-table/.detail-head/
   .h-cell/data-table)的规则恰 = D4 例外清单 1 条(04 的 .dt04-list .group-table 两列卡片栅格),
   且 .js 侧钉「选择器与首条声明同行」惯例(命中行必自带 { —— 多行规则形即红不静默逃逸,
-  .css/.html 侧保留规则解析双轨); 4. 例外条目存在性(04 规则本体 + HR 三表注册 +
-  HR/settings 面零 grid 几何的未接线状态); 5. 单点完整性(_gridTemplate 委托 DT_TABLE.layout
+  .css/.html 侧保留规则解析双轨); 4. 例外条目存在性(04 规则本体 + HR 三表注册/tpl 全列/stickyHead:false +
+  settings-detail HR grid 几何恰 3 处与零旁路拼轨 —— 26-11-17-0059 W1(3) 翻面, 旧「零 grid 几何」「借壳形态在」随 thead 借壳退役); 5. 单点完整性(_gridTemplate 委托 DT_TABLE.layout
   且无 .join 拼轨回潮 + colAlignCss 取 layout().aligns); 6. assert 侧豁免清单本体钉死
   (columns_grid.ASSERT_SKIP_FACES 键集恰 {drawerTrackerV04, drawerStubV0} +
   _assertLayoutPair 含 empty-row 行级豁免字面 —— 豁免被删 = 04 面刷 console.error 噪声, 即红)。
@@ -1838,7 +1840,11 @@ console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.le
 def test_r4_dt_table_layout_geometry_equivalence():
     """计划 26-11-10-0027 W1(1) 等价性探针: 现役 _gridTemplate 轨道串与 colAlignCss 对齐序列
     ≡ DT_TABLE.layout 输出(ALL_TABLE_DEFS 真实列定义全量 + colWidths/列态抽样场景)。
-    探针红 = 轨道语义冲突 = 计划 R1 停手条款。"""
+    探针红 = 轨道语义冲突 = 计划 R1 停手条款。
+    覆盖面口径(26-11-17-0059 评审记档): 实算 13 张**不含 HR 三表** —— 沙箱只截断加载 app.js
+    (不加载 hr_status.js, 桥常量 HR_DEFS_BRIDGE 空对象兜底, HR 键不进 ALL_TABLE_DEFS/页数枚举),
+    HR 三表的轨道/对齐等价性由例外清单守阵的静态形态钉承担(tpl 全列 + computed 单点委托),
+    真跑喂桩(打开 HR 面 × 列态场景)归 W3 parity e2e(T6), 本电池不加 HR 机器。"""
     report = _run_probe(
         _NODE_DT_LAYOUT_EQUIV_PROBE,
         bundle_file("columns.js"),
@@ -2012,20 +2018,33 @@ ok("[kebab] 表面几何规则恰 " + D4_EXCEPTIONS.length + " 条 = D4 例外�
 
 /* 4. D4 例外清单存在性: 清单点名的东西必须真实在盘(条目漂移即红, 防「例外清空了守阵却照绿」)
  *    a. 04 卡片栅格条目本体(.dt04-list .group-table 两列栅格)在 04 变体里恰 1 处;
- *    b. HR 三表(hrDetail/hrWave/hrKv)注册表在盘且零 grid 几何(未接线的例外状态被钉住)。 */
+ *    b. HR 三表(hrDetail/hrWave/hrKv)经 ALL_TABLE_DEFS 走单点 + settings-detail grid 几何
+ *       恰 3 处 —— 26-11-17-0059 W1(3) 迁 grid 翻面: 旧口径「HR 三表零 grid 几何」「settings-detail
+ *       零 grid 几何」「hrDetail 借壳形态在(thead 模式)」随 thead 借壳退役删除(HR 三表已是
+ *       引擎 grid 面, 几何合法出自 DT_TABLE.layout 单点); 新钉: 三表注册在盘、全列带 tpl(几何
+ *       唯一来源)、stickyHead:false(模态头不进主表头高测量)、settings-detail 每表恰一座
+ *       aq-table 表头 + 一处行 gridStyle + 一处行 data-table 锚, 且生产面零 gridTemplateColumns
+ *       字面量(旁路拼轨即红)。 */
 const f04 = fs.readFileSync(path.join(ROOT, "shared", "drawer_tpl", "04-trackers-status-cards-tall.js"), "utf8");
 const l04 = f04.split(/\r?\n/).filter((ln) => ln.indexOf("group-table") >= 0 && ln.indexOf("grid-template-columns") >= 0);
 ok("[D4] 04 条目在盘(.dt04-list .group-table 两列卡片栅格恰 1 处)",
    l04.length === 1 && /\.dt04-list \.group-table/.test(l04[0]) && /repeat\(2, minmax\(0, 1fr\)\)/.test(l04[0]));
 const hrSrc = fs.readFileSync(path.join(ROOT, "shared", "hr_status.js"), "utf8");
 for (const id of ["hrDetail", "hrWave", "hrKv"]) {
-  ok("[D4] HR 例外条目在盘: HR_TABLE_DEFS." + id, new RegExp("^  " + id + ": \{", "m").test(hrSrc));
+  ok("[D4] HR 条目在盘: HR_TABLE_DEFS." + id, new RegExp("^  " + id + ": \{", "m").test(hrSrc));
 }
-ok("[D4] HR 三表零 grid 几何(未接线状态被钉住, 顺手误接即红)",
-   !/gridTemplateColumns|grid-template-columns/.test(hrSrc));
+const hrTplCount = (hrSrc.match(/tpl: "/g) || []).length;
+ok("[D4] HR 三表列定义全列带 tpl(几何唯一来源 = DT_TABLE.layout 单点, W1(3) 翻面: 实得 " + hrTplCount + "/20)",
+   hrTplCount === 20);
+ok("[D4] HR 三表描述符 stickyHead: false 恰 3 处(模态头不参与主表 sticky-head/--head-h 测量, W1(3) T2 拍板)",
+   (hrSrc.match(/^    stickyHead: false,$/gm) || []).length === 3);
 const setDetail = fs.readFileSync(path.join(ROOT, "shared", "tpl", "settings-detail.html"), "utf8");
-ok("[D4] hrDetail 借壳形态在(settings-detail thead 模式)", setDetail.indexOf('table-id="hrDetail"') >= 0);
-ok("[D4] settings-detail 零 grid 几何(HR 面无旁路)", !/gridTemplateColumns|grid-template-columns/.test(setDetail));
+ok("[D4] settings-detail HR 三表 grid 几何恰 3 处(每表一座: aq-table 表头 + 行 gridStyle + 行 data-table 锚)",
+   (setDetail.match(/<aq-table table-id="hr/g) || []).length === 3 &&
+   (setDetail.match(/gridStyle\('hr/g) || []).length === 3 &&
+   (setDetail.match(/data-table="hr/g) || []).length === 3);
+ok("[D4] settings-detail 零旁路拼轨(gridTemplateColumns 字面量零残留)",
+   !/gridTemplateColumns|grid-template-columns/.test(setDetail));
 
 /* 5. 单点完整性: _gridTemplate 委托 DT_TABLE.layout 且无旁路拼接; colAlignCss 对齐取自
  *    layout().aligns —— 委托松开 = W1 成果回退。 */
@@ -2293,10 +2312,12 @@ def test_r4_dt_table_exception_list_geometry_guard():
     """计划 26-11-10-0027 W2(2), 拍板 D4: dt_table 例外清单守阵 —— 清单之外零旁路几何。
 
     例外清单(D4 拍板明文化, 本守阵是其机械面):
-      - HR 三表(hrDetail/hrWave/hrKv): 注册面已随 26-11-17-0059 W1(1)(2) E6 并入翻面 ——
-        定义源在 hr_status.js 的 HR_TABLE_DEFS(P5), 经 window.AQB_HR_TABLE_DEFS 桥并进
-        app.js 的 ALL_TABLE_DEFS, 本电池钉「经 ALL_TABLE_DEFS 走单点 + 桥在盘」; 其余旧形态
-        断言(HTML 借壳形态 / HR 面零 grid 几何)仍钉旧状态, 随 T2/T3 同笔翻面;
+      - HR 三表(hrDetail/hrWave/hrKv): 注册面随 26-11-17-0059 W1(1)(2) E6 并入、渲染面随
+        W1(3) 迁 grid 同步翻面 —— 定义源在 hr_status.js 的 HR_TABLE_DEFS(P5), 经
+        window.AQB_HR_TABLE_DEFS 桥并进 app.js 的 ALL_TABLE_DEFS, 本电池钉「经 ALL_TABLE_DEFS
+        走单点 + 桥在盘 + 全列带 tpl(几何唯一来源)+ stickyHead:false + settings-detail grid
+        几何恰 3 处(每表一座 aq-table 表头/行 gridStyle/行 data-table 锚)」; 旧形态断言
+        (HTML thead 借壳 / HR 面零 grid 几何)已随 thead 借壳退役删除(W1(3)(5) 同笔);
       - 04 卡片形态面(drawerTrackerV04): 引擎行容器被变体有意覆写成两列卡片栅格
         (行是卡片非列状数据, parity e2e 另有「卡片形态规格」守阵), 例外条目 = 该 CSS 规则恰 1 处。
     断言六节: camelCase 产物白名单(恰两件; table.js 双向钉死 —— 原文提及恰 1 处 + 掩码后
@@ -2304,7 +2325,7 @@ def test_r4_dt_table_exception_list_geometry_guard():
     16 条(13 张 app.js 字面表 + HR 三表经 window 桥并入)且 id 集与表注册表互对(逐 id 落
     app.js 或 hr_status.js 字面行之一, 桥合并/桥导出在盘)/ kebab 声明中命中表面容器的规则恰 =
     D4 例外清单(.js 侧另钉「选择器与首条声明同行」惯例断言 —— 多行规则形即红不静默逃逸;
-    .css/.html 侧保留规则解析双轨)/ 例外条目存在性(04 本体 + HR 三表注册与零几何)/
+    .css/.html 侧保留规则解析双轨)/ 例外条目存在性(04 本体 + HR 三表注册/tpl 全列/stickyHead + settings-detail grid 几何恰 3 处与零旁路拼轨)/
     单点完整性(_gridTemplate 委托 + 无拼轨回潮)/ assert 侧豁免清单本体(ASSERT_SKIP_FACES
     键集恰两键 + empty-row 行级豁免字面在 _assertLayoutPair —— 豁免被删即 04 面刷噪声,
     删豁免即红)。node 电池真跑(无 node 静默跳过)。"""

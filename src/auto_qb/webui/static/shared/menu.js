@@ -47,10 +47,20 @@ window.AQB_MENU = {
       const m = this.headMenu;
       this.headMenu.visible = false;
       if (!m.sortable) return;
-      // 明细表头右键的排序项也走明细表自己的键(m.page 已是列所属的表名)
-      const { gk, gd } = this._sortKeys(m.page === "detail" ? "detail" : undefined);
-      this[gk] = m.key;
-      this[gd] = dir;
+      /* 排序 scope 单点直传(m.page 已是列所属的表名)。曾写死 `m.page === "detail" ? "detail" :
+       * undefined` —— 非 detail 回落"当前视图的表", HR 明细表(26-11-17-0059 W1(3) 接入右键面)
+       * 的列键会写进主视图排序态(评审 major; 抽屉变体头同族隐患)。
+       * 直传后: 经典表(gk/gd 形态)行为逐位不变 —— 右键面在哪个表 m.page 就是那个表, 与旧
+       * "undefined -> VIEW_TABLE[viewMode]" 同解(表头在场 ⇒ 该表必是当前视图表; detail 特判
+       * 被直传天然覆盖); dyn 表(dtSortState 面: hrDetail + 抽屉变体)走 dtSortSet 直设单点
+       * (U3 先例: 04 卡片分段钮) —— 右键排序是"指定方向"语义, 不是三态循环, 不复用 setSort。 */
+      const k = this._sortKeys(m.page);
+      if (k.dyn) {
+        this.dtSortSet(k.id, m.key, dir);
+        return;
+      }
+      this[k.gk] = m.key;
+      this[k.gd] = dir;
     },
     headMenuPicker() {
       const m = this.headMenu;

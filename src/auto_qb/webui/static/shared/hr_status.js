@@ -21,13 +21,13 @@
  *   test_frontend_hr_status_fields_match_backend 闭集钉住, 不往里加新键), 方法前缀 hrsHist*。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
- * !表身份(P5, 计划 26-10-11-1722; 26-11-17-0059 W1(1)(2) E6 并入): 三张 HR 表的列定义单点仍在
- *   模块级 HR_TABLE_DEFS, 经 window.AQB_HR_TABLE_DEFS 并进 app.js 的 ALL_TABLE_DEFS(新 page 键
- *   hrDetail/hrWave/hrKv) —— 并入即覆盖的是**枚举面**(列偏好持久化/对齐注入/选择器枚举;
- *   交互面待 W1(3) grid 迁移, 见注册表段注), HR 分组进列选择器正是 E6 拍板的隐藏列恢复入口
- *   (过桥门 pickerHold 暂挡, W1(3) 落地摘除; 旧口径「不进 TABLE_PAGES 防列选择器多分组」是
- *   零交互时代的理由, 交互化后作废: 那时右键隐藏不可逆才怕多分组)。详情表表头当前仍借表壳
- *   组件 <aq-table> 的 thead 模式渲染(迁 grid 模式 = 计划 W1(3), T2 落地)。
+ * !表身份(P5, 计划 26-10-11-1722; 26-11-17-0059 W1 E6 并入 + W1(3) grid 迁移落地): 三张 HR 表的
+ *   列定义单点在模块级 HR_TABLE_DEFS, 经 window.AQB_HR_TABLE_DEFS 并进 app.js 的 ALL_TABLE_DEFS
+ *   (page 键 hrDetail/hrWave/hrKv) —— 几何/交互/持久化全量走主表同款链路: gridTemplate/列序/隐藏
+ *   经 _gridTemplate/DT_TABLE.layout 单点, 表头四项交互由 <aq-table> grid 根自带, 列偏好落
+ *   autoqb_cols_v5 新 page 子树(不升版本), HR 分组进列选择器 = 隐藏列恢复入口(E6; 旧口径
+ *   「不进 TABLE_PAGES 防列选择器多分组」是零交互时代的理由, 交互化后作废: 那时右键隐藏
+ *   不可逆才怕多分组)。详情表表头不再借 <aq-table> thead 模式(该模式已随本迁移退役)。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 
@@ -89,47 +89,49 @@ function hrsHistIsBad(r) {
   return HRS_HIST_BAD_ACTIONS.indexOf(r.action) >= 0 || r.kind === "defer";
 }
 
-/* ---------------- HR 表注册表(计划 26-10-11-1722 P5; 26-11-17-0059 W1(1)(2) 并入全局枚举) ----------------
+/* ---------------- HR 表注册表(计划 26-10-11-1722 P5; 26-11-17-0059 W1 并入全局枚举 + grid 迁移) ----------------
  * 「HR 表身份」单点: 与主视图 TABLE_DEFS 同**模型**(label + columns + features + 描述符字段),
  * 本体保留在本文件(HR 列语义与 hrs* 方法同址), 经 window.AQB_HR_TABLE_DEFS 桥并进 app.js 的
- * ALL_TABLE_DEFS(E6: 新 page 键 hrDetail/hrWave/hrKv) —— 并入分两面: **枚举面**(列偏好持久化/
- * 对齐注入/选择器枚举/断言)按 ALL_TABLE_PAGES 遍历, 并入即覆盖(当前对 HR 面是安全空转或被
- * 过桥门挡住); **交互面**(拖宽/拖序/右键隐藏)由 grid 表头 DOM 驱动, 待 W1(3) grid 迁移落地
- * 才生效。HR 分组进列选择器是 E6 拍板的隐藏列恢复入口(过桥门 pickerHold 暂挡, W1(3) 摘除;
- * 旧口径「不并防多分组」是零交互时代的理由, 已作废, 见头注)。window 桥 +
- * app.js 侧空对象兜底 = node 沙箱(app.js 截断切片, 无本文件)里 ALL_TABLE_DEFS 仍可求值
- * (AQB_DRAWER_TPL_DEFS 同款先例); 生产四皮肤 manifest 本文件恒先于 app.js 载入, 恒有值
- * (装载序守阵: test_frontend_table_registry_single_point 四皮肤断言)。
- * 加一张 HR 表 = 在此加一行 + 模板里挂调用点 + columns_computed.js 挂一对 computed。
+ * ALL_TABLE_DEFS(E6: page 键 hrDetail/hrWave/hrKv) —— 枚举面(列偏好持久化/对齐注入/选择器
+ * 枚举/断言)与交互面(拖宽/拖序/右键隐藏)都由 grid 表头 DOM + ALL_TABLE_PAGES 遍历驱动,
+ * W1(3) grid 迁移落地后全量生效。HR 分组进列选择器 = E6 拍板的隐藏列恢复入口(过桥门
+ * pickerHold 已随 W1(3) 摘除; 旧口径「不并防多分组」是零交互时代的理由, 已作废, 见头注)。
+ * window 桥 + app.js 侧空对象兜底 = node 沙箱(app.js 截断切片, 无本文件)里 ALL_TABLE_DEFS
+ * 仍可求值(AQB_DRAWER_TPL_DEFS 同款先例); 生产四皮肤 manifest 本文件恒先于 app.js 载入,
+ * 恒有值(装载序守阵: test_frontend_table_registry_single_point 四皮肤断言)。
+ * 加一张 HR 表 = 在此加一行 + 模板里挂调用点(aq-table grid 根 + .group-row 行) +
+ * columns_computed.js 挂一对 computed。
  *
- * columns: 列定义(key/label/num 与既有表头逐字一致)。26-11-17-0059 W1(1) 起每列补 tpl(轨道串,
+ * columns: 列定义(key/label 与既有表头逐字一致)。26-11-17-0059 W1(1) 起每列补 tpl(轨道串,
  *   直接喂 DT_TABLE.layout 单点)与 align(colAlignCss 注入消费)。R1 实证拍板: HR 面在
  *   .hr-full-modal v-show 未展开时 display:none, 窗口实测轨拿不到可用宽度(columns_persist
  *   recomputeEffective 的 _headEl 对无盒表头返回 null), 故三表默认走 **tpl 显式宽度**(固化轨);
- *   tpl 首切值按现网原生表观感估定, T2 迁 HTML 时按逐列保真清单手验。
+ *   tpl 首切值按现网原生表观感估定, W1(3) 迁 HTML 时按逐列保真清单手验。
  *   hrDetail 十列全带 sortable: true —— 判据 = HRS_SORT_VAL 十键全有访问器(真能排的才标);
- *   漏标 = thead 行为侧 headActivate 按 col.sortable 早退, 该列静默失去排序(issue 26-10-29-1348:
- *   曾十列全漏, 表壳却按「可排序」画箭头/挂可点类, 视觉与行为各取一半)。
- * features: 只声明差异 —— hrDetail 有 sort(E8: 排序并入引擎 setSort = W1(4), T2 落地);
- *   hrWave / hrKv 无排序无调宽(纯展示; 波次表行数 ≤4, 计划 26-10-02-1936 §3.4)。
+ *   漏标 = grid 表头行为侧 headActivate 按 col.sortable 早退, 该列静默失去排序(issue
+ *   26-10-29-1348: 曾十列全漏, 表壳却按「可排序」画箭头/挂可点类, 视觉与行为各取一半)。
+ * features: 只声明差异 —— hrDetail 有 sort(E8: 排序并入引擎 setSort, W1(4) 落地);
+ *   hrWave / hrKv 无排序(sortable 零标记, headActivate 按 col.sortable 早退; 波次表行数 ≤4
+ *   不接排序, 计划 26-10-02-1936 §3.4 的旧「纯展示不接线」口径仅指排序面) —— 拖宽/拖序/右键
+ *   隐藏按 E1 全量统一拍板, grid 迁移后与主表同链路(W1(3) 落地), 不按表裁剪。
+ * locked: hrKv k 列 locked(E7, 拆散 k/v 对不可表达); hrDetail 无 locked 身份列 —— 零列态
+ *   (全隐藏)恢复入口 = 列选择器(E6 分组), 不另设 locked(不扩大 E7 拍板范围, 终验可再议)。
  * sort: dyn 形态(排序状态进根 data 的 dtSortState 映射, 与抽屉变体表同款) —— 随并入登记,
  *   使 grid 表头点击的 $root.setSort(key, tableId) 对 HR 面良定义(sort.js _sortKeys 读
- *   ALL_TABLE_DEFS[id].sort, 缺描述符即 TypeError); 行消费侧仍走 hrsCompareRows/hrsSetSort,
- *   E8(T2)切换。hrWave/hrKv 无 sortable 列, 描述符纯为 registry 良定义(点击不可达)。
+ *   ALL_TABLE_DEFS[id].sort, 缺描述符即 TypeError); 行消费侧 hrsDetailRows 读 dtSortCell,
+ *   E8(W1(4))已切换。hrWave/hrKv 无 sortable 列, 描述符纯为 registry 良定义(点击不可达)。
  * header: false 已删(E7, 26-11-17-0059): hrKv 补列头「项/值」, k 列 locked —— 拆散 k/v 对的
  *   操作(隐藏 k/拖走 k)不可表达(隐藏侧 headMenuHide/toggleColumn 引擎既有守卫, 拖序侧 W2)。
- * pickerHold: 选择器**过桥门**(评审 minor, 26-11-17): T2 前 HR 面仍由 hrsCols() 全列 + 手写
- *   td 渲染、不消费 colHidden —— 列选择器若列出 HR 分组, 用户勾掉列纹丝不动而意图却持久化
- *   (静默无效果面)。故三表暂不进列选择器渲染面(tableDefs computed 过滤, columns_computed.js),
- *   W1(3) grid 迁移落地时摘除, 摘除后 HR 分组即隐藏列恢复入口(E6)。只挡选择器渲染面 ——
- *   列偏好/对齐/持久化枚举(ALL_TABLE_PAGES 遍历面)不受影响。
- * 表头渲染: hrDetail 当前借表壳组件 thead 模式(shared/table.js, 迁 grid = W1(3) T2);
- *   hrWave 由模板 v-for 摆列(无排序语义, 不必上组件)。 */
+ * stickyHead: false(三表, W1(3) T2 拍板): sticky-head 是「参与主视图吸顶几何」的标记类
+ *   (_ensureHeadObserver/_syncHeadHeight 按 .sticky-head 量顶栏高写 :root --head-h), HR 模态头
+ *   在 .hr-full-modal 内、无吸顶语义且 v-show 关闭态高度 0, 不进那套测量 —— 表壳组件按本字段
+ *   出 group-head 裸形(table.js headRootCls 单点)。
+ * 表头渲染: 三表全走表壳组件 grid 模式(thead 借壳模式已随迁移退役, shared/table.js)。 */
 const HR_TABLE_DEFS = {
   hrDetail: {
     label: "HR 明细表", features: { sort: true },
     grid: "hrDetailGrid", cols: "visibleHrDetailCols", headRef: null, tableRef: null, window: null,
-    pickerHold: true,
+    stickyHead: false,
     sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
       { key: "lane", label: "档位", tpl: "84px", align: "left", sortable: true },
@@ -147,7 +149,7 @@ const HR_TABLE_DEFS = {
   hrWave: {
     label: "HR 波次表", features: {},
     grid: "hrWaveGrid", cols: "visibleHrWaveCols", headRef: null, tableRef: null, window: null,
-    pickerHold: true,
+    stickyHead: false,
     sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
       { key: "lane", label: "档位", tpl: "84px", align: "left" },
@@ -163,7 +165,7 @@ const HR_TABLE_DEFS = {
   hrKv: {
     label: "HR 诊断表", features: {},
     grid: "hrKvGrid", cols: "visibleHrKvCols", headRef: null, tableRef: null, window: null,
-    pickerHold: true,
+    stickyHead: false,
     sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
       { key: "k", label: "项", tpl: "minmax(104px, 0.8fr)", align: "left", locked: true },
@@ -195,12 +197,11 @@ window.AQB_HR_STATUS = {
          * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端
         * oldOn(键 = 站点名): 已删除种子切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
         *   本地仍在列(local_present), true = 连已删除行一起显示; 不持久化(与 laneSel 同层)
-         * sortSel/sortDir(键 = 站点名): 三态排序键与方向("" = 后端默认序), 对齐 shared/sort.js */
+         * (排序状态不在 hrs: E8 拍板并入引擎 —— 表级 dyn 状态进根 data 的 dtSortState.hrDetail,
+         *  sort.js 单点, 26-11-17-0059 W1(4); 曾有的逐站点 sortSel/sortDir 随迁移删除) */
         details: {},
         laneSel: {},
         oldOn: {},
-        sortSel: {},
-        sortDir: {},
       },
       /* 表(3) 拉取历史(计划 26-10-04-0312 §3.5): 与 hrs 同一份 mixin data 的伴生状态 —— 不并进
        * hrs 根对象的原因: 模板对 hrs.* 的键引用被 test_frontend_hr_status_fields_match_backend
@@ -318,40 +319,15 @@ window.AQB_HR_STATUS = {
       const present = rows.filter((e) => e.local_present).length;
       return this.hrsOldOnOf(site) ? `只看本地仍在列 (${present})` : `显示已删除种子 (${rows.length - present})`;
     },
-    /* ---------------- 三态排序(计划 26-10-02-1936 §3.4, 对齐 shared/sort.js setSort) ----------------
-     * 首点该列 = 降序 -> 再点 = 升序 -> 第三次 = 恢复后端默认序(档位·下载量); 换列直接
-     * 降序开始。逐站点独立(与 laneSel 同层), 排序在当前过滤后的行集上进行(hrsDetailRows)。 */
-    hrsSortKeyOf(site) {
-      return this.hrs.sortSel[site] || "";
-    },
-    hrsSortDirOf(site) {
-      return this.hrs.sortDir[site] || -1;
-    },
-    hrsSetSort(site, key) {
-      if (this.hrsSortKeyOf(site) !== key) {
-        this.hrs.sortSel[site] = key;
-        this.hrs.sortDir[site] = -1;
-        return;
-      }
-      if (this.hrsSortDirOf(site) === -1) {
-        this.hrs.sortDir[site] = 1;
-        return;
-      }
-      this.hrs.sortSel[site] = "";
-      this.hrs.sortDir[site] = -1;
-    },
-    /* 表(1) 列定义取 HR 表注册表(P5: 表身份单点在 HR_TABLE_DEFS); 表头由表壳组件 thead 模式渲染
-     * (列名 + 排序箭头 + emit sort), 排序状态与三态机仍走本文件 hrsSetSort(D3=B: 只借壳)。 */
-    hrsCols() {
-      return HR_TABLE_DEFS.hrDetail.columns;
-    },
-    /* 表(2) 波次表列定义取注册表(不接排序: 行数 ≤4, 计划 26-10-02-1936 §3.4); 表头由模板 v-for 摆 */
-    hrsWaveCols() {
-      return HR_TABLE_DEFS.hrWave.columns;
-    },
+    /* ---------------- 三态排序(计划 26-10-02-1936 §3.4; E8 并入引擎, 26-11-17-0059 W1(4)) ----------------
+     * 排序状态与三态机归 sort.js 引擎单点: 表头点击走 aq-table grid 根的
+     * setSort(key, 'hrDetail') -> dyn 状态进根 data 的 dtSortState.hrDetail(首点降 → 再点升 →
+     * 第三击恢复后端默认序 defKey=""/defDir=-1 = 后端原序; 换列直接降序开始, 三态语义与旧
+     * hrsSetSort 逐位一致); 行消费侧这里只读 dtSortCell('hrDetail') 取当前键/方向。
+     * 行为差(E8 拍板接受): 排序选择从逐站点记忆变表级(全 HR 明细表共用一座键)。 */
     /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 已删除种子切换
-     * AND 叠加, 再叠加三态排序(模块级 hrsCompareRows 纯函数, 空值恒末位); 无排序键时保持
-     * 后端默认序(档位·下载量)。 */
+     * AND 叠加, 再叠加三态排序(键/方向取引擎 dtSortCell 单点, 比较器走模块级 hrsCompareRows
+     * 纯函数, 空值恒末位); 无排序键时保持后端默认序(档位·下载量)。 */
     hrsDetailRows(site) {
       const d = this.hrs.details[site];
       if (!d || !d.entries) return [];
@@ -359,8 +335,8 @@ window.AQB_HR_STATUS = {
       const sel = this.hrsLaneSelOf(site);
       if (sel) rows = rows.filter((e) => e.lane === sel);
       if (!this.hrsOldOnOf(site)) rows = rows.filter((e) => e.local_present);
-      const key = this.hrsSortKeyOf(site);
-      if (key) rows = [...rows].sort((a, b) => hrsCompareRows(a, b, key, this.hrsSortDirOf(site)));
+      const cell = this.dtSortCell("hrDetail");
+      if (cell.key) rows = [...rows].sort((a, b) => hrsCompareRows(a, b, cell.key, cell.dir));
       return rows;
     },
     /* 过滤后空态文案(计划 §3.3): 区分「该站点本地没有 HR 种子」(本地仍在列视图全空)与

@@ -308,12 +308,16 @@
                             <button class="hb-btn ghost sm" :disabled="hrs.refreshing"
                                     @click="hrsRefresh(s.site)">立即拉取</button>
                           </p>
-                          <!-- 表1 全量详情表(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3): 逐种子清单,
-                               按站点按需拉一次(hr_status.js loadHrSiteEntries, 打开分区/手动刷新, 不轮询);
-                               档位 chips × 已删除种子切换钮前端本地过滤不回后端; 表头三态排序对齐种子页
-                               (shared/sort.js 范式: 首点降 → 再点升 → 第三击恢复后端默认序, 空值恒末位);
+                          <!-- 表1 全量详情表(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3; 26-11-17-0059 W1(3) 迁 grid):
+                               逐种子清单, 按站点按需拉一次(hr_status.js loadHrSiteEntries, 打开分区/手动刷新, 不轮询);
+                               档位 chips × 已删除种子切换钮前端本地过滤不回后端; 表头三态排序并入引擎
+                               (aq-table grid 表头 -> setSort(key, 'hrDetail'), dyn 状态进 dtSortState.hrDetail:
+                               首点降 → 再点升 → 第三击恢复后端默认序, 空值恒末位; E8 拍板: 逐站点记忆 → 表级);
                                三列重组(拍板4): 档位徽章 / 核实结论(徽章+来源·时间副行) / 在列(徽章+最近被见到副行);
-                               骨架照 .drawer-table 范式(同挂一类);
+                               挂载形态 = T1 实证拍板: 表头 <aq-table> grid 根(.group-head[data-table]) + 行为
+                               同容器兄弟 div(.group-row[data-table] 同款 gridStyle), 值格为行直接子元素
+                               (顺序 = visibleHrDetailCols, 与几何单点 _gridTemplate 同源); 容器沿用
+                               .drawer-table 家族类(.mono-cell 派生样式的选择器锚)+ .group-table(flex 纵列+行距);
                                单元格一律不挂原生 title(hr-tooltip-overlap), 名称过长靠 .wrap 换行;
                                人话(lane_text/need_seed_text/verified_source_text)全由后端算好, 前端不重算 -->
                           <!-- aqb:hr-detail-table:begin (守阵 test_frontend_hr_detail_table_wiring 的扫描锚) -->
@@ -329,79 +333,74 @@
                             <p v-if="d.loading && !d.loaded" class="hb-hp">正在读取站点明细…</p>
                             <aq-empty v-else-if="d.error" icon="#i-warn" :text="d.error"></aq-empty>
                             <aq-empty v-else-if="d.readError" icon="#i-warn" :text="'站点文件读取失败: ' + d.readError"></aq-empty>
-                            <table v-else-if="hrsDetailRows(s.site).length" class="drawer-table hr-detail-table">
-                              <thead>
-                                <!-- 表头借表壳组件 thead 模式(计划 26-10-11-1722 P5): 根模板是
-                                     in-DOM 的, 自定义元素直接放 <thead> 里会被浏览器 foster-parent
-                                     移出表格 ⇒ 用 <tr is="vue:aq-table"> 占位; 排序仍走 HR 自己的
-                                     hrsSetSort(D3=B), 组件只画列名/箭头并 emit sort -->
-                                <tr is="vue:aq-table" mode="thead" table-id="hrDetail" :cols="hrsCols()"
-                                    :sort-key="hrsSortKeyOf(s.site)" :sort-dir="hrsSortDirOf(s.site)"
-                                    @sort="hrsSetSort(s.site, $event)"></tr>
-                              </thead>
-                              <tbody>
-                                <tr v-for="e in hrsDetailRows(s.site)" :key="e.tid" :class="{ missing: !e.active }">
-                                  <td><span class="hr-lane" :class="hrsLaneCls(e.lane)">{{ e.lane }} {{ e.lane_text }}</span></td>
-                                  <td class="wrap">{{ e.name || "—" }}</td>
-                                  <td class="mono-cell">{{ e.tid }}</td>
-                                  <td class="num">{{ hrsSize(e.uploaded_bytes) }}</td>
-                                  <td class="num">{{ hrsSize(e.downloaded_bytes) }}</td>
-                                  <td class="num">{{ hrsRatio(e.ratio) }}</td>
-                                  <td class="num">{{ hrsNeedSeed(e.need_seed_text) }}</td>
-                                  <td class="mono-cell">{{ hrsDone(e.done_iso) }}</td>
-                                  <td><span class="hr-vsrc" :class="hrsSrcCls(e)">{{ hrsVerdictText(e) }}</span><span
-                                       class="hr-sub">{{ hrsVerdictSub(e) }}</span></td>
-                                  <td><span class="hr-pres" :class="hrsPresenceCls(e)">{{ hrsPresenceText(e) }}</span><span
-                                       class="hr-sub">{{ hrsPresenceSub(e) }}</span></td>
-                                </tr>
-                              </tbody>
-                            </table>
+                            <div v-else-if="hrsDetailRows(s.site).length" class="group-table drawer-table hr-detail-table">
+                              <aq-table table-id="hrDetail" :cols="visibleHrDetailCols"
+                                        :sort-key="dtSortCell('hrDetail').key" :sort-dir="dtSortCell('hrDetail').dir"
+                                        :drag="colDrag"></aq-table>
+                              <div v-for="e in hrsDetailRows(s.site)" :key="e.tid" class="group-row"
+                                   :class="{ missing: !e.active }" data-table="hrDetail"
+                                   :style="gridStyle('hrDetail')">
+                                <template v-for="c in visibleHrDetailCols" :key="c.key">
+                                  <div v-if="c.key === 'lane'"><span class="hr-lane" :class="hrsLaneCls(e.lane)">{{ e.lane }} {{ e.lane_text }}</span></div>
+                                  <div v-else-if="c.key === 'name'" class="wrap">{{ e.name || "—" }}</div>
+                                  <div v-else-if="c.key === 'tid'" class="mono-cell">{{ e.tid }}</div>
+                                  <div v-else-if="c.key === 'uploaded_bytes'">{{ hrsSize(e.uploaded_bytes) }}</div>
+                                  <div v-else-if="c.key === 'downloaded_bytes'">{{ hrsSize(e.downloaded_bytes) }}</div>
+                                  <div v-else-if="c.key === 'ratio'">{{ hrsRatio(e.ratio) }}</div>
+                                  <div v-else-if="c.key === 'need_seed_seconds'">{{ hrsNeedSeed(e.need_seed_text) }}</div>
+                                  <div v-else-if="c.key === 'done_iso'" class="mono-cell">{{ hrsDone(e.done_iso) }}</div>
+                                  <div v-else-if="c.key === 'verified_ts'"><span class="hr-vsrc" :class="hrsSrcCls(e)">{{ hrsVerdictText(e) }}</span><span
+                                       class="hr-sub">{{ hrsVerdictSub(e) }}</span></div>
+                                  <div v-else-if="c.key === 'last_seen'"><span class="hr-pres" :class="hrsPresenceCls(e)">{{ hrsPresenceText(e) }}</span><span
+                                       class="hr-sub">{{ hrsPresenceSub(e) }}</span></div>
+                                </template>
+                              </div>
+                            </div>
                             <aq-empty v-else :text="hrsEmptyText(s.site)"></aq-empty>
                           </template>
                           <!-- aqb:hr-detail-table:end -->
-                          <!-- 表2 排障视图(计划 26-10-01-2216 阶段3, 拍板1a): 排障性文本(取波/守恒/零行三态/
-                               现在不放行/备注/站点文件/配额/时间窗/存量)收进原生 details **默认收起**, 表格化为
-                               站点级 kv 行 + 各档波次明细(§5.3); 展开态是临时排障动作, 不进 localStorage 不持久化;
+                          <!-- 表2 排障视图(计划 26-10-01-2216 阶段3, 拍板1a; 26-11-17-0059 W1(3) 迁 grid):
+                               排障性文本(取波/守恒/零行三态/现在不放行/备注/站点文件/配额/时间窗/存量)收进
+                               原生 details **默认收起**, 表格化为站点级 kv 行 + 各档波次明细(§5.3);
+                               展开态是临时排障动作, 不进 localStorage 不持久化;
                                数据全来自 /api/hr/status 现有载荷(hrsKvRows 拼行), 无新请求无新定时器;
-                               波次表同挂 .hr-detail-table 继承表1 徽章色义(计划: 阶段3 复用阶段2 骨架与徽章) -->
+                               kv 表补列头「项/值」(E7: header:false 已删, k 列 locked 拆散 k/v 对不可表达);
+                               波次表同挂 .hr-detail-table 继承表1 徽章色义(计划: 阶段3 复用阶段2 骨架与徽章);
+                               两表挂载形态同表1(T1 实证拍板, 见 aqb:hr-detail-table 段注);
+                               波次表不接排序(行数 ≤4, 计划 26-10-02-1936 §3.4): 列定义无 sortable,
+                               aq-table 表头按 col.sortable 早退, 排序面自然缺位 -->
                           <!-- aqb:hr-diag:begin (守阵 test_frontend_hr_diag_view_wiring 的扫描锚) -->
                           <details class="hrs-diag">
                             <summary>排障视图 · 波次明细与站点诊断</summary>
-                            <table class="drawer-table hr-diag-kv">
-                              <tbody>
-                                <tr v-for="kv in hrsKvRows(s)" :key="kv.k">
-                                  <td>{{ kv.k }}</td>
-                                  <td class="mono-cell" :class="kv.cls">{{ kv.v }}
+                            <div class="group-table drawer-table hr-diag-kv">
+                              <aq-table table-id="hrKv" :cols="visibleHrKvCols" :drag="colDrag"></aq-table>
+                              <div v-for="kv in hrsKvRows(s)" :key="kv.k" class="group-row"
+                                   data-table="hrKv" :style="gridStyle('hrKv')">
+                                <template v-for="c in visibleHrKvCols" :key="c.key">
+                                  <div v-if="c.key === 'k'" class="kv-k">{{ kv.k }}</div>
+                                  <div v-else class="mono-cell" :class="kv.cls">{{ kv.v }}
                                     <button v-if="kv.act" class="hb-btn ghost sm" :disabled="hrs.confirming"
                                             @click="hrsConfirmEmpty(s.site)">确认空清单</button>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                            <table v-if="s.lanes && s.lanes.length" class="drawer-table hr-detail-table hr-wave-table">
-                              <thead>
-                                <!-- 波次表列定义取 HR 表注册表(hrsWaveCols, 计划 26-10-11-1722 P5);
-                                     不接排序(行数 ≤4), 故不上表壳组件。两支写在同一行(v-for 的
-                                     template 内不留空白 —— 空白会被 Vue 折成零长文本节点混进 <tr>,
-                                     子节点骨架比对即红)且 num 列走 v-if 而不是 `:class="{num}"` ——
-                                     后者在非 num 列会渲出空 class=""(normalizeClass 恒回字符串) -->
-                                <tr>
-                                  <template v-for="c in hrsWaveCols()" :key="c.key"><th v-if="c.num" class="num">{{ c.label }}</th><th v-else>{{ c.label }}</th></template>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr v-for="ls in s.lanes" :key="ls.lane">
-                                  <td><span class="hr-lane" :class="hrsLaneCls(ls.lane)">{{ ls.lane }} {{ ls.lane_text }}</span></td>
-                                  <td class="mono-cell" :class="hrsLaneClass(ls)">{{ ls.status_text }}</td>
-                                  <td class="num">{{ ls.pages }}</td>
-                                  <td class="num">{{ ls.rows }}</td>
-                                  <td class="num">{{ hrsWaveCutoff(ls) }}</td>
-                                  <td class="num">{{ ls.fail_streak }}</td>
-                                  <td class="num">{{ hrsWaveCount(ls) }}</td>
-                                  <td class="mono-cell">{{ ls.detail || "—" }}</td>
-                                </tr>
-                              </tbody>
-                            </table>
+                                  </div>
+                                </template>
+                              </div>
+                            </div>
+                            <div v-if="s.lanes && s.lanes.length" class="group-table drawer-table hr-detail-table hr-wave-table">
+                              <aq-table table-id="hrWave" :cols="visibleHrWaveCols" :drag="colDrag"></aq-table>
+                              <div v-for="ls in s.lanes" :key="ls.lane" class="group-row"
+                                   data-table="hrWave" :style="gridStyle('hrWave')">
+                                <template v-for="c in visibleHrWaveCols" :key="c.key">
+                                  <div v-if="c.key === 'lane'"><span class="hr-lane" :class="hrsLaneCls(ls.lane)">{{ ls.lane }} {{ ls.lane_text }}</span></div>
+                                  <div v-else-if="c.key === 'status'" class="mono-cell" :class="hrsLaneClass(ls)">{{ ls.status_text }}</div>
+                                  <div v-else-if="c.key === 'pages'">{{ ls.pages }}</div>
+                                  <div v-else-if="c.key === 'rows'">{{ ls.rows }}</div>
+                                  <div v-else-if="c.key === 'cutoff'">{{ hrsWaveCutoff(ls) }}</div>
+                                  <div v-else-if="c.key === 'fail_streak'">{{ ls.fail_streak }}</div>
+                                  <div v-else-if="c.key === 'count'">{{ hrsWaveCount(ls) }}</div>
+                                  <div v-else-if="c.key === 'detail'" class="mono-cell">{{ ls.detail || "—" }}</div>
+                                </template>
+                              </div>
+                            </div>
                             <p v-else class="hrs-line">各档波次: {{ s.lanes_text || '-' }}</p>
                           </details>
                           <!-- aqb:hr-diag:end -->

@@ -17,17 +17,13 @@ Object.assign(window.AQB_COLUMNS, {
       /* 变体表格体(26-10-12-0527): 带 variantTab 的表只在**对应变体被选中**时进选择器
        * (dtBridgeTbl 是 drawer_templates.js mixin 的桥反查; 经典选中时该变体表不出现 ——
        * 八个变体表恒列出会把生产选择器撑爆, 且全部隐藏列无意义)。恢复入口不变式保持:
-       * 变体选中期间右键隐藏的列仍可在选择器勾回。 */
+       * 变体选中期间右键隐藏的列仍可在选择器勾回。
+       * HR 三分组(26-11-17-0059 W1(3) 起): 过桥门 pickerHold 已随 grid 迁移摘除 —— HR 面
+       * 消费 colHidden(grid 行按 visibleCols 渲染), 选择器勾选即生效, 分组即隐藏列恢复入口(E6)。 */
       const out = [];
       for (const id of ALL_TABLE_PAGES) {
         const def = ALL_TABLE_DEFS[id];
         if (def.variantTab && this.dtBridgeTbl(def.variantTab) !== id) continue;
-        /* 过桥门(评审 minor, 26-11-17-0059): pickerHold 表暂不进列选择器渲染面 —— T2 前 HR 面
-         * 仍由 hrsCols() 全列 + 手写 td 渲染、不消费 colHidden, 列出分组会让用户勾掉列纹丝不动
-         * 而意图却持久化(静默无效果面)。W1(3) grid 迁移落地时摘除本行, 摘除后 HR 分组即隐藏
-         * 列恢复入口(E6); 标记单点在 hr_status.js 的 HR_TABLE_DEFS(pickerHold 注释有完整口径)。
-         * 只挡渲染面, 列偏好/对齐/持久化枚举(ALL_TABLE_PAGES 遍历面)不受影响。 */
-        if (def.pickerHold) continue;
         out.push({ id, label: def.label, columns: def.columns });
       }
       return out;

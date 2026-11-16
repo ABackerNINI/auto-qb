@@ -8,8 +8,8 @@
  *     / 明细成员单元格 2 份逐字近似(groups.html / shows.html)。
  * 本文件把这两处收敛为**单份**:
  *   <aq-table>         表壳: 列名 + 排序箭头 + 拖宽把手 + 重排指示线 + 表头右键(三皮肤同名类);
- *                      两模式(P5): grid = div 网格表头(主视图 4 表) / thead = 原生 <table>
- *                      表头行(设置页 HR 详情表; 调用方以 `<tr is="vue:aq-table" mode="thead">` 占位)
+ *                      grid = div 网格表头(主视图 4 表 + 抽屉桥变体 + HR 三表; 原 thead 原生
+ *                      <table> 借壳模式随 HR 三表迁 grid 退役, 26-11-17-0059 W1(3)(5))
  *   <aq-member-cells>  明细成员行的单元格渲染器(member 行模型; 28 个列分支只此一份)
  *   <aq-group-cells>   group 行模型单元格渲染器(49 个分支, 原 groups.html 内联)
  *   <aq-torrent-cells> torrent 行模型单元格渲染器(28 个分支, 原 torrents.html 内联)
@@ -55,9 +55,9 @@
  *      rowModel  行模型名 -> 渲染器组件(优先复用经典; 变体专属格新增单份渲染器)
  *      features  行为开关 { sort, resize, hide, window }
  *      hostAnchor  Teleport 锚选择器(见 (4))
- * (2) 表壳 <aq-table>: props = tableId / cols / sortKey / sortDir / drag / mode("grid"|"thead")。
- *    只渲染表头 + emit("sort", key) —— 行为归调用方: 列头点击接 `setSort(key, tableId)`
- *    (表 id 即 scope, 无视图推断)。thead 模式不挂拖宽/重排/右键(借壳模式, HR 先例)。
+ * (2) 表壳 <aq-table>: props = tableId / cols / sortKey / sortDir / drag。
+ *    只渲染表头 —— 行为归引擎: 列头点击走 `setSort(key, tableId)`(表 id 即 scope, 无视图推断),
+ *    拖宽/重排/右键把手全在 grid 表头(P5 时代的 mode="thead" 借壳模式已退役, HR 三表同走 grid)。
  * (3) 行渲染器(aq-*-cells): **纯消费方** —— props = 可见列 cols + 行模型自然名属性(g/m/s/e/t/p/f);
  *    内部按 col.key 查表(v-if 链); 回调一律 `$root.xxx`(组件数据只有 props, 根数据走 $root,
  *    复制方法实现会触发 _scan_mixin_wiring 重名守阵); 模板走 xtpl-cells.html 的 x-template
@@ -73,31 +73,34 @@
 window.AQ_TABLE_COMPONENT = {
   name: "aq-table",
   props: {
-    tableId: { type: String, required: true },   // 表 id(= TABLE_DEFS 键): group/detail/show/torrent/hrDetail
+    tableId: { type: String, required: true },   // 表 id(= ALL_TABLE_DEFS 键): group/detail/show/torrent/hrDetail
     cols: { type: Array, required: true },       // 可见列(顺序 = grid 模板序, 与值单元格同源)
     sortKey: { type: String, default: "" },      // 当前排序键(根数据, 由调用方传入)
     sortDir: { type: Number, default: 1 },
     drag: { type: Object, default: null },       // 根数据的 colDrag(本表命中时才画指示线/拖拽源类)
-    /* 渲染模式(计划 26-10-11-1722 P5): grid = div 网格表头(主视图 4 表, 默认);
-     * thead = 原生 <table> 表头行(设置页 HR 详情表借壳)。两者共用一个组件(一份表壳) —— 差异只在
-     * markup 族(div.h-cell vs tr>th)与行为开关: thead 模式不挂拖宽/重排/右键(那些行为只在
-     * grid 模式存在), 排序状态仍归调用方(D3=B: 只借壳不并引擎), 组件只 emit("sort", key)。 */
-    mode: { type: String, default: "grid" },
   },
-  emits: ["sort"],
-  /* 表头 a11y 件套单点(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— grid 与 thead 两模式
-   * 共用一份, 不散在各调用方。语义载体用 role="columnheader"(**不是** button): aria-sort 只对该
-   * role 生效, 挂 button 上读屏会忽略(那正是 issue 摘要里「读屏不知排序态」那一半的修法)。
+  /* 表头 a11y 件套单点(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C)。语义载体用
+   * role="columnheader"(**不是** button): aria-sort 只对该 role 生效, 挂 button 上读屏会忽略。
    * 取值与箭头渲染判据同源(sortKey === col.key 才出方向), 保证任一时刻属性与箭头一致。 */
   methods: {
     headAriaSort(col) {
       if (!col.sortable || this.sortKey !== col.key) return null;   // 未命中列不输出(与 arrow 的 v-if 同源)
       return this.sortDir === 1 ? "ascending" : "descending";
     },
+    /* grid 表头根类(P5 两模式时代由模板内联三元硬编码; 26-11-17-0059 W1(5) thead 退役后收进方法):
+     * - detail = 主视图展开明细的表头(面板内, 非 sticky 上下文, P1 既有形态);
+     * - 描述符 stickyHead: false(HR 三表, W1(3) T2 拍板)= group-head 裸形 —— sticky-head 是
+     *   「参与主视图吸顶几何」的标记类: _ensureHeadObserver/_syncHeadHeight(columns_grid.js)
+     *   按 .sticky-head 量顶栏高写 :root --head-h, HR 模态头(v-show 关闭态高度 0)不该进那套
+     *   测量; 模态体内也无吸顶语义。主视图四表缺省 sticky-head(吸顶 + 可见带测量)。 */
+    headRootCls() {
+      if (this.tableId === "detail") return "detail-head";
+      const def = ALL_TABLE_DEFS[this.tableId];
+      return def && def.stickyHead === false ? "group-head" : "group-head sticky-head";
+    },
     headActivate(col) {
       if (!col.sortable) return;
-      if (this.mode === "thead") this.$emit("sort", col.key);       // 借壳模式: 排序归调用方(D3=B)
-      else this.$root.setSort(col.key, this.tableId);               // grid: 直连引擎排序单点
+      this.$root.setSort(col.key, this.tableId);               // 直连引擎排序单点(表 id 即 scope)
     },
   },
   template: "#tpl-aq-table",
