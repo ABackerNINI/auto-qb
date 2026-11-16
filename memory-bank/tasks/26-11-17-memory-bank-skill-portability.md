@@ -38,17 +38,17 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | R0 | 报告收编+grilling 拍板+计划入库 | Done(2026-11-17) |
-| S1 | memory-bank 配置化(config/project.toml + 宽容回落) | Open |
+| S1 | memory-bank 配置化(config/project.toml + 宽容回落) | Done(2026-11-17, cd1bfcc5) |
 | S2 | 锚守卫摘链+kb.check 空库恒绿全链审计 | Done(2026-11-17) |
 | S3 | 全包 rmtree/unlink 复核 | Done(2026-11-17) |
 | S4 | red_lines/warn_lines glob 化+存量迁移审计 | Done(2026-11-17) |
-| S5 | PORTING 升级轨道 runbook(双场景, 重点存量) | Open |
-| S6 | 出厂配置模板四件+数据件骨架三件 | Open |
+| S5 | PORTING 升级轨道 runbook(双场景, 重点存量) | Done(2026-11-17, 4323d5f9) |
+| S6 | 出厂配置模板四件+数据件骨架三件 | Done(2026-11-17, ad82b1ef+fc1d2193) |
 | S7 | review_lane 数据外置 lane.toml(存量评审开箱) | Done(2026-11-17) |
-| S8 | 每 skill references/PORTING.md | Open |
-| S9 | sync 配置化(.config/sync.toml) | Open |
-| S10 | 出厂配置环境中立(uv→python3) | Open |
-| S11 | 沙箱重放+grep 白名单审计收口 | Open |
+| S8 | 每 skill references/PORTING.md | Done(2026-11-17, 6ef64c16) |
+| S9 | sync 配置化(.config/sync.toml) | Done(2026-11-17, 53ce6fb9) |
+| S10 | 出厂配置环境中立(uv→python3) | Done(2026-11-17, 随 S6a 出厂设计吸收, 模板面 run 行零 uv) |
+| S11 | 沙箱重放+grep 白名单审计收口 | Done(2026-11-17, 收口轮 ①③④ 过; ② 经批9b 四处外置配置后 grep 复验操作性零命中, 用户拍板) |
 
 ## 进度日志
 
@@ -102,3 +102,31 @@
 - 本批改面: `.commands/review/lane.toml`(骨架→真实配置) / `.commands/review/scripts/review_lane.py`(数据外置加载+D18+引导报错, 流程零改) / `.commands/review/scripts/test_review_pkg.py`(LaneConfigTest+签名随改) / `.commands/review/config.toml`(manifest/claim/verify/smoke 四条 note 随 D18/S7 语义同步) / `.agents/skills/memory-bank/references/PORTING.md`(存量 lane 用法接线状态两行改「已接线 S7」, 口径不复制)。对照组 skill(commands/create-issue/scope-guard)零改动; config.yml/auto-qb-data/ 未动; 在库 manifest.json 与 route-*.json 未动。工作树留全部改动, 提交动作不在本批范围(按批次指示)。
 - S7 批次评审修复轮(5 条全过检, 当场修): ①[major] LaneTipTest 新增 4 条钉 `_require_tip` 三分支(无远端 note+本地 HEAD D18 / remote 可解析但 ls-remote 失败 rc=1 / 远端无该分支 ref rc=1 / HEAD!=tip rc=1, 附加同步态放行无 note; 本地 bare 仓当远端零网络); ②LaneConfigTest 引导报错守阵表扩到 13 个 _die 分支(坏 TOML/缺 [lane] 节/缺必填字段/缺 scope 节/include 类型错或空/路线缺 id、id 重复、无批/批次前缀错、id 重复/exact-globs 全空、类型错, subTest 表驱动); ③加载面路径形态校验(lane_dir 须仓库相对, snapshot_root 须单段目录名, 违者 D13 引导报错 —— _guard_snap_path 删除授权依赖 snapshot_root 点名) + 4 条路径形态守阵 + lane.toml 头注字段口径同步; ④LaneManifestGuardTest 钉「认领后拒 manifest 重生成」(rc=1, 不写 manifest); ⑤钉「漏配即拒列清单」(rc=1, 列出漏配文件, 不写 manifest)。机械流程仍零改(③属加载面校验); 测试计划清单同步; 包内 `test.one` `138 passed` + `17 subtests`(修前 `129`), `test.quick` 全量 `6261 passed` / `19 skipped`。
 - S7 复评轮 3(nit, 一行成本修): `_is_repo_relative` 补禁 `'\'` 字段 —— git porcelain 恒正斜杠, Windows 宿主 TOML 填 `'memory-bank\reports'` 一类反斜杠原串会过旧校验而 lane 前缀比对对不齐(同类误导性误报); lane_dir/snapshot_root 报错文案与 lane.toml 头注同步「路径字段一律填 posix 形态」; 守阵补 TOML 字面串反斜杠反例(basic string 装裸反斜杠会先死在 TOML 转义, 用 literal string 构造) + 直驱单元反例。包内 `test.one` `139 passed` + `21 subtests`。
+
+### S1/S5/S6/S8/S9/S10 · 记账补齐 (2026-11-17)
+
+- 各批次本体改动与提交见 git log(S1 cd1bfcc5 配置化+宽容回落 / S5 4323d5f9 轨道 runbook / S6a ad82b1ef+S6b fc1d2193 模板四件+数据件骨架 / S8 6ef64c16 九份 PORTING / S9 53ce6fb9 sync 配置化); 各批守阵随批入库(tests/test_memory_bank_cli.py / test_sync_agent_skills_config.py 等), 明细以提交与计划 §04 为准。此前批次未回写本档案(提交未带记账), 本轮收口按 git log 补账。
+- S10 判定说明: 出厂/模板面(config.minimal.toml 四件 + 数据件骨架三件)自 S6a 建件起即以 python3 出厂(run 行零 uv, 头注明示「uv 等项目偏好不入出厂配置」), S10 判据「模板面 grep 零 uv」由 S6a 设计吸收达成。
+
+### S11 · 收口轮 (2026-11-17)
+
+- **① 沙箱重放(D5)过**: 绿地场景(/tmp/port-replay/demo-farm, git init 模拟目标项目), 照 runbook 移植单位清单表拷 6 单位(memory-bank skill + commands 引擎 + kb/my-commit-flow/review/test 四包 + scripts/sync_agent_skills.py + KB 数据件骨架), 配置填空 4 件(project.toml 目标项目值 / kb·test config.toml 与 .my-commit-flow.toml 由 minimal 模板改名填空 / .config/sync.toml), KB 骨架+三件数据件+README+_about.md。验收全绿: kb.time 三行正常; kb.index 首生成; kb.check 8 成员绿; doc.links 绿; kb.new task 建档成功后即删(领域枚举 farm- 前缀与 siblings 空列表真实生效); my-commit-flow `_pipeline.py --show-config` 读到填空配置(红线/警告/3 起步闸门); 起步闸门手工跑绿(pytest 1 passed / node --check 绿); sync 脚本落 .farm-skills 2 条链接。**0 行代码 diff 取证**: diff -rq 全轨道对照源仓, 零 .py 内容差异(唯一 .py 级差异行 = 本仓 .commands/conftest.py 与 test_conftest_guard.py 未拷 —— 仓内 pytest 收集面, 不属移植单位清单); 差异面全部落在配置/数据件(project.toml、四包根配置、sync.toml、KB 数据件)。
+- **③ 空库首跑绿终验 + 删配置态过**: 独立裸沙箱(/tmp/port-replay/bare-kb, 零 config/project.toml): kb.check 默认链 8 成员全绿(首跑 kb.index 生成 0 物, 空库恒绿); 删配置态 kb.new task rc=0 且必打两行 `[KB-CONFIG]` 提示(领域枚举缺失跳过校验 / 跨 clone 查重缺失跳过) —— D13 宽容回落非静默, 不红。
+- **② grep 白名单审计(R-4)不过 —— 停手待拍板**: 分词 grep(auto-qb / auto_qb / qBittorrent / qbittorrent / gitee, -i)对 .agents/skills + .commands + scripts 全量命中(约 700 处, 集中: review/lane.toml 222=本仓矩阵实例, 根 scripts/ 约 160=项目运行时代码非移植单位, 包根 config.toml 各文件=本仓 task id 运行面, test_*.py=守阵合成夹具/本仓基建钉值, md/html 文档=历史文档与 provenance 注释, mutants.py 与 test 包 linux_*.py=深度项目绑定件 PORTING/双场景指导明示不移植)。**轨道单位内 2 处未申报操作性命中**: ①`.agents/skills/memory-bank/scripts/nav_data.py:48` `REPO_DENY` 硬编码 `auto-qb-data`(取证 2026-11-17); ②`.agents/skills/memory-bank/scripts/nav_server.py:75` `MAIN_REMOTE_CANDIDATES = ("gitee","origin","github")` gitee-first 双远端假设(与报告 §04 横切原则「单远端而非 gitee/github 双远端假设」相抵) —— 两处均在 kb.nav(可选机检, 不在默认链)但随 skill 整目录被拷, 无 PORTING/config 申报, 未外置。**验收判据「操作性代码零命中」不成立, S11 ② 不过**; 按收口指令停手报告, 不放宽判据、不入池、不自行修(nav 不属 S1-S10 改造面, 范围守恒只记录)。另 2 处非轨道单位的申报出入同轮记录: `.agents/skills/release/scripts/tag_release.py:78` 默认 tag 附注硬编码 `auto-qb`(其 references/PORTING.md:8 声明「skill 脚本零项目事实」—— 单点漂移, release 本体不在 D2 改造面); `.agents/skills/deps-upgrade/scripts/check_updates.py:37` USER_AGENT 硬编码 `auto-qb-deps-upgrade/1.0`(project/ 数据目录未收编此项)。
+- **④ D15 实测(Linux 半条过)**: `commands run test.pkg` 全绿(含 my-commit-flow 自带测试 test_pipeline/test_gate/test_commit/test_snapshot/test_sync 与 commands 引擎; 实测数字与用时单点见基线切片 26-11-17-0622); `commands run test.full` 全绿, 基线切片 26-11-17-0622。「全包无未校验 rmtree 调用点」已由 S3 收口(全包逐调用点复核零命中)。
+- **Windows 半条场地声明留痕(D15 ⑤)**: 本 clone(Linux)不可执行 Windows 半条 —— 按 D15 场地声明执行: 有 Windows 侧实例则补测, 无则以 33e3a3d6 锚定防呆守阵(语义绑数据不绑宿主 OS)+Linux 绿为**过渡态**, 不静默收窄; 后续有 Windows 侧实例时补跑 my-commit-flow 包内测试并回写本档案。
+- **runbook 微调两处(重放暴露缺口, 计划面允许)**: PORTING.md「最小移植 3 步」第 2 步补「空库阶段 _about.md 不预挂类级 _index 链接」(空类目录不生成类索引, 挂了 doc.links 必红 —— 重放首轮实测); 移植单位清单表 #3 补 test 包例外交叉引用(只取 config.minimal.toml 起步, 原包脚本不移植)。
+- **R-6 入池(用户已显式批准)**: `memory-bank/issues/26-11-17-0620-docs-memory-bank-history-sink.html`(docs/light, D14 拍板缓行的 P2 文案类「SKILL.md 演进史批量下沉」, 与计划 26-11-17-0010 已双向补链)。
+- **收口结论(收口轮)**: 验收五条(报告 §5)逐条 = ①过 ②**不过** ③过 ④过 ⑤Linux 过渡态过(Windows 留痕) —— 当轮 S11 保持 In Progress, ② 的 4 处操作性命中报用户拍板。
+
+### 批9b · 四处操作性命中外置配置 (2026-11-17, 用户拍板「全部外置配置, 照 S1 同款模式」)
+
+- **外置1 nav_data**: `REPO_DENY` 常量 → `DEFAULT_REPO_DENY = (".git", ".env")`(通用默认, 零项目词)+ `effective_repo_deny()` 现读 `<skill>/config/project.toml` `[nav] repo_deny`(server 30s 轮询下改配置即生效); 缺失/形态不对 → 回落默认 + stderr 必打 `[KB-CONFIG]` 提示一次(免轮询刷屏); 显式空列表 = 合法配置(全放行不提示, 口径同 siblings); 坏 TOML 异常上抛 fail-fast。本仓 `[nav] repo_deny = ["config.yml","auto-qb-data",".git",".env"]` = 旧 REPO_DENY 原样搬家, **行为零变化**。读者单点 `_common.config_nav_repo_deny`(S1 读者同款形态判据)。
+- **外置2 nav_server**: `MAIN_REMOTE_CANDIDATES` → `DEFAULT_REMOTE_CANDIDATES = ("origin",)`(单远端通用, 对齐报告 §04 横切原则)+ `_remote_candidates()` 读 `[nav] remotes`, 回落语义同上(names[0] 兜底口径不变; 显式空列表 = 直接取 git remote 第一个)。本仓 `remotes = ["gitee","origin","github"]` 原样搬家, 行为零变化。读者单点 `_common.config_nav_remotes`。
+- **外置3 tag_release**: 默认附注 `f"auto-qb {tag}"` → 纯函数 `tag_message(message, prefix, tag)` 三分支(--message 显式恒胜 / `<prefix> <tag>` / 空前缀回落通用 `release <tag>` 并置 fallback 旗 → main 打 WARN, 非静默); 项目词经新增 CLI 参 `--tag-note-prefix` 从 `.commands/release/config.toml` 的 release.tag **run 行**传入 —— 沿用该包「项目事实全在 config.toml run 行」的既有参数化模式(PORTING.md 配置键行声明), 不新增脚本读引擎配置的机制; FlagConsistencyTest(旗标 ⊆ argparse)守阵自动覆盖新旗标, 项目事实钉值扩进 test_project_facts_pinned。脚本零项目词(usage/docstring 同步通用化)。
+- **外置4 check_updates**: `USER_AGENT` 常量 → `user_agent()` 函数读**新建** `.agents/skills/deps-upgrade/config/project.toml` `[user_agent] value`(D19 统一落点, 该 skill 首份 config); 缺失/形态不对(value 非串/空白/节非表)→ 回落通用 `DEFAULT_USER_AGENT = "deps-upgrade/1.0 (skill script; read-only)"` + stderr `[DEPS-CONFIG]` 提示一次; 坏 TOML fail-fast。选型留痕: User-Agent 是 API 礼仪标识非校验面, 回落提示取「提示着降级」与 D13 同口径(不静默)。
+- **PORTING 依赖面同步三处**(不造第二口径): memory-bank runbook「配置落点」skill 面补 `[nav]` 两键; release PORTING 配置键行补 `--tag-note-prefix` 与回落语义; deps-upgrade PORTING 配置键行补 `[user_agent]`(并修正原「零硬编码项目词」声明与事实不符的漂移)。
+- **守阵(红绿双验, 各文件头部测试计划同步)**: test_kb_nav_data 4 例(配置生效/整体替换语义/回落零项目词+提示一次/混型回落/显式空合法)、test_kb_nav_server 5 例(remotes 读配置生效/回落 origin+提示一次/候选序无命中退 names[0]/混型回落/显式空直取第一个; 既有 offline 测试改经配置给 gitee 候选序)、test_memory_bank_cli 2 例(本仓成态 [nav] 两节在场钉 + 读者形态判据)、release 包 TagMessageTest 3 例 + run 行项目事实钉值、tests/test_deps_upgrade_user_agent.py 新文件 4 例(配置生效/回落+提示/形态不对/坏 TOML fail-fast)。test.quick 全绿(实测数字与增量单点见新基线切片); dev.fmt 全部改过的 .py。
+- **grep 复验(操作性代码零命中达成)**: 分词 grep(-i, auto-qb/auto_qb/qBittorrent/qbittorrent/gitee)对 .agents/skills + .commands + scripts 全量 695 处逐文件分类: C1 配置/数据面(task id 运行面/项目配置/项目数据件)283, C2 历史文档/PORTING/references 38, C3 provenance 注释/docstring 21, C4 守阵合成夹具/钉值 105, C5 项目专属不移植件/平台 API 词汇(PORTING/双场景指导明示声明同源)76, C6 根 scripts/ 项目运行时(非移植单位)172 —— **操作性代码命中 0**(批9b 前 4 处: nav×2/tag_release/check_updates 全部外置归零; 四个文件的余量命中均为注释/docstring, 计划字面词形大小写敏感下 nav_server 的 Gitee 注释等不构成「qBittorrent」形态命中)。**边界留痕**: `check_updates.py:365` 联合分析输出文案含小写 `qbittorrent` 三依赖名 —— 按计划 S11 字面词形(大小写敏感)不命中; -i 口径下归类「依赖面声明/特性词汇」白名单(与 SKILL.md「三特殊依赖联合分析」特性描述同源, 权威数据在 project/deps.toml 数据件), 外置需改输出装配逻辑(超出批9b 四处范围), 留痕供复核。
+- **S11 终态**: 验收五条(报告 §5)全过 —— ①拷目录+填配置+0 行代码 diff 过; ②grep 白名单审计操作性代码零命中过(批9b 后); ③kb.check 空库首跑绿+删配置态宽容回落过; ④runbook 照做可复现过(①联验); ⑤my-commit-flow 自带测试 Linux 绿过(Windows 半条场地声明留痕, 见上轮)。S11 翻 **Done**。
+- **批9b 评审修正(1 major 必修, 收集面分层)**: 基线切片首版(0653)的增量分解有误 —— 把 release 包 TagMessageTest 3 例计入了 test.full 增量, 静态按用例函数推 +17 与 test.full 实测增量 +14 矛盾。根因 = **收集面分层**: tests/ 收集面(test.full 消费)与 .commands 包收集面(test.pkg 消费)各自独立计数, test_release_pkg 在 test.full 收集面恒为 0 项。实证: 节点级收集清单 diff(stash 态 HEAD 6291 项 → 当前 6305 项, 净 +14, 零删除项; TagMessageTest 不在 test.full 清单)+ 逐文件收集计数(13/24/35/4/13)。处置: ①test.full 与 test.pkg 双面重跑实测(test.full 数字与上轮一致; test.pkg 较收口轮 +3 = TagMessageTest 3 例在其收集面在场); ②0653 切片未提交即废, 按「写完不改」口径删除重切为 26-11-17-0719(增量分解按面分摊 tests/ 面 14 + 包面 3, 与两轮实测严格对账; test_memory_bank_cli 净 +1 —— 既有「本仓 project.toml 成态」用例系加断言改造不计增量, 修正评审「净 +1」判定与首版「+2」的双重偏差); ③全部新守阵收集面自检通过: 14 项在 tests/ 面 node diff 逐条在列, TagMessageTest 3 例经 test.pkg 实测在场 —— 无「测量后扩写」(deps 4 例首版测量前已写, 评审的疑似不成立)。数字与分解单点 = 基线切片 26-11-17-0719。

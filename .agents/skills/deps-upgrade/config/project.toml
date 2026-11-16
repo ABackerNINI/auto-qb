@@ -1,0 +1,9 @@
+# deps-upgrade skill 的项目绑定配置 (统一落点 <skill>/config/project.toml, D19;
+# 计划 26-11-17-0010 S11 批9b 外置)。口径: 项目词汇外置到这里, 代码只读配置;
+# 缺失回落通用默认 + 必打提示 (D13, 禁静默降级); 坏 TOML fail-fast。
+
+[user_agent]
+# HTTP User-Agent (PyPI / GitHub API 的礼仪标识)。项目名随项目走: 移植时把
+# auto-qb-deps-upgrade 换成本项目标识; 缺失 / 形态不对 → 脚本回落通用
+# "deps-upgrade/1.0 (skill script; read-only)" 并打一行 stderr 提示。
+value = "auto-qb-deps-upgrade/1.0 (skill script; read-only)"

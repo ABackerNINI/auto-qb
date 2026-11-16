@@ -47,7 +47,7 @@ from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import find_root, resolve_mb_dir  # noqa: E402
+from _common import config_nav_remotes, find_root, load_project_config, resolve_mb_dir  # noqa: E402
 import nav_data  # noqa: E402
 
 SHELL_NAME = "nav_page.html"
@@ -69,10 +69,33 @@ DATA_TOKEN = "__DATA__"  # 壳内数据注入位 (S2 的壳以同款 token 预�
 PULL_PATH = "/api/pull"
 PULL_HEADER = "X-Nav-Action"  # CSRF 护栏: 跨站 fetch 带自定义头会先发 OPTIONS 预检, 本服务不答
 PULL_HEADER_VALUE = "pull"
-# 主线远端候选与顺序: 与 .commands/my-commit-flow 的 main_candidates 同序 (Gitee 优先, 历史 clone 的
-# origin 可能是 GitHub 镜像)。判据纪律同 sync.py —— 只认 ls-remote 现查的远端真值, 不读 refs/remotes
+# 主线远端候选与顺序: 项目绑定面外置单点 `<skill>/config/project.toml` `[nav] remotes`
+# (计划 26-11-17-0010 S11 批9b, S1 同款模式; 与 .commands/my-commit-flow 的 main_candidates
+# 同构)。缺失回落这里的**单远端通用**默认 + 必打提示 (D13/R-7, 提示每进程一次) —— 默认零项目词,
+# 多远端项目 (Gitee 优先、历史 clone 的 origin 可能是镜像等) 的候选序属于配置不属于代码。
+# 判据纪律同 sync.py —— 只认 ls-remote 现查的远端真值, 不读 refs/remotes
 # (本环境该 ref 的写入会被静默丢弃, 见 pitfalls/git/refs.md)。
-MAIN_REMOTE_CANDIDATES = ("gitee", "origin", "github")
+DEFAULT_REMOTE_CANDIDATES = ("origin", )
+_remotes_hint_done = False
+
+
+def _remote_candidates() -> tuple[str, ...]:
+    """生效候选序: `[nav] remotes` 现读项目配置; 缺失 / 形态不对 → 回落 DEFAULT_REMOTE_CANDIDATES
+    + 必打提示 (提示只打一次)。配置解析失败 (坏 TOML) → 异常上抛 fail-fast (坏配置不是「缺失」)。"""
+    global _remotes_hint_done
+    values = config_nav_remotes(load_project_config())
+    if values is None:
+        if not _remotes_hint_done:
+            _remotes_hint_done = True
+            sys.stderr.write(
+                "[KB-CONFIG] 未配置主线远端候选序 (<skill>/config/project.toml [nav] remotes 缺失或"
+                "形态不对) —— 回落单远端通用 (\"origin\",); 多远端项目请照配置补 [nav] remotes, "
+                "候选序失效不是静默的\n"
+            )
+        return DEFAULT_REMOTE_CANDIDATES
+    return values
+
+
 # 单条 git 命令超时(秒) + 有界重试: 口径整体移植自 .commands/my-commit-flow/scripts/_pipeline.py
 # (2026-11-11, 用户报「Gitee 经常抖动, 首次 pull 失败」)。单次超时收紧 60→20s 的理由同源:
 # Gitee 间歇性卡住时 60s 只够等出一次失败, 20s + 重试才能在同一个 POST 里自愈 (最坏
@@ -344,9 +367,10 @@ def classify_pull(head: str, rsha: str, behind: int, ahead: int) -> str:
 
 
 def pick_remote(root: Path) -> str:
-    """主线远端名: 按 MAIN_REMOTE_CANDIDATES 顺序取第一个存在的 (都没有则退第一个, 无远端则空串)。"""
+    """主线远端名: 按 `[nav] remotes` 候选序 (缺失回落单远端通用+提示, 见 _remote_candidates)
+    取第一个存在的 (都没有则退第一个, 无远端则空串)。"""
     names = [line.strip() for line in _out(_git(root, "remote")).splitlines() if line.strip()]
-    for cand in MAIN_REMOTE_CANDIDATES:
+    for cand in _remote_candidates():
         if cand in names:
             return cand
     return names[0] if names else ""

@@ -13,10 +13,13 @@ bump-my-version 配置 commit/tag=false)。
 - FlagConsistencyTest config.toml 手写旗标 ⊆ 对应脚本 argparse 的 add_argument 集合(改旗标即红)
 - BuildTaskTest      release.build 用 `uv build --wheel`(源根构建)而非全量 uv build(sdist 两段式丢 git 上下文)
 - BumpWiringTest     pyproject [tool.bumpversion] commit/tag 均 false + [tool.hatch.build.hooks.custom] 接线在位
+- TagMessageTest     tag_release.tag_message 附注取值 (批9b 外置): --message 恒胜 / prefix 拼接 /
+                     空前缀回落通用 release <tag> 且置 fallback 旗 (调用方必打 WARN)
 """
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import tomllib
 import unittest
@@ -24,6 +27,17 @@ from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]  # .commands/release/scripts/ → .commands/release/
 ROOT = PKG.parents[1]  # → 仓库根
+
+
+def _load_script(rel: str):
+    """进程内按路径加载包内脚本 (TagMessageTest 用; 不走包导入, 免引擎耦合)。"""
+    spec = importlib.util.spec_from_file_location(rel.replace("/", "_")[:-3], ROOT / rel)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+tag_release = _load_script(".agents/skills/release/scripts/tag_release.py")
 
 
 def _load_cfg() -> dict:
@@ -91,6 +105,10 @@ class TaskSetTest(unittest.TestCase):
         self.assertIn("--to-branch master", tasks["release.merge"]["run"][0])
         self.assertIn("--gh-repo ABackerNINI/auto-qb", tasks["release.ci-gate"]["run"][0])
         self.assertIn("--remotes gitee,github", tasks["release.tag"]["run"][0])
+        self.assertIn(
+            "--tag-note-prefix auto-qb", tasks["release.tag"]["run"][0],
+            "tag 附注前缀是项目事实 (批9b 外置到 config.toml run 行), 缺了脚本回落通用附注"
+        )
         self.assertIn("--gitee-repo ABacker/auto-qb", tasks["release.page"]["run"][0])
         self.assertIn("--github-repo ABackerNINI/auto-qb", tasks["release.page"]["run"][0])
 
@@ -141,3 +159,19 @@ class BumpWiringTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TagMessageTest(unittest.TestCase):
+    """tag_release.tag_message 附注取值 (计划 26-11-17-0010 S11 批9b 外置): 项目词前缀从脚本
+    常量外置到 config.toml run 行 (--tag-note-prefix); 取值纯函数钉死三分支。"""
+    def test_explicit_message_wins(self):
+        self.assertEqual(tag_release.tag_message("custom note", "any-prefix", "v1.2.3"), ("custom note", False))
+        self.assertEqual(tag_release.tag_message("custom note", "", "v1.2.3"), ("custom note", False))
+
+    def test_prefix_joins_tag(self):
+        self.assertEqual(tag_release.tag_message(None, "myproj", "v1.2.3"), ("myproj v1.2.3", False))
+
+    def test_empty_prefix_falls_back_generic(self):
+        msg, fallback = tag_release.tag_message(None, "", "v1.2.3")
+        self.assertEqual((msg, fallback), ("release v1.2.3", True), "空前缀回落通用附注且置 fallback 旗 (调用方必打 WARN)")
+        self.assertNotIn("auto-qb", msg, "通用回落零项目词 —— 项目词属于配置不属于代码")

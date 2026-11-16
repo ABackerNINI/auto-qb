@@ -242,6 +242,42 @@ def config_sibling_names(config: dict) -> tuple[str, ...] | None:
     return tuple(names)
 
 
+def config_nav_repo_deny(config: dict) -> tuple[str, ...] | None:
+    """配置 → 导航红线排除首段 (`[nav] repo_deny` 目录/文件名列表; kb.nav 对仓库根
+    **第一段**整段匹配, 解析后越界另有独立拒绝 —— 判据单点 nav_data._denied)。
+
+    节缺失 / repo_deny 键缺失 / 形态不对 (节非表、值非数组、元素混型含非 str) → `None`
+    (= 未配置, 调用方回落通用默认并必打提示, D13/R-7 —— 排除表失效**非静默**;
+    元素逐个 str 校验的动机同 `config_domains` 的 WARN);
+    **显式空列表 = 合法配置** (项目没有需要排除的红线路径, 返回空元组, 不回落不提示;
+    口径同 `config_sibling_names` 的显式空列表)。
+    """
+    section = config.get("nav")
+    if not isinstance(section, dict):
+        return None
+    values = section.get("repo_deny", None)
+    if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+        return None
+    return tuple(values)
+
+
+def config_nav_remotes(config: dict) -> tuple[str, ...] | None:
+    """配置 → 主线远端候选序 (`[nav] remotes` 远端名列表, 按序取第一个存在的 ——
+    判据单点 nav_server.pick_remote, 与 my-commit-flow `main_candidates` 同构)。
+
+    节缺失 / remotes 键缺失 / 形态不对 (节非表、值非数组、元素混型含非 str) → `None`
+    (= 未配置, 调用方回落单远端通用默认并必打提示, D13/R-7 —— 候选序失效**非静默**);
+    **显式空列表 = 合法配置** (= 不按候选序挑, 直接取 `git remote` 的第一个, 不提示)。
+    """
+    section = config.get("nav")
+    if not isinstance(section, dict):
+        return None
+    values = section.get("remotes", None)
+    if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+        return None
+    return tuple(values)
+
+
 def match_domain(topic: str, domains: tuple[str, ...]) -> str | None:
     """`--topic` 的领域段 = **最长前缀匹配**的枚举项 (枚举自身可含短横线, 如 `memory-bank`;
     枚举来自项目配置 `[domains] values`, 见 `load_project_config` / `config_domains`)。

@@ -34,7 +34,34 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "project" / "deps.toml"
-USER_AGENT = "auto-qb-deps-upgrade/1.0 (skill script; read-only)"
+# HTTP User-Agent: 项目绑定面外置单点 `<skill>/config/project.toml` `[user_agent] value`
+# (计划 26-11-17-0010 S11 批9b 外置, D19 统一落点) —— API 礼仪标识里的项目名随项目走。
+# 缺失 / 形态不对 → 回落这里的**通用**默认 + stderr 提示一次 (D13 提示着降级, 非静默);
+# 配置解析失败 (坏 TOML) → 异常上抛 fail-fast (坏配置不是「缺失」)。
+DEFAULT_USER_AGENT = "deps-upgrade/1.0 (skill script; read-only)"
+USER_AGENT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "project.toml"
+_user_agent_hint_done = False
+
+
+def user_agent() -> str:
+    """生效 User-Agent: `[user_agent] value` 现读 skill 项目配置; 缺失/形态不对回落通用默认。"""
+    global _user_agent_hint_done
+    try:
+        with USER_AGENT_CONFIG_PATH.open("rb") as fh:
+            section = tomllib.load(fh).get("user_agent")
+    except FileNotFoundError:
+        section = None
+    if isinstance(section, dict) and isinstance(section.get("value"), str) and section["value"].strip():
+        return section["value"]
+    if not _user_agent_hint_done:
+        _user_agent_hint_done = True
+        print(
+            f"[DEPS-CONFIG] 未配置 User-Agent (<skill>/config/project.toml [user_agent] value 缺失"
+            f"或形态不对) —— 回落通用 {DEFAULT_USER_AGENT!r}; 项目标识不是静默丢的",
+            file=sys.stderr,
+        )
+    return DEFAULT_USER_AGENT
+
 
 GITHUB_TAGS_URL = "https://api.github.com/repos/{repo}/tags?per_page=100"
 GITHUB_COMMIT_URL = "https://api.github.com/repos/{repo}/commits/{ref}"
@@ -48,7 +75,7 @@ class Unreachable(Exception):
 
 
 def fetch_json(url: str, timeout: float) -> Any:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent(), "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))

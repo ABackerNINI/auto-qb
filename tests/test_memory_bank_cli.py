@@ -39,7 +39,9 @@ D12 统一落点 + D13 宽容回落 —— 校验类缺失跳过对应校验并*
   枚举后 kb.new task 只认它 (改 toml 即生效, 不触代码); 枚举外领域拒且文案列的是配置里的枚举;
   配置在场时零 [KB-CONFIG] 提示行
 - test_new_doc_repo_project_config_exists_and_parses: 本仓 `<skill>/config/project.toml` 存在
-  且可解析, [domains]/[siblings] 两节齐 (S1 统一落点; 缺件 = 配置化改造被意外回退)
+  且可解析, [domains]/[siblings]/[nav] 三节齐 (S1 统一落点 + 批9b [nav] 外置; 缺件 = 配置化改造被意外回退)
+- test_config_nav_readers_shapes: config_nav_repo_deny / config_nav_remotes 形态判据 (批9b
+  外置, S1 读者同款): 节缺失/键缺失/混型 → None (调用方回落+提示); 显式空列表 = 合法配置
 - test_new_doc_task_without_config_falls_back_with_hints: 删配置 → 枚举外 topic 也可建 +
   stderr 必打领域/跨 clone 两条提示行 (D13: 宽容回落, 禁静默降级)
 - test_new_doc_task_empty_domains_falls_back_but_empty_siblings_is_single_clone: [domains]
@@ -427,6 +429,28 @@ def test_new_doc_repo_project_config_exists_and_parses() -> None:
     config = _common.load_project_config()
     assert _common.config_domains(config), "本仓配置必须配了 [domains] values (领域校验在场)"
     assert _common.config_sibling_names(config) is not None, "本仓配置必须配了 [siblings] 节"
+    # [nav] 节 (批9b 外置): 本仓成态必须配齐 repo_deny / remotes —— kb.nav 行为零变化的配置面
+    assert _common.config_nav_repo_deny(config) is not None, "本仓配置必须配了 [nav] repo_deny (kb.nav 红线排除在场)"
+    assert _common.config_nav_remotes(config) is not None, "本仓配置必须配了 [nav] remotes (主线远端候选序在场)"
+
+
+def test_config_nav_readers_shapes() -> None:
+    """`config_nav_repo_deny` / `config_nav_remotes` 形态判据 (批9b 外置, S1 读者同款):
+    节缺失/键缺失/混型 → None (调用方回落+提示); 合法 → 元组; 显式空列表 = 合法配置。"""
+    import _common
+
+    assert _common.config_nav_repo_deny({}) is None, "无 [nav] 节 → None"
+    assert _common.config_nav_repo_deny({"nav": {}}) is None, "键缺失 → None (未配置)"
+    assert _common.config_nav_repo_deny({"nav": {"repo_deny": ["a", 2]}}) is None, "混型 → None"
+    assert _common.config_nav_repo_deny({"nav": {"repo_deny": "a"}}) is None, "非数组 → None"
+    assert _common.config_nav_repo_deny({"nav": {"repo_deny": []}}) == (), "显式空 = 合法配置"
+    assert _common.config_nav_repo_deny({"nav": {"repo_deny": [".git", "x"]}}) == (".git", "x")
+
+    assert _common.config_nav_remotes({}) is None
+    assert _common.config_nav_remotes({"nav": {}}) is None
+    assert _common.config_nav_remotes({"nav": {"remotes": ["origin", 2]}}) is None
+    assert _common.config_nav_remotes({"nav": {"remotes": []}}) == (), "显式空 = 不按候选序挑"
+    assert _common.config_nav_remotes({"nav": {"remotes": ["gitee"]}}) == ("gitee", )
 
 
 def test_new_doc_task_without_config_falls_back_with_hints(tmp_path: Path, monkeypatch) -> None:

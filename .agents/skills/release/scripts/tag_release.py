@@ -7,7 +7,7 @@
 - 幂等重入: tag 已存在时校验指向而非重建。
 
 用法:
-    python tag_release.py --repo <root> --tag v0.3.0 --remotes gitee,github [--message ..]
+    python tag_release.py --repo <root> --tag v0.3.0 --remotes <主线>,<镜像> [--tag-note-prefix <项目前缀>] [--message ..]
 退出码: 0 全部远端落定(含重入) / 1 校验或推送失败。
 """
 
@@ -54,12 +54,32 @@ def remote_tag_sha(run_git, repo: str, remote: str, tag: str) -> str | None:
     return locals().get("peeled")
 
 
+def tag_message(message: str | None, prefix: str, tag: str) -> tuple[str, bool]:
+    """tag 附注取值 (计划 26-11-17-0010 S11 批9b 外置): `--message` 显式指定恒胜;
+    否则 `<prefix> <tag>` —— prefix 是**项目事实** (项目名前缀), 由 release 包 config.toml
+    的 release.tag run 行经 `--tag-note-prefix` 传入 (该包「项目事实全在 config.toml run 行」
+    的既有参数化模式, 不新增脚本读配置的机制); prefix 空 → 回落通用 `release <tag>` 并置
+    fallback=True (调用方必打提示, D13/R-7 —— 项目附注前缀失效非静默)。返回 (附注, 是否回落)。"""
+    if message:
+        return message, False
+    if prefix:
+        return f"{prefix} {tag}", False
+    return f"release {tag}", True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="打发布 tag + 显式推送 + ls-remote 核验(release skill)")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--tag", required=True, help="发布 tag, 形如 v0.3.0(不带 hash)")
     parser.add_argument("--remotes", required=True, help="逗号分隔, 首位=主线远端")
-    parser.add_argument("--message", default=None, help="tag 附注(默认 auto-qb <tag>)")
+    parser.add_argument(
+        "--tag-note-prefix",
+        default="",
+        help="附注项目前缀(项目事实, 由 release 包 config.toml run 行传入; 缺省回落通用 'release <tag>' 且打提示)"
+    )
+    parser.add_argument(
+        "--message", default=None, help="tag 附注(显式指定恒胜; 缺省 = <tag-note-prefix> <tag>, 回落 release <tag>)"
+    )
     ns = parser.parse_args(argv)
 
     for stream in (sys.stdout, sys.stderr):
@@ -75,7 +95,13 @@ def main(argv: list[str] | None = None) -> int:
         if not TAG_PATTERN.match(ns.tag):
             raise RuntimeError(f"tag {ns.tag!r} 不符合 v<major>.<minor>.<patch> 形态(不带 hash)")
         head = must_git(["rev-parse", "HEAD"], ns.repo, "rev-parse HEAD").strip()
-        message = ns.message or f"auto-qb {ns.tag}"
+        message, fallback_note = tag_message(ns.message, ns.tag_note_prefix, ns.tag)
+        if fallback_note:
+            print(
+                "[tag_release] WARN tag 附注前缀未配置 (项目事实应由 release 包 config.toml 的"
+                " release.tag run 行经 --tag-note-prefix 传入) —— 回落通用附注, 不是静默降级",
+                file=sys.stderr,
+            )
 
         # 幂等重入: 本地已有 → 校验指向而非重建。
         local_sha = local_tag_sha(run_git, ns.repo, ns.tag)

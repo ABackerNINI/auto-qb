@@ -51,6 +51,10 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_collect_nav_stale_hint_respects_frozen_forms: doc-age-days / doc-stale 只提示不拦截; plan/report 冻结不审, 其余按 90 天 (2026-11-05 计划 §07 P4)
 - test_doc_map_collect_keys_unchanged: gen_doc_map.collect() 输出键集合不变 (enrich 不动本体)
 - test_titles_and_meta_unescaped_in_data_layer: HTML 源里的实体 (issue-title / issue-summary / <title>) 在数据层反转义, 前端 esc 只转义一次 (否则 nav 显示 "-&gt;", 2026-10-31 用户报)
+- test_repo_deny_reads_project_config: [nav] repo_deny 读配置即生效, 显式列表整体替换通用默认 (批9b 外置)
+- test_repo_deny_fallback_generic_and_hint: 删配置回落通用默认 (.git/.env, 零项目词) + 必打提示行一次
+- test_repo_deny_malformed_falls_back: 形态不对 (元素混型) 回落+提示 (禁静默)
+- test_repo_deny_explicit_empty_legal: 显式空列表 = 合法配置 (全放行, 不回落不提示)
 """
 
 from __future__ import annotations
@@ -274,3 +278,40 @@ def test_doc_map_collect_keys_unchanged(tmp_path: Path) -> None:
     expected = {"form", "topic", "status", "stamp", "title", "link", "refs"}
     for item in gen_doc_map.collect(mb):
         assert set(item) == expected, f"collect() 本体键集合变了: {sorted(item)}"
+
+
+def test_repo_deny_reads_project_config(tmp_path: Path, monkeypatch) -> None:
+    """`[nav] repo_deny` 读配置即生效 (批9b 外置, S1 同款): 显式列表**整体替换**通用默认 ——
+    配置里只写 secret-data 时, 通用项 (.git) 不再拦, 项目项 (secret-data) 生效; 配置在场零提示。"""
+    monkeypatch.setattr(nav_data, "load_project_config", lambda: {"nav": {"repo_deny": ["secret-data"]}})
+    assert nav_data._denied("secret-data/x.json", tmp_path) is True, "配置里的项目红线必须拦"
+    assert nav_data._denied(".git/config", tmp_path) is False, "显式列表整体替换默认 (要拦通用项须写进列表)"
+
+
+def test_repo_deny_fallback_generic_and_hint(tmp_path: Path, monkeypatch, capsys) -> None:
+    """删配置 → 回落**通用**默认 (.git/.env, 零项目词 —— 项目词属于配置不属于代码) 且 stderr
+    **必打**提示行 (D13/R-7, 排除表失效非静默); 提示每进程只打一次 (免 30s 轮询刷屏)。"""
+    monkeypatch.setattr(nav_data, "_repo_deny_hint_done", False)  # 模块级提示旗标复位 (测试序无关)
+    monkeypatch.setattr(nav_data, "load_project_config", lambda: {})
+    assert nav_data._denied(".git/config", tmp_path) is True, "通用默认 .git 仍拦"
+    assert nav_data._denied(".env", tmp_path) is True, "通用默认 .env 仍拦"
+    assert nav_data._denied("auto-qb-data/state.json", tmp_path) is False, "项目词不得进代码默认 (属配置)"
+    err1 = capsys.readouterr().err
+    assert "[KB-CONFIG]" in err1 and "repo_deny" in err1, f"回落必打提示行: {err1}"
+    nav_data._denied(".git/config", tmp_path)
+    assert capsys.readouterr().err == "", "提示每进程只打一次"
+
+
+def test_repo_deny_malformed_falls_back(tmp_path: Path, monkeypatch, capsys) -> None:
+    """形态不对 (元素混型含非 str) → 同缺失: 回落通用默认 + 提示行 (禁静默降级)。"""
+    monkeypatch.setattr(nav_data, "_repo_deny_hint_done", False)
+    monkeypatch.setattr(nav_data, "load_project_config", lambda: {"nav": {"repo_deny": ["ok", 2]}})
+    assert nav_data._denied(".git/config", tmp_path) is True, "混型 → 回落通用默认"
+    assert "[KB-CONFIG]" in capsys.readouterr().err
+
+
+def test_repo_deny_explicit_empty_legal(tmp_path: Path, monkeypatch, capsys) -> None:
+    """显式空列表 = 合法配置 (项目没有需要排除的红线路径): 全放行, 不回落不提示 (口径同 siblings 空列表)。"""
+    monkeypatch.setattr(nav_data, "load_project_config", lambda: {"nav": {"repo_deny": []}})
+    assert nav_data._denied(".git/config", tmp_path) is False
+    assert capsys.readouterr().err == "", "显式配置不得打回落提示"

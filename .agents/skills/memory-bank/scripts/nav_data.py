@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import STALE_DAYS_REFERENCE  # noqa: E402
+from _common import STALE_DAYS_REFERENCE, config_nav_repo_deny, load_project_config  # noqa: E402
 from gen_doc_map import (  # noqa: E402
     FORM_ORDER, META_RE, _refs_of, collect, group_by_topic, is_live,
 )
@@ -44,8 +44,31 @@ from gen_doc_map import (  # noqa: E402
 NO_STATUS = "(无状态)"
 MB_PREFIX = "memory-bank/"  # refs 声明的是仓库根相对路径, 台账 link 是 memory-bank 相对路径
 BASELINE_ATTACH = ("testing", "baselines", "attachments")  # 归档回退根 (kb.check 同口径)
-# 仓库根下这些前缀一律不进导航 (config.yml 是真生产配置, auto-qb-data/ 是运行数据, 见 pitfalls/ops/prod-files.md)
-REPO_DENY = ("config.yml", "auto-qb-data", ".git", ".env")
+# 仓库根下这些前缀**不配置就**不进导航 —— 项目绑定面外置单点 `<skill>/config/project.toml`
+# `[nav] repo_deny`(计划 26-11-17-0010 S11 批9b, S1 同款模式): 本仓实例 (生产配置 config.yml /
+# 运行数据 auto-qb-data/, 判据见 pitfalls/ops/prod-files.md) 配在配置里; 缺失回落这里的**通用**
+# 默认 + 必打提示 (D13/R-7, 提示每进程一次)。默认零项目词 —— 项目词属于配置, 不属于代码。
+DEFAULT_REPO_DENY = (".git", ".env")
+_repo_deny_hint_done = False
+
+
+def effective_repo_deny() -> tuple[str, ...]:
+    """生效排除表: `[nav] repo_deny` 现读项目配置 (server 30s 轮询下改配置即生效);
+    缺失 / 形态不对 → 回落 DEFAULT_REPO_DENY + 必打提示 (提示只打一次, 免轮询刷屏)。
+    配置解析失败 (坏 TOML) → 异常上抛 fail-fast (坏配置不是「缺失」, 静默回落会假绿)。"""
+    global _repo_deny_hint_done
+    values = config_nav_repo_deny(load_project_config())
+    if values is None:
+        if not _repo_deny_hint_done:
+            _repo_deny_hint_done = True
+            sys.stderr.write(
+                "[KB-CONFIG] 未配置导航红线排除 (<skill>/config/project.toml [nav] repo_deny 缺失或"
+                "形态不对) —— 回落通用默认 (.git/.env); 项目专属红线 (生产配置 / 运行时数据目录)"
+                "请照配置补 [nav] repo_deny, 排除表失效不是静默的\n"
+            )
+        return DEFAULT_REPO_DENY
+    return values
+
 
 # 数据自带时间戳的两种体例: `YY-MM-DD-HHMM` (HTML) / `YY-MM-DD` (md 档案)
 _AGE_STAMP_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{2})(?:-(\d{4}))?$")
@@ -141,7 +164,7 @@ def _denied(rel: str, root: Path) -> bool:
         head = (root / rel).resolve().relative_to(root.resolve()).parts[0]
     except (OSError, ValueError):
         return True  # 落不进仓库根 (越界): 一律拒绝
-    return head in REPO_DENY
+    return head in effective_repo_deny()
 
 
 def _basename_index(mb: Path) -> dict[str, str]:

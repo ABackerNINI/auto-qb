@@ -42,10 +42,10 @@ note    = "红 -> 停 tag 前，修复后重走（管线可重入）；无鉴权
 
 # 6. 打 tag：锚发版提交 + 显式 ref 推送 + ls-remote 核验
 [tasks."release.tag"]
-run     = ["uv run python .agents/skills/release/scripts/tag_release.py --repo . --remotes gitee,github <args>"]
+run     = ["uv run python .agents/skills/release/scripts/tag_release.py --repo . --remotes gitee,github --tag-note-prefix auto-qb <args>"]
 timeout = 600
 when    = "ci-gate 全绿后（agent 追加 --tag v<major>.<minor>.<patch>）"
-note    = "tag 名不带 hash；幂等重入（已存在则校验指向而非重建）"
+note    = "tag 名不带 hash；幂等重入（已存在则校验指向而非重建）；--tag-note-prefix 是项目事实（tag 附注前缀, 计划 26-11-17-0010 S11 批9b 外置）—— 缺了脚本回落通用附注并打 WARN"
 
 # 7. Release 页：gitee 主线 + github 镜像，各尝试一次
 [tasks."release.page"]

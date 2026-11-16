@@ -42,7 +42,12 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_classify_pull_cases: 仅快进分类 (up-to-date / fast-forward / ahead-only / diverged) 纯逻辑钉死
 - test_pull_ff_only_rejects_non_repo: 非 git 工作树 → 失败
 - test_pull_ff_only_rejects_detached_head: 游离 HEAD → 失败
-- test_pull_ff_only_offline_reports_unreachable: ls-remote 拿不到远端 → 失败(离线提示)
+- test_pull_ff_only_offline_reports_unreachable: ls-remote 拿不到远端 → 失败(离线提示; 远端名按 [nav] remotes 候选序挑出)
+- test_pick_remote_reads_remotes_config: [nav] remotes 候选序读配置即生效 (批9b 外置)
+- test_pick_remote_fallback_single_remote_and_hint: 删配置回落 ("origin",) + 必打提示行一次
+- test_pick_remote_fallback_names0_without_origin: 候选序无命中退 names[0] (兜底口径不变)
+- test_pick_remote_malformed_remotes_falls_back: 形态不对回落+提示 (禁静默)
+- test_pick_remote_explicit_empty_remotes_uses_first_remote: 显式空列表 = 直接取第一个远端, 不提示
 - test_pull_ff_only_diverged_refuses_without_merge: 分叉 → 失败, 且**绝不执行 merge**(仅快进口径)
 - test_pull_ff_only_ahead_only_is_noop: 本地领先(未推送) → 成功且不执行 merge
 - test_pull_ff_only_fast_forwards: 纯落后 → merge --ff-only, 回报新 HEAD
@@ -181,7 +186,9 @@ def test_pull_ff_only_rejects_detached_head(tmp_path: Path, monkeypatch) -> None
 
 
 def test_pull_ff_only_offline_reports_unreachable(tmp_path: Path, monkeypatch) -> None:
-    """远端不可达: fetch 失败 + ls-remote 空 → 报离线; 远端名按 gitee 优先挑出。"""
+    """远端不可达: fetch 失败 + ls-remote 空 → 报离线; 远端名按 `[nav] remotes` 候选序挑出
+    (批9b 外置: gitee 优先属于配置面, 测试经配置给出)。"""
+    monkeypatch.setattr(nav_server, "load_project_config", lambda: {"nav": {"remotes": ["gitee", "origin"]}})
     runner, _ = _fake_git(
         {
             ("rev-parse", "--is-inside-work-tree"): _proc(0, "true\n"),
@@ -194,6 +201,49 @@ def test_pull_ff_only_offline_reports_unreachable(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(nav_server, "_git", runner)
     ok, msg = nav_server.pull_ff_only(tmp_path)
     assert ok is False and "拿不到远端" in msg and "gitee" in msg
+
+
+def test_pick_remote_reads_remotes_config(tmp_path: Path, monkeypatch) -> None:
+    """`[nav] remotes` 候选序读配置即生效 (批9b 外置): 配置里的首位远端胜出, 不触代码。"""
+    monkeypatch.setattr(nav_server, "load_project_config", lambda: {"nav": {"remotes": ["up", "origin"]}})
+    monkeypatch.setattr(nav_server, "_git", lambda root, *a: _proc(0, "origin\nup\n"))
+    assert nav_server.pick_remote(tmp_path) == "up"
+
+
+def test_pick_remote_fallback_single_remote_and_hint(tmp_path: Path, monkeypatch, capsys) -> None:
+    """删配置 → 回落单远端通用 ("origin",) (D13/R-7): origin 在场照挑 origin; 名单里没有
+    origin 时退第一个远端 (names[0] 兜底口径不变); stderr **必打**一次提示行, 再调不重复。"""
+    monkeypatch.setattr(nav_server, "_remotes_hint_done", False)  # 模块级提示旗标复位 (测试序无关)
+    monkeypatch.setattr(nav_server, "load_project_config", lambda: {})
+    monkeypatch.setattr(nav_server, "_git", lambda root, *a: _proc(0, "gitee\norigin\n"))
+    assert nav_server.pick_remote(tmp_path) == "origin"
+    err1 = capsys.readouterr().err
+    assert "[KB-CONFIG]" in err1 and "remotes" in err1, f"回落必打提示行: {err1}"
+    assert nav_server.pick_remote(tmp_path) == "origin"
+    assert capsys.readouterr().err == "", "提示每进程只打一次 (免轮询/重试刷屏)"
+
+
+def test_pick_remote_fallback_names0_without_origin(tmp_path: Path, monkeypatch) -> None:
+    """回落候选序里没有仓库实际远端名时 → 仍取 git remote 的第一个 (兜底口径不变, 不空转)。"""
+    monkeypatch.setattr(nav_server, "load_project_config", lambda: {"nav": {"remotes": ["gitee", "github"]}})
+    monkeypatch.setattr(nav_server, "_git", lambda root, *a: _proc(0, "gitee\n"))
+    assert nav_server.pick_remote(tmp_path) == "gitee"
+
+
+def test_pick_remote_malformed_remotes_falls_back(tmp_path: Path, monkeypatch, capsys) -> None:
+    """形态不对 (元素混型) → 同缺失: 回落单远端通用 + 提示行 (禁静默降级)。"""
+    monkeypatch.setattr(nav_server, "_remotes_hint_done", False)
+    monkeypatch.setattr(nav_server, "load_project_config", lambda: {"nav": {"remotes": ["origin", 2]}})
+    monkeypatch.setattr(nav_server, "_git", lambda root, *a: _proc(0, "origin\n"))
+    assert nav_server.pick_remote(tmp_path) == "origin"
+    assert "[KB-CONFIG]" in capsys.readouterr().err
+
+
+def test_pick_remote_explicit_empty_remotes_uses_first_remote(tmp_path: Path, monkeypatch) -> None:
+    """显式空列表 = 合法配置 (不按候选序挑, 直接取 git remote 第一个), 不回落不提示。"""
+    monkeypatch.setattr(nav_server, "load_project_config", lambda: {"nav": {"remotes": []}})
+    monkeypatch.setattr(nav_server, "_git", lambda root, *a: _proc(0, "first\norigin\n"))
+    assert nav_server.pick_remote(tmp_path) == "first"
 
 
 def test_pull_ff_only_diverged_refuses_without_merge(tmp_path: Path, monkeypatch) -> None:

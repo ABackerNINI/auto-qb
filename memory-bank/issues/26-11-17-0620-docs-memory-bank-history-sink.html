@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>memory-bank SKILL.md 演进史批量下沉 references/history.md · docs · 计划外问题（便签）</title>
+<meta name="issue-slug" content="memory-bank-history-sink">
+<meta name="issue-stamp" content="26-11-17-0620">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="memory-bank-skill-portability">
+<meta name="doc-refs" content="memory-bank/plans/26-11-17-0010-plan-skill-portability.html">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="memory-bank SKILL.md 演进史批量下沉 references/history.md">
+<meta name="issue-summary" content="计划 26-11-17-0010 D14 拍板缓行的 P2 文案类: SKILL.md 正文混大量演进史(裁定编号/复盘故事), 批量下沉到 references/history.md, 正文只留协议">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· docs</div>
+<h1>memory-bank SKILL.md 演进史批量下沉 references/history.md</h1>
+<p class="lede">计划 26-11-17-0010 D14 拍板缓行的 P2 文案类: SKILL.md 正文混大量演进史(裁定编号/复盘故事), 批量下沉到 references/history.md, 正文只留协议</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-0620-docs-memory-bank-history-sink</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 06:20</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>memory-bank 的 <code>SKILL.md</code> 正文(约 19KB)混大量演进史 —— 裁定编号(A1/A5/A6)、日期型复盘叙事(「2026-09-17 复盘: …」「2026-09-27 审计 … 已实证」)、历史方案出处(「2026-10-08 方案 C」「2026-11-05 用户重定调」)与已退役机制的历史引用 —— 协议层与历史层未分层(收编报告 §2.1-6 实证: PTSKIT 移植时逐条判定「provenance 保留/操作性改写」花了裁决成本)。应该是: SKILL.md 只留协议, 演进史批量下沉 <code>references/history.md</code>, 正文对历史引用一次即可。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+  <ul>
+    <li><code>.agents/skills/memory-bank/SKILL.md:49</code>（取证 2026-11-17 06:20）· grep「2026-09-17 复盘」—— 立档阈值段的历史复盘叙事</li>
+    <li><code>.agents/skills/memory-bank/SKILL.md:76</code>（取证 2026-11-17 06:20）· grep「2026-09-27 审计」—— 回写措辞段的审计故事与 reports 链接</li>
+    <li><code>.agents/skills/memory-bank/SKILL.md:113-114</code>（取证 2026-11-17 06:20）· grep「触顶处置」「债务制」—— cap 债务制的多轮重定调史</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>照收编报告 §2.1-6 的方向: 建 <code>references/history.md</code>, 把裁定编号/复盘故事/方案出处成批迁入并按主题分节, SKILL.md 相应位置只留一句指针; 属批量文案手术, 宜单开一轮做(不与代码改造混批)。来源: 计划 26-11-17-0010 D14 拍板「P2 范围砍文案类, 演进史下沉缓行」+ R-6 风险「缓行后遗忘」。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 06:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-17-0620-docs-memory-bank-history-sink.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

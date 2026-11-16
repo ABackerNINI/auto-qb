@@ -12,3 +12,14 @@ values = ["webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "co
 # 按 slug 比对; 自身 clone 自动排除)。每项相对本仓库根的 parent 目录解析 (与旧 glob `../auto-qb-*`
 # 同锚点); 空列表 = 单 clone, 不查跨 clone。列出即生效, 不再按名字模式扫 parent 目录。
 tasks_dirs = ["auto-qb-zcode-clone2", "auto-qb-zcode-clone3"]
+
+[nav]
+# kb.nav 的项目绑定面 (计划 26-11-17-0010 S11 批9b 外置, S1 同款模式)。
+# repo_deny: 仓库根下这些**首段**不进导航 (红线排除表, 判据 nav_data._denied; 越界面独立拒绝)。
+#   本仓实例 = 旧 REPO_DENY 原样搬家 (config.yml 是真生产配置, auto-qb-data/ 是运行数据,
+#   见 pitfalls/ops/prod-files.md); 缺失回落通用默认 (.git/.env) + 必打提示 (D13/R-7)。
+repo_deny = ["config.yml", "auto-qb-data", ".git", ".env"]
+# remotes: 主线远端候选序 (kb.nav 顶栏「拉取」按序取第一个存在的远端, 与 my-commit-flow
+#   main_candidates 同构)。本仓实例 = Gitee 优先 (历史 clone 的 origin 可能是 GitHub 镜像);
+#   缺失回落单远端通用 ("origin",) + 必打提示 (D13/R-7)。空列表 = 不按候选序挑, 直接取第一个。
+remotes = ["gitee", "origin", "github"]

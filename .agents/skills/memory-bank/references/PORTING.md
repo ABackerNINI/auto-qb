@@ -19,7 +19,9 @@
    `~/.workbuddy-ai/skills/memory-bank/`。`scripts/` 整目录带走即可 —— `check_kb_structure.py` /
    `check_doc_links.py` / `timekit.py` / `gen_*.py` / `nav_*.py` 全在里面。
 2. **建 KB 骨架**: 建 `memory-bank/` 与各目录 —— `tasks/` `active-context/` `plans/` `reports/`
-   `issues/` `pitfalls/<类>/` `testing/baselines/` 等; 索引目录(现仅 pitfalls)放一份 `_about.md`(三行头);
+   `issues/` `pitfalls/<类>/` `testing/baselines/` 等; 索引目录(现仅 pitfalls)放一份 `_about.md`(三行头) ——
+   **空库阶段 `_about.md` 里不要预挂类级 `_index.md` 链接**(空类目录不生成类级索引, 挂了 `doc.links` 必红;
+   写入第一份坑档并重跑 `kb.index` 后再挂);
    手写 `memory-bank/README.md` 细路由(它不被生成, 是路由单点)。
 3. **首次生成**: 跑 `commands run kb.index` 重建 pitfalls 的 `_index.md`(全库唯一生成索引)。
 
@@ -37,7 +39,7 @@
 |---|---|---|---|---|---|
 | 1 | memory-bank skill 目录 | `.agents/skills/memory-bank/` 整目录(`scripts/` 全带走)→ 目标项目同名路径或用户级 skills 目录 | 建并填 `<skill>/config/project.toml`(`[domains]` / `[siblings]`; 填法见「双场景指导·领域枚举对齐」) | `memory-bank/` 目录骨架(`tasks/` `active-context/` `plans/` `reports/` `issues/` `pitfalls/<类>/` `testing/baselines/` 等; 类枚举单点 `PITFALL_CLASSES`, 索引目录放 `_about.md` 三行头) + 手写 `memory-bank/README.md` 细路由 | `kb.time` 三行正常(UTC+8); `kb.check` 空库绿; `kb.new task` 建档成功(领域枚举/查重生效) |
 | 2 | commands 引擎 | `.agents/skills/commands/` 整目录 | 无引擎级配置; 各包配置见下行 | 无 | `commands list` 列得出包; `commands run kb.check` 经引擎跑通(`<skill-dir:NAME>` 占位符解析, 项目级 `.agents/skills/` 优先、用户级兜底) |
-| 3 | `.commands/` 包 | 按需拷 `my-commit-flow/` `test/` `kb/` `review/` 各包(`scripts/` 与模板一并) | 每包照「模板清单」的 `config.minimal.toml` 复制 → 改名(`config.toml`; my-commit-flow 改名 `.my-commit-flow.toml`)→ 逐节填空 | review 包另建 `lane.toml`(只做存量评审才建, 见「双场景指导·存量评审 lane」) | 各包脚本 `--help`; 预检 `--dry-run`; 起步闸门手工跑一遍绿 |
+| 3 | `.commands/` 包 | 按需拷 `my-commit-flow/` `test/` `kb/` `review/` 各包(`scripts/` 与模板一并); **test 包例外: 只取它的 `config.minimal.toml` 起步, 原包脚本深度项目绑定不移植**(见「双场景指导·与既有测试套共存」) | 每包照「模板清单」的 `config.minimal.toml` 复制 → 改名(`config.toml`; my-commit-flow 改名 `.my-commit-flow.toml`)→ 逐节填空 | review 包另建 `lane.toml`(只做存量评审才建, 见「双场景指导·存量评审 lane」) | 各包脚本 `--help`; 预检 `--dry-run`; 起步闸门手工跑一遍绿 |
 | 4 | sync 脚本 | 项目根 `scripts/sync_agent_skills.py` | 排除表与链接目标改成本项目值(本项目实例: `LINK_TARGETS = [.codebuddy/skills]` + `EXCLUDED = {autoclaw-design-capability}`); S9 批次后改走 `.agents/skills/.config/sync.toml`(口径见「配置落点与命名口径」, 落地前不创建) | 链接目标目录(本项目实例: `.codebuddy/skills/`) | 跑一遍后 `ls` 链接目标可见各 skill 链接 |
 | 5 | KB 数据件骨架 | 按需拷 [templates/doc-forms.md](../templates/doc-forms.md) / [templates/collaboration.md](../templates/collaboration.md) / [templates/real-machine.md](../templates/real-machine.md)(既有骨架先例: [baseline.md](../templates/baseline.md)) | 无 | 复制到 `memory-bank/` 对应位置逐节填空(去向见「模板清单」); **不需要的件不复制**, SKILL.md 里引用它的段落一并摘除 | `check_doc_links.py --quiet` 绿(摘引用后无坏链) |
 | 6 | 本文件 PORTING | 随单位 1 自动带走 | 移植后按目标项目现状回写(依赖面清单漂移是本改造头号风险 R-4) | 无 | 无 |
@@ -46,7 +48,8 @@
 
 单点口径, 别在别处再写第二份:
 
-- **skill 面**: `<skill>/config/project.toml` —— 统一名, 项目绑定面(领域枚举 / 兄弟 clone 清单 / …)单点。
+- **skill 面**: `<skill>/config/project.toml` —— 统一名, 项目绑定面(领域枚举 / 兄弟 clone 清单 /
+  kb.nav 的 `[nav]`(红线排除 `repo_deny` / 远端候选序 `remotes`) / …)单点。
 - **帮助文档**: `<skill>/references/PORTING.md` —— 每 skill 一份(D16, 允许薄); **包面不另建包级移植文件**,
   由本轨道 runbook 分节覆盖(D17, my-commit-flow `references/config.md` 先例)。
   每份随各自 skill 目录自动带走(拷目录即得), 依赖面以各文件为准, 本文件不汇总复制;
