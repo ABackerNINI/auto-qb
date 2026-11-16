@@ -1,0 +1,117 @@
+# ===========================================================================
+# kb 包出厂最小模板 (计划 26-11-17-0010 S6)
+#
+# 用法: 复制到 `.commands/kb/` 后改名 `config.toml`, 得到 PORTING 命令包清单
+#       (memory-bank skill 的 references/PORTING.md「可选机检(推荐全挂) · 命令包」节)
+#       的起步超集: 另含 wrap/status/bump/ref 四条标准机械面, kb.nav 归可选注释;
+#       <skill-dir:memory-bank> 占位符由 commands 引擎解析
+#       (项目级 .agents/skills/ 优先, 用户级兜底), skill 目录搬家配置零改动。
+#
+# 本文件是静态模板, commands 引擎只读 `config.toml`; 两个名字并存时以改名后的
+# config.toml 为生效面。解释器一律 `python3`(uv 等项目偏好不入出厂配置)。
+#
+# 默认链成员资格 (计划 26-11-17-0010 设计原则): kb.check 只收「对新空库恒绿」的成员
+# —— 凡「要求某个具体文件必须存在」的 fail-closed 守卫都是项目层守卫, 不进默认链,
+# 以注释示例出现(下方 kb.docmap / kb.anchor), 是否启用由项目拍板, 判据单点在
+# PORTING.md 的「项目可选守卫勿默认移植」节。
+# ===========================================================================
+
+[pack]
+name      = "kb"
+when      = "知识库: 索引重建 / 会话切片 / 只校验不写"
+confirmed = true
+
+[tasks."kb.index"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/gen_all.py"]
+timeout = 120
+pin     = true
+when    = "收尾回写知识库后重建索引(不要手改 _index.md)"
+note    = "生成集合的单点在 gen_all.py(它同时是生成物白名单 --list 的来源); 集合只有这一处, 不在包配置里再列一遍"
+
+[tasks."kb.check"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/gen_all.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/check_wording.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/check_doc_templates.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/timekit.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/check_status_drift.py --check",
+           "python3 <skill-dir:memory-bank>/scripts/check_html.py --check"]
+timeout = 120
+when    = "改完知识库先自查, 或提交前确认索引自洽"
+note    = "--check 只校验不写; 要在回写代码之后跑, 否则改到一半必然红; 成员 = 默认链(对新空库恒绿), fail-closed 守卫不在其中(见文件头与下方注释示例)"
+
+[tasks."kb.active"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/gen_active_recent.py <args>"]
+timeout = 60
+when    = "看会话滚动状态(在办专题切片, 按最后活动倒序)"
+note    = "只打印不写文件; <args> 可传 --all / -n N 全量或改条数、--check 只校验(已挂进 kb.check)"
+
+[tasks."kb.baseline"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/gen_baseline_recent.py <args>"]
+timeout = 60
+when    = "看测试基线 / 最新数字 / 历史基线排障(默认列最近 3 条)"
+note    = "只打印不写文件; <args> 可传 --all 或 -n N、--check 只校验(已挂进 kb.check)"
+
+[tasks."kb.time"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/timekit.py <args>"]
+timeout = 30
+when    = "取当前时间戳(UTC+8 钉死, 与机器时区无关): 无参三行全打; 子命令 date / time / stamp; check 走日期守卫"
+note    = "KB 内任何日期(文件名前缀 / 元数据 / 正文)一律取自它的输出, 禁用模型上下文里的日期与手工推算"
+
+[tasks."kb.new"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/new_doc.py <args>"]
+when    = "新建计划/任务档案/issue/坑档/基线切片: 一次逻辑动作 = 一条命令 + 一次填空(时间戳/命名/头部/SLOT 全派生)"
+note    = "建后必填 SLOT(守卫拦残留); 目标已存在即 rc=1; <args> 形态见 skill SKILL.md 与 doc-forms 数据件的「创建/更新方式」节"
+timeout = 60
+
+[tasks."kb.wrap"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/wrap_session.py <args>"]
+when    = "收尾机械面: 抬切片最后活动 + 追加变更记录行 / 同专题档案 Updated + 进度日志日期行"
+note    = "只做机械面(蒸馏与判断仍是 agent 的活); 切片不存在则按模板建"
+timeout = 60
+
+[tasks."kb.status"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/flip_status.py <args>"]
+when    = "翻转文档状态(词表校验 / 抬时间戳全派生, 终态带提醒)"
+note    = "词表单点 import(_common), 别凭记忆写; 切片一律拒绝并指路 kb.wrap; 同状态翻转幂等"
+timeout = 60
+
+[tasks."kb.bump"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/bump_doc.py <args>"]
+when    = "文档改版一次落盘: HTML 抬 doc-updated + 变更记录追加行 / 档案抬 Updated / 切片抬最后活动"
+note    = "变更记录编号 = 段内最大 + 1(只追加, 已有行零触碰); 缺变更记录段即 fail-fast 指路, 不猜位置硬塞"
+timeout = 60
+
+[tasks."kb.ref"]
+run     = ["python3 <skill-dir:memory-bank>/scripts/set_doc_refs.py <args>"]
+when    = "认领链回填一条命令: 声明方原位并值 + 目标自动反向声明(双向义务机器保证)"
+note    = "目标未落盘整笔拒写; 声明方已有重复声明行拒写; 幂等, 只动元数据行; <args> = <path> --add <ref>[,<ref>...]"
+timeout = 60
+
+# ---------------------------------------------------------------------------
+# 项目可选机检(注释示例, 不默认启用) —— 启用前先读 PORTING.md「项目可选守卫勿默认
+# 移植」: 它们是 fail-closed 守卫, 空库首跑必红, 需要项目对象先建起来再显式挂载。
+# ---------------------------------------------------------------------------
+
+# [tasks."kb.docmap"]
+# # 主键校验 + 认领链双向守卫: 目标项目的第一份带 doc-topic / Refs 的文档建起来后再挂
+# run     = ["python3 <skill-dir:memory-bank>/scripts/gen_doc_map.py --check"]
+# timeout = 60
+# when    = "改了 KB 文档主键/Refs 认领链后自查"
+# note    = "缺 doc-topic/Topics 或单向链即红; 空库判红「没有任何件声明引用」—— 不满足对新空库恒绿, 故不在 kb.check 默认链"
+#
+# [tasks."kb.anchor"]
+# # 常驻锚防流水守卫: 有变异测试/长期排期锚台账的项目才需要
+# run     = ["python3 <skill-dir:memory-bank>/scripts/check_mutation_anchor.py --check"]
+# timeout = 60
+# when    = "改了常驻锚 issue 或其节白名单后自查"
+# note    = "锚文件缺失即红 —— 不满足对新空库恒绿, 故不在 kb.check 默认链"
+#
+# [tasks."kb.nav"]
+# # 人的知识库导航页: 本地服务, stream 前台长跑(Ctrl-C 停); 按需启用
+# run     = ["python3 <skill-dir:memory-bank>/scripts/nav_server.py <args>"]
+# timeout = 3600
+# stream  = true
+# when    = "本地服务现算三视图浏览; --gen-static 走静态导出"
+# note    = "启动即开浏览器(--no-open 关); 默认绑 127.0.0.1:8765, 端口被占时报错行内提示 --port"

@@ -1,0 +1,33 @@
+# ===========================================================================
+# test 包出厂最小模板 (计划 26-11-17-0010 S6): node --check + pytest 两条起步
+#
+# 用法: 复制到 `.commands/test/` 后改名 `config.toml` —— 即得到一个最小可用测试包;
+#       再按项目往 [tasks.*] 里补自己的 task。源仓 test 包(Docker testbed / TMPDIR
+#       自举 / 覆盖率闸 / 随机序巡检)深度项目绑定, **不移植原包** —— 摩擦依据见
+#       memory-bank skill 的 references/PORTING.md。
+#
+# 本文件是静态模板, commands 引擎只读 `config.toml` 这一个名字, 本文件不被加载;
+# 生效面(键名 / 必填项 / confirmed 语义)以 [.agents/skills/commands/](commands 引擎)
+# 的解析为准: [tasks."*"] 必须有 run(字符串数组)或 script(二选一), 未知键即 STOP。
+#
+# 出厂面环境中立: 解释器一律 `python3`(uv 等项目偏好不入出厂配置, 想用自己改);
+# 路径与目录名是通用占位, 按项目实际布局替换。
+# ===========================================================================
+
+[pack]
+name      = "test"
+when      = "验证代码: 测试套 / 语法自检 / 单文件"
+confirmed = true
+
+[tasks."test.pytest"]
+run     = ["python3 -m pytest tests -q"]
+timeout = 600
+pin     = true
+when    = "改完代码要验一遍(测试套整体跑一次, 红了即非零退出)"
+note    = "最小起步: 直接调 pytest 默认发现(目录名 tests/ 按项目替换); 项目大了再自己拆全量/快速/单文件三档与覆盖率开关"
+
+[tasks."test.node-check"]
+run     = ["node --check <args>"]
+timeout = 30
+when    = "改了 JS 后语法自检: test.node-check -- <文件.js>"
+note    = "node --check 一次只认一个文件, <args> 逐个传; 要批量跑就自己加一条包装脚本 task, 不要在本条里塞循环"

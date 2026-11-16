@@ -1,0 +1,108 @@
+# ===========================================================================
+# my-commit-flow 出厂最小闸门模板 (计划 26-11-17-0010 S6)
+#
+# 用法: 复制到包根后改名 `.my-commit-flow.toml`, 逐节填空, 核对完把 confirmed 改 true。
+#       本文件是静态模板, 引擎与包脚本都不读它 —— 生效配置只有 `.my-commit-flow.toml`
+#       一个名字; 也可以不复制本文件, 直接 `_pipeline.py --init` 按仓库特征生成初稿
+#       (本模板 = 人工可读的最小起点, --init = 机器探测的起点, 两者都要人工确认才算数)。
+#
+# 配置缺失回落语义 (计划 26-11-17-0010 D13):
+#   - 配置文件本体缺失 = **运行必需数据缺失** -> 预检停手并打引导文案(ConfigMissing),
+#     绝不静默回退到"猜一份默认"; 只有逐键省略才回落到 scripts/_ship_config.py 的
+#     KEY_DEFAULTS(省略键的兜底, 不是没文件时的默认值)。
+#   - 闸门命令里的占位符(<root> / <skill-dir:NAME> / <changed:GLOB> / <each:GLOB>)
+#     展开不了 -> STOP, 不降级成"只打印" —— 让人以为跑过了比直接报错更危险。
+#   - <changed:> / <each:> 无匹配文件 -> 按设计静默跳过(它们只盯本次改动, 空匹配不是
+#     配置缺失, 不打提示)。
+#
+# 匹配语义: red_lines / warn_lines / gates[].match 的条目一律是 fnmatch glob
+# (对仓库相对整路径匹配, 大小写敏感, `*` 跨 `/`; 不带通配元的裸串 = 精确相等)。
+# 前缀意图写 `foo*`, 子串意图写 `*foo*`, 精确相等写 `foo`。
+# 正反例表与转义规则的单点见 references/config.md 的「匹配语义」节 —— 不要凭印象写。
+# ===========================================================================
+
+confirmed = false                 # 初稿 WARN(未确认)仅 _pipeline.py --show-config 体检可见(v3 常规路径不拦); 填空核对后自行改 true
+
+branch = ""                       # 留空 = 跟当前分支
+
+# TODO 必填: 红线 = 出现即 STOP 的路径(生产配置 / 运行时数据 / 凭据)。
+# WARN: 空清单仅在 _pipeline.py --show-config 体检报 WARN(v3 常规路径不拦, 没有消费方真拦)
+#   —— TODO 必填勿留空; 把空红线升成 STOP 属引擎行为变更, 不随本模板发生。
+# 示例(按项目替换): ["*config.yml*", "*secrets/*", "*credentials*"]
+red_lines = []
+# TODO 必填: 高危 = 出现需人工确认的路径(在途草稿 / 不该入库的项目数据)。
+# 示例(按项目替换): ["*draft*", "*TODO.md*"]
+warn_lines = []
+
+# TODO 选填: 改代码 / 跑 git 前该读的陷阱索引 —— 预检在检查表末尾把它摆到提交那一刻眼前。
+# pitfalls_index = "memory-bank/pitfalls/git/_index.md"
+
+# ---------------------------------------------------------------------------
+# 生成物冲突自动化解: 默认(省略本键)= 开, 但兜底命令指向 memory-bank skill 的生成器 ——
+# 未移植该 skill 的项目保持 false(冲突一律人工, 行为与不配时逐字一致); 移植后改 true
+# 并把两条命令换成项目自己的生成器(--list 与重跑/自证同一入口)。
+# ! TOML 陷阱: 顶层键必须写在任何 [[gates]] 表头**之前** —— 表头之后写的裸键会并进
+#   最后一张闸门表(实测: 本模板初版就踩过, show-config 里它挂进了第三条闸门)。
+# ---------------------------------------------------------------------------
+auto_resolve_generated = false
+# generated_list_cmd  = "python3 <skill-dir:memory-bank>/scripts/gen_all.py --list"
+# generated_regen_cmd = "python3 <skill-dir:memory-bank>/scripts/gen_all.py"
+
+# ---------------------------------------------------------------------------
+# 起步闸门 3 条: python 测试 / JS 语法自检 / 包内脚本冒烟 —— 零项目词汇, 复制即可用。
+# 目录不同的项目改 match 的 glob; 单语言项目删掉用不到的那条。
+# ---------------------------------------------------------------------------
+
+[[gates]]
+match = ["src/*", "tests/*"]
+run   = ["python3 -m pytest tests -q"]
+auto  = true
+timeout = 600
+note  = "python 全量测试: 改了 src/tests 才跑, 红了即 STOP"
+
+[[gates]]
+match = ["*.js", "*.mjs", "*.cjs"]
+run   = ["node --check <each:**/*.js>",
+         "node --check <each:**/*.mjs>",
+         "node --check <each:**/*.cjs>"]
+auto  = true
+timeout = 30
+note  = "node 语法自检: node --check 一次只认一个文件, <each:> 按改动文件逐个展开"
+
+[[gates]]
+match = [".agents/skills/*", ".commands/*"]
+run   = ["python3 <each:.agents/skills/**/scripts/*.py|--with-safety> --help",
+         "python3 <each:.commands/**/scripts/*.py|--with-safety> --help"]
+auto  = true
+timeout = 300
+note  = "包内脚本冒烟: 改了哪个跑哪个; |--with-safety 摘掉「无参即真动作」的脚本(输出里写明, 非静默丢)"
+
+# ---------------------------------------------------------------------------
+# 可选闸门(注释示例): 按项目需要取消注释并改键。命令一律写 task id 走 commands 引擎,
+# 不在本文件抄命令本体; 未移植某 skill 时对应闸门保持注释。
+# ---------------------------------------------------------------------------
+
+# [[gates]]
+# # 知识库自洽: 需已移植 memory-bank skill 与 kb 命令包(单点 = kb.check 默认链)
+# match = ["memory-bank/*"]
+# run   = ["python3 <skill-dir:commands>/scripts/run.py run kb.check"]
+# auto  = true
+# timeout = 120
+# note  = "索引 / 日期 / 措辞 / 文档模板等知识库守卫, 覆盖面单点在 kb.check"
+#
+# [[gates]]
+# # 文档相对链接存在性: 改名/搬家后的坏链只有机检看得见(需已移植 memory-bank skill)
+# match = ["memory-bank/*", "docs/*", "AGENTS.md"]
+# run   = ["python3 <skill-dir:memory-bank>/scripts/check_doc_links.py --quiet"]
+# auto  = true
+# timeout = 60
+# note  = "相对链接存在性: --quiet 只在红时输出"
+#
+# [[gates]]
+# # 提交前格式化: 经 commands 引擎的项目 task(如 dev.fmt), TODO 换成项目自己的格式化 task id;
+# # 没挂 commands 引擎的项目先别启用(没有 task id 可指)。
+# match = ["src/*", "tests/*"]
+# run   = ["python3 <skill-dir:commands>/scripts/run.py run dev.fmt -- <changed:*.py>"]
+# auto  = true
+# timeout = 60
+# note  = "只碰本次改过的 py 文件(经 <changed:> 展开)"
