@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-11-15
-**Updated:** 2026-11-16
-**Summary:** relocate 结构重构立项: 三病灶(相位碎片化/mixin假边界/判定分叉)结构分析与 45 issue 归因 → grilling D1-D10 全拍板 → 计划入库; 分两批实施(单活任务+判定单点 / 接口显式化+探测异步化), 认领 8 个 Open issue
+**Updated:** 2026-11-17
+**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机验收 4 项 PASS + 基线切片; 第二批 S5/S6 待开工
 **Topics:** backend-relocate-refactor
-**Refs:** memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html
+**Refs:** memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html
 
 ## 本篇只回答
 
@@ -31,10 +31,10 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | 单活任务模型: 续迁收官+移交+统一改指+改道机器退役+旧账迁移器 | Open |
-| S2 | 撤销语义重做: 删搬回+三段式确认文案 | Open |
-| S3 | 生命周期账统一: phase 派生+终态分级保留+双真相收敛 | Open |
-| S4 | 路径判定单点: 归一/到位/根内合一+删链门修复 | Open |
+| S1 | 单活任务模型: 续迁收官+移交+统一改指+改道机器退役+旧账迁移器 | Done(第一批) |
+| S2 | 撤销语义重做: 删搬回+三段式确认文案 | Done(第一批; 「上界面」降级为 API/命令通道下发, UI 消费面另立 issue) |
+| S3 | 生命周期账统一: phase 派生+终态分级保留+双真相收敛 | Done(第一批) |
+| S4 | 路径判定单点: 归一/到位/根内合一+删链门修复 | Done(第一批) |
 | S5 | 跨模块接口显式化: 登记集→查询协议+私有引用清除 | Open |
 | S6 | 探测异步化(并轨 2350) | Open |
 
@@ -49,3 +49,12 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 - 2026-11-15 23:44 立项: 双子代理分析(结构7418行/45issue归类) + grilling D1-D10 全拍板 + 计划 26-11-15-2340 入库认领 8 Open issue; 并轨处置 2350 计划翻 Superseded + issue 0638 认领链改挂 + 活动切片注记
 
 - 2026-11-16 00:12 批次评审(提交前): R1 发现 2 minor+1 nit 过检 3/3 全修(指针§03.6/D11 误写/mixin 口径), R2 复评零 actionable 回退校验通过 —— 计划与 8 issue 认领链可入库
+
+### R1 · 第一批落地 (2026-11-16 ~ 11-17)
+
+- **六笔提交链**(S1-S4 + 收尾追修, 全部随本专题入库): f0004ef9 S1a 单活任务模型核心(续迁收官+移交+统一改指) → 785ad5ae S1b 改道机器退役+整链清理单元+旧账迁移器 → dae75d34 S2 撤销语义重做(删搬回+三段式 guide API/命令通道下发) → df15af5f S3 生命周期账统一(phase 派生单点+终态分级保留+清空历史) → 3692616c S4 路径判定单点(双 _norm 合一+删链门候选面修复) → cd786499 收尾缺陷追修(启动期接管面写穿+撤销 docstring 对齐+补测 5 条)。
+- **分批评审**(逐笔只读子代理, 发现经引文校验全修零回退): S1a 5 轮 11 条; S1b 4 轮 12 条(3 major: armed 继任改写义务失主断粮洞/热启用 fail-fast 失效内存覆盖回滚/回滚测试还原断言恒真); S2 2 轮 5 minor; S3 3 轮 7 条(1 blocker 清空历史前端回执形状错配 + 1 major 自动滚出可静默删恢复挂账); S4 2 轮 3 minor(含 _rel_under 空串契约漂移); 追修 1 轮零 actionable。接缝终审发现的前三条补测缺口随追修提交落入。
+- **真机验收 4 项 PASS**(证据 27 件, tmp-analysis/acc-reloc-single/): acc1 链式 A→B→C 撤销(旧路径解析/数据路径未动); acc2 迁移器(good/bad/restart 三形态); acc3 终态分级保留+清空历史; acc4 闸门面(0535 祖先方向 + 0711 direct)。
+- **S2 偏离**(用户拍板 2026-11-17): 「上界面」降级为 API/命令通道结构化下发(_CANCEL_GUIDE 经 confirm 回执 guide 字段); 前端撤销入口+弹窗消费面入池 issue 单独跟进。
+- **收尾(本轮)**: test.full 主体全绿(数字见 kb.baseline), 覆盖率闸门未达 Windows 阈(缺口净额与点名模块见基线切片; relocate 家族新增路径为缺口主体, 补测属后续轮); 计划 HTML 回写 R1 注记/§03.3 偏离注记/§04-S4 判据回写/§03.6 本批状态列; 基线切片落位。第二批 S5/S6 待显式开工。
+- **内核级通用隐患裁决(2026-11-17)**: qbmanager.run() 的 _reload_state 在 start_all 之后整体重读磁盘替换 ctx.state.data(qbmanager.py:547→:435→:371), 任何模块启动期写 state 被静默丢弃 —— relocate 发病点(迁移盖章/对账回写/prune 滚出)已由 cd786499 写穿规避(_load_jobs 尾部 ctx.state.save()), 内核面曾「未修待裁决」, 现已裁决入池 issue 26-11-17-0214(question: reload 挪到 start_all 之前 vs 显式接管协议), 坑档随该 issue 处置一并落。

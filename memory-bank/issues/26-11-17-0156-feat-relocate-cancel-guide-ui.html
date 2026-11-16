@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>S2 三段式撤销文案 UI 消费面——前端撤销入口与 confirm 弹窗消费 _CANCEL_GUIDE · feat · 计划外问题</title>
+<meta name="issue-slug" content="relocate-cancel-guide-ui">
+<meta name="issue-stamp" content="26-11-17-0156">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="relocate-refactor">
+<meta name="doc-refs" content="memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="S2 三段式撤销文案 UI 消费面——前端撤销入口与 confirm 弹窗消费 _CANCEL_GUIDE">
+<meta name="issue-summary" content="三段式撤销 guide 已在 API/命令回执结构化下发(dae75d34), 前端 static 无任何消费方(撤销入口本无弹窗); 需补前端撤销入口+confirm 弹窗渲染 guide 三段+confirm 前零请求副作用 e2e">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· feat</div>
+<h1>S2 三段式撤销文案 UI 消费面——前端撤销入口与 confirm 弹窗消费 _CANCEL_GUIDE</h1>
+<p class="lede">三段式撤销 guide 已在 API/命令回执结构化下发(dae75d34), 前端 static 无任何消费方(撤销入口本无弹窗); 需补前端撤销入口+confirm 弹窗渲染 guide 三段+confirm 前零请求副作用 e2e</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-0156-feat-relocate-cancel-guide-ui</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 01:56</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>relocate 重构第一批 S2(dae75d34)收尾回写时撞见(2026-11-17): 计划 26-11-15-2340 §03.3/D7 把「三段式撤销确认文案上界面」列为硬性验收项, S2 实际落地为三段 guide 经 API/命令通道结构化下发(confirm 回执 <code>guide</code> 字段, 文案单点 <code>_CANCEL_GUIDE</code>); 用户拍板 2026-11-17 将「上界面」降级, UI 消费面单独立项跟进(偏离注记见该计划 §03.3 与 §10 R1)。与平台/配置无关 —— 四皮肤共用同一套 static。</p>
+  <p>现状事实: 前端本就没有撤销入口(撤销确认弹窗不存在, 属既有欠账), 后端下发的三段 guide 在 Web UI 上没有任何渲染面。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code># 取证 2026-11-17 01:56
+$ grep -rn "relocate_cancel" src/auto_qb/webui/static/
+src/auto_qb/webui/static/shared/relocate_pop.js:200:  * 点击**才发的用户动作, ... 两步确认走与 relocate_cancel 同款
+# ↑ 前端 static 全部命中仅此一处注释提及, 无任何调用点
+
+$ grep -rln "guide" src/auto_qb/webui/static/
+src/auto_qb/webui/static/fx/showcase.html   # 无关命中(展示页), 无消费方
+
+# 后端下发面(已存在, 非缺口):
+src/auto_qb/core/modules/relocate_exec.py:2020:  _CANCEL_GUIDE = {        # 三段文案单点
+src/auto_qb/core/modules/relocate_exec.py:2115:  "guide": self._CANCEL_GUIDE,   # confirm 回执结构化下发
+src/auto_qb/webui/commands_torrents.py:398:  (" | 三段式确认面已下发" if result.get("guide") else "")</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>用户想在 Web UI 撤销一个在途迁移任务时 —— 前端无撤销入口, 只能绕行 API/命令通道直调 <code>relocate_cancel</code></td></tr>
+    <tr><td>影响范围</td><td>四皮肤共用 static(shared); relocate 在途行(未开始/搬移中/收尾窗)的撤销操作面与 D7 三段引导文案的可达性</td></tr>
+    <tr><td>严重度</td><td>中 —— 撤销后端语义(D6 撤销不搬回)已安全落地且真机验收 PASS; 缺的是用户引导(UI 半边), 数据面无风险</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:2020</code>(取证 2026-11-17 01:56)· <code>_CANCEL_GUIDE</code> · grep <code>_CANCEL_GUIDE</code> —— 三段文案单点(后果/半途警示/手动处置推荐)</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:2115</code> · confirm 回执 <code>guide</code> 字段 · grep <code>"guide": self._CANCEL_GUIDE</code></li>
+    <li><code>src/auto_qb/webui/commands_torrents.py:385</code> · <code>_cmd_relocate_cancel</code> · grep <code>_cmd_relocate_cancel</code> —— cmd 通道两步契约(cls=confirm 带 guide)</li>
+    <li><code>src/auto_qb/webui/server/routes/torrent_cmds.py:204</code> · <code>api_relocate_cancel</code> · grep <code>api_relocate_cancel</code> —— HTTP 面</li>
+    <li>前端零消费实证 · grep <code>relocate_cancel src/auto_qb/webui/static/</code> 仅 relocate_pop.js:200 注释提及; relocate_pop.js:193 注释「撤销走行内菜单/抽屉的撤销语义」所指的入口实际不存在</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">S2 原判据「文案三段式定稿并上界面」被用户拍板降级(2026-11-17): 后端结构化下发视为 S2 交付物, UI 消费面拆出本件单独跟进。撤销入口本无弹窗是 S2 之前就存在的欠账, 非本批回归。已排除: 后端下发缺失(guide 字段已在 confirm 回执)、文案单点缺失(<code>_CANCEL_GUIDE</code> 已定稿)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <ul>
+    <li>补前端撤销入口(面向 relocate 在途行的行内菜单/浮窗动作), 走 <code>relocate_cancel</code> 两步协议。</li>
+    <li>confirm 弹窗渲染回执 <code>guide</code> 三段(结构化消费, 前端不硬编码第二份文案 —— 单点保持在 <code>_CANCEL_GUIDE</code>)。</li>
+    <li>confirm 前零请求副作用 e2e: 对齐 relocate_pop「清空迁移历史」两步先例(relocate_pop.js <code>relPopClearHistory</code>: 第一步不带 confirm 只取确认面 → confirmDialog → confirm:true → <code>waitCmd</code> 等真值回执)。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 01:56 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-17-0156-feat-relocate-cancel-guide-ui.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
