@@ -20,6 +20,14 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * **全序列**(含隐藏列) —— 移除自身后按"第 b 个可见列之前"折算插入点, 隐藏列的相对
      * 次序不动(之后取消隐藏时插回原相对位)。落库后下一帧 recomputeEffective 重算生效宽度。 */
     applyColOrder(page, key, dropIdx) {
+      /* locked 双保险(26-11-17-0059 W2(1)/E7): locked 列不可被拖走(序不得变) —— 与隐藏侧
+       * 同款两层(隐藏层 menu.js headMenuHide 拦 + 落点层 columns_persist.toggleColumn 兜),
+       * 这里是拖序侧的落点层兜底(唯一生产调用点 startColDrag 已在起点拦, 见下条); 守住
+       * 直接调用面(守阵/未来新调用点)。语义 = 拒绝启动而非忽略换位: 起点拦掉后无虚影/
+       * 指示线, 松手"没反应"的 broken 感不存在; 非 locked 列的拖序自由度逐位不变(仍可拖过
+       * locked 列的槽位, locked 列自身不挪动、locked 相对次序恒保持) —— 对主表既有拖序
+       * 体验的最小扰动(主表 locked 列从"可拖走"变"不可拖走"是 E7/R7 授权的可见变化)。 */
+      if ((columnDef(page, key) || {}).locked) return;
       const full = this._orderedKeys(page);
       const vis = full.filter((k) => this.colVisible(page, k));
       const fromVis = vis.indexOf(key);
@@ -44,6 +52,10 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * 指示线: head 容器内绝对定位 .col-drop-line(不占 grid 轨道), left 由 move 实时更新。 */
     startColDrag(event, page, key) {
       if (event.button !== 0) return;  // 仅左键; 右键 = openColMenuAt(contextmenu), 中键不劫持
+      /* locked 列拒绝启动拖序手势(26-11-17-0059 W2(1)/E7: 拆散 k/v 对的操作不可表达):
+       * 早退在绑监听/preventDefault 之前 —— 无虚影无指示线, 表头点击(排序)照常冒泡到
+       * headActivate, resizer 已 .stop 不受影响; 选型理由见 applyColOrder 头注。 */
+      if ((columnDef(page, key) || {}).locked) return;
       const headEl = event.target.closest(".group-head") || event.target.closest(".detail-head");
       if (!headEl) return;
       if (this._visibleCols(page).length < 2) return;  // 单列无从重排

@@ -3,7 +3,8 @@
 ## 测试计划(每个测试函数一条)
 - test_r4_winmembers_sorted_window_same_source: R5#35(major) 修复回归 —— winMembers/memberPadTop/memberPadBottom 先 sortedMembers 再开窗: 明细列排序激活且成员 >= ROW_WIN_EST_MIN 时, 切片/占位/前缀和(_rowPre.member)与渲染数组同源同序, 键盘行序(shortcuts _kbRows 同走 sortedMembers)与前缀和逐行对齐(修复前 memberWin 按未排序 list 开窗必红)
 - test_r4_groupwin_expand_backoff: R5#57 —— groupWin 退避判据 = 「当前真的有面板」: expandedKey 命中在场组才退避全量; 原组被筛掉/已删与未展开都保持 active 窗口(不得为一个不存在的面板永久退化成全量渲染)
-- test_r4_apply_col_order_boundaries: R5#53 —— applyColOrder 落点折算四类边界: 向后移 at=dropIdx-1 / 向前移原位插入 / 末尾边界兜底 push / 非法输入(隐藏列/越界)no-op; 全程隐藏列相对次序不动且尊重既有 colOrder 头部
+- test_r4_apply_col_order_boundaries: R5#53 —— applyColOrder 落点折算四类边界: 向后移 at=dropIdx-1 / 向前移原位插入 / 末尾边界兜底 push / 非法输入(隐藏列/越界)no-op; 全程隐藏列相对次序不动且尊重既有 colOrder 头部; 26-11-17-0059 W2(1) 增 locked 双保险面: locked 列拖序 no-op(不写不落库)且同场非 locked 列不误伤
+- test_r4_col_drag_locked_reject: 26-11-17-0059 W2(1)(E7/R7) —— startColDrag locked 列拒绝启动拖序手势 node 电池: locked 列 mousedown 不挂 move/up 监听、不 preventDefault(表头点击排序/resizer 拖宽不被牵连); 非 locked 列手势照常(守卫不误伤); 落点层兜底(applyColOrder locked no-op)由 test_r4_apply_col_order_boundaries 场景 6 承担, 摘除两处守卫任一即红(红绿双验锚)
 - test_r4_col_persist_intent_merge_and_gates: R5#52(major) + R5#37/R5#38 修复回归 —— 意图升格三层 merge: 拖拽/双击自适应后既有隐藏列 px 仍在、可见列被渲染快照冻结、被拖/适配列被终值覆盖; 纯点击零位移不升格意图不落盘不拦 click(R5#37); 拖拽尾 capture 拦截下一拍自清(R5#38); 微动未过阈值不把起始快照写进生效轨(issue 26-11-08-0229 #10)
 - test_r4_selection_state_machine: R5#51(major) —— AQB_SELECTION 真跑: _selSyncGroups 四态(补选/移出/未知 key 保留/种子页降级: 不补选但降级照做)、_selAnchor 兜底链四态(显式锚点/光标/展开组/首行)、selSizeSummaryOf occ_key 取 max 去重
 - test_r4_partial_groups_predicate_five_forms: 部分组判定单点守阵(计划 26-11-11-0820 S1, 拍板 D2) —— _partialGroupsOf(keys, hashes) -> [{key, name, sel, total}] 是删除确认框行(S2)/迁移关确认框(S3)/迁移开披露条(S4) 三落点共用的「部分组」唯一判定面; 判定 = 真实组(!virtual 且 total>1)有成员命中 hashes ∧ 组键不在 keys ∧ sel<total。静态锚: 判定单点 _partialGroupsOf 与聚合单点 _partialGroupsSummary 对称设锚, 各自在 selection.js 定义形态(裸名+(参数)+`{`, 接收者调用与注释散文不计)恰一次(其它 shared 文件零平行定义 —— 消费方内联判定或聚合任一即红)、方法体走 this.decoratedGroups 与 _findGroup 同源解析面且零 filteredGroups 独走、判据含 g.virtual 豁免。五形态 node 电池真跑: 组键整组入选不触发(含双向联动组键与成员 hash 同存面)/成员全选不触发(组键已晋升 + 种子页降级未晋升 sel===total 两面)/部分选中触发且 sel/total/name 逐字段正确/跨组混合(整组 A + 部分组 C 并存)只列部分组/单成员组与虚拟行均不触发(专设双成员虚拟行钉住 virtual 判据独立于 total<=1); 边界面: 空入参不抛/hash 不属任何组不触发/name 缺失兜组 key/decoratedGroups 缺失(R6 极端竞态)空返回不抛不误拦 —— 摘除判定或换解析面即红
@@ -266,6 +267,9 @@ const fs = require("fs");
 global.window = {};
 // TABLE_COLUMNS 是 app.js 模块级常量, 方法体按裸名引用(走作用域链, 不走 this) —— 必须真挂全局
 global.TABLE_COLUMNS = { p: [{ key: "a" }, { key: "b" }, { key: "c" }, { key: "d" }, { key: "e" }] };
+// columnDef 同在 app.js(生产里先于本片段载入, 作用域链可达) —— 电池自给同款实现
+// (26-11-17-0059 W2(1) 起 applyColOrder 有 locked 双保险直接引用它, 缺它即 ReferenceError)
+global.columnDef = (p, k) => (global.TABLE_COLUMNS[p] || []).find((c) => c.key === k) || null;
 const src = fs.readFileSync(process.argv[1], "utf8");
 eval(src + "\n;globalThis.__W2__ = window.AQB_COLUMNS;");
 const M = globalThis.__W2__.methods;
@@ -316,11 +320,80 @@ ok("非法输入不触发持久化", c.persisted.length === 0);
 c = mkCtx(["e", "d", "c", "b", "a"]);
 M.applyColOrder.call(c, "p", "a", 0);
 ok("既有自定义序下向前移 -> [a,e,d,c,b]", JSON.stringify(orderOf(c)) === JSON.stringify(["a", "e", "d", "c", "b"]));
+
+// 6. locked 双保险(26-11-17-0059 W2(1)/E7): locked 列不可被拖走 —— 落点层直接调用面 no-op
+//    (不写 colOrder 不落库; 非 locked 同场列不受牵连照常换位)
+global.TABLE_COLUMNS = { p: [{ key: "k", locked: true }, { key: "x" }, { key: "y" }] };
+c = mkCtx();
+M.applyColOrder.call(c, "p", "k", 0);
+ok("locked 列拖序 no-op(colOrder 不写不落库)", (!c.colOrder.p || c.colOrder.p.length === 0) && c.persisted.length === 0);
+M.applyColOrder.call(c, "p", "x", 0);
+ok("同场非 locked 列拖序照常(守卫不误伤)", JSON.stringify(orderOf(c)) === JSON.stringify(["x", "k", "y"]));
 console.log(JSON.stringify({
   ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]),
 }));
 """
+
+# 26-11-17-0059 W2(1): startColDrag locked 列拒绝启动拖序手势 ------------------------
+_NODE_COLDRAG_LOCKED_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+// 列模型常量与 columnDef 单点都在 app.js(生产先于本片段载入) —— 电池自给(同 applyColOrder 电池口径)
+global.TABLE_COLUMNS = { p: [{ key: "k", locked: true }, { key: "x" }, { key: "y" }] };
+global.columnDef = (p, k) => (global.TABLE_COLUMNS[p] || []).find((c) => c.key === k) || null;
+const listeners = [];
+global.document = {
+  addEventListener: (t, fn, cap) => { listeners.push({ type: t, fn, capture: !!cap, op: "add" }); },
+  removeEventListener: (t, fn, cap) => { listeners.push({ type: t, fn, capture: !!cap, op: "remove" }); },
+};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_COLUMNS;");
+const M = globalThis.__W2__.methods;
+
+const mkCtx = () => Object.assign({}, M, { _visibleCols: () => [{ key: "k" }, { key: "x" }, { key: "y" }] });
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+let prevented = 0;
+const mkEv = () => ({
+  button: 0,
+  clientX: 100, clientY: 100,
+  target: { closest: () => ({ classList: { add() {}, remove() {} } }) },
+  preventDefault: () => { prevented += 1; },
+});
+const byType = (t) => listeners.filter((l) => l.type === t && l.op === "add");
+
+// 1. locked 列: 拒绝启动 —— 不挂监听不 preventDefault(点击排序照常冒泡到 headActivate 的前提)
+let c = mkCtx();
+M.startColDrag.call(c, mkEv(), "p", "k");
+ok("locked 列拒绝启动: 零监听注册(mousemove/mouseup 都不挂)",
+   byType("mousemove").length === 0 && byType("mouseup").length === 0);
+ok("locked 列拒绝启动: 不 preventDefault(表头点击/文本选择行为不被劫持)", prevented === 0);
+
+// 2. 非 locked 列: 手势照常启动(守卫不误伤) —— move/up 各注册一且 preventDefault 已调
+listeners.length = 0; prevented = 0;
+c = mkCtx();
+M.startColDrag.call(c, mkEv(), "p", "x");
+ok("非 locked 列手势照常: mousemove+mouseup 各注册一",
+   byType("mousemove").length === 1 && byType("mouseup").length === 1);
+ok("非 locked 列手势照常: preventDefault 已调(抑制文本选择)", prevented === 1);
+
+console.log(JSON.stringify({
+  ok: checks.filter((x) => x[1]).length, total: checks.length,
+  failed: checks.filter((x) => !x[1]).map((x) => x[0]),
+}));
+"""
+
+
+def test_r4_col_drag_locked_reject():
+    """26-11-17-0059 W2(1)(E7/R7): startColDrag locked 列拒绝启动拖序手势 node 电池 ——
+    locked 列(主表 name/site/url/act/prio 族 + hrKv k 列)mousedown 不挂 move/up 监听、
+    不 preventDefault(表头点击排序/resizer 拖宽不被牵连); 非 locked 列手势照常(守卫不误伤)。
+    落点层兜底(applyColOrder locked no-op)由 test_r4_apply_col_order_boundaries 场景 6 承担;
+    守阵口径: 摘除 columns_drag.js 两处 locked 检查任一, 两电池之一即红(红绿双验锚)。"""
+    report = _run_probe(_NODE_COLDRAG_LOCKED_PROBE, bundle_file("columns.js"))
+    _assert_battery(report, "startColDrag locked 拒绝电池")
+
 
 # R5#52 意图升格三层 merge + R5#37 纯点击门槛 + R5#38 拦截自清 ----------------------
 _NODE_COLPERSIST_MERGE_PROBE = r"""

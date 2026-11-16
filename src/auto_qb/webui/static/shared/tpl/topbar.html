@@ -82,38 +82,19 @@
           <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。
                键帽同上(S3 建 / S4 角标化, id 引用 col-picker; 设置 Ctrl+, 的键帽见右侧独立组,
                括号包完整串)。角标绝对定位, 药丸宽度零变化。 -->
-          <div v-if="page === 'groups'" class="col-picker">
-            <button class="table-tool aq-kbd-host" :class="{ active: colMenuOpen }"
+          <!-- 26-11-17-0059 W2(1) shell 修复: 弹层本体已迁出 header.topbar 至本文件尾(#app 直接
+               子级) —— header 的 z-index:31 层叠上下文会把弹层整体压在设置页 .hr-full-modal
+               (z-index:129)之下, HR 模态内右键「显示/隐藏列…」恢复入口(E6)不可见。容器只留
+               按钮锚(.col-picker relative), 守卫仍 groups 独占(设置页顶栏不出「列」钮, 列选择器
+               键 K 的 scope 也仍是 list); 弹层定位改走 fixed 坐标(toggleColMenu/openColMenuAt
+               现算, 见 columns_menu.js), 详见文件尾迁移注。 -->
+          <div class="col-picker">
+            <button v-if="page === 'groups'" class="table-tool aq-kbd-host" :class="{ active: colMenuOpen }"
                     @click.stop="toggleColMenu($event)">
               <svg class="ico ico-sm ico-cols" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
               列
               <kbd v-if="kbKeycapOf('col-picker')" class="aq-kbd">{{ kbKeycapOf('col-picker') }}</kbd>
             </button>
-            <transition name="pop">
-            <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip && !colMenuAt }" :style="colMenuStyle()" @click.stop>
-              <template v-for="def in tableDefs" :key="def.id">
-                <div class="col-menu-title">{{ def.label }}</div>
-                <div v-for="c in def.columns" :key="c.key" class="pop-item col-menu-item"
-                     :class="{ locked: c.locked, on: colVisible(def.id, c.key) }"
-                     role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible(def.id, c.key)"
-                     @click="!c.locked && toggleColumn(def.id, c.key)"
-                     @keyup.enter="!c.locked && toggleColumn(def.id, c.key)"
-                     @keyup.space.prevent="!c.locked && toggleColumn(def.id, c.key)">
-                  <span class="pop-value">{{ c.label }}</span>
-                  <span v-if="c.locked" class="col-lock">必显</span>
-                  <svg v-else-if="colVisible(def.id, c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
-                </div>
-              </template>
-              <div class="col-menu-actions">
-                <button class="bt ghost sm" @click="resetAllColumnWidthsAll()">
-                  恢复默认列宽
-                </button>
-                <button class="bt ghost sm" @click="fitColumnsToWindowAll()">
-                  适应窗口宽度
-                </button>
-              </div>
-            </div>
-            </transition>
           </div>
           <div class="spacer"></div>
           <!-- W4: 设置移至顶栏右侧(与左侧视图导航分列); 复用 .tabs 保证 hover/active 态一致。
@@ -292,4 +273,38 @@
 
       </div>
 
+        <transition name="pop">
+        <div v-if="colMenuOpen" class="col-menu" :class="[{ 'flip-x': colFlip && !colMenuAt }, { 'above-full-modal': hrsOpen }]" :style="colMenuStyle()" @click.stop>
+            <template v-for="def in tableDefs" :key="def.id">
+              <div class="col-menu-title">{{ def.label }}</div>
+              <div v-for="c in def.columns" :key="c.key" class="pop-item col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible(def.id, c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible(def.id, c.key)"
+                   @click="!c.locked && toggleColumn(def.id, c.key)"
+                   @keyup.enter="!c.locked && toggleColumn(def.id, c.key)"
+                   @keyup.space.prevent="!c.locked && toggleColumn(def.id, c.key)">
+                <span class="pop-value">{{ c.label }}</span>
+                <span v-if="c.locked" class="col-lock">必显</span>
+                <svg v-else-if="colVisible(def.id, c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              </div>
+            </template>
+            <div class="col-menu-actions">
+              <button class="bt ghost sm" @click="resetAllColumnWidthsAll()">
+                恢复默认列宽
+              </button>
+              <button class="bt ghost sm" @click="fitColumnsToWindowAll()">
+                适应窗口宽度
+              </button>
+            </div>
+        </div>
+        </transition>
+
+        <!-- 26-11-17-0059 W2(1) shell 修复: 列选择器弹层迁出 header.topbar(原在 .col-picker 内,
+             absolute 锚定按钮)。迁移原因: header 的 z-index:31 层叠上下文把弹层压在设置页
+             .hr-full-modal(z-index:129)之下, HR 模态内右键「显示/隐藏列…」恢复入口(E6)不可见。
+             迁出后为 #app 直接子级: 右键路径(openColMenuAt)定位不变(恒 fixed); 按钮路径/K 键
+             (toggleColMenu)改由现算按钮盒 fixed 坐标锚定(等价旧 CSS absolute 的
+             left:0/top:calc(100%+6px), 见 columns_menu.js)。above-full-modal = HR 全屏模态
+             (z129)开着时的层级让位(ctx-menu/col-menu 基础 z100/40 压不过 129, 让位值 135 见
+             各皮肤 dialogs.css)。 -->
       <!-- 辅种分组页: 左栏信息栏已退役(TBL-08), 单列全宽表格 + 底部状态栏 -->

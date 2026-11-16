@@ -35,6 +35,7 @@
 .modal-input { width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--bg-row); color: var(--fg); font-size: 13.5px; margin-bottom: 18px; }
 .modal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
+.ctx-menu.above-full-modal, .col-menu.above-full-modal { z-index: 135; } /* 26-11-17-0059 W2(1) shell: HR 全屏模态(z129)开着时右键/列选择器浮层让位 —— 基础 z100/40 压不过 129, 挂载见 ctx-menus.html 四座菜单根与 topbar.html 弹层的 hrsOpen 类; 主页面无此类层级梯逐位不变 */
 /* (.modal-check 勾选框族已随 FX-24 切胶囊退役删除 —— 统一模板零引用, 26-09-27 死类清理) */
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
 

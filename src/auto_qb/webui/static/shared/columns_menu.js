@@ -5,9 +5,31 @@
  */
 Object.assign(window.AQB_COLUMNS.methods, {
     toggleColMenu(ev) {
-      this.colMenuAt = null;  // 按钮路径: 清掉右键锚点, 弹层回到 .col-picker 下的常规 CSS 定位
+      /* 26-11-17-0059 W2(1) shell 修复: 列选择器弹层已从 header.topbar(.col-picker 内)迁出至
+       * #app 直接子级(topbar.html 尾) —— header 的 z-index:31 层叠上下文会把弹层整体压在
+       * 设置页 .hr-full-modal(z-index:129)之下, HR 模态内右键「显示/隐藏列…」恢复入口(E6)
+       * 不可见。迁出后 CSS absolute 锚(.col-picker relative)失效, 按钮路径/K 键改现算按钮盒
+       * fixed 坐标: x=按钮左缘 clamp、y=按钮下缘+6(等价旧 CSS left:0/top:calc(100%+6px)),
+       * 高度钳制与 openColMenuAt 同式(FIT 单点)。右键路径(openColMenuAt)定位不变。
+       * colFlip 保留原计算: flip-x 绑定 `colFlip && !colMenuAt` 在 colMenuAt 恒真后不再生效,
+       * 属已知休眠面(记录, 不扩大 diff 摘除)。 */
+      this.colMenuAt = null;
       this.colMenuOpen = !this.colMenuOpen;
-      if (this.colMenuOpen) this.colFlip = this._menuOverflowsRight(ev && ev.currentTarget, 300);
+      if (this.colMenuOpen) {
+        const anchor = (ev && ev.currentTarget) || document.querySelector(".col-picker .table-tool");
+        const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
+        const W = 300;
+        if (anchor && anchor.getBoundingClientRect) {
+          const r = anchor.getBoundingClientRect();
+          const y = Math.max(FIT.EDGE, r.bottom + 6);
+          this.colMenuAt = {
+            x: FIT.clampAxis(r.left, W, window.innerWidth),
+            y,
+            mh: Math.max(160, window.innerHeight - y - FIT.EDGE),
+          };
+        }
+        this.colFlip = this._menuOverflowsRight(ev && ev.currentTarget, 300);
+      }
     },
     /* 表头右键(TBL-05): 就地打开列选择器弹层(复用 col-menu 与 colHidden 勾选逻辑),
      * fixed 定位锚在右键坐标; 右/下边界自钳制(宽 300 与 .col-menu 一致, 高度按剩余空间截断

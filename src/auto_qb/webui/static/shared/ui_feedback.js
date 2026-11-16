@@ -350,14 +350,18 @@ window.AQB_FEEDBACK = {
      * 还会落定 ~2px(Chrome 对新插入内容的首轮文本 shaping 与终轮不等) —— 单次 $nextTick
      * 量测钳位后右缘仍可溢出 1~2px(e2e CTX-fit 右缘红)。故钳位回写后再排一帧按落定后的
      * 实测宽复核; 位置已在界内时复核是幂等的(不写回、不重排), 宽度若又变则最多再补两帧,
-     * 有界收敛。rAF 在后台页签不触发 —— 菜单只在可见页签打开, 无此场景。 */
+     * 有界收敛(26-11-17-0059 W2(1) 起 retries 2 -> 10: 弹层迁出 header 层叠上下文后首次量测
+ * 落进 .pop 入场动画窗内(scale 缩放中, 实测宽偏小 ~8px), 动画 ~120ms ≈ 7 帧逐帧变宽,
+ * 2 帧预算不够 -> 残留 ~8px 右缘溢出(e2e CTX-fit 右缘稳定红); 10 帧 > 动画窗, 宽度
+ * 稳定后位置不再变化, 循环自止 —— 预算只是上限, 无动画时首帧即收敛)。rAF 在后台页签
+ * 不触发 —— 菜单只在可见页签打开, 无此场景。 */
     _menuFitRefit(stateKey, refName) {
       const s = this[stateKey];
       if (!s || !s.visible) return;
       const p = this._menuFit(this.$refs[refName], s.x, s.y);
       s.x = p.x;
       s.y = p.y;
-      let retries = 2;
+      let retries = 10;
       const settle = () => {
         const s2 = this[stateKey];
         if (!s2 || !s2.visible) return;

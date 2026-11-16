@@ -161,6 +161,7 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-full-modal { position: fixed; left: 0; right: 0; top: var(--head-h, 0px); bottom: var(--statusbar-h, 34px);
   z-index: 129; display: flex; flex-direction: column; background: var(--bg);
   border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-3); animation: modal-in .2s var(--ease-spring); }
+.ctx-menu.above-full-modal, .col-menu.above-full-modal { z-index: 135; } /* 26-11-17-0059 W2(1) shell: HR 全屏模态(z129)开着时右键/列选择器浮层让位 —— 基础 z100/40 压不过 129, 挂载见 ctx-menus.html 四座菜单根与 topbar.html 弹层的 hrsOpen 类; 主页面无此类层级梯逐位不变 */
 .hr-full-modal-hd { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
   background: var(--bg-card); border-bottom: 1px solid var(--border); }
 .hr-full-modal-t { font-size: 15px; font-weight: 600; }

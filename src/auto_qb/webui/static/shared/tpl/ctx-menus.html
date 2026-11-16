@@ -1,5 +1,5 @@
         <transition name="pop">
-        <div v-if="menu.visible" ref="ctxMenu" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}"
+        <div v-if="menu.visible" ref="ctxMenu" class="ctx-menu" :class="{ 'above-full-modal': hrsOpen }" :style="{left: menu.x+'px', top: menu.y+'px'}"
              :data-kind="ctxMenuKind()" :data-count="ctxSeedCount()"
              @contextmenu.prevent @click.stop>
           <!-- 行右键菜单四支(计划 26-10-20-0024 W3 起): 项集/顺序/显隐/跨层全部由注册表
@@ -86,7 +86,7 @@
         </transition>
         <!-- 表头右键菜单(TBL-05): 针对**该列**的操作 —— "隐藏xxx"即隐藏这一列; 另给排序直达与完整列选择器入口 -->
         <transition name="pop">
-        <div v-if="headMenu.visible" ref="headMenuEl" class="ctx-menu" :style="{left: headMenu.x+'px', top: headMenu.y+'px'}"
+        <div v-if="headMenu.visible" ref="headMenuEl" class="ctx-menu" :class="{ 'above-full-modal': hrsOpen }" :style="{left: headMenu.x+'px', top: headMenu.y+'px'}"
              @click.stop @contextmenu.prevent>
           <div class="ctx-item" :class="{ muted: headMenu.locked }" @click="headMenuHide()">
             <svg class="ico ico-sm ico-hide" viewBox="0 0 16 16"><use href="#i-eye-off"></use></svg>
@@ -121,7 +121,7 @@
         </transition>
         <!-- 文件优先级小菜单(详情抽屉内容页签): 复用 .ctx-menu 视觉, 锚定单元格, 视口吸附 -->
         <transition name="pop">
-        <div v-if="filePrio.visible" ref="filePrioEl" class="ctx-menu" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
+        <div v-if="filePrio.visible" ref="filePrioEl" class="ctx-menu" :class="{ 'above-full-modal': hrsOpen }" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
           <div class="ctx-item" @click="setFilePriority(0)">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>不下载
           </div>
@@ -144,7 +144,7 @@
              勾读真实开关态 dtMergeOn(不是恒真的形态判据 dtMenuMergeOn); 该项不挂 title ——
              自绘 .aq-tip(z90) 恒被 .ctx-menu(z100) 盖住, 留着只会出一个看不见的提示。 -->
         <transition name="pop">
-        <div v-if="drawerMenu.visible" ref="drawerMenuEl" class="ctx-menu" :style="{left: drawerMenu.x+'px', top: drawerMenu.y+'px'}"
+        <div v-if="drawerMenu.visible" ref="drawerMenuEl" class="ctx-menu" :class="{ 'above-full-modal': hrsOpen }" :style="{left: drawerMenu.x+'px', top: drawerMenu.y+'px'}"
              @click.stop @contextmenu.prevent>
           <div v-for="o in dtMenuTplOptions" :key="o.id" class="ctx-item" @click="dtMenuPick(o.id)">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-layers"></use></svg>{{ o.label }}
@@ -160,5 +160,15 @@
           </template>
         </div>
         </transition>
-        </main>
-      </div>
+
+        <!-- 主视图容器收口(</main></div>)原挂本文件尾: 片段拼接注入(boot.js buckets.app 单串
+             insertAdjacentHTML)下, groups.html 首行的 <div v-if="page==='groups'" class="layout">
+             少一个收口, 由本文件尾的 </main></div> 补 —— 代价是本文件四座浮层菜单(行菜单/表头
+             菜单/文件优先级菜单/抽屉模板菜单)整体落进 groups 页 v-if 子树, **设置页上全部右键菜单与列选择器
+             恢复入口结构性不可达**(HR 三表 26-11-17-0059 W2(1) 接入表头右键时才首次触达)。
+             26-11-17-0059 W2(1) shell 修复: 收口对挪到三视图最后一个片段(shows.html)尾, 本文件
+             回归 #app 直接子级、全页面可达; groups 页 DOM 形态不变(同一对收口位置在拼接串上
+             提前), 菜单 fixed 定位不受影响(.layout/.content 无 transform 类包含块属性)。
+             另: HR 全屏模态(z129)开着时四座菜单根按 hrsOpen 挂 above-full-modal 类让位到
+             模态之上(z 135, 见各皮肤 dialogs.css) —— 基础 z100 压不过模态, 不让位则本文件
+             虽可达仍在模态之下。 -->

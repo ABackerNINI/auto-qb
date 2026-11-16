@@ -82,3 +82,11 @@
              · FX-15 分层原则(已写入 memory-bank conventions.md): **一级只放 PT 日常高频动作**;
                qB 通用能力(队列 / TMM / 超级做种 / 强制启动 / 分享率限制 / 复制族)一律进次级菜单。
              · FX-14: "打开目标文件夹"走后端 /api/open-path(路径由服务端从自己的快照派生, 前端不传路径)。 -->
+
+        <!-- 主视图容器收口(</main></div>, 26-11-17-0059 W2(1) shell 修复): 原挂 ctx-menus.html 尾,
+             使 ctx-menus 三座浮层菜单落进 groups 页 v-if 子树(设置页右键菜单/列选择器恢复入口
+             结构性不可达); 收口对挪到三视图最后片段尾后, ctx-menus 回归 #app 直接子级、全页面
+             可达。groups 页 DOM 形态不变(同一对收口, 拼接串上位置提前), 菜单 fixed 定位不受
+             影响(.layout/.content 无 transform 类包含块属性)。 -->
+        </main>
+      </div>

@@ -452,11 +452,21 @@ for (const skin of SKINS) {
         const menu = page.locator('.ctx-menu');
         await expect(menu).toBeVisible({ timeout: 5_000 });
         const vp = /** @type {{width: number, height: number}} */ (page.viewportSize());
-        const b = /** @type {{x: number, y: number, width: number, height: number}} */ (await menu.boundingBox());
+        /* 26-11-17-0059 W2(1) shell 修复后改 settle 轮询断言: 右缘 clamp 有两级收敛链
+         * (_menuPos 估算钳位 -> _menuFitRefit $nextTick 实测钳位 -> rAF settle 逐帧复核),
+         * 首帧按估算宽(214)钳位, 实测宽(246)在 settle 内落定 —— 修复前量测 roundtrip 恒
+         * 落在收敛完成后, 修复后(弹层迁 #app 直属, 补丁/绘制时序前移)单帧快照可能捕到
+         * 收敛中间帧(短暂右缘 +8px)。改 expect.toPass 轮询到 settle 落定再判: 用户可点
+         * 的是落定态, 永久溢出(clamp 全拆)照样轮询超时红 —— 红验性质不变。 */
+        await expect(async () => {
+          const b2 = await menu.boundingBox();
+          expect(b2, '菜单盒量不到').toBeTruthy();
+          expect(Math.round(b2.x + b2.width),
+            `菜单右缘 ${Math.round(b2.x + b2.width)} 应 ≤ 视口宽 - 8(${vp.width - 8}) —— 溢出即右缘项点不到`)
+            .toBeLessThanOrEqual(vp.width - 8 + 1);
+        }).toPass({ timeout: 5_000 });
+        const b = await menu.boundingBox();
         expect(b, '菜单盒量不到').toBeTruthy();
-        expect(Math.round(b.x + b.width),
-          `菜单右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8(${vp.width - 8}) —— 溢出即右缘项点不到`)
-          .toBeLessThanOrEqual(vp.width - 8 + 1);
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
       });
