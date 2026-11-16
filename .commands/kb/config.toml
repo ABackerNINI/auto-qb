@@ -30,18 +30,28 @@ note    = "KB 内任何日期 (文件名前缀 / Added / Updated / 最后活动 
 
 [tasks."kb.check"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
            "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
-           "python <skill-dir:memory-bank>/scripts/check_mutation_anchor.py --check",
            "python <skill-dir:memory-bank>/scripts/check_doc_templates.py --check",
            "python <skill-dir:memory-bank>/scripts/timekit.py --check",
            "python <skill-dir:memory-bank>/scripts/check_status_drift.py --check",
            "python <skill-dir:memory-bank>/scripts/check_html.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index; 2026-11-08 重构后生成集合收缩为 pitfalls 索引一家); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + active-context/基线切片校验 + 回写措辞守卫(tasks/ 与 active-context/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + 常驻锚防流水守卫(check_mutation_anchor: 排期锚只记「包/模块·时间·大致成果·指针」, 台账/逐轮日志写回 = 红, 2026-10-31 加) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加) + 状态漂移守卫(check_status_drift: issue badge vs meta / status-unreadable 硬拦, 完成断言只提示, 2026-10-31 加; 2026-11-08 重构 W5: progress 判据节反链档随 progress/ 目录退役删除) + HTML 结构守卫(check_html: 闭合标签缺右尖括号静默吞正文类 —— 2026-11-01 两起实测事故, L1 行级正则 + L2 stdlib 解析器残缺名校验双网, script/style 区遮蔽防 JS 字面量误报, 全库 645 件 <2s; 更广的规范级伤害归 kb.html-audit 的 v.Nu 巡检)"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index; 2026-11-08 重构后生成集合收缩为 pitfalls 索引一家); 其余 = active-context/基线切片校验 + 回写措辞守卫(tasks/ 与 active-context/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加) + 状态漂移守卫(check_status_drift: issue badge vs meta / status-unreadable 硬拦, 完成断言只提示, 2026-10-31 加; 2026-11-08 重构 W5: progress 判据节反链档随 progress/ 目录退役删除) + HTML 结构守卫(check_html: 闭合标签缺右尖括号静默吞正文类 —— 2026-11-01 两起实测事故, L1 行级正则 + L2 stdlib 解析器残缺名校验双网, script/style 区遮蔽防 JS 字面量误报, 全库 645 件 <2s; 更广的规范级伤害归 kb.html-audit 的 v.Nu 巡检)。**默认链成员资格**: 只收「对新空库恒绿」的成员 —— fail-closed 守卫(要求某文件必须存在/守阵有校验对象)属项目层, 不进默认链: 常驻锚防流水守卫(check_mutation_anchor, 2026-10-31 加)与主键+认领链守卫(gen_doc_map, 空库判红「认领链守阵失去校验对象」)2026-11-17 起摘出(计划 26-11-17-0010 S2, 用户拍板 2026-11-16), 本项目侧经下方 kb.anchor / kb.docmap 显式挂载"
+
+[tasks."kb.docmap"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check"]
+timeout = 60
+when    = "改了 KB 文档主键/Refs 认领链(doc-topic / **Refs:** / doc-refs)后自查; 收尾回写涉及认领链时跑"
+note    = "主键校验 + 认领链双向守卫(2026-10-03 下沉单点): 缺 doc-topic/Topics 或单向链即红。2026-11-17 (计划 26-11-17-0010 S2, 用户拍板 2026-11-16) 摘出 kb.check 默认链、本项目侧显式挂载 —— 它是 fail-closed 守卫(空库判红「没有任何件声明引用——认领链守阵失去校验对象」, 见 check_claim_chain), 不满足「对新空库恒绿」; 判据与本项目挂载清单单点在 skill 的 references/PORTING.md「项目可选守卫勿默认移植」。提交闸门(memory-bank/)经 commands 引擎指向本 task, 本仓拦截行为不变。"
+
+[tasks."kb.anchor"]
+run     = ["python <skill-dir:memory-bank>/scripts/check_mutation_anchor.py --check"]
+timeout = 60
+when    = "改了变异测试常驻锚 (issues/*test-mutation-audit-standing.html) 或其节白名单后自查"
+note    = "常驻锚防流水守卫(2026-10-31 加): 排期锚只记「包/模块·时间·大致成果·指针」, 台账/逐轮日志写回 = 红。2026-11-17 (计划 26-11-17-0010 S2) 摘出 kb.check 默认链、本项目侧显式挂载 —— 它是 fail-closed 守卫(锚文件缺失即红, 见 collect_violations), 不满足「对新空库恒绿」; 判据与本项目挂载清单单点在 skill 的 references/PORTING.md「项目可选守卫勿默认移植」。提交闸门(memory-bank/)经 commands 引擎指向本 task, 本仓拦截行为不变。"
 
 [tasks."kb.html-audit"]
 run     = ["python <skill-dir:memory-bank>/scripts/check_html.py --vnu --all <args>"]
@@ -71,7 +81,7 @@ timeout = 60
 [tasks."kb.status"]
 run     = ["python <skill-dir:memory-bank>/scripts/flip_status.py <args>"]
 when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表 · issue 徽标+meta 两处): 词表校验/抬时间戳全派生, 终态带提醒"
-note    = "词表单点 import(_common), 别凭记忆写 —— 词表纪律的活体校验挂 kb.check(gen_doc_map --check, 见 pitfalls/kb/doc-status-meta.md); 切片一律拒绝并指路 kb.wrap; issue 已收编(2026-11-07 W4, 计划 26-11-07-0549): badge+meta 两处一起改+追加状态日志行; 同状态翻转幂等(不抬时间戳不追加日志行); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言; 2026-11-08 重构起不再重建索引(改面四族 _index 已退役, D4/D5)"
+note    = "词表单点 import(_common), 别凭记忆写 —— 词表纪律的活体校验挂 kb.docmap(gen_doc_map --check, 见 pitfalls/kb/doc-status-meta.md); 切片一律拒绝并指路 kb.wrap; issue 已收编(2026-11-07 W4, 计划 26-11-07-0549): badge+meta 两处一起改+追加状态日志行; 同状态翻转幂等(不抬时间戳不追加日志行); 路径三形态(绝对/仓库根相对/mb 相对)都认; 输出带「机械 0」收录断言; 2026-11-08 重构起不再重建索引(改面四族 _index 已退役, D4/D5)"
 timeout = 60
 
 [tasks."kb.bump"]

@@ -76,7 +76,9 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 
 - test_mutation_anchor_guard_is_green_on_current_kb: 蒸馏改版后的常驻锚零违规 (§07 一张记录表 + 一行式状态日志)
 - test_mutation_anchor_guard_flags_ledger_log_and_round_numbers: 台账字样 / 白名单外节 / 逐轮流水数字 / 状态日志超限逐类判红; 清白件零误报
-- test_mutation_anchor_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧
+- test_mutation_anchor_guard_mounted_explicitly_out_of_default_chain: (2026-11-17 S2, 原 test_mutation_anchor_guard_is_wired_into_kb_check_and_gate 改钉新形态) 守卫摘出 kb.check 默认链、经 kb 包 kb.anchor 显式挂载 + 闸门改指 —— 摘挂同批, 漏挂即红
+- test_doc_map_guard_mounted_explicitly_out_of_default_chain: (2026-11-17 S2, 用户拍板 2026-11-16) gen_doc_map 与锚守卫同款处置: 摘出 kb.check 默认链、经 kb 包 kb.docmap 显式挂载 + 闸门改指 —— 摘挂同批, 漏挂即红
+- test_kb_check_default_chain_empty_kb_audit: (2026-11-17 S2.4) 默认链空库恒绿审计: 两守卫摘链后其余 8 成员对新空库骨架**全绿** (S2 验收原文「空库首跑绿」实测达标); gen_doc_map / check_mutation_anchor 空库判红(摘链判据)同件钉住。check_html 不接 --root —— monkeypatch find_root 真跑全量 rglob + 坏 HTML 红验, 不让恒绿成员冒充活体校验(评审 RB)
 
 
 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
@@ -660,17 +662,116 @@ def test_mutation_anchor_guard_flags_ledger_log_and_round_numbers(tmp_path: Path
     assert "日志体量" in joined, "9 条 × 400 字符的日志必须双限全红"
 
 
-def test_mutation_anchor_guard_is_wired_into_kb_check_and_gate() -> None:
-    """守卫必须挂在 kb.check 与提交闸门两侧 —— 不接线 = 没人跑, 漏闸门 = 静默红。
+def test_mutation_anchor_guard_mounted_explicitly_out_of_default_chain() -> None:
+    """锚守卫摘出 kb.check 默认链、本项目侧显式挂载, 摘挂同批 (计划 26-11-17-0010 S2, R-2)。
 
-    `test_commit_gate_covers_kb_check` 已按 run 列表推导闸门覆盖面; 本条把名字钉死, 防
-    kb.check 清单整行改名后两条测试同时静默失效。
+    fail-closed 守卫(锚文件缺失即红)不满足「对新空库恒绿」, 默认链不得含它(计划 §01 原则 2);
+    但本仓(auto-qb)行为零变化: kb 包另立 `kb.anchor` task, 提交闸门(memory-bank/)经 commands
+    引擎指向它 —— 本行调用形态同 dev.fmt / test.quick / review.trace, 该拦的仍拦。
     """
     kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
-    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+    kb_check = re.search(r'^\[tasks\."kb\.check"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert kb_check, "kb/config.toml 里找不到 kb.check"
+    assert not re.search(r'"python [^"]*check_mutation_anchor',
+                         kb_check.group(1)), ("锚守卫仍在 kb.check 的 run 列表里 (fail-closed, 空库必红; note 里的摘链史注不在此列)")
 
-    assert "check_mutation_anchor.py --check" in kb_cfg, "check_mutation_anchor.py 未挂进 kb.check"
-    assert "check_mutation_anchor.py --check" in gate_cfg, "check_mutation_anchor.py 未挂进提交闸门 (静默红)"
+    anchor_task = re.search(r'^\[tasks\."kb\.anchor"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert anchor_task, "kb 包没有 kb.anchor task —— 摘链后本项目漏挂锚守卫 (R-2)"
+    assert "check_mutation_anchor.py --check" in anchor_task.group(1), "kb.anchor 未指向 check_mutation_anchor.py --check"
+
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+    assert "run kb.anchor" in gate_cfg, "提交闸门未改指 kb.anchor (R-2: 摘挂同批, 只摘不挂 = 排期台账回写不再被拦)"
+
+
+def test_doc_map_guard_mounted_explicitly_out_of_default_chain() -> None:
+    """gen_doc_map 守卫与锚守卫同款处置: 摘出 kb.check 默认链、本项目侧显式挂载, 摘挂同批
+    (计划 26-11-17-0010 S2, 用户拍板 2026-11-16)。
+
+    fail-closed 守卫(空库判红「没有任何件声明引用——认领链守阵失去校验对象」)不满足
+    「对新空库恒绿」, 默认链不得含它(计划 §01 原则 2); 但本仓(auto-qb)行为零变化: kb 包另立
+    `kb.docmap` task, 提交闸门(memory-bank/)经 commands 引擎指向它 —— 认领链该拦的仍拦。
+    """
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    kb_check = re.search(r'^\[tasks\."kb\.check"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert kb_check, "kb/config.toml 里找不到 kb.check"
+    assert not re.search(r'"python [^"]*gen_doc_map',
+                         kb_check.group(1)), ("gen_doc_map 仍在 kb.check 的 run 列表里 (fail-closed, 空库必红; note 里的摘链史注不在此列)")
+
+    docmap_task = re.search(r'^\[tasks\."kb\.docmap"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert docmap_task, "kb 包没有 kb.docmap task —— 摘链后本项目漏挂认领链守卫"
+    assert "gen_doc_map.py --check" in docmap_task.group(1), "kb.docmap 未指向 gen_doc_map.py --check"
+
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+    assert "run kb.docmap" in gate_cfg, "提交闸门未改指 kb.docmap (摘挂同批, 只摘不挂 = 认领链回写不再被拦)"
+
+
+def _run_kb_script(monkeypatch, name: str, argv: list[str]) -> tuple[int, str]:
+    """进程内跑 memory-bank skill 的一个检查脚本 main() (不 --quiet: 无违规时输出 all-clear 行)。
+
+    gen_doc_map / gen_active_recent / gen_baseline_recent 的 main() 无 argv 形参 (parse_args()
+    直读 sys.argv) —— 统一 monkeypatch sys.argv, 对两种签名都成立。返回 (rc, stdout+stderr)。
+    """
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    module = __import__(name)
+    monkeypatch.setattr(sys, "argv", [f"{name}.py", *argv])
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        rc = module.main()
+    return rc, out.getvalue() + err.getvalue()
+
+
+def test_kb_check_default_chain_empty_kb_audit(tmp_path: Path, monkeypatch) -> None:
+    """kb.check 默认链「对新空库恒绿」全链审计 (计划 26-11-17-0010 S2.4, 2026-11-17 实测)。
+
+    夹具 = 新空库骨架 (各族目录全建, 零文档件; PORTING「最小移植」第 2 步形态)。审计结论
+    (两处 fail-closed —— check_mutation_anchor / gen_doc_map —— 均已摘出默认链经 kb.anchor /
+    kb.docmap 显式挂载, 用户拍板 2026-11-16): 摘链后默认链 8 成员对新空库骨架**全绿**,
+    S2 验收原文「kb.check 对空库首跑绿」实测达标。本守阵把分界线钉死:
+    再有成员落到红侧 / 两个 fail-closed 守卫的空库判红文案漂移, 这里立刻可见。
+    """
+    root = tmp_path
+    mb = root / "memory-bank"
+    for sub in ("tasks", "active-context", "plans", "reports", "issues", "pitfalls/kb", "testing/baselines"):
+        (mb / sub).mkdir(parents=True)
+
+    green = (
+        "gen_all",
+        "gen_active_recent",
+        "gen_baseline_recent",
+        "check_wording",
+        "check_doc_templates",
+        "timekit",
+        "check_status_drift",
+    )
+    for name in green:
+        rc, output = _run_kb_script(monkeypatch, name, ["--check", "--root", str(root)])
+        assert rc == 0, f"{name}.py --check 对新空库判红 (默认链成员必须对新空库恒绿):\n{output}"
+
+    # check_html 不接 --root (main 里 root=find_root(), 由脚本安装位置定): --root 会被当陌生
+    # 旗标忽略、其值被收进 paths 再被 collect_files 过滤成空 —— 靠它断言绿是空洞的 (评审 RB)。
+    # 真跑走全量路径: monkeypatch 模块内 find_root 指向 tmp 根, `--check` 无显式 paths 时对
+    # tmp 的 memory-bank 整面 rglob (空库 = 0 个 HTML); 随后坏 HTML 红验同一调用形态,
+    # 证明绿不是恒绿。
+    html_mod = __import__("check_html")
+    monkeypatch.setattr(html_mod, "find_root", lambda start=None: root)
+    rc, output = _run_kb_script(monkeypatch, "check_html", ["--check"])
+    assert rc == 0 and "0 个 HTML" in output, f"check_html 对空库骨架真跑应绿 (0 个 HTML):\n{output}"
+    broken = mb / "plans" / "broken.html"
+    broken.write_text("<p>x</p>\n<code>y</code)\n", encoding="utf-8")
+    rc, output = _run_kb_script(monkeypatch, "check_html", ["--check"])
+    assert rc == 1, f"check_html 同一调用形态对坏 HTML 必须红 (证明空库绿非恒绿):\n{output}"
+
+    # 摘链判据 1: gen_doc_map 空库上认领链守阵无对象即红 (fail-closed, 故不进默认链)。
+    rc, output = _run_kb_script(monkeypatch, "gen_doc_map", ["--check", "--root", str(root)])
+    assert rc == 1 and "没有任何件声明引用" in output, "gen_doc_map 空库行为变了 —— 同步本守阵与 PORTING 可选守卫清单"
+
+    # 摘链判据 2: 锚守卫空库上锚文件缺失即红 (fail-closed, 故不进默认链)。
+    rc, output = _run_kb_script(monkeypatch, "check_mutation_anchor", ["--check", "--root", str(root)])
+    assert rc == 1 and "未找到常驻锚文件" in output, "锚守卫空库行为变了 —— 同步本守阵与 PORTING 可选守卫清单"
 
 
 def test_commit_gate_covers_kb_check() -> None:

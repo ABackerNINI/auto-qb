@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("声明已全部在册 —— 幂等, 无改动")
     print("剩余人工 0 项(判断 0 · 条件 0 · 机械 0)")
-    print("NEXT: 闸门自证: commands run kb.check (含认领链双向校验 gen_doc_map --check)")
+    print("NEXT: 闸门自证: commands run kb.docmap (认领链双向校验 gen_doc_map --check)")
     return 0
 
 

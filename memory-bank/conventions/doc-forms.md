@@ -72,7 +72,8 @@ Form 切**内容形态**, 与四工位(制品用途/寿命)**正交**, 四工位
 - **pitfalls 的 8 个 `_index.md` 是全库唯一生成索引例外**(触发词聚合 = 改码前扫陷阱载体,
   grep 替代不了「扫到不知道的坑」); 重建 = `commands run kb.index`, 不要手改。
 - 机检(无物化文件): 缺主键 / **主键形态越界(逗号·非 kebab)** / 状态词表越界 / 单向认领链
-  = `gen_doc_map.py --check`(挂 `kb.check` 与提交闸门, 纯文档轮也覆盖)。
+  = `gen_doc_map.py --check`(fail-closed: 空库判红, 2026-11-17 计划 26-11-17-0010 S2 摘出
+  `kb.check` 默认链、经 `kb.docmap` 显式挂载, 提交闸门经 commands 引擎指向该 task, 纯文档轮也覆盖)。
 
 ## 认领链
 
@@ -91,7 +92,7 @@ issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Re
   实测 1215 件 / 1856 条 ref: `ok` 1267 · `ext` 299 · `basename` 253 · `repo` 2 · `dead` **35**
   (全为历史件指向 26-11-08 已删路径, 计划 §07 R1 明示预期, 非机检故障) ——
   页面上的「未入库」从来不是丢了件。
-- **机检单点**: `gen_doc_map.py --check` (挂提交闸门 `memory-bank/` 与 `kb.check`, 纯文档轮也覆盖; 2026-10-03 自 tests/test_docs_forms.py 下沉, 该测试同函数复验), 声明方 = 四形态全量。
+- **机检单点**: `gen_doc_map.py --check` (挂提交闸门 `memory-bank/` 与 kb 包 `kb.docmap`; 2026-11-17 计划 26-11-17-0010 S2 起摘出 `kb.check` 默认链 —— fail-closed 空库判红; 2026-10-03 自 tests/test_docs_forms.py 下沉, 该测试同函数复验), 声明方 = 四形态全量。
 
 ## 创建/更新方式 (命令化, 2026-10-17)
 

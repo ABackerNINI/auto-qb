@@ -106,17 +106,23 @@ match = ["memory-bank/"]
 #   其生成物 (tasks/plans/reports/issues 的 _index.md 与 attachments/_archive.md) 已随低价值层
 #   移除退役 (计划 26-11-08-1625 D4/D5); 索引生成只剩 gen_kb_index 一家 (pitfalls)。
 run   = ["python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
-         "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
+         # 2026-11-17 (计划 26-11-17-0010 S2, 用户拍板 2026-11-16): gen_doc_map --check 摘出
+         # kb.check 默认链(fail-closed: 空库判红「认领链守阵失去校验对象」), 本项目侧经 kb 包
+         # `kb.docmap` task 显式挂载 —— 走 commands 引擎单点; 拦截行为不变。
+         "python <skill-dir:commands>/scripts/run.py run kb.docmap",
          "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
          "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
-         "python <skill-dir:memory-bank>/scripts/check_mutation_anchor.py --check",
+         # 2026-11-17 (计划 26-11-17-0010 S2): 锚守卫摘出 kb.check 默认链(fail-closed: 锚文件
+         # 缺失即红, 不满足「对新空库恒绿」), 本项目侧经 kb 包 `kb.anchor` task 显式挂载 ——
+         # 不在这里抄命令, 走 commands 引擎单点(同 dev.fmt / test.quick 形态); 拦截行为不变。
+         "python <skill-dir:commands>/scripts/run.py run kb.anchor",
          "python <skill-dir:memory-bank>/scripts/check_doc_templates.py --check",
          "python <skill-dir:memory-bank>/scripts/timekit.py --check --files <changed:memory-bank/**>",
          "python <skill-dir:memory-bank>/scripts/check_status_drift.py --check",
          "python <skill-dir:memory-bank>/scripts/check_html.py --check <changed:**/*.html>"]
 auto  = true
 timeout = 60
-note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条; 2026-11-08 起索引生成只剩 gen_kb_index/pitfalls 一家); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面); check_doc_templates --check (2026-10-17 P1 加: 冻结线之后新建族文件的命名/头部/状态词表/无残留 SLOT, 存量豁免; 2026-10-31 修: plan/report 圈面改文件名 stamp 前缀, 堵「缺 doc-added 手写新件整件逃逸」洞, RM02-RM10 事故); check_mutation_anchor --check (2026-10-31 加: 常驻锚防流水, 台账/逐轮日志写回 = 红); check_status_drift --check (2026-10-31 加: 状态漂移守卫, progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦; 2026-11-08 重构 W5: progress 判据节反链档随 progress/ 目录退役删除)"
+note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条; 2026-11-08 起索引生成只剩 gen_kb_index/pitfalls 一家); gen_doc_map --check (主键校验 + 认领链双向, 2026-11-17 S2 起摘出 kb.check 默认链, 经 kb 包 kb.docmap task 显式挂载, 本行调用行为不变); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面); check_doc_templates --check (2026-10-17 P1 加: 冻结线之后新建族文件的命名/头部/状态词表/无残留 SLOT, 存量豁免; 2026-10-31 修: plan/report 圈面改文件名 stamp 前缀, 堵「缺 doc-added 手写新件整件逃逸」洞, RM02-RM10 事故); check_mutation_anchor (2026-10-31 加: 常驻锚防流水, 台账/逐轮日志写回 = 红; 2026-11-17 S2 起摘出 kb.check 默认链, 经 kb 包 kb.anchor task 显式挂载, 本行调用行为不变); check_status_drift --check (2026-10-31 加: 状态漂移守卫, progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦; 2026-11-08 重构 W5: progress 判据节反链档随 progress/ 目录退役删除)"
 
 [[gates]]
 # HTML 结构守卫(2026-11-01 两起实测事故: 闭合标签少 `>` 被分词器整段吞掉, 其后内容全嵌进未闭合
