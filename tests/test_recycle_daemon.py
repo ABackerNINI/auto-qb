@@ -293,6 +293,22 @@ sink 类键 obs_listen/obs_roster/obs_owner + 接线点处置类 listen 补齐, 
 - test_spec_extra_srcs_rewrite_member_from_legacy_root: spec.extra_srcs 在场 => 成员
   fastresume 指向前任旧根也按 {旧根 -> dst} 改写(rewritten 落盘); 反证: 无 extra_srcs
   的旧形状下同一成员 unmatched 出账(不误写), 旧 spec 形状行为不变
+
+覆盖率补测(2026-11-17, 监听映射/死证/复验/多根去重/缺失收口剩余分支; 补测轮到闸门绿):
+- test_listening_map_netstat_non_digit_port_row_skipped: netstat 解析防御 —— local port 段
+  非数字的行跳过, 合法行照常归组
+- test_listening_map_proc_hex_garbage_row_skipped: /proc 表解析防御 —— inode 列非十六进制的
+  行 ValueError 跳过(行级容错); 本表唯一行坏形 => 全表零解析成功 None + warning(T2 收紧)
+- test_owner_pid_from_procnet_channel_down_returns_none: 归属通道 —— 全机映射不可判 None =>
+  归属 None(不猜)
+- test_owner_dead_identity_incomplete_conservative_false: owner 死证 —— 名册条目 ct 读不出
+  (身份不完整)保守 False 不开安全口子
+- test_l1_window_open_roster_channel_down_silent_false: 复验名册通道不可判 —— 非节流形态
+  静默返回 False, 不冒充通过
+- test_rewrite_member_roots_dedup_blank_and_case_variants: 多旧根归一去重 —— 空 src/空白串
+  跳过, 分隔符/大小写/尾斜杠变体折叠为单根(只 retarget 一次)
+- test_process_window_missing_fastresume_warns_member_gone: 窗口改写 —— fastresume 缺失按
+  member_gone 收口且 WARNING 落日志(不失败不重试)
 """
 import builtins
 import io
@@ -3665,3 +3681,120 @@ def test_scenario_channel_outage_falls_to_l2_then_l1_on_recovery(tmp_path, monke
         assert not [r for r in caplog.records if "退 L2 全机口径" in r.message], "通道恢复零退 L2 留痕"
     assert rj.read_rewrites(data_dir, "job-1")[h1]["status"] == "rewritten", "恢复后回到 L1 立即改写"
     assert rec_ts and min(rec_ts) - tick_log[0][0] < rd.NEW_FACE_SETTLE, "恢复后无稳定期(L1 强证据)"
+
+
+# ---------- 覆盖率补测(2026-11-17, 清单见文件头「## 测试计划」尾段) ----------
+
+
+def test_listening_map_netstat_non_digit_port_row_skipped():
+    """netstat 解析防御: local port 段非数字的行跳过(不炸不进映射), 合法行照常归组"""
+    text = ("TCP 0.0.0.0:abcd 0.0.0.0:0 LISTENING 111\n"
+            "TCP [::]:8080 0.0.0.0:0 LISTENING 222\n")
+    m = rd._listening_map_netstat(text)
+    assert m == {222: frozenset({8080})}, m
+
+
+def test_listening_map_proc_hex_garbage_row_skipped(monkeypatch):
+    """(/proc 表解析防御: inode 列非十六进制的行 ValueError 跳过(行级容错, 不炸不弃整表);
+    本表唯一行坏形 => 全表零解析成功 -> None + warning(T2 评审「解析不出就退」收紧面))"""
+    # inode 列坏形行(open 桩走同文件既有单点 _stub_proc_open; inode_port 空 =>
+    # recycle_daemon.py:351 先 return None, fd 扫描 loop 不可达, 无需 /proc 根清单桩)
+    tcp = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 00000000:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0    zz 1 0\n"
+    )
+    _stub_proc_open(monkeypatch, {"/proc/net/tcp": tcp, "/proc/net/tcp6": OSError(2, "no tcp6")})
+    m = rd._listening_map_proc()
+    assert m is None, "坏形行跳过后全表零解析成功 -> None + warning(格式漂移嫌疑, T2 收紧)"
+
+
+def test_owner_pid_from_procnet_channel_down_returns_none(monkeypatch):
+    """Linux 归属通道: 全机映射不可判(None) => 归属同样 None(不猜)"""
+    monkeypatch.setattr(rd, "_listening_map_proc", lambda **kw: None)
+    assert rd._owner_pid_from_procnet(8080) is None
+
+
+def test_owner_dead_identity_incomplete_conservative_false():
+    """owner 死证: 名册条目 ct 读不出(身份不完整) => 无法证明死亡, 保守 False(不开安全口子)"""
+    obs = rd._Observation(HOST, PORT)
+    obs.owner = {"pid": 1, "ct": 100.0}
+    roster = {1: {"name": "qbittorrent.exe"}}  # 缺 ct
+    assert obs._owner_dead(roster) is False
+
+
+def test_l1_window_open_roster_channel_down_silent_false(monkeypatch, caplog):
+    """复验名册通道不可判: 非节流形态(sink None)静默返回 False, 零告警不冒充通过"""
+    monkeypatch.setattr(rd, "_qb_processes", lambda **kw: None)
+    obs = rd._Observation(HOST, PORT)
+    obs.owner = {"pid": 1, "ct": 100.0}
+    with caplog.at_level(logging.DEBUG, logger=LOG_RD):
+        verdict = rd._l1_window_open(HOST, PORT, obs)
+    assert verdict is False
+    assert caplog.records == [], "sink None: 静默不告警"
+
+
+def test_rewrite_member_roots_dedup_blank_and_case_variants(tmp_path, monkeypatch):
+    """多旧根归一去重: 空 src/空白串跳过, 分隔符/大小写/尾斜杠变体折叠为单根(只 retarget 一次)"""
+    calls = []
+
+    def _fake_retarget(backup, h1, h2, old_root, new_root):
+        calls.append(old_root)
+        raise frmod.FastresumeError("x")
+
+    monkeypatch.setattr(rd.fastresume, "retarget", _fake_retarget)
+    spec = {
+        "bt_backup": str(tmp_path / "BT_backup"),
+        "src": "",
+        "dst": "R:/new",
+        "extra_srcs": ["R:/a", "r:/a", "R:/a/", "   "],
+    }
+    rec = rd._rewrite_member(spec, {"hash_v1": "HA"}, None)
+    assert rec["status"] == "failed", "retarget 异常照常 failed(去重面之上)"
+    assert calls == ["R:/a"], f"四变体折叠单根: {calls}"
+
+
+def test_process_window_missing_fastresume_warns_member_gone(tmp_path, monkeypatch, caplog):
+    """窗口改写: 成员 fastresume 缺失 -> member_gone 收口且 WARNING 落日志(不失败不重试)"""
+    data_dir = str(tmp_path / "data")
+    os.makedirs(os.path.join(data_dir, "relocate"), exist_ok=True)
+    spec = {
+        "job_id": "j1",
+        "src": str(tmp_path / "src"),
+        "dst": str(tmp_path / "dst"),
+        "scope": str(tmp_path / "dst"),
+        "hashes": ["0" * 40],
+        "host": HOST,
+        "port": PORT,
+        "alias_paths": [],
+        "files": [],
+        "members": [{
+            "hash_v1": "0" * 40,
+            "hash_v2": ""
+        }],
+        "bt_backup": str(tmp_path / "BT_backup"),  # 空目录: 定位不到 = member_gone
+    }
+    os.makedirs(spec["bt_backup"], exist_ok=True)
+    rj.write_spec(data_dir, "j1", spec)  # 窗口内逐成员现读 spec(评审 #4), 必须落盘
+    rj.write_journal(data_dir, "j1", {"phase": "rewritten", "ts": 1.0})
+    jobs = [{"job_id": "j1", "spec": spec, "flip": False}]
+    owner = rd._Owner(data_dir, "k", 12345)
+    assert owner.claim(1000.0, max_age=60.0) == "claimed"
+    monkeypatch.setattr(rd, "_window_open", lambda *a, **k: True)  # L2 窗保持开
+    times = iter(float(1000.0 + i) for i in range(64))
+    with caplog.at_level(logging.WARNING, logger=LOG_RD):
+        ret = rd._process_window(
+            data_dir,
+            jobs,
+            owner,
+            HOST,
+            PORT,
+            started=1000.0,
+            max_wait=60.0,
+            poll=0.0,
+            clock=lambda: next(times),
+            sleep=lambda *_: None,
+        )
+    assert ret == "settled", "缺失成员按 member_gone 收口出账"
+    assert rj.read_rewrites(data_dir, "j1")["0" * 40]["status"] == rj.REWRITE_MEMBER_GONE
+    # R4 留痕: member_gone 收口伴随 WARNING(recycle_daemon.py 窗口段文案钉扎)
+    assert any("fastresume 已缺失" in r.message for r in caplog.records), caplog.text

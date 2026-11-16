@@ -44,10 +44,29 @@
   建账(dst 自 superseded_from 还原、带 plan.inherited)的 MOVING job 撤销: 未确认先回
   三段式 guide; 确认后清理面 = 自建链接, inherited 不删不撤(改指收敛前的撤销窗, 继承
   别名仍指前任 dst, 悬空为已接受遗留风险), 零 qB 写, 前任历史零触碰。
+
+覆盖率补测(2026-11-17, 迁移器/写穿/对账回写剩余分支; 补测轮到闸门绿):
+- test_probe_salt_and_stamp_degenerate_state_shapes: 退化 state 形态 —— probe_salt_ensure
+  上下文缺失返回空串不生成 / model_version 坏形按未盖章 / jobs 箱非 dict 直接盖章零备份 /
+  store 为 None 的登记面空转
+- test_migration_successor_matching_skips_and_prefers: 继任判定跳过面(哈希不交集/dst 不等)
+  与多候选择优(非终态优先, 同分取 updated_at 最新; 落选候选让位回环)
+- test_migration_rerun_replaces_entry_and_lifts_sub_inherited: 幂等重跑(半程崩溃残留同 id
+  条目原位替换不叠加)/ 前任自带移交条目展平上提链顶(坏形条目逐条跳过, 同 id 不重复)
+- test_migration_rewrite_spec_no_change_skips_write: spec 重写无增量不写盘(成员全在账 +
+  src 与既有 extra_srcs 重合)/ 仅 extra_srcs 增量仍写盘(members 不重复并入)
+- test_migration_backup_without_journal_dir: data_dir 无 relocate 目录时备份不含镜像,
+  迁移照常完成
+- test_migration_rollback_disk_restore_shapes: 回滚盘面四形态(无内存快照只盘面还原 /
+  备份缺 state 文件撤走窗口新产物 / 镜像重建现目录缺失 / 无镜像整目录撤走 / 双缺空转 /
+  state_file 缺失跳过 state 还原 / 回滚自身异常如实暴露不抛)
+- test_load_jobs_terminal_journal_ts_unparseable_shelved: 启动对账锚定面 —— journal 终相位
+  ts 不可解析: 锚定不上搁置不采纳, state 相位原样
 """
 
 import json
 import os
+import shutil
 import types
 from dataclasses import replace
 
@@ -605,3 +624,262 @@ def test_migrated_successor_cancel_semantics_moving_window(tmp_path):
     assert disk["relocate"]["jobs"]["jr-p"]["phase"] == ru.PHASE_SUPERSEDED, "前任历史零触碰"
     assert disk["relocate"]["jobs"]["jr-s"]["phase"] == ru.PHASE_CANCELLED, "撤销账落盘"
     assert disk["relocate"]["model_version"] == ru.MODEL_VERSION, "章保留"
+
+
+# ---------- 覆盖率补测(2026-11-17, 迁移器/写穿/对账回写剩余分支): 行为有意义面 ----------
+
+
+def test_probe_salt_and_stamp_degenerate_state_shapes(tmp_path):
+    """退化 state 形态不炸: probe_salt_ensure 上下文缺失返回空串 / model_version 坏形按
+    未盖章处理(尝试迁移) / jobs 箱非 dict 直接盖章零备份(store 为 None 的登记面同样空转)"""
+    # 上下文缺失(state.data 非 dict): 读盐/保盐返回空串, 绝不生成不落盘
+    mod = _bare_mod(data_dir=str(tmp_path))
+    mod._ctx.state = types.SimpleNamespace(data=None)
+    assert mod.probe_salt_ensure() == ""
+    # store 为 None 的替身形态: resuming 登记面空转不炸(老 store 缺字段自建的同族退化)
+    mod._ctx.store = None
+    mod._sync_resuming()
+    # model_version 坏形(list)+ jobs 箱非 dict: 按未盖章 -> 尝试迁移 -> 无账可迁直接盖章
+    # (直调迁移器: _load_jobs 的账恢复循环按 dict 箱为前提, 坏形箱的容错收口在迁移器)
+    data_dir = str(tmp_path / "data")
+    state_path = tmp_path / "state.json"
+    payload = {"relocate": {"model_version": ["bad"], "jobs": "oops"}}
+    state_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    svc = StateService(str(state_path))
+    svc.data = svc.load()
+    mod2 = _bare_mod(data_dir=data_dir)
+    mod2._ctx.state = svc
+    mod2._migrate_legacy_accounts()
+    assert svc.data["relocate"]["model_version"] == ru.MODEL_VERSION, "坏形版本号按未盖章, 空账直接盖章"
+    assert not os.path.isdir(os.path.join(data_dir, "relocate-migration-backup")), "盖章路径零备份目录"
+
+
+def test_migration_successor_matching_skips_and_prefers(tmp_path):
+    """继任判定跳过面与择优: 哈希不交集跳过 / dst 不等跳过 / 多候选按(非终态, updated_at)
+    择优 —— 条目归集到择优继任, 被跳过账零触碰"""
+    box = {
+        "jr-0": _legacy_job("jr-0", "R:/s0", "R:/dstC", "armed", 100.0, hashes=("HA", )),
+        "jr-x": _legacy_job("jr-x", "R:/sx", "R:/dstC", "armed", 900.0, hashes=("HB", )),  # 哈希不交集: 跳过
+        "jr-y": _legacy_job("jr-y", "R:/sy", "R:/dstD", "armed", 800.0, hashes=("HA", )),  # dst 不等: 跳过
+        "jr-z": _legacy_job("jr-z", "R:/sz", "R:/dstC", "done", 100.0, hashes=("HA", )),  # 终态候选(分低)
+        "jr-v": _legacy_job("jr-v", "R:/sv", "R:/dstC", "done", 50.0, hashes=("HA", )),  # 落选候选(更差)
+        "jr-w": _legacy_job("jr-w", "R:/sw", "R:/dstC", "armed", 200.0, hashes=("HA", )),  # 在途候选(择优)
+    }
+    box["jr-0"]["plan"]["superseded_from"] = "R:/dstA"
+    mod, data_dir, state_path = _migration_env(tmp_path, box)
+
+    n = mod._load_jobs()
+
+    assert n == 6, "六账一条不丢"
+    data = mod._ctx.state.data["relocate"]
+    # 条目归集到择优继任 jr-w(在途优先于终态; 同分才比 updated_at)
+    inherited = {e["job_id"] for e in (data["jobs"]["jr-w"].get("plan") or {}).get("inherited") or ()}
+    assert inherited == {"jr-0"}, f"归集到择优继任: {inherited}"
+    # 被跳过账(哈希不交集/dst 不等/落选候选)零触碰
+    for jid in ("jr-x", "jr-y", "jr-z"):
+        assert data["jobs"][jid]["phase"] == box[jid]["phase"], jid
+        assert not (data["jobs"][jid].get("plan") or {}).get("inherited"), jid
+
+
+def test_migration_rerun_replaces_entry_and_lifts_sub_inherited(tmp_path):
+    """幂等重跑与展平上提面: 半程崩溃重跑(继任已有同 id 条目)原位替换不重复 / 前任自带的
+    移交条目一并上提链顶(前任账不再持有)/ 空 src 的条目不进 spec 重写清单"""
+    box = {
+        "jr-1": _legacy_job("jr-1", "", "R:/dstC", "armed", 200.0, hashes=("HA", )),
+        "jr-2": _legacy_job("jr-2", "R:/s2", "R:/dstC", "moving", 300.0, hashes=("HA", )),
+    }
+    box["jr-1"]["plan"]["superseded_from"] = "R:/dstB"
+    # 半程崩溃残留: 继任已有 jr-1 的旧条目(重跑须原位替换, 不叠加)
+    box["jr-2"]["plan"]["inherited"] = [
+        {
+            "job_id": "jr-1",
+            "src": "R:/stale",
+            "dst": "R:/stale-dst",
+            "scope": "R:/stale",
+            "alias_kind": "dir",
+            "alias_paths": [],
+            "link_kind": "junction",
+        }
+    ]
+    # 前任自带的移交条目(旧机器时代展平遗留): 迁移时一并上提链顶; 坏形条目逐条跳过不炸
+    box["jr-1"]["plan"]["inherited"] = [
+        42,  # 非 dict: 跳过
+        {
+            "src": "R:/no-id"
+        },  # 缺 job_id: 跳过
+        {
+            "job_id": "jr-1",
+            "src": "R:/dup"
+        },  # 与主条目同 id(已在链顶): 不重复上提
+        {
+            "job_id": "jr-0",
+            "src": "R:/s0",
+            "dst": "R:/dstA",
+            "scope": "R:/s0",
+            "alias_kind": "dir",
+            "alias_paths": ["R:/dstA/alias"],
+            "link_kind": "junction",
+        },
+    ]
+    mod, data_dir, state_path = _migration_env(tmp_path, box)
+
+    mod._load_jobs()
+
+    data = mod._ctx.state.data["relocate"]
+    j2_plan = data["jobs"]["jr-2"]["plan"]
+    entries = {e["job_id"]: e for e in j2_plan["inherited"]}
+    assert set(entries) == {"jr-1", "jr-0"}, f"替换 + 上提: {set(entries)}"
+    assert entries["jr-1"]["dst"] == "R:/dstB" and entries["jr-1"]["src"] == "", "原位替换为本次归集值"
+    assert entries["jr-0"]["dst"] == "R:/dstA", "前任自带条目上提保留"
+    assert not (data["jobs"]["jr-1"].get("plan") or {}).get("inherited"), "前任账不再持有"
+
+
+def test_migration_rewrite_spec_no_change_skips_write(tmp_path):
+    """spec 重写无增量不写盘: 前任成员已在继任 spec(members 不变)+ 移交 src 与既有
+    extra_srcs 重合(无新根) -> added 恒 False, spec 字节不变(473->476 / 476->exit 面);
+    新 src 根且成员全在账(465->467: members 不加, 仅 extra_srcs 增量)-> 仍写盘"""
+    def _env(name, legacy_src):
+        backup = tmp_path / f"BT_backup-{name}"
+        root_a, root_c, root_d = str(tmp_path / f"a-{name}"), str(tmp_path / f"c-{name}"), str(tmp_path / f"d-{name}")
+        h_a = _member_fixture(backup, b"m-a", root_a)
+        box = {
+            "jr-1": _legacy_job("jr-1", legacy_src, root_d, "armed", 200.0, hashes=(h_a, )),
+            "jr-2": _legacy_job("jr-2", root_c, root_d, "armed", 300.0, hashes=(h_a, )),
+        }
+        box["jr-1"]["plan"]["superseded_from"] = root_a
+        data_dir = str(tmp_path / f"data-{name}")
+        os.makedirs(os.path.join(data_dir, "relocate"), exist_ok=True)
+        state_path = tmp_path / f"state-{name}.json"
+        state_path.write_text(json.dumps({"relocate": {"jobs": box}}, ensure_ascii=False), encoding="utf-8")
+        rj.write_spec(
+            data_dir, "jr-2", {
+                "job_id": "jr-2",
+                "src": root_c,
+                "dst": root_d,
+                "scope": root_c,
+                "hashes": [h_a],
+                "host": HOST,
+                "port": PORT,
+                "alias_paths": [],
+                "files": [],
+                "bt_backup": str(backup),
+                "members": [{
+                    "hash_v1": h_a,
+                    "hash_v2": ""
+                }],
+                "extra_srcs": [root_a],
+            }
+        )
+        mod = _bare_mod(data_dir=data_dir)
+        mod._ctx.state = types.SimpleNamespace(
+            data=json.loads(state_path.read_text(encoding="utf-8")), state_file=str(state_path)
+        )
+        mod._ctx.config = types.SimpleNamespace(relocate=RelocateConfig(enabled=True), data_dir=data_dir)
+        spec_before = rj.read_spec(data_dir, "jr-2")
+        return mod, data_dir, spec_before
+
+    # 场景一: 全部增量重合(前任 src 与既有 extra_srcs 重合, 成员已在账) -> spec 零写(内容不变)
+    mod1, data_dir1, spec1 = _env("same", str(tmp_path / "a-same"))
+    mod1._load_jobs()
+    assert rj.read_spec(data_dir1, "jr-1") is None, "前任无 spec(只有继任有)"
+    spec_after = rj.read_spec(data_dir1, "jr-2")
+    assert spec_after == spec1, "无增量不重写 spec"
+
+    # 场景二: 成员已在账 + 新 src 根 -> 仅 extra_srcs 增量, 仍写盘
+    mod2, data_dir2, _ = _env("newsrc", "R:/s2")
+    mod2._load_jobs()
+    spec2 = rj.read_spec(data_dir2, "jr-2")
+    member_v1 = {m["hash_v1"] for m in spec2["members"] if isinstance(m, dict)}
+    assert len(member_v1) == 1, "成员全在账不重复并入"
+    assert len(spec2["extra_srcs"]) == 2, "新 src 根并入 extra_srcs"
+
+
+def test_migration_backup_without_journal_dir(tmp_path):
+    """迁移前备份面: data_dir 尚无 relocate 目录(journal 未启用) -> 备份目录不含 relocate
+    镜像, 迁移照常完成(journal 投影空转)"""
+    box = {"jr-1": _legacy_job("jr-1", "R:/s1", "R:/dstC", "armed", 200.0, hashes=("HA", ))}
+    box["jr-1"]["plan"]["superseded_from"] = "R:/dstB"
+    data_dir = str(tmp_path / "data")  # 不建 relocate 子目录
+    state_path = tmp_path / "state.json"
+    state_path.write_text(json.dumps({"relocate": {"jobs": box}}, ensure_ascii=False), encoding="utf-8")
+    svc = StateService(str(state_path))
+    svc.data = svc.load()
+    mod = _bare_mod(data_dir=data_dir)
+    mod._ctx.state = svc
+
+    mod._load_jobs()
+
+    backup_root = os.path.join(data_dir, "relocate-migration-backup")
+    backups = os.listdir(backup_root)
+    assert backups, "备份目录落盘"
+    assert not os.path.exists(os.path.join(backup_root, backups[0], "relocate")), "无 journal 目录则不镜像"
+    assert mod._ctx.state.data["relocate"]["jobs"]["jr-1"]["phase"] == ru.PHASE_SUPERSEDED
+
+
+def test_migration_rollback_disk_restore_shapes(tmp_path, monkeypatch, caplog):
+    """回滚盘面形态: 无内存快照参数只做盘面还原 / 备份缺 state 文件撤走迁移窗口新产物 /
+    备份有 relocate 镜像而现目录缺失(重建)/ 备份无镜像而现目录在(整目录撤走)/
+    state_file 缺失跳过 state 还原 / 回滚自身异常如实暴露不抛"""
+    def _shape(backup_has_relocate, current_has_relocate, state_file_name="state.json"):
+        data_dir = str(tmp_path / ("d-%s-%s-%s" % (backup_has_relocate, current_has_relocate, state_file_name)))
+        os.makedirs(data_dir, exist_ok=True)
+        if current_has_relocate:
+            os.makedirs(os.path.join(data_dir, "relocate"))
+            rj.write_journal(data_dir, "jr-x", {"phase": "armed", "ts": 1.0})
+        backup_dir = os.path.join(data_dir, "backup")
+        os.makedirs(backup_dir, exist_ok=True)
+        state_path = os.path.join(data_dir, state_file_name)
+        open(state_path, "w", encoding="utf-8").write("{}")
+        shutil.copy2(state_path, os.path.join(backup_dir, "state.json"))
+        if backup_has_relocate:
+            os.makedirs(os.path.join(backup_dir, "relocate"))
+            rj.write_journal(backup_dir, "jr-x", {"phase": "armed", "ts": 1.0})
+        open(os.path.join(data_dir, "state.json.bak"), "w", encoding="utf-8").write("{}")
+        mod = _bare_mod(data_dir=data_dir)
+        mod._ctx.state = types.SimpleNamespace(data={}, state_file=state_path)
+        return mod, data_dir, backup_dir
+
+    # 形态一: 无内存快照(备份阶段失败面) + 备份缺 .bak(迁移窗口新产物) -> 撤走;
+    # 备份无 relocate 镜像而现目录在 -> 整目录撤走
+    mod, data_dir, backup_dir = _shape(False, True)
+    mod._migration_rollback(data_dir, backup_dir)
+    assert not os.path.exists(os.path.join(data_dir, "state.json.bak")), "备份缺该文件 = 迁移窗口新产物, 撤走"
+    assert not os.path.isdir(os.path.join(data_dir, "relocate")), "备份时无 relocate 目录 -> 现目录全为迁移产物, 撤走"
+
+    # 形态四: 备份与现目录都无 relocate -> 面全空转, 只还原 state
+    mod, data_dir, backup_dir = _shape(False, False)
+    mod._migration_rollback(data_dir, backup_dir)
+    assert not os.path.isdir(os.path.join(data_dir, "relocate"))
+    assert os.path.isfile(os.path.join(data_dir, "state.json"))
+
+    # 形态二: 备份有 relocate 镜像而现目录缺失 -> 重建; state_file 空 -> 跳过 state 还原
+    mod, data_dir, backup_dir = _shape(True, False, state_file_name="other.json")
+    mod._ctx.state.state_file = ""
+    mod._migration_rollback(data_dir, backup_dir)
+    assert os.path.isfile(os.path.join(data_dir, "relocate", "jr-x.json")), "现目录缺失由备份镜像重建"
+    assert not os.path.exists(os.path.join(data_dir, "state.json")), "state_file 缺失: state 还原面跳过"
+
+    # 形态三: 回滚自身异常 -> logger.error 如实暴露, 不上抛
+    mod, data_dir, backup_dir = _shape(False, True)
+
+    def _boom(src, dst, *a, **k):
+        raise OSError("boom")
+
+    monkeypatch.setattr(shutil, "copy2", _boom)
+    mod._migration_rollback(data_dir, backup_dir)
+    assert any("回滚失败" in r.message for r in caplog.records), "回滚异常如实暴露"
+    assert os.path.isdir(os.path.join(data_dir, "relocate")), "异常后现场原样(不半撤)"
+
+
+def test_load_jobs_terminal_journal_ts_unparseable_shelved(tmp_path):
+    """启动对账锚定面: journal 终相位但 ts 不可解析 -> 锚定不上搁置不采纳(state 相位原样,
+    上一世残留交 _arm 侧既有清理口)"""
+    box = {"jr-1": _legacy_job("jr-1", "R:/s1", "R:/dstC", "moving", 200.0, hashes=("HA", ))}
+    journals = {"jr-1": {"phase": "done", "ts": "not-a-number"}}
+    mod, data_dir, state_path = _migration_env(tmp_path, box, journals)
+
+    n = mod._load_jobs()
+
+    assert n == 1
+    assert mod.get_job("jr-1").phase == ru.PHASE_MOVING, "ts 不可解析: 锚定不上, 搁置不采纳"
+    assert mod._ctx.state.data["relocate"]["jobs"]["jr-1"]["phase"] == "moving", "state 原样"

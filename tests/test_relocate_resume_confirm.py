@@ -65,6 +65,14 @@
   resume_hashes 上非 pending(已闭合)成员保留(kept 过滤, issue 26-11-15-1433); 把闭账口径
   改成全账扫 resume_hashes 或把账面收敛成 remaining pending 都必红
 ### 计数器停机摘要(issue 26-11-15-0345-feat, 计划 26-11-15-0914 S4)
+覆盖率补测(2026-11-17, 恢复确认/闭账/停机补写剩余分支; 补测轮到闸门绿):
+- test_resume_defensive_degenerate_faces: 退化形态 —— 挂账单点未知 job_id 空转 / 成员不在
+  store 保守按停着 / 闭账单点空删除集与无交集删除集原样返回
+- test_reconcile_resume_pending_no_api_and_stop_persist_failure: 对账循环 api 缺失空转不炸 /
+  stop() 补写失败不抛(退出路径不受 state 落盘失败影响)
+- test_live_conf_hot_rejected_non_dataclass_conf_none: 热启用被拒面 —— 非 dataclass 配置替身
+  按 None 闸; 真 dataclass 按禁用收口; 清位后恢复现配置
+
 - test_stop_logs_failure_counters_zero: stop() 停机摘要一行, 全 0 也打(D12)
 - test_stop_logs_failure_counters_nonzero: 非 0 形态如实带出两个绝对计数(不建分母, D13)
 """
@@ -829,3 +837,50 @@ def test_stop_logs_failure_counters_nonzero():
     with capture_logs(LOG_NAME) as cap:
         mod.stop()
     assert any("停机" in m and "tag_failures=2" in m and "resume_failures=5" in m for m in cap.messages), cap.messages
+
+
+# ---------- 覆盖率补测(2026-11-17, 恢复确认/闭账/停机补写剩余分支): 行为有意义面 ----------
+
+
+def test_resume_defensive_degenerate_faces():
+    """退化形态不炸: 挂账单点遇未知 job_id 空转 / 成员不在 store 按停着(保守不闭账) /
+    闭账单点空删除集与无交集删除集都原样返回"""
+    mod = _resume_mod(types.SimpleNamespace(torrents_resume=lambda **kw: None))
+    mod._note_resume_state("ghost", ("HA", ), 0)  # 未知 job_id: 空转
+    assert mod._member_stopped("HA") is True, "不在 store: 保守按停着"
+    job = _job("j1", phase=ru.PHASE_ARMED, resume_hashes=("HA", ), resume_pending=("HA", ))
+    mod._jobs["j1"] = job
+    assert mod._close_deleted_members(job, ()) is job, "空删除集原样"
+    assert mod._close_deleted_members(job, ("HX", )) is job, "无交集删除集原样(不动账)"
+
+
+def test_reconcile_resume_pending_no_api_and_stop_persist_failure(tmp_path):
+    """对账循环 api 缺失空转不炸 / stop() 补写失败不抛(退出路径不受 state 落盘失败影响)"""
+    mod = _resume_mod(types.SimpleNamespace(torrents_resume=lambda **kw: None))
+    mod._ctx.api = None  # 对账入口的退化上下文
+    mod._reconcile_resume_pending()
+    # stop() 补写失败: _persist 抛 -> 吞掉不外漏
+    mod._jobs_loaded = True
+    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_ARMED)
+
+    def _boom():
+        raise RuntimeError("state 落盘失败")
+
+    mod._persist = _boom
+    assert mod.stop() is None, "退出路径不抛"
+
+
+def test_live_conf_hot_rejected_non_dataclass_conf_none():
+    """热启用被拒 x 非 dataclass 配置替身 -> 按 None 闸(入口全部 unavailable/blocked);
+    真 dataclass 配置 -> 按禁用收口(enabled=False)"""
+    mod = _resume_mod(types.SimpleNamespace(torrents_resume=lambda **kw: None))
+    conf = {"form": "dir_alias"}  # 任意非 dataclass 对象(dict 替身, replace 会 TypeError)
+    mod._ctx.config = types.SimpleNamespace(relocate=conf)
+    mod._hot_enable_rejected = True
+    assert mod._live_conf() is None, "非 dataclass 替身: None 闸"
+    from auto_qb.config.models import RelocateConfig as _RC
+
+    mod._ctx.config = types.SimpleNamespace(relocate=_RC(enabled=True))
+    assert mod._live_conf().enabled is False, "被拒: 禁用收口"
+    mod._hot_enable_rejected = False
+    assert mod._live_conf().enabled is True, "清位后恢复现配置"

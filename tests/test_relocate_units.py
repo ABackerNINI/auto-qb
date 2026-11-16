@@ -36,6 +36,20 @@
 - test_evaluate_add_dir_alias_redirects_landing_in_moved_phase: 行 2 目录别名改道(moved 相位)
   -> confirm 带实际落点与卷剩余
 
+覆盖率补测(2026-11-17, 本批 relocate 单元剩余分支; 补测轮到闸门绿):
+- test_rel_under_defensive_fold_and_empty_guards: _rel_under 折叠口径长度失配防御支 -> ""(不伪尾段);
+  under_alias_root 空 path/空 roots、_file_link_roots 空 src、nested_target_on 空 target 的
+  空值守卫(现实不可达, _norm 替身直驱)各自退化形态不炸
+- test_inherited_entries_normalization_skips_junk: plan.inherited 非 dict 条目逐条跳过不炸,
+  好条目字段归一保留; 非 list/tuple 容器/None -> 空元组
+- test_scope_hit_inherited_entries_faces: 继承面 scope_hit 三态(目录条目 scope 内命中 /
+  文件条目恰等命中、子目录不命中 / 未知形态不命中) —— 前任作用域经活任务条目解析(D4)
+- test_nested_target_r5_note_file_links: R5 note 面(FILE_LINKS target 嵌旧内容根)——
+  confirm(R4)与 note(R5)并存, note 独立进 notes 不降级
+- test_inherited_add_confirm_faces: 移交面添加预检全分支 —— 目录条目(恰等/重定向/无命中)/
+  文件条目(不在 src 下/账面不可得保守 confirm/撞链接路径/撞成员链接根/异名不重叠)/
+  未知形态 None / 多条目逐个扫(坏条目不挡好条目)
+
 R1 收尾窗形态感知分流追加(计划 26-11-13-0448 P2; _file_job 默认 alias_paths 改绝对路径生产形):
 - test_evaluate_add_finalize_window_form_aware: 收尾窗分流表驱动 —— 文件级 (1)同名撞链接路径
   confirm(场景 2/3 文案)/(2) 首段撞成员链接根(同名目录+深层+内容根内)confirm(保守)/
@@ -1845,3 +1859,206 @@ def test_is_complete_state_transition_exclusion_table():
     # 防御面: state_enum 缺失/None -> 保守 False(不豁免)
     assert not ru.is_complete_state(SimpleNamespace(state="stalledUP", state_enum=None))
     assert not ru.is_complete_state(SimpleNamespace(state="stalledUP"))
+
+
+# ---------- 覆盖率补测(2026-11-17, relocate 单元剩余分支): 行为有意义面 ----------
+
+
+def test_rel_under_defensive_fold_and_empty_guards(monkeypatch):
+    """防御支四面: 折叠口径长度失配 -> ""(调用侧 actual 退化为根不伪段)/ 空 path 的
+    under_alias_root -> None / _file_link_roots 空 src -> 空集 / nested_target_on 空 target
+    -> 三空串(不猜不炸)。后三支守卫现实不可达(normpath 恒返回 "."), 沿既有替身直驱口径
+    (test_within_empty_scope_guard_via_norm_empty 同款)。"""
+    # 防御支: 归一形测长与原形取尾长度失配(路径含可折叠段 "//") -> 返回 "" 不伪尾段
+    assert ru._rel_under("R:/Download//Show", "R:/Download") == ""
+    real_norm = ru._norm
+    monkeypatch.setattr(ru, "_norm", lambda p, fold_case=True: "" if p == "" else real_norm(p, fold_case=fold_case))
+    # 空 path 不落在任何根之上/之内 -> None(删链门/删种拦截共用判据的退化形态)
+    assert ru.under_alias_root("", ("R:/a", )) is None
+    assert ru.under_alias_root("R:/a", ()) is None
+    # 空 src 解析不出任何链接根 -> 空集(调用侧按账面不可得保守 confirm)
+    assert ru._file_link_roots("", ("R:/a/e00.mkv", )) == ()
+    # 空 target 不参与嵌套判定 -> (blocked, confirm, note) 三空串
+    assert ru.nested_target_on("", (), form=ru.FORM_DIR_ALIAS, src_cr=S, dst_cr=T, mover_save_path=S) == ("", "", "")
+
+
+def test_inherited_entries_normalization_skips_junk():
+    """plan.inherited 坏形条目逐条跳过(非 dict 不炸不进视图); 好条目字段归一保留"""
+    plan = {
+        "inherited":
+            [
+                42,  # 非 dict: 跳过
+                "junk",  # 同上
+                {
+                    "job_id": "p1",
+                    "src": "R:/old",
+                    "scope": "R:/old/Show",
+                    "alias_kind": "dir",
+                    "alias_paths": ["R:/old/Show"],
+                    "link_kind": "junction",
+                    "dst": "R:/new",
+                },
+                {},  # 全空 dict: 归一为空字段条目(不炸)
+            ]
+    }
+    entries = ru.inherited_entries_of(plan)
+    assert len(entries) == 2, "非 dict 条目跳过, dict 条目全保留"
+    e = entries[0]
+    assert e.job_id == "p1" and e.src == "R:/old" and e.alias_kind == "dir"
+    assert e.alias_paths == ("R:/old/Show", ) and e.dst == "R:/new" and e.link_kind == "junction"
+    # 非 list/tuple 容器 -> 空元组(账面坏形不炸)
+    assert ru.inherited_entries_of({"inherited": "oops"}) == ()
+    assert ru.inherited_entries_of(None) == ()
+
+
+def test_scope_hit_inherited_entries_faces():
+    """继承面 scope_hit 三态: 目录条目落 scope 内命中 / 文件条目落点非恰等 scope 不命中 /
+    未知形态条目不命中(循环继续) —— 前任作用域经活任务条目解析, 组键不裂(D4)"""
+    ESP = "R:/old"
+    job = ru.RelocateJob(
+        job_id="j1",
+        hashes=("HA", ),
+        mover="HA",
+        src="R:/cur",
+        dst="R:/curdst",
+        scope="R:/cur/Show",
+        alias_kind="dir",
+        phase=ru.PHASE_ARMED,
+        plan={
+            "inherited":
+                [
+                    {
+                        "job_id": "p1",
+                        "src": ESP,
+                        "scope": ESP + "/Show",
+                        "alias_kind": "dir",
+                    },
+                    {
+                        "job_id": "p2",
+                        "src": ESP,
+                        "scope": ESP + "/Show",
+                        "alias_kind": "file",
+                    },
+                    {
+                        "job_id": "p3",
+                        "src": ESP,
+                        "scope": ESP + "/Show",
+                        "alias_kind": "junction",  # 未知形态: 不命中
+                    },
+                ]
+        },
+    )
+
+    def _job_of(kind):
+        return ru.RelocateJob(
+            job_id="j1",
+            hashes=("HA", ),
+            mover="HA",
+            src="R:/cur",
+            dst="R:/curdst",
+            scope="R:/cur/Show",
+            alias_kind="dir",
+            phase=ru.PHASE_ARMED,
+            plan={"inherited": [{
+                "job_id": "p1",
+                "src": ESP,
+                "scope": ESP + "/Show",
+                "alias_kind": kind
+            }]},
+        )
+
+    # 目录条目: save_path 等条目 src + landing 在条目 scope 内 -> 命中
+    assert _job_of("dir").scope_hit(ESP, os.path.join(ESP, "Show", "sub"))
+    # 文件条目: landing 在 scope 下但非恰等 -> 不命中(逐文件只认恰等)
+    assert not _job_of("file").scope_hit(ESP, os.path.join(ESP, "Show", "sub"))
+    # 文件条目恰等 scope -> 命中
+    assert _job_of("file").scope_hit(ESP, ESP + "/Show")
+    # 未知形态条目: 不命中(遍历完回 False)
+    assert not _job_of("junction").scope_hit(ESP, ESP + "/Show")
+
+
+def test_nested_target_r5_note_file_links():
+    """R5 note 面(FILE_LINKS): target 严格嵌在旧内容根下 -> confirm(R4)与 note(R5)并存,
+    note 进 notes 不降级(别名存续期链接叶与新数据混居披露)"""
+    target = os.path.join(S, "Show", "newdata")
+    r = ru.evaluate_group(_ok_facts(target=target))  # 2 成员 < threshold -> FILE_LINKS
+    # R4 confirm 命中(新落点嵌在 mover 声明源树下), R5 note 同拍独立产出进 notes
+    gates = [x["gate"] for x in r["reasons"]]
+    assert "nested" in gates and r["cls"] == ru.CLS_CONFIRM, r["reasons"]
+    assert any("混居" in n and "D16" in n for n in r.get("notes", [])), r.get("notes")
+
+
+def test_inherited_add_confirm_faces():
+    """移交面添加预检(D4)全分支: 目录条目三态(恰等/重定向/无命中 None)/ 文件条目四态
+    (不在 src 下 None / 账面不可得保守 confirm / 撞链接路径 confirm / 撞成员链接根 confirm /
+    异名不重叠 None)/ 未知形态 None / 多条目逐个扫(坏条目不挡好条目)"""
+    ESP = "R:/old"
+    ESHOW = os.path.join(ESP, "Show")
+    hit_dir_entry = {
+        "job_id": "p1",
+        "src": ESP,
+        "scope": ESHOW,
+        "alias_kind": "dir",
+        "dst": "R:/newdst",
+    }
+    miss_dir_entry = {
+        "job_id": "p2",
+        "src": ESP,
+        "scope": ESHOW,
+        "alias_kind": "dir",
+    }
+    file_entry_nolinks = {"job_id": "p3", "src": ESP, "scope": ESHOW, "alias_kind": "file", "dst": "R:/newdst"}
+    file_entry_links = {
+        "job_id": "p4",
+        "src": ESP,
+        "scope": ESHOW,
+        "alias_kind": "file",
+        "dst": "R:/newdst",
+        "alias_paths": [os.path.join(ESP, "Show", "e00.mkv")],
+    }
+    junk_entry = {"job_id": "p5", "src": ESP, "scope": ESHOW, "alias_kind": "symlink"}  # 未知形态 -> None
+
+    def _run(save_path, name, entries):
+        job = ru.RelocateJob(
+            job_id="j1",
+            hashes=("HA", ),
+            mover="HA",
+            src="R:/cur",
+            dst="R:/curdst",
+            scope="R:/cur/Show",
+            alias_kind="file",  # 主 job 文件级且 save_path 不碰它 -> 落到继承扫描
+            phase=ru.PHASE_ARMED,
+            plan={"inherited": list(entries)},
+        )
+        return ru.evaluate_add(ru.AddFacts(save_path=save_path, name=name, jobs=(job, ), target_free=5000))
+
+    # 目录条目 - 恰等条目 src: confirm(actual 按前任终位置建模, 改指未收敛文案)
+    r = _run(ESP, "Show", (hit_dir_entry, ))
+    assert r["cls"] == "confirm" and "尚未收敛" in r["reasons"][0]["text"]
+    # 目录条目 - landing 在条目 scope 内(重定向面): confirm
+    r = _run(os.path.join(ESP, "Show"), "sub/deep", (hit_dir_entry, ))
+    assert r["cls"] == "confirm", r
+    # 目录条目 - save_path 与条目 src 异且 landing 在 anchor 外: None(继续扫) -> 最终 ok
+    r = _run("R:/elsewhere", "Show", (miss_dir_entry, ))
+    assert r["cls"] == "ok", r
+    # 文件条目 - save_path 不在条目 src 下: None -> ok
+    r = _run("R:/elsewhere", "Show", (file_entry_links, ))
+    assert r["cls"] == "ok", r
+    # 文件条目 - save_path 在 src 下 + alias_paths 缺失: 保守 confirm(账面不可得)
+    r = _run(ESP, "Show", (file_entry_nolinks, ))
+    assert r["cls"] == "confirm" and "账面不可得" in r["reasons"][0]["text"]
+    # 文件条目 - 撞链接路径(同名文件): confirm
+    r = _run(os.path.join(ESP, "Show"), "e00.mkv", (file_entry_links, ))
+    assert r["cls"] == "confirm", r
+    # 文件条目 - 撞成员链接根(同名目录 + 深层): confirm(保守)
+    r = _run(ESP, "Show/deep/x", (file_entry_links, ))
+    assert r["cls"] == "confirm", r
+    # 文件条目 - save_path 在 src 下但落点异名不重叠: None -> ok(宁拦勿漏只覆盖重叠面)
+    r = _run(ESP, "other", (file_entry_links, ))
+    assert r["cls"] == "ok", r
+    # 未知形态条目: None(函数尾 return None)
+    r = _run(ESP, "Show", (junk_entry, ))
+    assert r["cls"] == "ok", r
+    # 多条目扫描: 首条目无命中不挡次条目命中(1331->1329 循环回边)
+    r = _run(ESP, "Show", (miss_dir_entry, hit_dir_entry))
+    assert r["cls"] == "confirm", "坏条目不挡好条目"

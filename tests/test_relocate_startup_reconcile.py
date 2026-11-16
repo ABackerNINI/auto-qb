@@ -38,6 +38,17 @@
 - test_hot_enable_derives_reconcile_flag: 热启用(enabled 假->真)经同一 _load_jobs
   推导 failed flag, 与 start() 启用分支同口径(§03.4)
 ### 端到端(生产 jr-a2ce556d0165 同型: pre-arm 自检 NEGATIVE 失败 -> 重启对账 -> 既有链)
+覆盖率补测(2026-11-17, 消费窗/残留清理剩余分支; 补测轮到闸门绿):
+- test_reconcile_tick_skips_job_changed_after_flag: 消费窗内账已变(flag 推导后相位被改/账被清)
+  以账上现值为准不重判, 消费即清照常
+- test_reconcile_tick_survives_rt_mutation_mid_consume: 消费循环内 rt 被动的防御形态(rt 缺失
+  不炸, 账面判定照走; 替身直驱)
+- test_reset_stale_terminal_journal_ts_unparseable_kept: 残留重置锚定面 —— journal 终相位但
+  ts 不可解析: 锚定不上保守不清账不武装, 存疑告警限频一次
+- test_consume_failed_journal_guards: journal failed 消费守卫 —— 相位已变/ reason 空都不转终态
+- test_clear_stale_failed_journal_phase_changed_returns_false: 陈旧 failed 清理落手前再核 ——
+  盘上现相位已不是 failed 不删返回 False
+
 - test_prearm_failed_job_reenters_and_reruns_chain: pre-arm 失败(qb_side_check_failed,
   armed_at 恒 0)的 job 重启后对账重入 moved, 走既有链建链/穿透/武装收口(零新增逻辑)
 """
@@ -53,6 +64,8 @@ from auto_qb.core.modules import relocate_units as ru
 from auto_qb.config.models import Config, RelocateConfig
 
 from auto_qb.core.modules.relocate_mod import RelocateModule
+
+from auto_qb.infra import relocate_journal as rj
 
 from helpers import pin_disk_usage, relocate_env
 
@@ -331,3 +344,89 @@ def test_prearm_failed_job_reenters_and_reruns_chain(tmp_path, monkeypatch):
     armed = mod2.get_job(job_id)
     assert armed.phase == ru.PHASE_ARMED, f"重入后必须经既有链武装收口: {armed.phase}"
     assert armed.armed_at > 0.0, armed.armed_at
+
+
+# ---------- 覆盖率补测(2026-11-17, 启动对账消费窗/残留清理剩余分支): 行为有意义面 ----------
+
+
+def test_reconcile_tick_skips_job_changed_after_flag(tmp_path, monkeypatch):
+    """消费窗内账已变(flag 推导后、消费前相位被改/账被清): 以账上现值为准不重判,
+    消费即清照常执行(119/123/128 面)"""
+    mod, job = _failed_env(tmp_path, monkeypatch)
+    # 形态一: flag 在但账相位已不是 failed(撤销/re-issue 改相位) -> 跳过重判
+    mod._set_job(replace(job, phase=ru.PHASE_MOVING))
+    mod._startup_reconcile_tick()
+    assert mod.get_job(job.job_id).phase == ru.PHASE_MOVING, "账已变: 不凭旧 flag 重判"
+    assert mod._rt[job.job_id].get("reconcile") is None, "消费即清照常"
+    # 形态二: 账已不在 _jobs(rt 还挂着) -> 跳过不炸
+    mod._rt[job.job_id] = {"reconcile": True}
+    mod._jobs.pop(job.job_id)
+    mod._startup_reconcile_tick()
+
+
+def test_reconcile_tick_survives_rt_mutation_mid_consume(tmp_path, monkeypatch):
+    """消费循环内 rt 被动的防御形态(119->121 / 128->130): rt 缺失不炸, 账面判定照走。
+    替身直驱: _qb_up 探活后/判定返回前摘走 rt(并发外的单写线程下不应发生, 真发生不炸)"""
+    mod, job = _failed_env(tmp_path, monkeypatch)
+    mod._rt["j2"] = {"reconcile": True}
+    mod._jobs["j2"] = replace(job, job_id="j2")
+    orig_qb_up = mod._qb_up
+
+    def _qb_up_pop():
+        orig_qb_up()
+        mod._rt.pop("j2", None)  # 消费循环开始后 j2 的 rt 被摘走 -> 119 rt None
+        return True
+
+    monkeypatch.setattr(mod, "_qb_up", _qb_up_pop)
+    mod._startup_reconcile_tick()  # j2: rt None 走 121 -> job failed -> 判定; 不炸
+    # 形态二: 判定通过后 rt 被摘走 -> 128 rt None 不炸, 重入落账照常
+    mod2, job2 = _failed_env(tmp_path, monkeypatch, mover_save="R:/dst")
+    monkeypatch.setattr(mod2, "_startup_reconcile_one", lambda j: mod2._rt.pop(j.job_id, None) or True)
+    mod2._startup_reconcile_tick()
+    assert mod2.get_job(job2.job_id).phase == ru.PHASE_MOVED, "rt 缺失不挡重入落账"
+
+
+def test_reset_stale_terminal_journal_ts_unparseable_kept(tmp_path):
+    """残留重置锚定面: journal 终相位但 ts 不可解析 -> 锚定不上保守不清账不武装
+    (返回 False, 证据行不落, journal 原样)"""
+    data_dir = str(tmp_path / "data")
+    os.makedirs(data_dir, exist_ok=True)
+    rj.write_journal(data_dir, "j1", {"phase": "done", "ts": "not-a-number"})
+    mod = _bare_mod(data_dir=data_dir)
+    job = _job("j1", phase=ru.PHASE_ARMED, created_at=1000.0)
+    rt = {}
+    assert mod._reset_stale_terminal_journal(job, rt) is False, "锚定不上: 本拍不清"
+    assert rt.get("journal_terminal_suspect_warned") is True, "存疑告警一次"
+    assert (rj.read_journal(data_dir, "j1") or {}).get("phase") == "done", "journal 原样"
+    # 幂等: 告警限频, 二次不再刷
+    with capture_logs() as cap:
+        mod._reset_stale_terminal_journal(job, rt)
+    assert not [x for x in cap.records if "无法确证" in x.message], "限频一次"
+
+
+def test_consume_failed_journal_guards(tmp_path):
+    """journal failed 消费守卫: 相位已不是 failed(盘上现值为准)与 reason 空(证据形变)
+    都不转终态(job 原样)"""
+    data_dir = str(tmp_path / "data")
+    os.makedirs(data_dir, exist_ok=True)
+    mod = _bare_mod(data_dir=data_dir)
+    job = _job("j1", phase=ru.PHASE_ARMED)
+    mod._jobs["j1"] = job
+    # 相位已变: 消费瞬间账已变, 不凭旧读误判
+    rj.write_journal(data_dir, "j1", {"phase": "armed", "ts": 1.0})
+    mod._consume_failed_journal(job)
+    assert mod.get_job("j1").phase == ru.PHASE_ARMED
+    # failed 但 reason 空: 证据形变, 回下拍重判
+    rj.write_journal(data_dir, "j1", {"phase": "failed", "reason": "", "ts": 1.0})
+    mod._consume_failed_journal(job)
+    assert mod.get_job("j1").phase == ru.PHASE_ARMED, "证据形变不转终态"
+
+
+def test_clear_stale_failed_journal_phase_changed_returns_false(tmp_path):
+    """陈旧 failed 清理落手前再核: 盘上现相位已不是 failed -> 不删返回 False(下拍重判)"""
+    data_dir = str(tmp_path / "data")
+    os.makedirs(data_dir, exist_ok=True)
+    rj.write_journal(data_dir, "j1", {"phase": "armed", "ts": 1.0})
+    mod = _bare_mod(data_dir=data_dir)
+    assert mod._clear_stale_failed_journal(_job("j1", phase=ru.PHASE_ARMED), {}) is False
+    assert (rj.read_journal(data_dir, "j1") or {}).get("phase") == "armed", "journal 原样"

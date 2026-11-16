@@ -85,6 +85,20 @@
 ### 单元边角
 - test_supersede_handover_stray_alias_skipped: 移交别名不在声明源下 = 跳过重定向只计数
   (账不自洽留痕, 不猜不动); _rel_under 三支(等值/根下/根外 None)
+- test_supersede_handover_lexical_fork_both_plan_branches
+
+覆盖率补测(2026-11-17, 认领/收官/结转剩余分支; 补测轮到闸门绿):
+- test_supersede_handover_malformed_sub_entries_skipped: 收官归集防御面 —— 前任账坏形移交
+  条目(非 dict/缺 job_id)逐条跳过不炸; 与前任自身条目同 id 的子条目原位替换(后写胜出)
+- test_supersede_handover_no_inherited_plan_key_absent: 认领集为空(前任已收官的重复执行/
+  竞态形态)不落空 inherited, 终态前任零触碰
+- test_predecessors_of_dst_mismatch_not_claimed: 前任认领 dst 判据 —— 收尾窗碰本组但旧目标
+  != 本 job 源根不认领
+- test_physical_anchor_skips_terminal_jobs: 搬迁锚点解析 —— 终态账不参与(跳过), 在途账
+  作用域命中 -> 物理根 = 前任 dst; 仅终态时原样返回零行为差
+- test_carry_prev_state_dedup_and_noop_extras: 同键重发结转去重 —— inherited 同 job_id 不重复
+  并入; extra_members 与新账重合空转不改写; 对照行全量并入
+
 - test_supersede_handover_lexical_fork_both_plan_branches: 三代链续迁叠加词法分叉(S4
   判定口径)—— _start_job「字面同串才复用/分叉保留第二算」两支都触到(第二跳 mover 账面
   回旧根、锚点解析到前任 dst = 分叉支; 第三跳账面根 = 物理根字面同串 = 复用支); 前任
@@ -1107,3 +1121,137 @@ def test_supersede_handover_lexical_fork_both_plan_branches(tmp_path, monkeypatc
         assert afs.alias_points_to(link, os.path.join(dst_d, *rel.split("/"))), (link, rel)
     with open(_inherited_aliases(job3)[0], "rb") as f:
         assert f.read() == b"x" * 64, "穿透校验: 经分叉串根下链接读到 D 的数据"
+
+
+# ---------- 覆盖率补测(2026-11-17, 认领/收官/结转剩余分支): 行为有意义面 ----------
+
+
+def test_supersede_handover_malformed_sub_entries_skipped(tmp_path):
+    """收官归集防御面: 前任账里的坏形移交条目(非 dict / 缺 job_id)逐条跳过不炸不进新账;
+    与主条目同 job_id 的重复子条目不重复上提(原位语义)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    pred = _job(
+        "K",
+        phase=ru.PHASE_ARMED,
+        src="R:/src",
+        dst="R:/dstB",
+        alias_paths=("R:/src/a.bin", ),
+        plan={
+            "inherited":
+                [
+                    42,  # 非 dict: 跳过
+                    {
+                        "src": "R:/no-id"
+                    },  # 缺 job_id: 跳过
+                    {
+                        "job_id": "K",
+                        "src": "R:/dup",
+                        "scope": "R:/dup",
+                        "alias_kind": "dir",
+                        "alias_paths": ["R:/dup/x"],
+                        "dst": "R:/dupdst",
+                    },  # 与前任自身条目同 id: 上提时原位替换(735 面)
+                ]
+        },
+    )
+    job = _job("J", phase=ru.PHASE_FAILED, src="R:/dstB", dst="R:/dstC")
+    job = mod._handover_predecessors([pred], job)
+    entries = [e for e in (job.plan or {}).get("inherited") or () if e.get("job_id") == "K"]
+    assert len(entries) == 1, "坏形条目不进账, 同 id 原位归一"
+    assert entries[0]["src"] == "R:/dup", "同 id 子条目原位替换(后写胜出, 与 735 语义一致)"
+    assert mod.get_job("K").phase == ru.PHASE_SUPERSEDED
+
+
+def test_supersede_handover_no_inherited_plan_key_absent(tmp_path):
+    """认领集为空(前任已收官的重复执行/竞态形态): 全部前任终态跳过, plan 不携带
+    inherited 键, 终态前任零触碰(不重复收官)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    mod._jobs["K"] = _job("K", phase=ru.PHASE_SUPERSEDED, src="R:/src", dst="R:/dstB")
+    pred = _job("K", phase=ru.PHASE_SUPERSEDED, src="R:/src", dst="R:/dstB", alias_paths=("R:/src/a.bin", ))
+    job = _job("J", phase=ru.PHASE_FAILED, src="R:/dstB", dst="R:/dstC")
+    job = mod._handover_predecessors([pred], job)
+    assert mod.get_job("K").phase == ru.PHASE_SUPERSEDED, "已收官前任不重复进账"
+    assert not (job.plan or {}).get("inherited"), "认领集为空: 不落空 inherited"
+
+
+def test_predecessors_of_dst_mismatch_not_claimed(tmp_path):
+    """前任认领 dst 判据: 收尾窗且碰本组但旧目标 != 本 job 源根 -> 不认领(空清单)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_ARMED, hashes=("HA", ), src="R:/src", dst="R:/other")
+    assert mod._predecessors_of("R:/src", ("HA", )) == [], "dst 不等: 不是本组前任"
+    assert mod._predecessors_of("R:/other", ("HA", )) != [], "dst 恰等源根: 认领"
+
+
+def test_physical_anchor_skips_terminal_jobs(tmp_path):
+    """搬迁锚点解析: 终态账不出活集匹配(跳过), 在途账作用域命中 -> 物理根 = 前任 dst"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    terminal = _job(
+        "jt",
+        phase=ru.PHASE_DONE,
+        hashes=("HA", ),
+        src="R:/src",
+        dst="R:/termdst",
+        scope="R:/src/Show",
+        alias_kind="dir",
+    )
+    live = _job(
+        "jl",
+        phase=ru.PHASE_ARMED,
+        hashes=("HB", ),
+        src="R:/src",
+        dst="R:/livedst",
+        scope="R:/src/Show",
+        alias_kind="dir",
+    )
+    mod._jobs["jt"] = terminal
+    mod._jobs["jl"] = live
+    files = (("Show/e00.mkv", 64), )
+    # 命中面: 终态账 jt 与在途账 jl 作用域同锚 —— 只有在途账参与解析(终态先跳过)
+    assert mod._physical_anchor("R:/src", files) == "R:/livedst"
+    # 无在途命中(仅终态) -> 原样返回(零行为差)
+    mod._jobs.pop("jl")
+    assert mod._physical_anchor("R:/src", files) == "R:/src"
+
+
+def test_carry_prev_state_dedup_and_noop_extras(tmp_path):
+    """同键重发结转去重面: 上一轮 inherited 条目已在新账(同 job_id)不重复并入;
+    extra_members 与新账重合 -> 不改写 plan(1786 面空转)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    entry = {
+        "job_id": "K",
+        "src": "R:/src",
+        "dst": "R:/dstB",
+        "scope": "R:/src",
+        "alias_kind": "dir",
+        "alias_paths": ["R:/src/alias"],
+        "link_kind": "junction",
+    }
+    prev = _job(
+        "J",
+        phase=ru.PHASE_FAILED,
+        src="R:/dstB",
+        dst="R:/dstC",
+        plan={
+            "inherited": [dict(entry)],
+            "extra_members": ["HX"]
+        },
+    )
+    mod._jobs["J"] = prev
+    fresh = _job(
+        "J",
+        phase=ru.PHASE_MOVING,
+        src="R:/dstB",
+        dst="R:/dstC",
+        plan={
+            "inherited": [dict(entry)],
+            "extra_members": ["HX"]
+        }
+    )
+    carried = mod._carry_prev_state("J", fresh)
+    assert [e["job_id"] for e in carried.plan["inherited"]] == ["K"], "同 id 不重复并入"
+    assert carried.plan["extra_members"] == ["HX"], "重合 extra_members 空转不改写"
+    # 增量形态: 新账无 inherited/无 extras -> 全量并入(对照行)
+    fresh2 = _job("J", phase=ru.PHASE_MOVING, src="R:/dstB", dst="R:/dstC")
+    carried2 = mod._carry_prev_state("J", fresh2)
+    assert [e["job_id"] for e in carried2.plan["inherited"]] == ["K"]
+    assert carried2.plan["extra_members"] == ["HX"], "前任成员并入且不进本 job 核验集合"

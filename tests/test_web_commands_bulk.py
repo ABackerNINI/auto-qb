@@ -9,6 +9,12 @@
 - test_bulk_limits_each_direction_independently: limits 单方向时另一方向守卫整条跳过(P0-T0.2 早退矩阵)
 - test_recheck_skip_check_receipt_matrix: recheck/skip_check 回执矩阵 —— 未知 hash 有无 cmd_id 两路 + ops 拒绝/受理两档
 - test_skip_check_precheck_truth_receipt: 跳检预检只读聚合 truth(results/summary) + ok 回执
+覆盖率补测(2026-11-17, 迁移回执/清空历史 handler 剩余分支; 补测轮到闸门绿):
+- test_relocate_receipt_missing_msgs_counts_contract: 批量缺失计数回执契约 —— missing_msgs
+  非空 error 回执, 计数段按 summary 逐桶追加(待确认/已发起/幂等跳过/被拒); 各桶全零不带计数段
+- test_relocate_clear_history_handler_contract: 清空迁移历史 handler —— 转发 relocate_clear_history
+  ok 回执带 truth(cleared/remaining); 无 cmd_id 只执行不发回执
+
 - test_relocate_receipt_direct_branches: 迁移回执单点 —— 无 cmd_id 早退 / 全 blocked 带首条原因 / 无原因回落通用文案 / 混合态 ok
 - test_relocate_armed_false_when_module_absent: ctx 无 relocate 模块 -> False(走旧 setLocation 路)
 - test_bulk_missing_group_receipt: bulk 组键缺失计组数 -> error 回执点名
@@ -819,3 +825,64 @@ def test_rename_fs_partial_group_hard_rejected():
         mgr.web.consume_commands()
         assert mgr.web.results["rfs-s1"]["status"] == "ok", mgr.web.results["rfs-s1"]
         assert client.calls[-1] == ("rename_file", ("HA", "movie.mkv", "renamed.mkv")), client.calls
+
+
+# ---------- 覆盖率补测(2026-11-17, 迁移回执/清空历史 handler 剩余分支): 行为有意义面 ----------
+
+
+def test_relocate_receipt_missing_msgs_counts_contract():
+    """批量缺失计数回执契约: missing_msgs 非空 -> error 回执, 计数段按 summary 逐桶追加
+    (待确认/已发起/幂等跳过/被拒), 各桶全零时文案不带计数段(453 面)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        items = [
+            {
+                "cls": "confirm",
+                "reasons": []
+            },
+            {
+                "cls": "started",
+                "reasons": []
+            },
+            {
+                "cls": "skip",
+                "reasons": []
+            },
+            {
+                "cls": "blocked",
+                "reasons": [{
+                    "text": "x"
+                }]
+            },
+        ]
+        mgr._relocate_receipt("c-mm", items, "批量移动位置(整组迁移)", missing_msgs=["2 个种子缺失"])
+        rec = mgr.web.results["c-mm"]
+        assert rec["status"] == "error", rec
+        assert rec["error"] == ("2 个种子缺失; 另有 1 项待确认 / 已发起 1 项 / 幂等跳过 1 项 / 另有 1 项被闸门拒绝"), rec["error"]
+        assert rec["truth"]["results"] == items and rec["truth"]["summary"]["confirm"] == 1
+        # 各计数桶全零(未知 cls 不进四桶): 文案只有缺失段(无计数后缀)
+        mgr._relocate_receipt("c-mm0", [{"cls": "weird", "reasons": []}], "批量移动位置(整组迁移)", missing_msgs=["1 个种子缺失"])
+        rec0 = mgr.web.results["c-mm0"]
+        assert rec0["status"] == "error" and rec0["error"] == "1 个种子缺失", rec0["error"]
+
+
+def test_relocate_clear_history_handler_contract():
+    """清空迁移历史 handler: 转发 relocate_clear_history 并 ok 回执带 truth(cleared/remaining);
+    无 cmd_id 只执行不发回执"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client, _key = _make_grouped_manager(td)
+        calls = []
+
+        class _Relocate:
+            def relocate_clear_history(self):
+                calls.append(1)
+                return {"cls": "ok", "cleared": 3, "remaining": 1, "note": ""}
+
+        mgr.ctx.relocate = _Relocate()
+        mgr._cmd_relocate_clear_history("c-cl")
+        assert calls == [1]
+        rec = mgr.web.results["c-cl"]
+        assert rec["status"] == "ok" and rec["truth"]["cleared"] == 3 and rec["truth"]["remaining"] == 1, rec
+        mgr._cmd_relocate_clear_history("")
+        assert calls == [1, 1], "无 cmd_id 照常执行"
+        assert mgr.web.results.get("", None) is None

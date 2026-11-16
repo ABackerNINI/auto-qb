@@ -37,6 +37,12 @@
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_arm_and_finish_direct_without_grouping_ctx: ctx 无 grouping 模块 -> 重归组段整段跳过, 落账/spec+daemon/恢复照旧(260->266/278->283)
 - test_remove_links_skips_non_alias_paths: 非别名/空条目跳过不删不计(709->705)
+
+覆盖率补测(2026-11-17, 别名存活判定/删链门依赖扫描剩余分支; 补测轮到闸门绿):
+- test_alias_live_plain_path_still_counts: 别名存活判定 —— 形态不可识但路径在判活(硬链接
+  nlink 收敛形态), 路径不在不活
+- test_chain_gate_deps_dedup_across_surfaces: 删链门依赖扫描 —— 自有面与继承条目同锚时同一
+  组外种子双面命中按 (hash, sp) 去重只计一笔
 """
 
 import os
@@ -587,3 +593,52 @@ def test_remove_links_skips_non_alias_paths(tmp_path):
     mod = _bare_mod()
     assert mod._remove_links([str(plain), "", None]) == 0
     assert plain.exists(), "非别名路径不得被删"
+
+
+# ---------- 覆盖率补测(2026-11-17, 别名存活判定/删链门依赖扫描剩余分支): 行为有意义面 ----------
+
+
+def test_alias_live_plain_path_still_counts(tmp_path):
+    """别名存活判定: 形态不可识(普通文件/目录)但路径在 -> 判活(硬链接 nlink 收敛形态,
+    S5 链式再迁移的必要修正); 路径不在 -> 不活"""
+    p = tmp_path / "data.bin"
+    p.write_bytes(b"x")
+    assert RelocateModule._alias_live(str(p)) is True, "普通文件路径在即活"
+    assert RelocateModule._alias_live(str(tmp_path / "nope")) is False, "路径不在: 不活"
+
+
+def test_chain_gate_deps_dedup_across_surfaces(tmp_path):
+    """删链门依赖扫描: 自有面与继承条目同锚(前任作用域与现任一致)时同一组外种子
+    双面命中 -> 按 (hash, sp) 去重只计一笔"""
+    by_hash = {
+        "HA": FakeTorrent(hash="HA", save_path="R:/src/Show"),
+        "HX": FakeTorrent(hash="HX", save_path="R:/src"),  # 组外: 恰等旧根(R7 等值面)
+    }
+    mod = _bare_mod(
+        store=types.SimpleNamespace(by_hash=by_hash, relocating_hashes=set()), data_dir=str(tmp_path / "data")
+    )
+    job = _job(
+        "j1",
+        phase=ru.PHASE_ARMED,
+        hashes=("HA", ),
+        src="R:/src",
+        dst="R:/dst",
+        scope="R:/src",
+        alias_kind="dir",
+        plan={
+            "inherited":
+                [
+                    {
+                        "job_id": "K",
+                        "src": "R:/src",
+                        "scope": "R:/src",
+                        "alias_kind": "dir",
+                        "alias_paths": ["R:/src/alias"],
+                        "link_kind": "junction",
+                        "dst": "R:/olddst",
+                    }
+                ]
+        },
+    )
+    deps = mod._chain_gate_deps(job)
+    assert [("HX", "R:/src")] == deps, "双面命中去重为一笔"

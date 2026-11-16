@@ -50,6 +50,10 @@
 - test_pick_job_for_hash_without_jobs_returns_none: pick_job_for 无快照/无命中 => None
 - test_chain_start_remote_candidate_short_circuits_without_stat: 远端候选判 remote 后直接取用不做本机 lstat
 - test_chain_endpoint_finalize_bad_port_falls_back_to_zero: qB 端口坏形 => finalize 段以 port=0 继续出
+
+覆盖率补测(2026-11-17, BT_backup 探测端点兜底面; 补测轮到闸门绿):
+- test_bt_backup_probe_route_prefs_error_note_and_probe_500: qB 偏好读不到 -> 证据行降级
+  (notes 注明 SQLite 未排除, online 口径不变); 探测模块异常 -> 结构化 500 detail(不裸栈)
 """
 import json
 import os
@@ -979,3 +983,37 @@ def test_bt_backup_probe_route_sqlite_precedes_manual(web_env, tmp_path, monkeyp
     mgr.config.relocate.bt_backup = "R:/manual/BT_backup"
     data = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr)).json()
     assert data["verdict"] == "unusable-sqlite" and data["manual_set"] is True, data
+
+
+# ---------- 覆盖率补测(2026-11-17, BT_backup 探测端点兜底面) ----------
+
+
+def test_bt_backup_probe_route_prefs_error_note_and_probe_500(web_env, tmp_path, monkeypatch):
+    """兜底两面: qB 偏好读不到 -> 证据行降级(notes 注明 SQLite 未排除, 不 5xx)/
+    探测模块异常 -> 结构化 500(端点面兜底, 不裸栈)"""
+    backup = _probe_setup(monkeypatch, tmp_path)
+    _mk_backup_dir(backup, PROBE_V1)
+    mgr, client = web_env
+    c = _probe_client((PROBE_V1, ))
+
+    def _prefs_boom(**kw):
+        raise RuntimeError("prefs down")
+
+    c.app_preferences = _prefs_boom
+    mgr.client = c
+    resp = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr))
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["online"] is True, "偏好失败不影响 online 口径(/torrents/info 已拿到)"
+    assert any("qB 偏好不可读" in n and "SQLite" in n for n in data["notes"]), data["notes"]
+
+    # 探测模块异常 -> 500 结构化 detail
+    from auto_qb.webui.server.routes import relocate_chain as route_mod
+
+    def _scan_boom(*a, **k):
+        raise RuntimeError("probe impl broke")
+
+    monkeypatch.setattr(route_mod.bt_backup_probe, "candidates", _scan_boom)
+    resp2 = client.post("/api/relocate/bt_backup_probe", headers=_auth(mgr))
+    assert resp2.status_code == 500, resp2.text
+    assert "BT_backup 探测内部异常" in resp2.json()["detail"], resp2.json()

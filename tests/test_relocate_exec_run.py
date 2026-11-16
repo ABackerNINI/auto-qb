@@ -92,6 +92,16 @@
   (多成员暂停不可免是设计不变量)+ 多成员旧回执文案保留
 - test_exec_dry_run_single_member_complete_unchanged: dry-run 不变 —— 单成员完成态零 API 调用,
   豁免/形态分型 note 不进 dry-run 回执
+
+覆盖率补测(2026-11-17, 改指重试/建链去重/回滚防御/arm spec 去重; 补测轮到闸门绿):
+- test_step_moved_handover_redirect_failure_holds_stage: 改指失败留在 handover 下一拍重试
+  (不落链不判失败, D20)
+- test_build_links_dir_alias_already_ledgered_no_duplicate: 目录支 append 去重 —— 账面已含该
+  链接位(断点续建形态)不重复 append, 缺盘仍真建
+- test_rollback_links_defense_faces: 回滚防御面 —— plan 清单重复条目去重不重复删 / 单条删除
+  失败告警继续 / built 账外孤儿照清
+- test_write_arm_spec_extra_srcs_dedup_faces: arm spec extra_srcs 去重 —— 空 src/恰等 job.src
+  条目跳过仅新根并入; 全部重合不落键
 """
 
 import os
@@ -1617,3 +1627,166 @@ def test_buckets_group_members_missing_from_by_hash_dropped():
     mod2 = _bare_mod(store=store_ok, api=types.SimpleNamespace(client=object()))
     gone2, groups2 = mod2._buckets(["HA"])
     assert gone2 == [] and len(groups2) == 1 and groups2[0][0].hash == "HA", (gone2, groups2)
+
+
+# ---------- 覆盖率补测(2026-11-17, 改指重试/建链去重/回滚防御/arm spec 去重): 行为有意义面 ----------
+
+
+def test_step_moved_handover_redirect_failure_holds_stage(tmp_path, monkeypatch):
+    """改指失败留在 handover 下一拍重试(D20): retarget 抛错 -> 不落链不判失败,
+    stage 保持 handover(284->286 面)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    entry = {
+        "job_id": "K",
+        "src": "R:/src",
+        "scope": "R:/src",
+        "alias_kind": "file",
+        "alias_paths": ["R:/src/a.bin"],
+        "link_kind": "",
+    }
+    job = _job("J", phase=ru.PHASE_MOVED, src="R:/dstB", dst="R:/dstC", plan={"inherited": [entry]})
+
+    def _boom(link, target, kind=None):
+        raise OSError("占用")
+
+    monkeypatch.setattr(afs, "retarget_alias", _boom)
+    rt = {"stage": "handover"}
+    mod._step_moved(job, rt)
+    assert rt.get("stage") == "handover", "改指失败: 留在 handover 下一拍重试"
+    assert "link_pos" not in rt, "不落链(不进 link stage)"
+
+
+def test_build_links_dir_alias_already_ledgered_no_duplicate(tmp_path, monkeypatch):
+    """目录支 append 去重: 账面已含该链接位(重启续建形态) -> 建成后不重复 append(362 面)"""
+    dir_calls = []
+    monkeypatch.setattr(afs, "create_dir_alias", lambda link, target, kind: dir_calls.append(link))
+    mod = _bare_mod()
+    job = _job("j1", phase=ru.PHASE_MOVED, plan={"form": ru.FORM_DIR_ALIAS, "link_kind": "junction", "files": []})
+    rt = {"links": [job.src], "link_pos": 0}  # 账面已含(断点续建形态)
+    assert mod._build_links(job, rt) is True
+    assert dir_calls == [job.src], "链接位缺盘仍真建(孤儿续建)"
+    assert rt["links"] == [job.src], "账面去重: 不翻倍"
+
+
+def test_rollback_links_defense_faces(tmp_path, monkeypatch):
+    """回滚防御面: plan 清单重复条目去重(不重复删)/ 单条删除失败告警继续(不炸)/
+    built 账外条目(崩溃窗孤儿)照清 + 账外条目删除失败也告警继续"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    for rel in ("Show/a.mkv", "Show/b.mkv"):
+        p = dst / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x" * 64)
+        lp = src / rel
+        lp.parent.mkdir(parents=True, exist_ok=True)
+        afs.create_file_alias(str(lp), str(p), afs.KIND_HARDLINK)
+    job = _job(
+        "j1",
+        phase=ru.PHASE_MOVED,
+        src=str(src),
+        dst=str(dst),
+        plan={
+            "form": ru.FORM_FILE_LINKS,
+            "link_kind": "hardlink",
+            "files": [["Show/a.mkv", 64], ["Show/a.mkv", 64], ["Show/b.mkv", 64]]  # a 重复
+        },
+    )
+    # 形态一: 重复条目去重, 各删一次
+    removed = mod._rollback_links(job, ())
+    assert removed == 2, f"重复条目去重: {removed}"
+    # 形态二: 重建链接位 + 盘上孤儿(账外); plan 清单内的 b.mkv 删除失败 -> 告警继续不炸
+    for rel in ("Show/a.mkv", "Show/b.mkv"):
+        afs.create_file_alias(str(src / rel), str(dst / rel), afs.KIND_HARDLINK)
+    orphan = src / "Show" / "c.mkv"
+    (dst / "Show" / "c.mkv").parent.mkdir(parents=True, exist_ok=True)
+    (dst / "Show" / "c.mkv").write_bytes(b"x" * 64)
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    afs.create_file_alias(str(orphan), str(dst / "Show" / "c.mkv"), afs.KIND_HARDLINK)
+    real_remove = afs.remove_alias
+
+    def _flaky(link, *a, **k):
+        if link.endswith("b.mkv"):
+            raise OSError("权限")
+        return real_remove(link, *a, **k)
+
+    monkeypatch.setattr(afs, "remove_alias", _flaky)
+    with capture_logs() as cap:
+        removed2 = mod._rollback_links(job, (str(orphan), ))
+    assert removed2 == 2, f"失败单条不计, 其余照删: {removed2}"
+    assert any("回滚删链接失败" in x.getMessage() for x in cap.records), "单条失败告警继续"
+    # 形态三: built 账外孤儿(不失败)照清(442-447 面)
+    monkeypatch.setattr(afs, "remove_alias", real_remove)
+    if os.path.exists(str(orphan)):
+        os.remove(str(orphan))  # 残链撤走后重建
+    afs.create_file_alias(str(orphan), str(dst / "Show" / "c.mkv"), afs.KIND_HARDLINK)
+    # 形态二失败的 b.mkv 残余仍在(下一次对账面), 本拍 = b.mkv + 账外孤儿 c.mkv 两条
+    assert mod._rollback_links(job, (str(orphan), )) == 2, "残余 + 账外孤儿一并清"
+
+
+def test_write_arm_spec_extra_srcs_dedup_faces(tmp_path):
+    """arm spec extra_srcs 去重: 空 src 条目与 src 恰等 job.src 的条目跳过, 仅新根并入;
+    全部重合 -> 不落 extra_srcs 键"""
+    data_dir = str(tmp_path / "data")
+    mod = _bare_mod(data_dir=data_dir)
+    job = _job(
+        "j1",
+        phase=ru.PHASE_MOVING,
+        src="R:/src",
+        dst="R:/dst",
+        plan={
+            "form":
+                ru.FORM_DIR_ALIAS,
+            "link_kind":
+                "junction",
+            "files": [],
+            "inherited":
+                [
+                    {
+                        "job_id": "k0",
+                        "src": "",
+                        "scope": "",
+                        "alias_kind": "dir",
+                        "alias_paths": []
+                    },
+                    {
+                        "job_id": "k1",
+                        "src": "R:/src",
+                        "scope": "R:/src",
+                        "alias_kind": "dir",
+                        "alias_paths": []
+                    },
+                    {
+                        "job_id": "k2",
+                        "src": "R:/other",
+                        "scope": "R:/other",
+                        "alias_kind": "dir",
+                        "alias_paths": []
+                    },
+                ],
+        },
+    )
+    assert mod._write_arm_spec(job) is True
+    spec = relocate_journal.read_spec(data_dir, "j1")
+    assert spec["extra_srcs"] == ["R:/other"], "空/自根条目跳过, 新根并入"
+    # 对照: 全部条目 src 与 job.src 重合 -> 无 extra_srcs 键
+    job2 = _job(
+        "j2",
+        phase=ru.PHASE_MOVING,
+        src="R:/src",
+        dst="R:/dst",
+        plan={
+            "form": ru.FORM_DIR_ALIAS,
+            "link_kind": "junction",
+            "files": [],
+            "inherited": [{
+                "job_id": "k3",
+                "src": "R:/src",
+                "scope": "R:/src",
+                "alias_kind": "dir",
+                "alias_paths": []
+            }],
+        },
+    )
+    assert mod._write_arm_spec(job2) is True
+    spec2 = relocate_journal.read_spec(data_dir, "j2")
+    assert "extra_srcs" not in spec2, "无新根不落键"
