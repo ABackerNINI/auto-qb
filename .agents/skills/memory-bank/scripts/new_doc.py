@@ -10,7 +10,12 @@
 
 判据与边界 (计划 §03 / §05):
 - 目标文件已存在即 rc=1 拒绝 (幂等); 档案族撞名 = 同专题已存在, 提示「追加不新建」并给路径
-  (同 clone 按 slug 忽略日期前缀比对 + 跨 clone `../auto-qb-*/memory-bank/tasks/` 只读 ls)
+  (同 clone 按 slug 忽略日期前缀比对 + 跨 clone 查重走配置 `[siblings] tasks_dirs` 显式列表,
+  落点 `<skill>/config/project.toml`; 未配置 → 跨 clone 部分跳过并打提示行 (本 clone 照查),
+  D13 宽容回落)
+- **项目配置 (S1, 计划 26-11-17-0010)**: 领域枚举/兄弟工作区等项目绑定面从代码外置进
+  `<skill>/config/project.toml` (单点 `_common.load_project_config`); 配置存在 → 行为与
+  旧硬编码版完全一致, 缺失/节空 → 跳过对应校验 + 必打提示行 (禁静默降级, D13)
 - `--refs` **D4 反向认领自动补链 (P2 交付)**: 目标件**自动补/并** `doc-refs` meta (HTML) 或
   `**Refs:**` 行 (md) —— 只动元数据行, 合并为英文逗号列表, 幂等; 杀「单向链闸门红」整类问题。
   目标必须存在且在 memory-bank 内 (fail-fast; 生成物 `_` 前缀文件不作目标)
@@ -32,7 +37,7 @@
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/new_doc.py plan [<topic>] --title ".." [--refs p1,p2]
-    python <skill-dir>/scripts/new_doc.py task [<topic>] --title ".." [--refs p1,p2]   # <topic> = <领域>-<专题>
+    python <skill-dir>/scripts/new_doc.py task [<topic>] --title ".." [--refs p1,p2]   # <topic> = <领域>-<专题> (领域枚举见 config/project.toml [domains])
     python <skill-dir>/scripts/new_doc.py issue <slug> --type <8 类之一> --title ".." --summary ".." [--tier light|standard] [--module ".."] [--reporter ".."] [--topic <kebab>] [--refs p1,p2]
     python <skill-dir>/scripts/new_doc.py report [<topic>] --title ".." [--refs p1,p2]
     python <skill-dir>/scripts/new_doc.py pitfall [<slug>] --class <7 类之一> --title ".." --triggers "词, 词"
@@ -50,6 +55,7 @@ import argparse
 import html
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -58,16 +64,19 @@ import timekit  # noqa: E402  (时间单点: UTC+8 naive 墙钟, 与 kb.time 同
 from _common import (  # noqa: E402
     FAMILIES,
     PITFALL_CLASSES,
+    PROJECT_CONFIG,
     SKILL_DIR,
     SLUG_RE,
     SLOT_RE,
-    TASK_DOMAINS,
     TIER_BY_TYPE,
     TIERS,
     TYPES,
+    config_domains,
+    config_sibling_names,
     find_root,
     html_meta,
     html_set_refs,
+    load_project_config,
     match_domain,
     md_field,
     md_set_refs,
@@ -86,6 +95,11 @@ def _fail(msg: str) -> int:
     return 1
 
 
+def _warn(msg: str) -> None:
+    """配置缺失的回落提示 (D13: 必打, 禁静默降级) —— 走 stderr, 不混进 stdout 契约输出。"""
+    sys.stderr.write(f"[KB-CONFIG] {msg}\n")
+
+
 def _utf8_stdout() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -96,14 +110,15 @@ def _html_escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _sibling_tasks_dirs(root: Path) -> list[Path]:
-    """跨 clone 的 tasks/ 目录 (`../auto-qb-*/memory-bank/tasks/`, 只读 ls; 排除自己)。"""
+def _sibling_tasks_dirs(root: Path, names: tuple[str, ...]) -> list[Path]:
+    """跨 clone 的 tasks/ 目录 (配置 `[siblings] tasks_dirs` 显式列表; 只读 ls; 排除自己)。
+
+    每项相对本仓库根的 parent 目录解析 (与旧 glob 同锚点), 取其 `memory-bank/tasks/`;
+    目录不存在的项跳过 (与旧行为一致)。空列表 = 单 clone → 空表。
+    """
     out: list[Path] = []
-    try:
-        siblings = sorted(root.parent.glob("auto-qb-*"))
-    except OSError:
-        return out
-    for sib in siblings:
+    for name in names:
+        sib = root.parent / name
         if sib.resolve() == root.resolve():
             continue
         tasks = sib / "memory-bank" / "tasks"
@@ -112,10 +127,10 @@ def _sibling_tasks_dirs(root: Path) -> list[Path]:
     return out
 
 
-def _check_duplicate(topic: str, mb: Path, root: Path) -> str | None:
+def _check_duplicate(topic: str, mb: Path, root: Path, sibling_tasks_dirs: list[Path]) -> str | None:
     """档案族查重: 本 clone + 跨 clone 按 slug(忽略日期前缀)比对。命中返回拒绝原因。"""
     hits: list[str] = []
-    for tasks_dir in [mb / "tasks", *_sibling_tasks_dirs(root)]:
+    for tasks_dir in [mb / "tasks", *sibling_tasks_dirs]:
         for path in sorted(tasks_dir.glob("*.md")):
             if path.name.startswith("_"):
                 continue
@@ -328,6 +343,15 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root).resolve() if args.root else find_root()
     mb = resolve_mb_dir(root, args.mb_dir)
 
+    # --- 项目配置 (S1 配置化): 领域枚举/跨 clone 查重范围读 `<skill>/config/project.toml`;
+    # 文件缺失 → {} (宽容回落: 各校验点跳过并必打提示, D13); 解析失败 → fail-fast
+    try:
+        config = load_project_config()
+    except tomllib.TOMLDecodeError as exc:
+        return _fail(f"skill 项目配置解析失败 ({PROJECT_CONFIG}): {exc} —— 修好该文件或移走后重跑")
+    domains = config_domains(config)
+    sibling_names = config_sibling_names(config)
+
     # --- 取时 (timekit 单点) 与命名校验 (fail-fast: 之后假定命名合法)
     moment = timekit.now()
     tier = ""  # 档位选模板族 (issue) 的推导档位; 其余族空串
@@ -409,11 +433,16 @@ def main(argv: list[str] | None = None) -> int:
         }
     elif family == "task":
         # 领域段 = 最长前缀匹配 (`_common.match_domain` 单点): 枚举含短横线项
-        # (`memory-bank`), 首段切分会让它永远不可达 (P1 缺陷, P2 补)
-        domain = match_domain(args.topic)
-        if domain is None:
+        # (`memory-bank`), 首段切分会让它永远不可达 (P1 缺陷, P2 补)。
+        # 枚举来自配置 [domains] (S1); 未配置/为空/形态不对 → 跳过校验并必打提示 (宽容回落, D13)
+        if not domains:
+            _warn(
+                "未配置领域枚举 (<skill>/config/project.toml [domains] values 缺失、为空或形态不对) "
+                "—— 跳过领域校验; 配置后恢复 (领域枚举改动只改配置, 不触代码)"
+            )
+        elif match_domain(args.topic, domains) is None:
             return _fail(
-                f"专题主键首段必须是领域枚举之一 ({', '.join(TASK_DOMAINS)}): "
+                f"专题主键首段必须是领域枚举之一 ({', '.join(domains)}): "
                 f"现为 {args.topic.split('-', 1)[0]!r} (位置参数或 --topic 传入均可)"
             )
         filename = f"{moment.strftime('%y-%m-%d')}-{args.topic}.md"
@@ -481,7 +510,18 @@ def main(argv: list[str] | None = None) -> int:
         return _fail(f"目标文件已存在: {rel_posix(target, root)} —— 幂等拒绝; 改版请直接编辑该文件")
 
     if family == "task":
-        dup = _check_duplicate(args.topic, mb, root)
+        # 跨 clone 查重范围来自配置 [siblings] (S1); 未配置/形态不对 → 跳过**跨 clone 部分**
+        # 并必打提示 (宽容回落, D13) —— 本 clone 查重不随回落丢失, 照查;
+        # 显式空列表 = 单 clone, 静默不查跨 clone (合法配置)
+        sibling_dirs: list[Path] = []
+        if sibling_names is None:
+            _warn(
+                "未配置跨 clone 查重范围 (<skill>/config/project.toml [siblings] tasks_dirs 缺失或形态不对) "
+                "—— 跳过跨 clone 查重 (本 clone 照查); 配置后恢复"
+            )
+        else:
+            sibling_dirs = _sibling_tasks_dirs(root, sibling_names)
+        dup = _check_duplicate(args.topic, mb, root, sibling_dirs)
         if dup:
             return _fail(dup)
 

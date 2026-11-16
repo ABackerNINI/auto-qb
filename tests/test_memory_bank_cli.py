@@ -30,6 +30,32 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
   plan 分钟戳命名 + 真墙钟跨分钟 = 两次文件名不同永不撞名, CI 偶发红 26-10-17 实证)
 - test_new_doc_task_domain_is_longest_prefix_match: 领域段最长前缀匹配 (P1 首段切分缺陷,
   P2 补) —— 连字符领域 `memory-bank` 可建 / `memory-` 前缀撞名不误收 / 裸领域沿用 P1 行为
+
+项目配置化 (S1, 计划 26-11-17-0010; 领域枚举/跨 clone 查重范围外置 `<skill>/config/project.toml`,
+D12 统一落点 + D13 宽容回落 —— 校验类缺失跳过对应校验并**必打**提示行, 禁静默降级;
+配置存在 = 行为与旧硬编码版一致; 实现与检查器同在 memory-bank skill 的 `scripts/new_doc.py`):
+
+- test_new_doc_task_domains_come_from_project_config: 领域枚举从配置读 —— tmp 配置换成自定义
+  枚举后 kb.new task 只认它 (改 toml 即生效, 不触代码); 枚举外领域拒且文案列的是配置里的枚举;
+  配置在场时零 [KB-CONFIG] 提示行
+- test_new_doc_repo_project_config_exists_and_parses: 本仓 `<skill>/config/project.toml` 存在
+  且可解析, [domains]/[siblings] 两节齐 (S1 统一落点; 缺件 = 配置化改造被意外回退)
+- test_new_doc_task_without_config_falls_back_with_hints: 删配置 → 枚举外 topic 也可建 +
+  stderr 必打领域/跨 clone 两条提示行 (D13: 宽容回落, 禁静默降级)
+- test_new_doc_task_empty_domains_falls_back_but_empty_siblings_is_single_clone: [domains]
+  values=[] → 跳过领域校验 + 提示; [siblings] tasks_dirs=[] 显式空 = 单 clone (合法配置),
+  静默不查不提示
+- test_new_doc_broken_project_config_fails_fast: TOML 解析失败 → rc=1 (坏配置不是「缺失」,
+  不允许静默跳过校验假绿)
+- test_new_doc_mixed_type_config_arrays_fall_back_with_hints: 混型数组 (元素含非 str) =
+  形态不对 → 按 D13 宽容回落 + 必打提示, 不抛 TypeError 裸栈 (评审 RB-2); 提示文案覆盖
+  「形态不对」 (RB-3); sibling 回落时本 clone 查重照查
+- test_new_doc_cross_clone_dup_check_reads_siblings_config: 跨 clone 查重读 [siblings] 显式
+  列表 —— 配置点名的 sibling 里同 slug 档案 → 拒并给路径; 点名但目录不存在 → 跳过 (与旧
+  glob 对缺失目录的行为一致)
+- test_new_doc_task_without_siblings_section_skips_cross_clone_dup_with_hint: 配置在但缺
+  [siblings] 节 → 跳过**跨 clone 部分**查重 + 必打提示 (D13); 领域校验不受影响;
+  **本 clone 查重照查** (同 clone 同 slug 仍拒, 评审 RB-1)
 - test_wrap_creates_zero_slot_slice_and_updates: 建切片零 SLOT 即合规 (判断剩余 0, 裁定 A6);
   二次调用抬最后活动 + 追加 R 行; 同专题档案抬 Updated + 进度日志日期行 (A5)
 - test_wrap_archive_flag_anchors_umbrella_archive: `--archive` 显式锚档案 —— 异键 (伞形档案
@@ -340,6 +366,195 @@ def test_new_doc_task_domain_is_longest_prefix_match(tmp_path: Path) -> None:
 
     rc, _, err = run("nosuch-slug")
     assert rc == 1 and "领域枚举" in err, f"真坏领域必须拒: {err}"
+
+
+def _patch_project_config(tmp_path: Path, monkeypatch, body: str | None) -> Path:
+    """把 `_common.PROJECT_CONFIG` 指到 tmp 配置件 (进程内 monkeypatch; S1 配置化测试夹具)。
+
+    `new_doc.load_project_config()` 每次调用都**现读**模块全局 (不在 import 时快照),
+    所以 patch 模块属性即可; `body=None` = 指向不存在的路径 (删配置回落场景)。
+    """
+    import _common
+
+    cfg = tmp_path / "project.toml"
+    if body is None:
+        cfg = tmp_path / "absent" / "project.toml"
+    else:
+        cfg.write_text(body, encoding="utf-8")
+    monkeypatch.setattr(_common, "PROJECT_CONFIG", cfg)
+    return cfg
+
+
+def _run_new_doc_task(new_doc, root: Path, mb: Path, topic: str) -> tuple[int, str, str]:
+    """进程内跑 `kb.new task --topic <topic>` (stdout/stderr 分开收, 提示行走 stderr)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        rc = new_doc.main(["--root", str(root), "--mb-dir", str(mb), "task", "--title", "S1 配置化", "--topic", topic])
+    return rc, out.getvalue(), err.getvalue()
+
+
+def test_new_doc_task_domains_come_from_project_config(tmp_path: Path, monkeypatch) -> None:
+    """领域枚举从项目配置读 (S1/D12): 改 toml 即生效, 不触代码。
+
+    tmp 配置换成自定义枚举 `mydomain` 后: 枚举内可建、原八域的 webui 拒且文案列的是
+    **配置里的**枚举; 配置在场时零提示行 (配置存在 = 行为与旧硬编码版一致)。
+    """
+    _patch_project_config(tmp_path, monkeypatch, '[domains]\nvalues = ["mydomain"]\n\n[siblings]\ntasks_dirs = []\n')
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    rc, _, err = _run_new_doc_task(new_doc, tmp_path, mb, "mydomain-custom")
+    assert rc == 0, f"配置里的自定义领域必须可建 (改 toml 即生效): {err}"
+    assert "[KB-CONFIG]" not in err, f"配置在场不得打回落提示行: {err}"
+
+    rc, _, err = _run_new_doc_task(new_doc, tmp_path, mb, "webui-x")
+    assert rc == 1 and "领域枚举之一 (mydomain)" in err, (f"枚举外领域必须拒, 且文案列配置里的枚举 (不再触代码): {err}")
+
+
+def test_new_doc_repo_project_config_exists_and_parses() -> None:
+    """本仓 `<skill>/config/project.toml` 存在且可解析, [domains]/[siblings] 两节齐 (S1 统一落点)。
+
+    缺件/坏节 = 配置化改造被意外回退或文件被误删 —— 直接判红, 不宽容 (回落语义只服务
+    **移植目标项目**, 本仓是有配置的成态)。
+    """
+    import _common
+
+    assert _common.PROJECT_CONFIG.is_file(), f"本仓必须保留 skill 项目配置: {_common.PROJECT_CONFIG}"
+    config = _common.load_project_config()
+    assert _common.config_domains(config), "本仓配置必须配了 [domains] values (领域校验在场)"
+    assert _common.config_sibling_names(config) is not None, "本仓配置必须配了 [siblings] 节"
+
+
+def test_new_doc_task_without_config_falls_back_with_hints(tmp_path: Path, monkeypatch) -> None:
+    """删配置 → 工具仍可用 (D13 宽容回落): 枚举外 topic 也放行, stderr **必打**两条提示行
+    (领域 + 跨 clone), 禁静默降级; 档案照常落盘。"""
+    _patch_project_config(tmp_path, monkeypatch, None)
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    rc, _, err = _run_new_doc_task(new_doc, tmp_path, mb, "whatever-x")
+    assert rc == 0, f"删配置后工具必须仍可用 (宽容回落): {err}"
+    assert "未配置领域枚举" in err and "跳过领域校验" in err, f"领域回落必须打提示行: {err}"
+    assert "未配置跨 clone 查重范围" in err and "跳过跨 clone 查重" in err, f"跨 clone 回落必须打提示行: {err}"
+    created = list((mb / "tasks").glob("*-whatever-x.md"))
+    assert len(created) == 1, f"回落态档案照常落盘: {created}"
+
+
+def test_new_doc_task_empty_domains_falls_back_but_empty_siblings_is_single_clone(tmp_path: Path, monkeypatch) -> None:
+    """[domains] values=[] → 跳过领域校验 + 提示; [siblings] tasks_dirs=[] 显式空 = 单 clone
+    (合法配置) —— 静默不查不提示, 与「节缺失」的回落提示区分开。"""
+    _patch_project_config(tmp_path, monkeypatch, '[domains]\nvalues = []\n\n[siblings]\ntasks_dirs = []\n')
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    rc, _, err = _run_new_doc_task(new_doc, tmp_path, mb, "whatever-x")
+    assert rc == 0, f"空枚举 = 跳过校验放行: {err}"
+    assert "未配置领域枚举" in err, f"空 domains 也要打提示 (禁静默降级): {err}"
+    assert "跨 clone" not in err, f"显式空 siblings = 单 clone, 不提示: {err}"
+
+
+def test_new_doc_broken_project_config_fails_fast(tmp_path: Path, monkeypatch) -> None:
+    """TOML 解析失败 → rc=1 fail-fast (坏配置不是「缺失」, 静默跳过校验会让守卫假绿)。"""
+    _patch_project_config(tmp_path, monkeypatch, "[domains\nvalues = [")
+    new_doc = _new_doc()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    rc, _, err = _run_new_doc_task(new_doc, tmp_path, mb, "docs-x")
+    assert rc == 1 and "解析失败" in err, f"坏配置必须 fail-fast: {err}"
+
+
+def test_new_doc_mixed_type_config_arrays_fall_back_with_hints(tmp_path: Path, monkeypatch) -> None:
+    """混型数组 (元素含非 str) = 形态不对 → 按 D13 宽容回落 (跳过对应校验 + 必打提示),
+    **不抛 TypeError 裸栈** (评审 RB-2: 混型放过会让 `', '.join(domains)` /
+    `root.parent / name` 当场炸); 本 clone 查重随 sibling 回落照查。
+
+    TOML 裸类型不混型的 (如 tasks_dirs 为裸字符串) 同走形态不对回落 —— 提示文案
+    「缺失或形态不对」覆盖两态 (评审 RB-3: 排障指向不能只说「缺失」)。
+    """
+    _patch_project_config(
+        tmp_path,
+        monkeypatch,
+        '[domains]\nvalues = ["webui", 2]\n\n[siblings]\ntasks_dirs = ["sib", 3]\n',
+    )
+    new_doc = _new_doc()
+    root = tmp_path / "clone"
+    mb = root / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    # sibling 名单里有混型项, 但回落是整表视作未配置 —— 即便 sib 目录真有同 slug 也不查它
+    sib_tasks = tmp_path / "sib" / "memory-bank" / "tasks"
+    sib_tasks.mkdir(parents=True)
+    (sib_tasks / "26-09-14-memory-bank-migration.md").write_text("# x\n", encoding="utf-8")
+
+    rc, _, err = _run_new_doc_task(new_doc, root, mb, "webui-migration")
+    assert rc == 0, f"混型配置必须回落放行, 不抛裸栈: {err}"
+    assert "TypeError" not in err, f"混型元素不得穿透到下游抛 TypeError: {err}"
+    assert "缺失、为空或形态不对" in err, f"领域提示文案须覆盖形态不对 (RB-3): {err}"
+    assert "缺失或形态不对" in err, f"siblings 提示文案须覆盖形态不对 (RB-3): {err}"
+
+    # 回落不丢本 clone 查重: 同 slug 的本 clone 档案仍被拒 (换 topic 避开首跑已建件的同路径幂等拒)
+    (mb / "tasks" / "26-01-01-webui-other-dup.md").write_text("# x\n", encoding="utf-8")
+    rc, _, err = _run_new_doc_task(new_doc, root, mb, "webui-other-dup")
+    assert rc == 1 and "同专题档案已存在" in err, f"sibling 回落时本 clone 查重必须照查: {err}"
+
+
+def test_new_doc_cross_clone_dup_check_reads_siblings_config(tmp_path: Path, monkeypatch) -> None:
+    """跨 clone 查重读 [siblings] 显式列表 (S1, 替代旧 `../auto-qb-*` glob)。
+
+    配置点名的 sibling 里同 slug (忽略日期前缀) 档案 → 拒并给路径; 点名但目录不存在
+    → 静默跳过 (与旧 glob 对缺失目录的行为一致)。
+    """
+    _patch_project_config(
+        tmp_path, monkeypatch, '[domains]\nvalues = ["memory-bank"]\n\n[siblings]\ntasks_dirs = ["sib", "ghost"]\n'
+    )
+    new_doc = _new_doc()
+    root = tmp_path / "clone"
+    mb = root / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    sib_tasks = tmp_path / "sib" / "memory-bank" / "tasks"  # 显式列表相对 root.parent 解析
+    sib_tasks.mkdir(parents=True)
+    (sib_tasks / "26-09-14-memory-bank-migration.md").write_text("# x\n", encoding="utf-8")
+
+    rc, _, err = _run_new_doc_task(new_doc, root, mb, "memory-bank-migration")
+    assert rc == 1 and "同专题档案已存在" in err, f"配置点名的 sibling 同 slug 必须拒: {err}"
+    assert "26-09-14-memory-bank-migration.md" in err, f"拒绝文案必须给出 sibling 里的档案路径: {err}"
+    assert "[KB-CONFIG]" not in err, f"配置在场不得打回落提示行: {err}"
+
+    rc, _, err = _run_new_doc_task(new_doc, root, mb, "memory-bank-other-slug")
+    assert rc == 0, f"不同 slug 照常可建 (ghost 目录缺失 = 静默跳过, 同旧 glob 行为): {err}"
+
+
+def test_new_doc_task_without_siblings_section_skips_cross_clone_dup_with_hint(tmp_path: Path, monkeypatch) -> None:
+    """配置在但缺 [siblings] 节 → 跳过**跨 clone 部分**查重 + 必打提示 (D13); 领域校验不受影响。
+
+    回落只跳跨 clone —— **本 clone 查重照查** (回落不得把幂等/查重闸一起丢掉):
+    同 clone 里已存在的同 slug 档案仍被拒。
+    """
+    _patch_project_config(tmp_path, monkeypatch, '[domains]\nvalues = ["memory-bank"]\n')
+    new_doc = _new_doc()
+    root = tmp_path / "clone"
+    mb = root / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    sib_tasks = tmp_path / "sib" / "memory-bank" / "tasks"
+    sib_tasks.mkdir(parents=True)
+    (sib_tasks / "26-09-14-memory-bank-migration.md").write_text("# x\n", encoding="utf-8")
+
+    rc, _, err = _run_new_doc_task(new_doc, root, mb, "memory-bank-migration")
+    assert rc == 0, f"缺 [siblings] 节 = 跳过跨 clone 查重放行 (D13 宽容回落): {err}"
+    assert "未配置跨 clone 查重范围" in err, f"必须打回落提示行 (禁静默降级): {err}"
+    assert "本 clone 照查" in err, f"提示行必须说清只跳跨 clone (排障指向): {err}"
+    assert "领域枚举" not in err, f"领域校验不受 [siblings] 缺失影响: {err}"
+
+    # 回落不丢本 clone 查重: 本 clone 已有同 slug 档案 → 仍拒 (评审 RB-1 回归阵)
+    (mb / "tasks" / "26-01-01-memory-bank-local-dup.md").write_text("# x\n", encoding="utf-8")
+    rc, _, err = _run_new_doc_task(new_doc, root, mb, "memory-bank-local-dup")
+    assert rc == 1 and "同专题档案已存在" in err, f"缺 siblings 节时本 clone 同 slug 必须照查照拒: {err}"
 
 
 def test_wrap_creates_zero_slot_slice_and_updates(tmp_path: Path) -> None:

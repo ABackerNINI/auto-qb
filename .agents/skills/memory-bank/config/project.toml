@@ -1,0 +1,14 @@
+# memory-bank skill 的项目绑定配置 (统一落点 <skill>/config/project.toml, 计划 26-11-17-0010 S1/D12)。
+# 口径: 项目词汇与项目路径全部外置到这里, 代码只读配置 —— 换项目/改枚举只改本文件, 不触 scripts/*.py;
+# 节缺失或值为空 → 脚本宽容回落 (跳过对应校验 + 必打提示行, 禁静默降级, D13)。
+
+[domains]
+# 任务档案领域枚举 (文件名首段; `kb.new task --topic <领域>-<专题>` 按**最长前缀**匹配, 枚举项可含短横线)。
+# 不足用先扩枚举再建档 (口径见 SKILL.md「任务档案规范」); 改这里即生效, 不触代码。
+values = ["webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config"]
+
+[siblings]
+# 跨 clone 档案查重的兄弟工作区目录名**显式列表** (只读 ls 各自的 memory-bank/tasks/, 忽略日期前缀
+# 按 slug 比对; 自身 clone 自动排除)。每项相对本仓库根的 parent 目录解析 (与旧 glob `../auto-qb-*`
+# 同锚点); 空列表 = 单 clone, 不查跨 clone。列出即生效, 不再按名字模式扫 parent 目录。
+tasks_dirs = ["auto-qb-zcode-clone2", "auto-qb-zcode-clone3"]

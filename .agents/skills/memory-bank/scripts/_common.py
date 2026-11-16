@@ -8,8 +8,9 @@
 - `PITFALL_CLASSES`: pitfalls 的类枚举 (扩类须三处同步: 本常量 / 新建目录 / README 细路由)
 - `DOC_STATUSES` / `TERMINAL_DOC_STATUSES`: 计划 / 报告 / issue 共用的 5 词表与其完结子集
   (gen_doc_map 校验 / flip_status 词表 / check_doc_templates 都 import 这里)
-- `TASK_STATUSES` / `TASK_DOMAINS` / `TASK_FILE_RE`: 任务档案的 4 词表 / 领域枚举 / 命名正则
-  (`kb.new` / `check_doc_templates` 同源)
+- `TASK_STATUSES` / `TASK_FILE_RE`: 任务档案的 4 词表 / 命名正则
+  (`kb.new` / `check_doc_templates` 同源); 领域枚举**不在代码里** —— 走项目配置
+  (`load_project_config` / `config_domains`, 落点 `<skill>/config/project.toml [domains]`)
 - `FAMILIES`: 文档族注册表 (plan/task/slice + P3 二期 pitfall/report/baseline +
   2026-11-07 收编的 issue → 命名/模板/词表/索引动作) —— `kb.new` / `kb.wrap` /
   `check_doc_templates` 与模板的同一份注册表 (计划 26-10-17-0527 P1/P3; issue 收编见 26-11-07-0549 D4;
@@ -40,6 +41,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -189,18 +191,66 @@ SLICE_DIR = "active-context"
 # (`--total` 誊写, 无索引)。W3 收编 issue 族 (计划 26-11-07-0549 D4):
 # 模板按档位选 + 文件名中段从 TYPES 拼 (new_issue.py 退役, 26-10-17-0527 D2 正式翻案)。
 
-# 任务档案的领域枚举 (文件名首段; 不足用先扩枚举再建档 —— 口径见 SKILL.md「任务档案规范」)
-TASK_DOMAINS = ("webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config")
+# --------------------------------------------------------------------------- 项目配置
+# 项目绑定面单点 (D12, 计划 26-11-17-0010 S1): `<skill>/config/project.toml` —— 项目词汇
+# (领域枚举) 与项目路径 (兄弟工作区) 一律外置, 代码读配置; **换项目不该需要改任何 .py**。
+# 缺失回落语义 (D13): 校验类配置缺失 → 跳过对应校验 + 调用方**必打**提示行 (禁止静默降级);
+# 文件存在但解析失败 → 抛 `tomllib.TOMLDecodeError` 由调用方 fail-fast (坏配置不是「缺失」,
+# 静默跳过校验会让守卫假绿)。
+
+PROJECT_CONFIG = SKILL_DIR / "config" / "project.toml"
 
 
-def match_domain(topic: str) -> str | None:
-    """`--topic` 的领域段 = **最长前缀匹配**的枚举项 (枚举自身可含短横线, 如 `memory-bank`)。
+def load_project_config(path: Path | None = None) -> dict:
+    """读项目配置 TOML (`[domains]` / `[siblings]`); 文件缺失 → `{}` (宽容回落)。"""
+    cfg_path = path or PROJECT_CONFIG
+    if not cfg_path.is_file():
+        return {}
+    with cfg_path.open("rb") as fh:
+        return tomllib.load(fh)
+
+
+def config_domains(config: dict) -> tuple[str, ...]:
+    """配置 → 领域枚举 (`[domains] values`); 节缺失/为空/形态不对 (节非表、值非数组、
+    元素混型含非 str) → 空元组 (= 未配置, 调用方跳过领域校验并必打提示, D13)。
+
+    WARN: 元素必须逐个 str 校验 —— 放过混型数组 (如 `values = ["webui", 2]`) 会让下游
+    `', '.join(domains)` 抛 TypeError 裸栈, 而形态不对该走的是回落提示不是崩溃。
+    """
+    section = config.get("domains")
+    if not isinstance(section, dict):
+        return ()
+    values = section.get("values", [])
+    if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+        return ()
+    return tuple(values)
+
+
+def config_sibling_names(config: dict) -> tuple[str, ...] | None:
+    """配置 → 跨 clone 查重的兄弟工作区目录名 (`[siblings] tasks_dirs` 显式列表)。
+
+    节缺失/形态不对 (节非表、tasks_dirs 非数组、元素混型含非 str) → `None` (= 未配置,
+    调用方跳过跨 clone 查重并必打提示, D13; 元素 str 校验的动机同 `config_domains` 的 WARN);
+    **显式空列表 = 单 clone** (合法配置, 返回空元组, 不提示)。
+    """
+    section = config.get("siblings")
+    if not isinstance(section, dict):
+        return None
+    names = section.get("tasks_dirs", [])
+    if not isinstance(names, list) or not all(isinstance(v, str) for v in names):
+        return None
+    return tuple(names)
+
+
+def match_domain(topic: str, domains: tuple[str, ...]) -> str | None:
+    """`--topic` 的领域段 = **最长前缀匹配**的枚举项 (枚举自身可含短横线, 如 `memory-bank`;
+    枚举来自项目配置 `[domains] values`, 见 `load_project_config` / `config_domains`)。
 
     WARN: P1 缺陷 (P2 补, 26-10-17): 旧实现 `topic.split("-", 1)[0]` 把 `memory-bank-xxx`
     的首段切出 `memory` —— 枚举里的 `memory-bank` 永远不可达。领域段自定最长, 匹配规则
     只能最长前缀 (`d + "-"` 或 topic == d, 保留 P1 的裸领域照收行为), 不能首段切分。
     """
-    for d in sorted(TASK_DOMAINS, key=len, reverse=True):
+    for d in sorted(domains, key=len, reverse=True):
         if topic == d or topic.startswith(d + "-"):
             return d
     return None
@@ -235,7 +285,7 @@ class FamilySpec:
     default_status: str  # 出厂状态
     index_script: str  # 建后重建哪个生成器 (2026-11-08 W3 起仅 pitfall 族 = gen_kb_index; 其余族空串)
     naming_re: object  # 文件名正则 (从上面的单点来)
-    domain_first: bool  # `--topic` 领域段须 ∈ `TASK_DOMAINS` (最长前缀匹配, 仅档案族)
+    domain_first: bool  # `--topic` 领域段须 ∈ 配置领域枚举 (最长前缀匹配, 仅档案族)
     subdir_flag: str = ""  # 第二段子目录的 CLI 参数名 (坑档 = `class`; 其余族空)
     subdir_values: tuple = ()  # 子目录允许值 (坑档 = `PITFALL_CLASSES`; 其余族空)
     # 档位选模板 (W3, 计划 26-11-07-0549): 非空时模板按 `--tier` 从这里选 (issue 族), `template`
