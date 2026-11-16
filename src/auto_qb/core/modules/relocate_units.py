@@ -24,7 +24,11 @@
 import os
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Collection, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Collection, Iterable, Mapping, Optional, Sequence, Tuple
+
+# 判定面归一单点的 no-fold 分支取 infra.utils.path_normalize(core -> infra 正向依赖;
+# infra 不回依 core, 无环)。path_normalize 本体仍是斜杠归一的单一实现, 本文件不复制。
+from ...infra import utils
 
 # ---------------------------------------------------------------- 常量
 
@@ -185,16 +189,45 @@ def is_complete_state(rec: Any) -> bool:
 # ---------------------------------------------------------------- 路径纯函数
 
 
-def _norm(path: str) -> str:
-    """词法归一(斜杠统一 + 大小写折叠): 作用域/同路径判定的统一口径
+def _norm(path: str, fold_case: bool = True) -> str:
+    """路径归一**单点**(计划 26-11-15-2340 刀2/I5: 全仓 relocate 判定面的斜杠/大小写归一
+    只在本函数一份, 大小写模式为显式参数, 单点外无 normcase/path_normalize 判定散布):
 
-    与 group_key_of 的 path_normalize 分层: 那里保持词法形态做组键, 这里叠加
-    normcase(§3.3: POSIX 大小写敏感 / Windows 不敏感, 组键解析后仍需 normcase 兜底)。
-    normcase 在 Windows 上的分隔符是反斜杠 —— 归一后再折回正斜杠, 让比较与平台无关
-    (POSIX 无影响; 反斜杠作合法文件名字符的 POSIX 边角场景不在此判定域内)。
+    - fold_case=True(默认, 作用域/谓词口径): 叠加 os.path.normcase 平台折叠(§3.3:
+      POSIX 大小写敏感 / Windows 不敏感, 按 os.name 取向, 组键解析后仍需 normcase 兜底)。
+      normcase 在 Windows 上的分隔符是反斜杠 —— 归一后再折回正斜杠, 让比较与平台无关
+      (POSIX 无影响; 反斜杠作合法文件名字符的 POSIX 边角场景不在此判定域内)。
+    - fold_case=False(执行侧等值口径): 仅统一斜杠并压缩冗余斜杠(infra.utils.path_
+      normalize 单一实现), 保留大小写与词法形态 —— qB 快照 save_path 与 job.dst 等值
+      判定用: 大小写病态形态按原样不等, 落保守分支(_startup_reconcile_one 口径, R4:
+      迁移到单点时不放宽)。
+
+    与 group_key_of 的 path_normalize 分层: 那里保持词法形态做组键, 这里是判定面比较口径。
     """
-    n = os.path.normcase(os.path.normpath((path or "").replace("\\", "/")))
+    p = (path or "").replace("\\", "/")
+    if not fold_case:
+        return utils.path_normalize(p)
+    n = os.path.normcase(os.path.normpath(p))
     return n.replace("\\", "/")
+
+
+def at_dst(save_path: str, dst: str, *, fold_case: bool = False) -> bool:
+    """单成员「到位判定」单点(计划 26-11-15-2340 刀2: 6 个到位判定变体并一): save_path
+    是否恰等于 dst(等值比较, 归一走 _norm 显式口径)。
+
+    - fold_case=False(默认, 执行侧口径): qB 快照(store 镜像, 即 qB 现值)与 job.dst 等值
+      —— _recover/_member_at_dst/_all_at_dst/幂等 skip 同口径, 不折叠(病态形态保守);
+    - fold_case=True: 作用域/组级幂等口径(evaluate_group 幂等分支)。
+
+    「store 镜像 vs qB 现值」维度不在本判定 —— store 快照即 qB 现值的镜像, 分野在取数面
+    (调用方传 rec.save_path 还是 mover.save_path), 判定本体只有等值比较这一份。
+    """
+    return _norm(save_path, fold_case) == _norm(dst, fold_case)
+
+
+def all_at_dst(save_paths: Iterable[str], dst: str, *, fold_case: bool = False) -> bool:
+    """全组「到位判定」单点(逐成员 at_dst; 空集通过 —— 与执行侧 _all_at_dst 空转语义一致)"""
+    return all(at_dst(sp, dst, fold_case=fold_case) for sp in (save_paths or ()))
 
 
 def _join(save_path: str, rel: str) -> str:
@@ -203,24 +236,41 @@ def _join(save_path: str, rel: str) -> str:
     return f"{base}/{rel.strip('/')}" if rel else base
 
 
-def _within(scope: str, path: str) -> bool:
-    """path 是否落在 scope 目录内(含等于); 归一后比较"""
-    s, p = _norm(scope), _norm(path)
+def _within(scope: str, path: str, *, fold_case: bool = True) -> bool:
+    """「path 落在 scope 目录内(含等于)」根内谓词**单点**(计划 26-11-15-2340 刀2: 4 份
+    「落点在根内」判定合一 —— units._within/under_alias_root/执行侧 _rel_under 前缀面/
+    plan 侧内容根前缀面全部收编于此或经 _rel_under 取尾段); 归一走 _norm 单点,
+    前缀以分隔符为界(前缀同串的兄弟目录不误伤)。
+
+    fold_case=True(默认): 作用域/删链门平台折叠口径; False: 执行侧词法口径(不折叠)。
+    """
+    s, p = _norm(scope, fold_case), _norm(path, fold_case)
     if not s:  # 防御支: _norm 底层 normpath 恒返回 ".", 现实调用不可达; 契约由 _norm 替身直驱用例钉住(issue 26-11-05-0200)
         return False
     return p == s or p.startswith(s + "/")
 
 
-def _rel_under(path: str, base: str) -> str:
-    """path 相对 base 的尾段(词法, 保留原大小写/斜杠形态); 相等或不在 base 之下 -> ""
+def _rel_under(path: str, base: str, *, fold_case: bool = True) -> Optional[str]:
+    """path 相对 base 的尾段(单点, 双口径; 计划 26-11-15-2340 刀2: units 与执行侧同名
+    双实现合一): 相等 -> ""; 不在 base 之下(含空 path/空 base) -> None(执行侧「账不自洽」
+    形态沿用 —— 评审 minor-1: 空串输入不得被并入相等支, 否则消费面 rel is None 的账不
+    自洽守卫(_repoint_inherited 跳过改指交人)对空 alias_path 失效, 会把链接 retarget 到
+    dst 根本身)。
 
-    比对走 _norm(平台归一口径); 截取按「归一形测长、原形取尾」—— 现实输入(precheck-add
-    的 save_path/name 词法拼接)不含 normpath 可折叠段, 归一前后长度恒一致, 尾段大小写
-    得以保留; 防御支(折叠发生)返回 ""(调用侧 actual 退化为根本身, 不伪段)。
+    - fold_case=True(默认): 比对走 _norm 平台折叠口径, 截取按「归一形测长、原形取尾」
+      —— 现实输入(precheck-add 的 save_path/name 词法拼接)不含 normpath 可折叠段,
+      归一前后长度恒一致, 尾段大小写得以保留; 防御支(折叠发生)返回 ""(调用侧 actual
+      退化为根本身, 不伪段)。
+    - fold_case=False: 归一形(path_normalize 口径)取尾, 保留大小写 —— 执行侧改指换算
+      (_repoint_inherited/_scope_rel)与 plan 侧内容根前缀面用。
     """
-    n_p, n_b = _norm(path), _norm(base)
-    if not n_p or not n_b or n_p == n_b or not n_p.startswith(n_b + "/"):
+    n_p, n_b = _norm(path, fold_case), _norm(base, fold_case)
+    if n_p == n_b:
         return ""
+    if not n_p or not n_b or not n_p.startswith(n_b + "/"):
+        return None
+    if not fold_case:
+        return n_p[len(n_b) + 1:]
     tail = len(n_p) - len(n_b) - 1
     raw = path.replace("\\", "/").rstrip("/")
     if 0 < tail <= len(raw) and len(raw) == len(n_p):
@@ -730,6 +780,18 @@ def evaluate_group(facts: GroupFacts) -> dict:
 
     cls 三分流: blocked(硬拒) > confirm(需用户在确认框显式点头: 目录别名/长路径校正
     提议) > ok。reasons 只放未过闸门与需确认项; notes 放告知性事实(不影响 cls)。
+    返回值不含 RelocateUnitPlan 对象(回执按纯数据契约过 WEB/序列化面); 执行链需复用
+    plan() 第一算结果消除双算时走 evaluate_group_unit(计划 26-11-15-2340 刀2/A0b)。
+    """
+    return evaluate_group_unit(facts)[0]
+
+
+def evaluate_group_unit(facts: GroupFacts) -> Tuple[dict, Optional[RelocateUnitPlan]]:
+    """evaluate_group 的 (verdict, unit) 双产出: plan() 第一算的 RelocateUnitPlan 随
+    verdict 一并返回, 执行链(_start_job)据此消除同一次 execute 的 plan() 双算(计划
+    26-11-15-2340 刀2/A0b)。幂等早退支(全组已在目标位置)在 plan() 之前返回, unit=None
+    —— 该支不产出形态, 调用侧的幂等 skip 先于 _start_job, unit 不会被消费(即便被消费,
+    _start_job 的 None 回落自算保 direct 幂等路径不回退)。
     """
     reasons: list = []
     notes: list = []
@@ -773,7 +835,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
         break
 
     # ---- 幂等: 全组已在目标位置(§05 T3; 目标冲突等闸门对同路径无意义, 直接返回) ----
-    if _norm(facts.save_path) == _norm(facts.target):
+    if at_dst(facts.save_path, facts.target, fold_case=True):
         notes.append("所有成员已在目标位置(幂等): 规则 move_to 语义为 skip, 无需迁移")
         return {
             "hashes": list(facts.hashes),
@@ -792,7 +854,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
             "notes": notes,
             "target_free": facts.target_free,
             "same_volume": facts.same_volume,
-        }
+        }, None
 
     # ---- AutoTMM 成员闸门(计划 26-11-05-0808 S1, §2.2「AutoTMM 成员」行) ----
     # auto_tmm=true 的成员 fastresume 不落 qBt-savePath 键(N8 实测 55 vs 57 键), 双键改写
@@ -963,7 +1025,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
         "notes": notes,
         "target_free": facts.target_free,
         "same_volume": facts.same_volume,
-    }
+    }, unit
 
 
 # ---------------------------------------------------------------- 添加种子预检(§3.6.1)
@@ -1127,6 +1189,7 @@ def evaluate_add(facts: AddFacts) -> dict:
     # (3) 的 ok 不即刻返回: 先扫完其余 job 的 confirm 面(宁拦勿漏), 全部无交叉才静默放行。
     finalize_ok = False  # 有文件级 job 认领本次落点且判定「异名无交叉」(§3.6 场景 1)
     link_pending = False  # 落点是链接但不在任一认领 job 账上(第三方/他组): 不可判「异名」
+    direct_notes: list = []  # 0711(a) D10 告知面: direct 形态收尾窗落点在旧根面(等值/前缀)的告知性注记
     for job in facts.jobs:
         if job.is_terminal:
             continue
@@ -1236,22 +1299,21 @@ def evaluate_add(facts: AddFacts) -> dict:
             finalize_ok = True  # (3) 异名候选(§3.6 场景 1, 含 save_path 恰等 src 的等值面:
             # R2 交集判据落地后删链门按文件清单精判依赖, 等值面不再是账面依赖面) —— 继续扫其余 job 的 confirm 面
             continue
-        # 其余形态(direct, 无别名): 判据维持旧面(恰等 src), 形态感知分流不扩 direct
-        if _norm(facts.save_path) == _norm(job.src):
-            return {
-                **base,
-                "cls": CLS_CONFIRM,
-                "reasons":
-                    [
-                        _reason(
-                            "finalize_window", CLS_CONFIRM,
-                            f"该目录的迁移待收尾(job {job.job_id} 相位 {job.phase}, 数据已迁到 {job.dst}, "
-                            "成员经别名做种): 现在添加的种子账面会记在旧路径, 成为删链门的永久依赖"
-                            "(旧路径别名将永不删除) —— 请等 qB 重启收尾完成后再添加, 或确认接受依赖后继续"
-                        )
-                    ],
-                "notes": [],
-            }
+        # 其余形态(direct, 无别名): 0711 修法(b)+(a)(计划 26-11-15-2340 刀2, issue
+        # 26-11-13-0711 §06)。(b) 落地后 direct 的删链门自有面短路(无别名即无链可删,
+        # deps 判据对 direct 无意义 —— 执行侧 _chain_gate_deps 同步), 旧「恰等 src ->
+        # confirm」文案「账面成为删链门永久依赖(别名将永不删除)」的前提随之消失:
+        # direct 无重定向、无 D16 登记面(alias_roots_of 滤 alias_kind 空), 数据落原盘
+        # 真实目录, 构不成任何依赖 —— 维持 confirm 是假托辞的纯摩擦, 按「以代码事实定」
+        # 退出 confirm。(a) 告知面(D10)降为 notes: 落点在旧根面(等值或前缀,
+        # under_alias_root 单点)时给一条说明性注记, 不弹窗(告知的事实不构成 hazard)。
+        # 放行不即刻返回: 先扫完其余 job 的 confirm 面(宁拦勿漏, 与 (3) 同构)。
+        if under_alias_root(facts.save_path, (job.src, )) is not None:
+            direct_notes.append(
+                f"落点在待收尾迁移(job {job.job_id} 相位 {job.phase})的旧根 {job.src} 之下"
+                "(direct 形态, 无别名): 数据将落原盘真实目录, 不构成删链门依赖 —— 如非有意"
+                "请等收尾完成后再添加"
+            )
     # ---- 1b. 移交面(单活任务模型 D4): 接管前任作用域的活任务, 其继承条目同样是
     # confirm 面 —— 放在 (3) 异名放行之前(宁拦勿漏: 异名放行只对自有面成立)。
     base_add = {
@@ -1271,7 +1333,7 @@ def evaluate_add(facts: AddFacts) -> dict:
 
     if finalize_ok and not link_pending:
         # (3) 异名静默放行(§3.6 场景 1): 数据落原盘真实目录, 不经别名、不依赖别名
-        return {**base, "cls": CLS_OK, "reasons": [], "notes": []}
+        return {**base, "cls": CLS_OK, "reasons": [], "notes": direct_notes}
 
     # ---- 2/3. 别名作用域 ----
     # !这里用「落点是否落在作用域目录内」的本地判定, **不用** job.scope_hit: scope_hit 是
@@ -1284,8 +1346,10 @@ def evaluate_add(facts: AddFacts) -> dict:
         if _norm(facts.save_path) != _norm(job.src) or not _within(job.scope, landing):
             continue
         if job.alias_kind == "dir":
+            # 尾段取自 _rel_under 单点(刀2: 裸 startswith 前缀切片收编; fold_case=False
+            # 保持本支原词法口径 —— landing 由 _join 词法拼接, 归一形尾段与原形一致)
             sp = facts.save_path.replace("\\", "/").rstrip("/")
-            rel = landing[len(sp):].lstrip("/") if landing.startswith(sp + "/") else ""
+            rel = _rel_under(landing, sp, fold_case=False) or ""
             actual = _join(job.dst, rel)
             return {
                 **base,
@@ -1316,8 +1380,8 @@ def evaluate_add(facts: AddFacts) -> dict:
                     ],
                 "notes": [],
             }
-        # 异名落原盘真实目录: 无影响(§3.6 第 1 行)
-        return {**base, "cls": CLS_OK, "reasons": [], "notes": ["落在原盘真实目录, 与别名作用域无交叉"]}
+        # 异名落原盘真实目录: 无影响(§3.6 第 1 行); 0711(a) direct 告知注记并入
+        return {**base, "cls": CLS_OK, "reasons": [], "notes": ["落在原盘真实目录, 与别名作用域无交叉"] + direct_notes}
 
     # ---- 4. 落点本身是链接(无 job 登记: 第三方链接) ----
     if facts.landing_is_link:
@@ -1336,7 +1400,7 @@ def evaluate_add(facts: AddFacts) -> dict:
                 ],
             "notes": [],
         }
-    return {**base, "cls": CLS_OK, "reasons": [], "notes": []}
+    return {**base, "cls": CLS_OK, "reasons": [], "notes": direct_notes}
 
 
 # ---------------------------------------------------------------- 同卷证明(§2.4)
@@ -1754,16 +1818,14 @@ def under_alias_root(path: str, roots: Iterable[str]) -> Optional[str]:
 
     删链门与删种拦截**共用的判据单点**(计划 26-11-05-0808 §2.3 N5 教训): 纯前缀判据
     (p.startswith(root + "/"))会漏拦 save_path **恰等于**根的形态(N5 实测: 门外共享者
-    的 save_path 与组根同值) —— 必须等值 OR 前缀双判据。比较走 _norm(斜杠统一 +
-    normcase 平台折叠); 前缀以分隔符为界(前缀同串的兄弟目录不误伤)。
+    的 save_path 与组根同值) —— 必须等值 OR 前缀双判据。判定本体收编于 _within 单点
+    (计划 26-11-15-2340 刀2), 本函数是多根遍历的命中根回显面。
     """
-    p = _norm(path)
-    if not p:
+    if not _norm(path):
         return None
     for root in roots or ():
-        r = _norm(root)
-        if r and (p == r or p.startswith(r + "/")):
-            return r
+        if _within(root, path):
+            return _norm(root)
     return None
 
 
@@ -1827,9 +1889,17 @@ def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
     return tuple(out)
 
 
-def chain_gate_hits(save_paths: Iterable[str], root: str, equal_root: str = "") -> tuple:
-    """删链门依赖扫描(纯函数): 作用域根上/内的 save_path 集合 + 恰等旧根的并列等值面
-    (N5 双判据, 判据单点 under_alias_root)
+def chain_gate_hits(
+    save_paths: Iterable[str],
+    root: str,
+    equal_root: str = "",
+    *,
+    files_of: Optional[Callable[[str], Sequence[str]]] = None
+) -> tuple:
+    """删链门/D16 删种拦截**共用候选面**(纯函数): 作用域根上/内的 save_path 集合 + 恰等
+    旧根的并列等值面(N5 双判据, 判据单点 under_alias_root)+ 祖先方向候选格
+    (issue 26-11-13-0535)。D16 消费(qbapi._relocate_delete_blocked)以 [sp] 单点调用 +
+    equal_root=登记根 形态复用本单点, 候选面口径不造第二份。
 
     save_paths = qB 全量种子的 save_path(不限于本组 —— 门外共享者/落进作用域的组外种子
     都算依赖, §07 风险表「pending 期组外种子落旧根」行); root = 别名作用域(job.scope,
@@ -1843,13 +1913,31 @@ def chain_gate_hits(save_paths: Iterable[str], root: str, equal_root: str = "") 
     —— 豁免是成员身份语义不是路径语义, 路径层排除会误伤恰同路径的组外种子。
     R2 形态感知(计划 26-11-13-0448 §03 R2): 本函数是**候选面**(scope 前缀 + src 等值面
     预过滤, 便宜)—— 文件级 job(alias_kind="file")的最终 verdict 由消费侧(_chain_gate_deps)
-    按「文件清单 x alias_paths 交集」谓词(file_alias_intersects)精判; 目录级与 direct
-    维持命中即依赖原样。
+    按「文件清单 x alias_paths 交集」谓词(file_alias_intersects)精判(祖先格命中同样过该
+    精判 —— 复用既有谓词, 不造新口径); 目录级维持命中即依赖(祖先格命中 = 内容根恰覆盖
+    旧根, 数据落 junction 树, 真依赖; 嵌套 scope 形态下按覆盖面偏保守, 宁拦勿漏)。
+    0535 祖先方向候选格: 组外种子 save_path 为 equal_root(旧根)的**严格祖先**且其内容根
+    恰覆盖旧根(content_root_of(save_path, files) == equal_root)—— 该形态两头(前缀/等值)
+    都不命中(生产布局 R:\\Download\\PTing 直接挂下载根下真实可达), 修复前误清零导致
+    收尾删别名断粮。files_of = save_path -> 该种子文件相对路径清单 的取数回调(调用侧
+    _file_map 缓存单点; 只对严格祖先形态的 save_path 调用, 开销有界; None = 不启用该格,
+    旧调用面零行为差)。清单不可得(空表/取数失败) = 内容根不可判 -> 该格不命中(候选面
+    不猜; 精判面的「宁拦勿漏」契约在消费侧 file_alias_intersects)。
     返回命中的 save_path 原值元组(保持输入侧大小写/斜杠原样, 供文案展示)。
     """
     out = []
     eq = _norm(equal_root)
     for sp in save_paths or ():
-        if sp and (under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq)):
+        if not sp:
+            continue
+        if under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq):
             out.append(sp)
+            continue
+        # 0535 祖先方向候选格: save_path 为旧根严格祖先且内容根恰覆盖旧根
+        if files_of is not None and eq:
+            n_sp = _norm(sp)
+            if eq.startswith(n_sp + "/"):
+                cr = content_root_of(sp, list(files_of(sp) or ()))
+                if cr and _norm(cr) == eq:
+                    out.append(sp)
     return tuple(out)

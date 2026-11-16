@@ -44,7 +44,8 @@ R1 收尾窗形态感知分流追加(计划 26-11-13-0448 P2; _file_job 默认 a
   不误伤); 目录级 (5)==src confirm
   (正 rel)/(6)深层添加 confirm(E6-2 覆盖洞)/(7)scope 内深层 confirm(actual= dst 侧 scope
   镜像 + rel-to-scope, 评审轮 1 勘误); (8)组外路径与 src 下 scope 外兄弟目录裸 ok(勘误防回归);
-  (9)账面不可得(alias_paths 空/不在 src 下)保守 confirm; (10)direct 维持恰等 src 旧面
+  (9)账面不可得(alias_paths 空/不在 src 下)保守 confirm; (10)direct 退出 confirm 换告知注记
+  (0711 修法 a/b: 恰等 src 与前缀面都 ok + notes 告知, 旧根外静默 ok)
 - test_evaluate_add_finalize_ok_scan_and_link_pending: (3) 的 ok 不即刻返回(后续 job confirm
   胜出, 与 job 顺序无关)+ 账外链接落到分支 4 拦(不静默放行穿链接写入); 对照行 save_path
   取兄弟形, 等值面放行由形态分流表 (3+) 行承重
@@ -91,6 +92,12 @@ R4 成员收缩判据追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的
 
 W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 - test_norm_backslash_bridge_and_within_guard: _norm 反斜杠归一桥(平台盲区)+ 空 scope 守卫
+- test_norm_fold_case_modes_and_at_dst: 刀2/I5 归一单点双口径(fold 平台折叠 / no-fold
+  词法保留)+ 到位判定 at_dst/all_at_dst 并一(显式口径)
+- test_rel_under_single_point_modes: 刀2 _rel_under 双实现合一(units fold 原形取尾 /
+  执行侧 no-fold 归一形取尾; 相等 "" / 根外 None / 空串输入落根外 None 评审 minor-1)
+- test_chain_gate_hits_ancestor_grid_pure: 刀2 0535 祖先候选格纯函数面(祖先覆盖命中 /
+  files_of 缺省该格关闭零行为差 / 清单不可得不猜 / 不覆盖不命中)
 - test_join_slash_normalization_faces: _join 拼接契约(反斜杠归一/尾斜杠剥离/相对段剥离)
 - test_plan_long_path_exact_boundaries: 长路径校正恰 260 边界(内容根/最长文件)+ link_path_limit 透传
 - test_same_volume_proof_tolerance_band: 同卷证明容差带(1GiB 绝对带不翻倍 + 恰等边界)
@@ -646,7 +653,9 @@ def test_evaluate_add_finalize_window_form_aware():
     (补 T1 E6-2 实证覆盖洞); (7) scope 内深层: save_path==scope, actual = dst 侧 scope 镜像 +
     rel-to-scope(评审轮 1 勘误: 双面真值, rel 不再按 job.src 词法截取)。(8) 组外路径与 src 下
     scope 外兄弟目录行为不变(裸 ok, 勘误防回归); (9) 账面不可得(alias_paths 空/不在 src 下)
-    -> 保守 confirm, 不猜「异名」; (10) direct 维持恰等 src 旧面(形态分流不扩 direct)。
+    -> 保守 confirm, 不猜「异名」; (10) direct 退出 confirm 换告知注记(0711 修法 a/b,
+    计划 26-11-15-2340 刀2: 执行侧 direct 自有面短路后, 删链门依赖前提消失, 恰等/前缀面
+    ok + notes 告知, 旧根外静默 ok —— R4 放行扩张如实钉扎, 非静默放宽)。
     """
     fjob = _file_job()  # src=S, scope=S/Show, alias_paths=(S/Show/e00.mkv, S/Show/e01.mkv)
     fjob_rewritten = _file_job(phase=ru.PHASE_REWRITTEN)
@@ -821,7 +830,8 @@ def test_evaluate_add_finalize_window_form_aware():
             lambda r: _reason_gate(r) == "finalize_window" and "账面会记在旧路径" in _reason_text(r),
         ),
         (
-            "(10)direct(无别名)维持旧面: 恰等 src -> confirm(形态分流不扩 direct)",
+            "(10)direct(无别名)恰等 src -> ok + 告知注记(0711 修法 a/b: 删链门自有面短路后, "
+            "旧 confirm 文案「成为删链门永久依赖」前提消失 —— 无别名无链可删, 告知降 notes)",
             S,
             "X",
             (
@@ -837,8 +847,48 @@ def test_evaluate_add_finalize_window_form_aware():
                 ),
             ),
             {},
-            ru.CLS_CONFIRM,
-            lambda r: _reason_gate(r) == "finalize_window" and "账面会记在旧路径" in _reason_text(r),
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and any("不构成删链门依赖" in n and "direct" in n for n in r["notes"]),
+        ),
+        (
+            "(10)direct 前缀面: 深层落点在旧根之下 -> 同款 ok + 告知注记(D10 告知面闭合)",
+            os.path.join(S, "deep"),
+            "X",
+            (
+                ru.RelocateJob(
+                    job_id="jd",
+                    hashes=("HA", ),
+                    mover="HA",
+                    src=S,
+                    dst=T,
+                    scope=S,
+                    alias_kind="",
+                    phase=ru.PHASE_ARMED
+                ),
+            ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and any("不构成删链门依赖" in n for n in r["notes"]),
+        ),
+        (
+            "(10)direct 落点在旧根外: 静默 ok, 无注记(不噪音)",
+            "R:/outside-root",
+            "X",
+            (
+                ru.RelocateJob(
+                    job_id="jd",
+                    hashes=("HA", ),
+                    mover="HA",
+                    src=S,
+                    dst=T,
+                    scope=S,
+                    alias_kind="",
+                    phase=ru.PHASE_ARMED
+                ),
+            ),
+            {},
+            ru.CLS_OK,
+            lambda r: r["reasons"] == [] and r["notes"] == [],
         ),
     ]
     for label, sp, name, jobs, kw, want_cls, check in rows:
@@ -1224,6 +1274,78 @@ def test_norm_backslash_bridge_and_within_guard():
     assert ru._within("", "R:/anywhere") is False
 
 
+def test_norm_fold_case_modes_and_at_dst():
+    """刀2/I5 归一单点双口径(计划 26-11-15-2340): fold_case=True 平台折叠(normcase, POSIX
+    敏感 / Windows 不敏感)+ 折回正斜杠; fold_case=False 仅斜杠统一(path_normalize 口径),
+    保留大小写与词法形态(执行侧等值口径, 病态形态保守不放宽); 到位判定 at_dst/all_at_dst
+    逐成员/全组并一, 口径随显式参数(修复前 6 个变体散布两份 _norm 实现)"""
+    mixed = "R:/Download/BoX"
+    assert ru._norm(mixed) == ru._norm(mixed.upper()) or os.name != "nt", "fold 口径: Windows 折叠(POSIX 恒等, 断言不绑平台)"
+    assert ru._norm(mixed, fold_case=False) == "R:/Download/BoX", "no-fold 口径: 大小写原样保留"
+    assert ru._norm(mixed, fold_case=False) != ru._norm(mixed.upper(), fold_case=False), \
+        "no-fold 口径: 病态大小写形态按原样不等(_startup_reconcile_one 保守口径)"
+    assert ru._norm(r"R:\Download", fold_case=False) == "R:/Download", "no-fold 口径: 反斜杠照样归一(斜杠统一)"
+    assert ru._norm("a//b", fold_case=False) == "a/b", "no-fold 口径: 冗余斜杠压缩(path_normalize 单一实现)"
+    assert ru._norm("") == ".", "fold 口径: 空串 normpath '.'(既有契约, issue 26-11-05-0200)"
+    assert ru._norm("", fold_case=False) == "", "no-fold 口径: 空串恒空串(执行侧判空按原文)"
+    # 到位判定单点: 等值比较 + 口径显式
+    assert ru.at_dst("R:/Dst", "R:/dst", fold_case=True), "fold 口径: 大小写不敏感(Windows 语义)"
+    assert not ru.at_dst("R:/Dst", "R:/dst", fold_case=False), "no-fold 口径: 大小写病态形态保守不等"
+    assert ru.at_dst("R:/dst", "R:/dst") is True, "默认口径 = 执行侧不折叠"
+    assert ru.all_at_dst(["R:/dst", "R:/dst"], "R:/dst"), "全组到位: 逐成员单点"
+    assert not ru.all_at_dst(["R:/dst", "R:/src"], "R:/dst"), "一成员未到位即 False"
+    assert ru.all_at_dst([], "R:/dst"), "空集通过(与执行侧 _all_at_dst 空转语义一致)"
+
+
+def test_rel_under_single_point_modes():
+    """刀2 _rel_under 双实现合一: units 版(fold, 原形取尾/防御支空串)与执行侧版(no-fold,
+    归一形取尾)并一; 相等 -> ""、根外 -> None(执行侧「账不自洽」契约沿用); 空串输入
+    (评审 minor-1)落根外 None 支 —— 消费面 rel is None 守卫(_repoint_inherited 账不
+    自洽跳过改指)对空 alias_path 必须继续命中, 不得把链接 retarget 到 dst 根本身"""
+    # fold 口径(原 units 语义): 原形取尾保留大小写/斜杠形态
+    assert ru._rel_under("R:/SRC/Sub/e00", "R:/src") == "Sub/e00" or os.name != "nt", "fold: 原形尾段(Windows)"
+    assert ru._rel_under("R:/src", "R:/src") == "", "相等 -> 空串"
+    assert ru._rel_under("R:/other", "R:/src") is None, "根外 -> None(执行侧账不自洽沿用)"
+    assert ru._rel_under("R:/srcx", "R:/src") is None, "前缀同串兄弟目录不误伤"
+    # no-fold 口径(原执行侧语义): 归一形取尾, 大小写保留
+    assert ru._rel_under(r"R:\src\Sub\e00", r"R:\src", fold_case=False) == "Sub/e00", "no-fold: 归一形尾段"
+    assert ru._rel_under("R:/src/SUB", "R:/src", fold_case=False) == "SUB", "no-fold: 大小写原样保留(比对本身大小写敏感)"
+    # 空串契约(评审 minor-1, 两口径钉扎): 空 path 与空 base 都是「不在之下」= None(账不自洽),
+    # 双空 = 相等形态 ""
+    assert ru._rel_under("", "R:/src", fold_case=False) is None, "no-fold: 空 path -> None(修复前被并进相等支)"
+    assert ru._rel_under("", "R:/src") is None, "fold: 空 path 归一 '.' 同样根外 None"
+    assert ru._rel_under("R:/x", "", fold_case=False) is None, "no-fold: 空 base -> None(不伪段)"
+    assert ru._rel_under("", "", fold_case=False) == "", "双空 = 相等形态"
+    # 链接路径取第一段(_file_link_roots 消费面语义保真; fold 尾段按平台, 断言不绑 POSIX 形态)
+    rel = ru._rel_under("R:/src/Show/e00.mkv", "R:/src")
+    assert rel is None or rel.split("/", 1)[0] in ("Show", "show"), rel
+
+
+def test_chain_gate_hits_ancestor_grid_pure():
+    """刀2 0535 祖先候选格(纯函数面): save_path 为旧根严格祖先且内容根恰覆盖旧根 ->
+    命中(files_of 取数回调); files_of 缺省(None)该格关闭, 旧调用面零行为差; 清单不可得
+    = 内容根不可判 -> 不命中(候选面不猜); 前缀/等值面行为不变"""
+    src = "R:/Download/PTing"
+
+    def _files(sp):
+        return ["PTing/e00.mkv"] if sp == "R:/Download" else []
+
+    # 祖先覆盖 + 前缀/等值面照常(混合输入一次断言)
+    hits = ru.chain_gate_hits(
+        ["R:/Download/PTing", "R:/Download/PTing/g2", "R:/Download", "R:/elsewhere", ""],
+        "R:/Download/PTing",
+        equal_root=src,
+        files_of=_files,
+    )
+    assert hits == ("R:/Download/PTing", "R:/Download/PTing/g2", "R:/Download"), hits
+    # files_of=None: 祖先格关闭, 与旧行为逐字节一致
+    assert ru.chain_gate_hits(["R:/Download"], "R:/Download/PTing", equal_root=src) == ()
+    # 清单不可得 -> 不命中
+    assert ru.chain_gate_hits(["R:/Download"], src, equal_root=src, files_of=lambda sp: []) == ()
+    # 祖先但内容根不覆盖(name 换了) -> 不命中
+    assert ru.chain_gate_hits(["R:/Download"], src, equal_root=src, files_of=lambda sp: ["OtherStuff/x.bin"]) == ()
+
+
 def test_join_slash_normalization_faces():
     """_join 拼接契约: 反斜杠归一/尾斜杠剥离/相对段首尾斜杠剥离(平台无关字符串契约)"""
     assert ru._join("R:\\Download", "Show") == "R:/Download/Show"
@@ -1543,9 +1665,10 @@ def test_evaluate_add_flow_faces():
 
 def test_within_empty_scope_guard_via_norm_empty(monkeypatch):
     """(T2b)空 scope 守卫(98->99): 归一化器退化为返回空串时(现实 normpath 恒返回'.',
-    守卫属防御弧, 经 _norm 替身直驱)空 scope 永不匹配; 非空 scope 语义不变"""
+    守卫属防御弧, 经 _norm 替身直驱)空 scope 永不匹配; 非空 scope 语义不变
+    (替身带 fold_case 缺省形参 —— 刀2 后 _norm 双口径单点, _within 显式传参)"""
     real_norm = ru._norm
-    monkeypatch.setattr(ru, "_norm", lambda p: "" if p == "" else real_norm(p))
+    monkeypatch.setattr(ru, "_norm", lambda p, fold_case=True: "" if p == "" else real_norm(p, fold_case=fold_case))
     assert ru._within("", "R:/any/path") is False
     assert ru._within("", "") is False
     assert ru._within("R:/scope", "R:/scope/a") is True

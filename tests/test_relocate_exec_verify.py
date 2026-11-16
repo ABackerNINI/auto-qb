@@ -29,7 +29,15 @@
 - test_chain_gate_deps_file_kind_intersection_verdict: 文件级 job verdict 换「文件清单 x
   alias_paths 交集」—— 相交(同名撞链接路径/等值面平铺同名 E3 形态) = 依赖 / 不相交
   (组外异名, 等值面+前缀面候选) = 豁免(误拦1 修正面) / 不可得(取数抛错/空清单) =
-  保守计依赖(宁拦勿漏 E8) / 目录级与 direct 零变化 / 本组 hash 豁免不变
+  保守计依赖(宁拦勿漏 E8) / 目录级命中即依赖原样 / direct 自有面短路(0711b) / 本组 hash
+  豁免不变
+### 删链门 0535 祖先方向候选格(issue 26-11-13-0535, 计划 26-11-15-2340 刀2)
+- test_chain_gate_deps_ancestor_savepath_grid: 组外种子 save_path 为 job.src 严格祖先且
+  内容根恰覆盖旧根 -> 计入依赖(文件级过 file_alias_intersects 精判 / 目录级命中即依赖 /
+  祖先不覆盖旧根或清单不可得 -> 不命中, 候选面不猜)
+### direct 自有面短路(0711 修法 b, issue 26-11-13-0711, 计划 26-11-15-2340 刀2)
+- test_step_verify_direct_no_alias_finalizes: direct 收尾窗组外落点(前缀/等值)不再悬挂
+  chain_deps, 核验过即收尾(direct 无别名无链可删); 对照: dir 形态同落点仍悬挂
 ### 删链门反馈面文案分型(R5(2), 计划 26-11-13-0448 §03 R5)
 - test_chain_deps_text_form_aware_wording: 文件级 job 文案随 R2 语义改措辞「N 个种子的文件
   与别名链接重叠」+ 出路带立即收尾加速器(依赖清零即自动收尾); 目录级/direct 保留现行
@@ -51,6 +59,10 @@
 - test_qbapi_delete_guard_allows_probe_tagged_seeds: 探测种子(tag 含 TAG_PROBE)落在活动别名
   根下也放行(评审 #5, 自造探针非组成员数据; 拦截会让探测清理 deleteFiles 恒失败)/ 普通种子
   同根仍拦
+- test_qbapi_delete_guard_ancestor_savepath_grid: 0535 祖先方向候选格 D16 半边 —— 组外
+  种子 save_path 为登记根严格祖先且内容根恰覆盖 -> 带文件删除拦(文件级相交/目录级即拦/
+  异名不相交精判放行/清单不可得该格不命中候选面不猜/祖先不覆盖不拦), 候选面单点复用
+  chain_gate_hits
 ### WebUI 删除命令面(第二条路径, 经命令队列全链)
 - test_webui_delete_blocked_receipt_single_and_group: delete_torrent / delete_group 撞拦截 →
   error 回执带解法文案(R5(1) 成员出路句: 仅删种子 + 组账收缩)+ qB 客户端未收到 delete;
@@ -147,7 +159,13 @@ def _rewritten_env(tmp_path, members, *, extra=(), alias_paths=("R:/src/l", ), r
     if replays:
         body[rj.VERIFY_REPLAYS_KEY] = replays
     rj.write_journal(str(tmp_path), "j1", body)
-    job = _job("j1", phase=ru.PHASE_REWRITTEN, hashes=tuple(h for h, _sp in members), alias_paths=alias_paths)
+    job = _job(
+        "j1",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=tuple(h for h, _sp in members),
+        alias_paths=alias_paths,
+        alias_kind="dir"
+    )
     mod.register_job(job)
     removed = []
     mod._remove_links = lambda paths: (removed.extend(list(paths)), len(removed))[1]
@@ -277,6 +295,9 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
     - 组外 scope 内保守计数: 等值(恰等 scope)与前缀(scope 之下)双向照算(N5 双判据保留)
     - scope 外不计: 组外种子停旧根(src)兄弟目录不算依赖(T1b/E7 假依赖修)
     - 旧账 scope 缺失: 回落 job.src(保守, 与旧锚同口径)
+    - direct 自有面短路(0711 修法 b): 无别名 job 不开门(对照面)
+    (面测试 job 带 alias_kind="dir" —— 刀2 前这些用例隐式依赖「direct 也开门」的旧口径,
+    0711b 后开门前提 = 确有别名形态)
     """
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
 
@@ -285,11 +306,11 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
         return [h for h, _sp in mod._chain_gate_deps(job)]
 
     # 本组豁免 + scope 外不计: 成员停在嵌套落点(dst ⊆ scope, 豁免承重), 组外种子停旧根兄弟目录
-    job = _job("j1", src="R:/src", dst="R:/src/Show/待删", scope="R:/src/Show", hashes=("HA", "HB"))
+    job = _job("j1", src="R:/src", dst="R:/src/Show/待删", scope="R:/src/Show", hashes=("HA", "HB"), alias_kind="dir")
     assert _deps(job, [("HA", "R:/src/Show/待删"), ("HB", "R:/src/Show/待删"), ("HZ", "R:/src/停车")]) == [], \
         "成员豁免(R7)+ 组外 scope 外不计(E7 假依赖修)"
     # 组外 scope 内保守计数: 等值与前缀双向照算
-    job2 = _job("j2", src="R:/src", dst="R:/dst", scope="R:/src/Show", hashes=("HA", ))
+    job2 = _job("j2", src="R:/src", dst="R:/dst", scope="R:/src/Show", hashes=("HA", ), alias_kind="dir")
     assert _deps(job2, [("HZ", "R:/src/Show"), ("HY", r"R:\src\Show\g2")]) == ["HZ", "HY"], \
         "组外种子在作用域等值/之下仍算依赖(N5 双判据保留)"
     # 成员与组外同处 scope 内: 只有组外计入(豁免按 hash 身份, 不误伤同路径组外种子语义)
@@ -298,8 +319,11 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
     # 种子账面 save_path 恰等 job.src —— ⊄ scope, 只按 scope 判会漏计(D16 契约对齐)
     assert _deps(job2, [("HZ", "R:/src")]) == ["HZ"], "组外 save_path 恰等旧根仍算依赖(equal_root 等值面)"
     # 旧账 scope 缺失: 回落 job.src(保守)
-    legacy = _job("j3", src="R:/src", dst="R:/dst", scope="", hashes=("HA", ))
+    legacy = _job("j3", src="R:/src", dst="R:/dst", scope="", hashes=("HA", ), alias_kind="dir")
     assert _deps(legacy, [("HZ", "R:/src/停车")]) == ["HZ"], "scope 缺失回落 src(旧账兼容)"
+    # direct 自有面短路(0711 修法 b): 无别名 job 组外落点不开门(旧口径恒悬挂 REASON_CHAIN_DEPS)
+    direct = _job("j4", src="R:/src", dst="R:/dst", scope="R:/src", hashes=("HA", ), alias_kind="")
+    assert _deps(direct, [("HZ", "R:/src"), ("HY", r"R:\src\deep")]) == [], "direct 自有面短路(0711b)"
 
 
 def test_chain_gate_deps_file_kind_intersection_verdict(tmp_path):
@@ -342,9 +366,84 @@ def test_chain_gate_deps_file_kind_intersection_verdict(tmp_path):
     djob = _job("j2", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="dir", scope="R:/src/Show")
     assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "目录级命中即依赖"
     assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src", ("other.bin", )))]) == ["HZ"], "目录级等值面保留"
-    # direct(无别名)零变化(issue 26-11-13-0711): 命中面照算, 不走交集判据
+    # direct 自有面短路(0711 修法 b, 计划 26-11-15-2340 刀2): 无别名 job 无链可删,
+    # 组外落点(等值/前缀)不再顶进依赖集 —— 旧口径下该形态收尾恒悬挂 REASON_CHAIN_DEPS
+    # 且文案「维持别名」失实(direct 根本没有别名); 放行扩张如实钉扎(R4)
     direct = _job("j3", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="", scope="R:/src/Show")
-    assert _deps(direct, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "direct 行为零变化"
+    assert _deps(direct, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == [], "direct 自有面短路(0711b)"
+
+
+def test_chain_gate_deps_ancestor_savepath_grid(tmp_path):
+    """0535 祖先方向候选格(issue 26-11-13-0535, 计划 26-11-15-2340 刀2): 组外种子
+    save_path 为 job.src 的严格祖先且其内容根恰覆盖旧根 -> 计入依赖(修复前该形态
+    前缀/等值两头都不命中, 删链门误清零 -> 收尾删别名断粮)
+
+    - 文件级: 祖先覆盖 + 清单撞链接 -> 依赖(交集精判复用 file_alias_intersects);
+    - 文件级: 祖先覆盖但清单与链接不相交(异名) -> 豁免(不造新谓词, 精判不放宽);
+    - 目录级: 祖先覆盖 -> 依赖(数据落 junction 树, 命中即依赖);
+    - 祖先但内容根不覆盖旧根(name 换了) -> 不命中(候选面不扩面到不相关祖先);
+    - 祖先但文件清单不可得 -> 该格不命中(候选面不猜; 候选面外形态与旧口径一致)。
+    """
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+
+    def _deps(job, records):
+        mod._ctx.store = types.SimpleNamespace(by_hash={r.hash: r for r in records}, relocating_hashes=set())
+        return [h for h, _sp in mod._chain_gate_deps(job)]
+
+    # 0535 issue 原形: 组 src = R:/Download/PTing, 组外种子 save_path = R:/Download、
+    # name = PTing -> 内容根 = R:/Download/PTing == src(祖先方向, 生产布局真实可达)
+    fjob = _job(
+        "j1",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=("HA", ),
+        alias_kind="file",
+        alias_paths=("R:/Download/PTing/e00.mkv", ),
+        src="R:/Download/PTing",
+        scope="R:/Download/PTing",
+    )
+    ancestor_hit = _rec_files("HZ", "R:/Download", ("PTing/e00.mkv", ))  # 清单撞链接 -> 相交
+    ancestor_miss = _rec_files("HY", "R:/Download", ("PTing/other.bin", ))  # 覆盖但异名 -> 不相交
+    assert _deps(fjob, [ancestor_hit]) == ["HZ"], "祖先方向依赖(文件级相交)必须计入(0535 红->绿)"
+    assert _deps(fjob, [ancestor_miss]) == [], "祖先覆盖但异名不相交: 精判豁免(不放宽)"
+    # 目录级: 祖先覆盖 -> 依赖(数据落 junction 树)
+    djob = _job(
+        "j2",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=("HA", ),
+        alias_kind="dir",
+        src="R:/Download/PTing",
+        scope="R:/Download/PTing"
+    )
+    assert _deps(djob, [_rec_files("HZ", "R:/Download", ("PTing/e00.mkv", ))]) == ["HZ"], "祖先方向依赖(目录级)"
+    # 祖先但内容根不覆盖旧根: 候选面不收(不扩面到不相关祖先)
+    assert _deps(fjob, [_rec_files("HZ", "R:/Download", ("OtherStuff/e00.mkv", ))]) == [], \
+        "祖先不覆盖旧根 = 不相关, 不命中"
+    # 祖先但清单不可得(空表): 内容根不可判, 该格不命中(候选面不猜)
+    assert _deps(fjob, [_rec_files("HZ", "R:/Download", ())]) == [], "清单不可得: 候选面不猜, 该格不命中"
+
+
+def test_step_verify_direct_no_alias_finalizes(tmp_path):
+    """0711 修法 b(issue 26-11-13-0711, 计划 26-11-15-2340 刀2): direct(无别名)收尾窗
+    组外种子落旧根前缀/等值面 -> 删链门自有面短路, 核验通过即收尾 —— 修复前该形态
+    deps>0 恒悬挂 REASON_CHAIN_DEPS 且文案「维持别名等依赖消失」失实(direct 无别名)
+    (R4 放行扩张如实钉扎; direct + 继承条目带别名时继承面照开门, 见 chain_gate_deps 用例)
+    """
+    mod, job, rt, removed = _rewritten_env(tmp_path, [("HA", "R:/dst")], alias_paths=())
+    job = mod.get_job("j1")
+    mod._set_job(replace(job, alias_kind="", alias_paths=(), scope="R:/src"))
+    mod._ctx.store.by_hash["HZ"] = _rec("HZ", r"R:\src\deep")  # 组外种子落旧根前缀(0711 注入形态)
+    mod._ctx.store.by_hash["HZ2"] = _rec("HZ2", "R:/src")  # 组外种子恰等旧根(等值面)
+    mod._step_verify(mod.get_job("j1"), rt)
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_DONE and saved.reason == ru.REASON_FINALIZED, \
+        ("direct 无别名: 核验过即收尾, 不悬挂 chain_deps", saved.phase, saved.reason)
+    assert removed == [], "direct 无别名无链可删"
+    # 对照: 同落点在 dir 形态下仍悬挂(开门前提 = 确有别名)
+    mod2, job2, rt2, removed2 = _rewritten_env(tmp_path / "d2", [("HA", "R:/dst")])
+    mod2._ctx.store.by_hash["HZ"] = _rec("HZ", r"R:\src\deep")
+    mod2._step_verify(mod2.get_job("j1"), rt2)
+    saved2 = mod2.get_job("j1")
+    assert saved2.reason == ru.REASON_CHAIN_DEPS and removed2 == [], (saved2.reason, removed2)
 
 
 def test_chain_deps_text_form_aware_wording(tmp_path):
@@ -429,6 +528,46 @@ def test_qbapi_delete_guard_blocks_delete_files():
     api.torrents_delete(torrent_hashes=["HA"], delete_files=False)  # 纯删除 = 去文件化出口
     assert ("delete", False) in client.calls
     assert api.store.removed == ["HZ", "HA"], api.store.removed
+
+
+def test_qbapi_delete_guard_ancestor_savepath_grid():
+    """0535 祖先方向候选格 D16 半边(issue 26-11-13-0535, 计划 26-11-15-2340 刀2):
+    组外种子 save_path 为登记根严格祖先且内容根恰覆盖登记根 -> 带文件删除拦(修复前
+    该形态两头不命中不拦 = D16 空窗, deleteFiles 穿链接删 dst 数据); verdict 与既有
+    形态分流同构 —— 文件级过 file_alias_intersects 精判(异名不相交放行, 不放宽) /
+    目录级祖先覆盖即拦(junction 树) / 清单不可得该格不命中(候选面不猜) / 祖先不覆盖
+    登记根(name 换了)不拦。候选面单点复用 chain_gate_hits, 不造第二份祖先口径。"""
+    # 红->绿主行(0535 issue 原形): 登记根 R:/Download/PTing, HZ save_path = R:/Download
+    # 且 name=PTing -> 内容根恰覆盖登记根, 清单 PTing/e00.mkv 撞链接
+    records = {"HZ": _rec_files("HZ", "R:/Download", ("PTing/e00.mkv", ))}
+    api, client = _guard_api(records, {"R:/Download/PTing": ("j1", "file", ("R:/Download/PTing/e00.mkv", ))})
+    with pytest.raises(DeleteBlockedError) as ei:
+        api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
+    assert [b[0] for b in ei.value.blocked] == ["HZ"] and ei.value.blocked[0][2] == "j1", ei.value.blocked
+    assert not any(c[0] == "delete" for c in client.calls), "祖先方向依赖的带文件删除必须拦(0535 红->绿)"
+    # 文件级精判豁免面: 祖先覆盖但清单与链接不相交(异名) -> 放行(不因祖先格放宽)
+    client.calls.clear()
+    api.store._records["HY"] = _rec_files("HY", "R:/Download", ("PTing/other.bin", ))
+    api.torrents_delete(torrent_hashes=["HY"], delete_files=True)
+    assert ("delete", True) in client.calls, "祖先覆盖但异名不相交: 精判放行(R3 契约)"
+    # 目录级: 祖先覆盖即拦(数据落 junction 树)
+    client.calls.clear()
+    api.store.relocating_alias_roots = {"R:/Download/PTing": ("j2", "dir", ())}
+    with pytest.raises(DeleteBlockedError):
+        api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
+    assert not any(c[0] == "delete" for c in client.calls)
+    # 清单不可得(空表): 内容根不可判 -> 该格不命中, 候选面不猜(放行; 精判面保守拦只
+    # 作用于路径面候选, 祖先格无清单即无覆盖事实)
+    client.calls.clear()
+    api.store.relocating_alias_roots = {"R:/Download/PTing": ("j1", "file", ("R:/Download/PTing/e00.mkv", ))}
+    api.store._records["HN"] = _rec_files("HN", "R:/Download", ())
+    api.torrents_delete(torrent_hashes=["HN"], delete_files=True)
+    assert ("delete", True) in client.calls, "清单不可得: 祖先格不命中(候选面不猜)"
+    # 祖先但内容根不覆盖登记根: 不相关祖先不拦
+    client.calls.clear()
+    api.store._records["HM"] = _rec_files("HM", "R:/Download", ("OtherStuff/x.bin", ))
+    api.torrents_delete(torrent_hashes=["HM"], delete_files=True)
+    assert ("delete", True) in client.calls, "祖先不覆盖登记根 = 不相关, 不拦"
 
 
 def test_qbapi_delete_guard_message_member_vs_out_group():

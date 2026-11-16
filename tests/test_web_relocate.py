@@ -373,7 +373,10 @@ def test_relocate_module_classify_entries_per_record_error(tmp_path, monkeypatch
 
     def flaky(p):
         calls["n"] += 1
-        if calls["n"] == 3:  # 第 1/2 次是 src_norm/cr_norm, 第 3 次落在 HC 记录上(own 已提前跳过)
+        # 第 1 次 = save_path 归一, 第 2/3 次 = _rel_under 内 content_root/save_path 归一
+        # (刀2 收编 ru 单点后的调用拓扑), 第 4 次落在 HC 记录上(own 已提前跳过) ——
+        # 断言语义不变: 单条记录归一化抛错 -> except-continue 跳过, 其余分类不炸
+        if calls["n"] == 4:
             raise RuntimeError("boom")
         return orig(p)
 

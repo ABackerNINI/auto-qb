@@ -19,7 +19,7 @@ enabled=false(缺省)时行为为零(黄金法则 2): 路由层 403 fail-closed 
 模块侧另有一道纵深防御(relocate_precheck 内自查)。启动/热重载时的能力探测也只在
 enabled 时做 —— 开关关着却开机建删探测链接, 属于为关着的功能做副作用(R15 口径)。
 
-依赖方向: 本模块 -> infra(alias_fs/file_access/utils) + torrents + 兄弟模块**零**
+依赖方向: 本模块 -> infra(alias_fs/file_access/relocate_journal) + torrents + 兄弟模块**零**
 import(需要别人能力经 ctx); 决策纯函数在 relocate_units(不触盘), 本文件只收集事实。
 """
 import copy
@@ -31,7 +31,7 @@ from types import MappingProxyType
 from typing import Optional
 
 from ...config.models import bt_backup_path_of
-from ...infra import relocate_journal, utils
+from ...infra import relocate_journal
 from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from . import relocate_units as ru
@@ -324,14 +324,14 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         改道后 dst)。找不到 = ""(孤儿改道前任, 单独转历史记录)。
         """
         hashes = {str(h) for h in (d.get("hashes") or ()) if h}
-        want = utils.path_normalize(str(d.get("dst") or ""))
+        want = ru._norm(str(d.get("dst") or ""), fold_case=False)
         best, best_key = "", None
         for oid, od in jobs_box.items():
             if oid == jid or not isinstance(od, dict):
                 continue
             if not (hashes & {str(h) for h in (od.get("hashes") or ()) if h}):
                 continue
-            if utils.path_normalize(str(od.get("dst") or "")) != want:
+            if ru._norm(str(od.get("dst") or ""), fold_case=False) != want:
                 continue
             terminal = str(od.get("phase") or "") in ru.TERMINAL_PHASES
             key = (not terminal, float(od.get("updated_at") or 0.0))
@@ -462,8 +462,8 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             s
             for s in dict.fromkeys((*(spec.get("extra_srcs") or ()), *(need.get("srcs") or ()))) if str(s or "").strip()
         ]
-        own_src = utils.path_normalize(str(spec.get("src") or ""))
-        srcs = [s for s in srcs if utils.path_normalize(str(s)) != own_src]
+        own_src = ru._norm(str(spec.get("src") or ""), fold_case=False)
+        srcs = [s for s in srcs if ru._norm(str(s), fold_case=False) != own_src]
         if srcs and srcs != list(spec.get("extra_srcs") or ()):
             spec["extra_srcs"] = srcs
             added = True

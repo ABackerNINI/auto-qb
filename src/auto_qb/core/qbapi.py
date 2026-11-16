@@ -32,7 +32,7 @@ from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
 from . import curves
 from .modules.relocate_probe import TAG_PROBE
-from .modules.relocate_units import file_alias_intersects, under_alias_root
+from .modules.relocate_units import chain_gate_hits, file_alias_intersects
 
 logger = logging.getLogger(__name__)
 
@@ -219,8 +219,9 @@ class QbApi:
         R5(1))—— 目录别名存续期 deleteFiles
         会穿目录 junction(误删新位置共享数据, N5 实测)全量拦; 文件级别名按「文件清单 x
         alias_paths 交集」精判(相交 = 拦 / 不相交 = 组外异名放行)。两条删除路径(WebUI
-        删除命令与内部删种流程)都经本入口, 候选面判据单点 = relocate_units.under_alias_root
-        (等值 OR 前缀); 活动别名根集来自 relocate 模块维护的 store.relocating_alias_roots
+        删除命令与内部删种流程)都经本入口, 候选面判据单点 = relocate_units.chain_gate_hits
+        (等值 OR 前缀 + 0535 祖先方向内容根覆盖格, 与删链门共用同一候选面单点);
+        活动别名根集来自 relocate 模块维护的 store.relocating_alias_roots
         (非终态且确有别名记录的 job)。
         例外(收口评审 #5): tag 含探测标签(TAG_PROBE)的种子放行 —— 自造探针非组成员
         数据, 拦截会让探测清理的 deleteFiles 永远失败(探针滞留, 见 _relocate_delete_blocked)。
@@ -239,10 +240,14 @@ class QbApi:
             self.store.remove_torrent(h)
 
     def _relocate_delete_blocked(self, hashes: List[str]) -> List[tuple]:
-        """D16 拦截判定: 待删种子里位于活动别名根(等值或之下)的明细(R3 形态感知 verdict,
-        计划 26-11-13-0448 §03 R3, D4/D6)
+        """D16 拦截判定: 待删种子里位于活动别名根(等值/之下/祖先覆盖)的明细(R3 形态感知
+        verdict, 计划 26-11-13-0448 §03 R3, D4/D6; 0535 祖先格计划 26-11-15-2340 刀2)
 
-        候选面不变: save_path 位于登记根(等值 OR 前缀, under_alias_root 单点)才进判定;
+        候选面单点复用 chain_gate_hits(与删链门同一份, issue 26-11-13-0535): save_path
+        位于登记根(等值 OR 前缀, under_alias_root 判据)或为登记根严格祖先且内容根恰覆盖
+        登记根(content_root_of 口径)才进判定 —— 祖先格取数只对严格祖先形态发生(走
+        _relocate_file_names 既有惰性缓存单点), 清单不可得该格不命中(候选面不猜; 精判面
+        的「宁拦勿漏」契约在下方 file_alias_intersects);
         verdict 按别名形态分流:
         - 文件级(alias_kind="file"): 「文件清单 x job.alias_paths 交集」谓词精判
           (relocate_units.file_alias_intersects 单点)—— 相交(成员身份面 / 同名撞链接根,
@@ -277,7 +282,13 @@ class QbApi:
             if TAG_PROBE in (getattr(rec, "tags_set", None) or frozenset()):
                 continue  # 自造探针: 不在 D16 拦截面内(见 docstring)
             for raw_root, entry in roots.items():
-                if under_alias_root(sp, (raw_root, )) is None:
+                # 候选面单点(chain_gate_hits, 删链门共用): 等值 OR 前缀 + 0535 祖先格
+                # (save_path 为登记根严格祖先且内容根恰覆盖登记根); files_of 只对严格
+                # 祖先形态被调用(取数走 _relocate_file_names 惰性缓存单点), 清单不可得
+                # 该格不命中 —— 候选面不猜。
+                if sp not in chain_gate_hits(
+                    [sp], raw_root, equal_root=raw_root, files_of=lambda _p: self._relocate_file_names(rec)
+                ):
                     continue
                 if isinstance(entry, tuple):
                     job_id, kind, alias_paths = entry

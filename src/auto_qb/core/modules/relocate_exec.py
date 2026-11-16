@@ -13,7 +13,7 @@ from . import relocate_proof as rp
 from . import relocate_units as ru
 from .relocate_probe import probe_fingerprint, run_probe
 from ...torrents import TorrentRecord
-from .relocate_units import GroupFacts, RelocateJob, evaluate_group
+from .relocate_units import GroupFacts, RelocateJob, evaluate_group_unit
 from .relocate_common import _LINK_CHUNK, _native, logger
 
 _DAEMON_MODULE = "auto_qb.tools.recycle_daemon"  # S3 回收 daemon 拉起目标(与 _spawn 同款 detached)
@@ -75,7 +75,7 @@ class ExecMixin:
         """
         rt.pop("recover", None)
         moving = "moving" in str(getattr(mover, "state", "") or "").lower()
-        at_dst = self._norm(getattr(mover, "save_path", "") or "") == self._norm(job.dst)
+        at_dst = ru.at_dst(getattr(mover, "save_path", "") or "", job.dst, fold_case=False)
         verdict = ru.recover_exec_phase(moving, at_dst, self._dst_size(job) > 0)
         if verdict == ru.RECOVER_STALLED and not job.move_issued:
             rt["issue"] = True
@@ -607,10 +607,14 @@ class ExecMixin:
         logger.info(f"relocate | job {job.job_id}: 单成员组迁移完成(qB 自搬, 无需别名)")
 
     def _scope_rel(self, job: RelocateJob) -> str:
-        """内容根相对 src 的段(目录别名的链接位置; 平铺 = "")"""
+        """内容根相对 src 的段(目录别名的链接位置; 平铺 = "")
+
+        前缀切片收编于 ru._rel_under 单点(刀2: 裸 startswith 口径收编; 尾段按执行侧
+        词法口径 fold_case=False, 与旧裸切片一致 —— 输入为建账 content_root_of 词法形)。
+        """
         sp = job.src.replace("\\", "/").rstrip("/")
         scope = job.scope.replace("\\", "/").rstrip("/")
-        return scope[len(sp):].lstrip("/") if scope.startswith(sp + "/") else ""
+        return ru._rel_under(scope, sp, fold_case=False) or ""
 
     # ---------- S1a 单活任务模型: 前任认领与锚点(计划 26-11-15-2340 §03.2 D4/D5) ----------
 
@@ -839,16 +843,8 @@ class ExecMixin:
         state["pos"] = pos
         return pos >= len(links)
 
-    def _rel_under(self, root: str, path: str) -> Optional[str]:
-        """path 相对 root 的段(重定向目标换算); 不在根下返回 None(账不自洽, 交人处理)"""
-        r, p = self._norm(root), self._norm(path)
-        if p == r:
-            return ""
-        if p.startswith(r + "/"):
-            return p[len(r) + 1:]
-        return None
-
     # ---------- P6 对账: journal 合并 + 对账表处置 ----------
+    # (_rel_under 旧实现已收编于 ru._rel_under 单点, 委托形见类尾 _norm 旁)
 
     def _qb_up(self) -> bool:
         """「qB 在?」= 连得上(三证之一); 结果缓存 10s, 免得每 tick 一次请求"""
@@ -868,10 +864,14 @@ class ExecMixin:
         return up
 
     def _all_at_dst(self, job: RelocateJob) -> bool:
-        """全组成员是否都已在目标位置(核验的充分证据; 改写生效+qB 重启加载后成立)"""
+        """全组成员是否都已在目标位置(核验的充分证据; 改写生效+qB 重启加载后成立)
+
+        判定本体收编于 ru.all_at_dst/ru.at_dst 单点(刀2: 到位判定并一, 第三口径
+        utils.path_normalize 直用点退役); 本方法只剩成员取数(rec 缺席 = False)。"""
+        store = self._ctx.store.by_hash
         for h in job.hashes:
-            rec = self._ctx.store.by_hash.get(h)
-            if rec is None or utils.path_normalize(rec.save_path) != utils.path_normalize(job.dst):
+            rec = store.get(h)
+            if rec is None or not ru.at_dst(getattr(rec, "save_path", "") or "", job.dst, fold_case=False):
                 return False
         return True
 
@@ -1184,9 +1184,9 @@ class ExecMixin:
         self._finalize_verified(job)
 
     def _member_at_dst(self, h: str, job: RelocateJob) -> bool:
-        """单成员核验: 在客户端且 save_path == dst(等值比较)"""
+        """单成员核验: 在客户端且 save_path == dst(等值比较; 判定本体 ru.at_dst 单点, 刀2)"""
         rec = self._ctx.store.by_hash.get(h)
-        return rec is not None and self._norm(getattr(rec, "save_path", "") or "") == self._norm(job.dst)
+        return rec is not None and ru.at_dst(getattr(rec, "save_path", "") or "", job.dst, fold_case=False)
 
     def _verify_member_state(self, h: str, job: RelocateJob) -> str:
         """核验未过的成员状态描述(文案面: 不在客户端 / 仍在旧路径)"""
@@ -1240,14 +1240,23 @@ class ExecMixin:
         落进作用域的组外种子账面 save_path 恰等 job.src —— 只按 scope 前缀判会漏计(D16
         契约对齐, 误放删链 = 该种子断粮)。
         形态感知 verdict(R2, 计划 26-11-13-0448 §03 R2, D4): chain_gate_hits 命中面只是
-        **候选**(scope 前缀 + src 等值面预过滤, 便宜, files API 只对候选取数); 文件级
-        job(alias_kind="file")的最终判定换「文件清单 x job.alias_paths 交集」谓词
-        (ru.file_alias_intersects 单点)—— 相交 = 依赖, 不相交(组外异名, 数据落原盘真实
+        **候选**(scope 前缀 + src 等值面 + 0535 祖先格预过滤, 便宜, files API 只对候选
+        取数); 文件级 job(alias_kind="file")的最终判定换「文件清单 x job.alias_paths 交集」
+        谓词(ru.file_alias_intersects 单点)—— 相交 = 依赖, 不相交(组外异名, 数据落原盘真实
         目录不经别名) = 豁免, 清单不可得(取数失败/空表/client 缺席) = 保守计依赖(宁拦
         勿漏, E8 口径); 取数走 PlanMixin._file_map 既有缓存单点(TorrentRecord.files 惰性
         缓存; 本类与 PlanMixin 同属 RelocateModule 的 MRO, self._file_map 即该方法本体,
-        无第二份取数口径)。目录级与 direct(无别名)维持命中即依赖原样
-        (direct 判据面零变化 —— issue 26-11-13-0711)。
+        无第二份取数口径)。目录级维持命中即依赖原样。
+        direct 自有面短路(0711 修法 b, issue 26-11-13-0711 §06; 计划 26-11-15-2340 刀2):
+        alias_kind 为空(单成员组直搬, 无别名)即无链可删, deps 判据对 direct 无意义 ——
+        旧口径下组外种子落旧根前缀/等值面会把 direct 收尾恒悬挂 REASON_CHAIN_DEPS, 文案
+        「维持别名等依赖消失」失实(direct 根本没有别名)。direct 无重定向、无 D16 登记
+        (alias_roots_of 滤 alias_kind 空), 组外落点不构成数据 hazard —— 短路是按既有
+        issue 口径的修复(R4 放行扩张如实记录, 非静默放宽); 有别名形态(dir/file)与
+        继承条目(前任的门)不受影响。
+        0535 祖先方向候选格(issue 26-11-13-0535): chain_gate_hits 经 files_of 取数回调
+        启用祖先格(组外种子 save_path 为旧根严格祖先且内容根恰覆盖旧根); 文件级命中
+        照走交集精判, 目录级命中即依赖(数据落 junction 树)。
         单活任务模型(D4)追加**继承面**: 接管的前任作用域(移交条目)各自作为独立的门
         扫一遍(前任收官为历史后不再有自己的门)—— 旧根上的组外种子/未改写成员账面
         同样是依赖, 依赖清零前移交别名不删(前任的门由活任务承接)。
@@ -1255,14 +1264,32 @@ class ExecMixin:
         members = set(job.hashes)
         records = list(self._ctx.store.by_hash.values())
         save_paths = [getattr(r, "save_path", "") or "" for r in records]
-        surfaces = [(job.scope or job.src, job.src, job.alias_kind, job.alias_paths)]
-        surfaces += [(e.scope or e.src, e.src, e.alias_kind, e.alias_paths) for e in job.inherited]
+        # direct 自有面短路(0711b): 自有面只在确有别名形态时开门; 继承条目同滤
+        # (无别名条目同样无链可删, 别名形态缺失 = 直搬前任, 不开门)。
+        surfaces = []
+        if job.alias_kind:
+            surfaces.append((job.scope or job.src, job.src, job.alias_kind, job.alias_paths))
+        surfaces += [(e.scope or e.src, e.src, e.alias_kind, e.alias_paths) for e in job.inherited if e.alias_kind]
         api = getattr(self._ctx, "api", None)
         client = getattr(api, "client", None) if api is not None else None
+        # 0535 祖先格取数回调: 只对「save_path 为旧根严格祖先」的候选被 chain_gate_hits
+        # 调用(取数走 _file_map 缓存单点, 开销有界); 同 save_path 多记录取首条(候选面
+        # 只判内容根覆盖形态, 同路径成员身份豁免在下方按 hash 面)。
+        rec_by_sp = {}
+        for r, sp in zip(records, save_paths):
+            if sp and sp not in rec_by_sp:
+                rec_by_sp[sp] = r
+
+        def _ancestor_files_of(sp: str) -> list:
+            r = rec_by_sp.get(sp)
+            if r is None:
+                return []
+            return list(self._file_map(r, client).keys())
+
         deps = []
         seen = set()
         for anchor, equal_root, kind, alias_paths in surfaces:
-            hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=equal_root))
+            hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=equal_root, files_of=_ancestor_files_of))
             if not hits:
                 continue
             file_job = kind == "file"
@@ -1563,7 +1590,7 @@ class ExecMixin:
                     }
                 )
                 continue
-            if all(self._norm(r.save_path) == self._norm(target) for r in records):
+            if ru.all_at_dst([getattr(r, "save_path", "") or "" for r in records], target, fold_case=False):
                 items.append(
                     {
                         "hashes": hashes,
@@ -1586,21 +1613,21 @@ class ExecMixin:
                 items.append(deployment)
                 continue
             facts = self._group_facts(records, target, client)
-            verdict = evaluate_group(facts)
+            verdict, unit = evaluate_group_unit(facts)
             if verdict["cls"] == ru.CLS_BLOCKED:
                 items.append({**verdict, "cls": "blocked"})
                 continue
             if verdict["cls"] == ru.CLS_CONFIRM and not confirm:
                 items.append({**verdict, "cls": "confirm"})
                 continue
-            if self._norm(target) == self._norm(records[0].save_path):
+            if ru.at_dst(target, records[0].save_path, fold_case=False):
                 items.append({**verdict, "cls": "skip", "notes": list(verdict["notes"]) + ["已在目标位置(幂等): 未发起迁移"]})
                 continue
             gate = self._ensure_probe(records, facts, verdict)
             if gate is not None:
                 items.append(gate)
                 continue
-            items.append(self._start_job(records, target, facts, verdict, client, origin))
+            items.append(self._start_job(records, target, facts, verdict, client, origin, unit=unit))
         logger.info(f"relocate | 迁移执行({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
 
@@ -1767,13 +1794,22 @@ class ExecMixin:
         facts: GroupFacts,
         verdict: dict,
         client: Any,
-        origin: str = "unknown"
+        origin: str = "unknown",
+        unit: Optional[ru.RelocateUnitPlan] = None
     ) -> dict:
         """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)
 
         S5 链式再迁移(D15): src 取**搬迁锚点根**(mover 账面经活跃 job 作用域解析到
         物理根, _physical_anchor), mover 优先选账面已在锚点根的成员(免经别名搬迁留下
         硬链接孪生)—— 常规首迁两者都恒等于 mover 账面, 零行为差。
+
+        unit = evaluate_group_unit 的 plan() 第一算结果(计划 26-11-15-2340 刀2/A0b:
+        同一次 execute 消除 plan() 双算)。复用前提: 搬迁锚点根与形态判定所用账面根
+        (facts.save_path)**字面同串**(评审 minor-2: plan() 长路径校正按原串长度计,
+        归一等值不等于长度等值, 仅差内部 // 的词法分叉也保留第二算)—— 链式再迁移锚点
+        解析到前任 dst 时两者分叉, 路径长度校正(longest/content_root vs link_path_limit)
+        须按**物理根**重算, 此时保留第二算; unit=None(幂等早退支未产出形态)回落自算
+        —— direct 幂等路径不回退。
         """
         mover = records[0]
         src = self._physical_anchor(mover.save_path, facts.files)
@@ -1864,19 +1900,25 @@ class ExecMixin:
                         }
                     ],
             }
-        unit = ru.plan(
-            src,
-            [n for n, _s in facts.files],
-            facts.threshold,
-            facts.hard_max,
-            multi_member=len(records) > 1,
-            content_root_exclusive=facts.content_root_exclusive,
-            file_link_kind=facts.file_link_kind,
-            file_link_error=facts.file_link_error,
-            dir_link_kind=facts.dir_link_kind,
-            dir_link_error=facts.dir_link_error,
-            link_path_limit=facts.link_path_limit,
-        )
+        if unit is None or src != facts.save_path:
+            # 第二算(仅在锚点分叉或第一算缺席时): 链式再迁移的锚点根 != 账面根, 形态
+            # 判定(路径长度校正/内容根)必须按物理根重算 —— 双算消除只覆盖**字面同串**
+            # 路径(常规首迁): plan() 的长路径校正按原串长度计(_join 不压缩冗余斜杠),
+            # 归一等值(^.at_dst)不等于长度等值 —— 评审 minor-2: 复用条件收紧为字面比较,
+            # 一切词法分叉(仅差内部 // 也算)保留第二算, 260 边界判定与旧口径逐字符守恒。
+            unit = ru.plan(
+                src,
+                [n for n, _s in facts.files],
+                facts.threshold,
+                facts.hard_max,
+                multi_member=len(records) > 1,
+                content_root_exclusive=facts.content_root_exclusive,
+                file_link_kind=facts.file_link_kind,
+                file_link_error=facts.file_link_error,
+                dir_link_kind=facts.dir_link_kind,
+                dir_link_error=facts.dir_link_error,
+                link_path_limit=facts.link_path_limit,
+            )
         if unit.form == ru.FORM_REJECT:
             return {**verdict, "cls": "blocked", "reasons": [{"gate": ru.GATE_FORM, "text": unit.reason}]}
         scope = ru.content_root_of(src, [n for n, _s in facts.files])
@@ -2281,7 +2323,17 @@ class ExecMixin:
 
     @staticmethod
     def _norm(path: str) -> str:
-        return utils.path_normalize(path or "")
+        """执行侧等值归一: 单点 ru._norm 的不折叠口径(计划 26-11-15-2340 刀2/I5, 显式
+        传 fold_case=False)—— 本方法只是实参钉扎的委托, 归一实现全仓仅 ru._norm 一份"""
+        return ru._norm(path, fold_case=False)
+
+    def _rel_under(self, root: str, path: str) -> Optional[str]:
+        """path 相对 root 的段(重定向目标换算); 不在根下返回 None(账不自洽, 交人处理)
+
+        判定本体收编于 ru._rel_under 单点(刀2: 与 units 同名双实现合一); 实参序保持
+        本类旧形(root 在前, 既有调用/测试面不翻), 口径 = 执行侧 fold_case=False。
+        """
+        return ru._rel_under(path, root, fold_case=False)
 
     @staticmethod
     def _receipt(hashes: Iterable[str], target: str, cls: str, gate: str, text: str) -> dict:

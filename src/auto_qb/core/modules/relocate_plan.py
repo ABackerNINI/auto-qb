@@ -316,7 +316,9 @@ class PlanMixin:
             repr_label = getattr(rec, "log_repr", None) or repr(rec)
             logger.warning(f"relocate | 读取文件列表失败({repr_label}): {e}")
             return {}
-        return {utils.path_normalize(f.name): f.size for f in files}
+        # 归一走 ru._norm 单点不折叠口径(计划 26-11-15-2340 刀2/I5: 判定面归一单点;
+        # 键保持词法形态供组键/交集谓词消费, 与 group_key_of 分层口径一致)
+        return {ru._norm(f.name, fold_case=False): f.size for f in files}
 
     @staticmethod
     def _summ(items: List[dict]) -> str:
@@ -344,7 +346,7 @@ class PlanMixin:
         qb_temp: List[Any] = []  # .!qB 未落定收集面(顶层扫描 + 深层孪生双源; 归属分类见下方 listing 块)
         try:
             unwanted = {
-                utils.path_normalize(str(f.name))
+                ru._norm(str(f.name), fold_case=False)  # 归一单点不折叠口径(刀2/I5)
                 for f in mover.files(client) if getattr(f, "priority", 1) == 0
             }
         except Exception:  # noqa: BLE001 - 文件表读不到: 三态检查空转(与 _file_map 同保守口径)
@@ -494,9 +496,7 @@ class PlanMixin:
                 # 恒不等 —— 任何含大写字母的正常目录都会被误报成「目录级链接」(P7 真机
                 # 首步即撞见: 恶女目录 285 字符全大写混合)。两侧同过 normcase 再比:
                 # 比的是「真实差异」(真链接/换卷), 不是大小写。
-                if os.path.normcase(utils.path_normalize(resolved)) != os.path.normcase(
-                    utils.path_normalize(content_root)
-                ):
+                if ru._norm(resolved) != ru._norm(content_root):  # 平台折叠口径比较(刀2 单点)
                     tp_dir_note = (tp_dir_note + " " if tp_dir_note else "") + \
                         f"检测到目录级链接({content_root} -> {resolved}): 组判定按解析后路径并组(第三方链接三层之第二层, D11)"
         except Exception:  # noqa: BLE001 - 容器侧 realpath 词法退化, 无结论不加 note
@@ -644,18 +644,20 @@ class PlanMixin:
         """成员文件表换算到内容根粒度((相对 content_root 的路径, size)), B′ 比对用
 
         files 是 save_path 相对路径(qB files API 口径); 内容根 = save_path 本身(flat)
-        时原样透传, 否则剥掉内容根那一段前缀。
+        时原样透传, 否则剥掉内容根那一段前缀。前缀面/归一收编于 ru 单点(刀2: 尾段经
+        ru._rel_under, 名字归一经 ru._norm 不折叠口径 —— 保留长度切片的词法前提)。
         """
-        cr_norm = utils.path_normalize(content_root)
-        sp_norm = utils.path_normalize(save_path)
-        if cr_norm == sp_norm or not cr_norm.startswith(sp_norm + "/"):
-            return [(utils.path_normalize(name), size) for name, size in files]
-        prefix = cr_norm[len(sp_norm) + 1:]
-        return [
-            (norm[len(prefix) + 1:], size)
-            for norm, size in ((utils.path_normalize(name), size) for name, size in files)
-            if norm.startswith(prefix + "/")
-        ]
+        prefix = ru._rel_under(content_root, save_path, fold_case=False) or ""
+        out: List[Tuple[str, int]] = []
+        for name, size in files:
+            norm = ru._norm(name, fold_case=False)
+            if not prefix:
+                out.append((norm, size))  # flat(内容根 = save_path)或前缀不可判: 原样透传
+                continue
+            rel = ru._rel_under(norm, prefix, fold_case=False)
+            if rel:
+                out.append((rel, size))  # 深层成员剥内容根段; 恰等/不在该段下的散叶丢弃(与旧口径一致)
+        return out
 
     def _classify_entries(
         self, rest: List[Any], save_path: str, content_root: str, hashes: Iterable[str], store: TorrentStore,
@@ -669,18 +671,19 @@ class PlanMixin:
         if not rest:
             return [], []
         own_hashes = set(hashes)
-        src_norm = utils.path_normalize(save_path)
-        cr_norm = utils.path_normalize(content_root)
-        prefix = cr_norm[len(src_norm):].lstrip("/")  # 内容根相对 save_path 的目录段
+        src_norm = ru._norm(save_path, fold_case=False)  # 归一单点不折叠口径(刀2/I5)
+        # 内容根相对 save_path 的目录段: 前缀面收编于 ru._rel_under 单点(刀2)
+        prefix = ru._rel_under(content_root, save_path, fold_case=False) or ""
         belongs = set()
         for h, rec in store.by_hash.items():
             if h in own_hashes:
                 continue
             try:
-                if utils.path_normalize(rec.save_path) != src_norm:
+                if ru._norm(rec.save_path, fold_case=False) != src_norm:
                     continue
                 for f in self._file_map(rec, client):
-                    tail = f[len(prefix):].lstrip("/") if prefix and f.startswith(prefix + "/") else f
+                    # 相对名尾段剥离同样走 _rel_under 单点(恰等/不在该段下 = 原名透传)
+                    tail = (ru._rel_under(f, prefix, fold_case=False) or f) if prefix else f
                     top = tail.split("/", 1)[0]
                     if top in rest:
                         belongs.add(top)
