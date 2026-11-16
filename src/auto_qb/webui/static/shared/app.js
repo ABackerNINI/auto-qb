@@ -193,7 +193,8 @@ const SHOW_COLUMNS = [
 ];
 /* ---------------- 详情面板三张列表的列模型(计划 26-10-11-2106 W2) ----------------
  * 与主视图四张表**同模型**(label/tpl/sortable/locked/align 全套), 但**只共用列交互引擎, 不并身份**:
- * 抽屉表另立注册表 DRAWER_TABLE_DEFS(与 hr_status.js 的 HR_TABLE_DEFS 同法, 见计划 §07 表 D)。
+ * 抽屉表另立注册表 DRAWER_TABLE_DEFS(HR 三表的同型注册表 HR_TABLE_DEFS 已于 26-11-17-0059
+ * W1(2) E6 并入 ALL_TABLE_DEFS; 抽屉表保持独立是因列选择器/行窗口化的"页面"语义, 见下)。
  *
  * !为什么另立而不并进 TABLE_DEFS: `TABLE_PAGES = Object.keys(TABLE_DEFS)` 驱动的是"页面"语义 ——
  *   列选择器分组 / 行窗口化的 kind 分派 / 「恢复默认列宽·适应窗口宽度」两动作; 抽屉表没有视图,
@@ -357,6 +358,14 @@ const DEFAULT_HIDDEN_KEYS = new Set([
   "infohash_v2", // 信息哈希值 v2
   "completion_on", // 完成于
 ]);
+/* HR 三表注册表桥(计划 26-11-17-0059 W1(1)(2), E6 并入): 列定义/表身份单点在 hr_status.js 的
+ * HR_TABLE_DEFS(P5, 与 hrs* 方法同址), 本文件经 window.AQB_HR_TABLE_DEFS 并进全集 —— 装载序
+ * hr_status.js 先于本文件(四皮肤 manifest 同序), 生产恒有值; 空对象兜底 = node 沙箱(app.js
+ * 截断切片, 无 hr_status.js)里 ALL_TABLE_DEFS/TABLE_COLUMNS 仍可求值(AQB_DRAWER_TPL_DEFS
+ * 同款先例, columns_grid.js 消费侧同款 typeof 防御)。
+ * !常量名必须是 HR_DEFS_BRIDGE: hr_status.js 顶层已有 `const HR_TABLE_DEFS` —— 经典脚本共用
+ * 全局词法作用域, 本文件再声明同名 const 即整页 SyntaxError(顶层 const 撞名坑, columns.js 头注)。 */
+const HR_DEFS_BRIDGE = (typeof window !== "undefined" && window.AQB_HR_TABLE_DEFS) || {};
 const TABLE_COLUMNS = {
   group: GROUP_COLUMNS, detail: DETAIL_COLUMNS, torrent: TORRENT_COLUMNS, show: SHOW_COLUMNS,
   /* 变体表格体列集(26-10-12-0527): 与 DRAWER_TABLE_DEFS 同步注册(声明即事实源)。
@@ -371,6 +380,12 @@ const TABLE_COLUMNS = {
   drawerTrackerV06: DRAWER_TRACKER_V06_COLUMNS,
   drawerContentV10: DRAWER_CONTENT_V10_COLUMNS,
   drawerContentV11: DRAWER_CONTENT_V11_COLUMNS,
+  /* HR 三表列集(计划 26-11-17-0059 W1(1)(2) E6): 定义单点在 hr_status.js 的 HR_TABLE_DEFS(P5),
+   * 经上面的桥常量并入 —— columnKeys/columnDef/loadColState(遍历 ALL_TABLE_PAGES 消费)都按
+   * TABLE_COLUMNS 取列, 缺登记则并入后模块加载即 TypeError; 空集兜底同桥常量(沙箱无本文件)。 */
+  hrDetail: HR_DEFS_BRIDGE.hrDetail ? HR_DEFS_BRIDGE.hrDetail.columns : [],
+  hrWave: HR_DEFS_BRIDGE.hrWave ? HR_DEFS_BRIDGE.hrWave.columns : [],
+  hrKv: HR_DEFS_BRIDGE.hrKv ? HR_DEFS_BRIDGE.hrKv.columns : [],
 };
 const MIN_COL_PX = 56;    // 拖拽下限: 再窄列头就无法点击排序/再次拖拽了
 const MAX_FIT_PX = 520;   // 双击自适应内容的上限(超长种子名不该把某一列撑爆)
@@ -611,8 +626,9 @@ const DRAWER_TABLE_DEFS = {
   },
 };
 /* 列**交互引擎**的表 id 全集(columns.js 的列态/grid/对齐/生效宽度都按它遍历):
- * 主视图"页面" + 抽屉表。两者的差集只有一个用途 —— 见 columns.js `tableDefs` 的取法。 */
-const ALL_TABLE_DEFS = { ...TABLE_DEFS, ...DRAWER_TABLE_DEFS };
+ * 主视图"页面" + 抽屉表 + HR 三表(26-11-17-0059 W1(1)(2) E6 并入, 定义源 hr_status.js 的
+ * HR_TABLE_DEFS, 经 window 桥进来 —— 见 HR_DEFS_BRIDGE 桥常量注)。 */
+const ALL_TABLE_DEFS = { ...TABLE_DEFS, ...DRAWER_TABLE_DEFS, ...HR_DEFS_BRIDGE };
 const ALL_TABLE_PAGES = Object.keys(ALL_TABLE_DEFS);
 /* 变体表格体桥(计划 26-10-12-0527)的描述符读取口: drawer_templates.js 的桥方法按 table-id
  * 反查(注册表在模板层, 描述符在数据层, 装载序 app.js 先于 drawer_templates.js —— 经 window

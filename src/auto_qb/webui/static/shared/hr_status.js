@@ -21,10 +21,13 @@
  *   test_frontend_hr_status_fields_match_backend 闭集钉住, 不往里加新键), 方法前缀 hrsHist*。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
- * !表身份(P5, 计划 26-10-11-1722): 三张 HR 表的列定义单点在模块级 HR_TABLE_DEFS(与主视图
- *   TABLE_DEFS 同形但**独立** —— 不进 TABLE_PAGES, 否则列选择器/列对齐会多出分组); 详情表表头
- *   借表壳组件 <aq-table> 的 thead 模式渲染(一份表壳), 排序仍走本文件 hrsSetSort(D3=B: 只借壳
- *   不并引擎 —— HR 排序是逐站点独立 + 空值恒末位, 与主表不同)。
+ * !表身份(P5, 计划 26-10-11-1722; 26-11-17-0059 W1(1)(2) E6 并入): 三张 HR 表的列定义单点仍在
+ *   模块级 HR_TABLE_DEFS, 经 window.AQB_HR_TABLE_DEFS 并进 app.js 的 ALL_TABLE_DEFS(新 page 键
+ *   hrDetail/hrWave/hrKv) —— 并入即覆盖的是**枚举面**(列偏好持久化/对齐注入/选择器枚举;
+ *   交互面待 W1(3) grid 迁移, 见注册表段注), HR 分组进列选择器正是 E6 拍板的隐藏列恢复入口
+ *   (过桥门 pickerHold 暂挡, W1(3) 落地摘除; 旧口径「不进 TABLE_PAGES 防列选择器多分组」是
+ *   零交互时代的理由, 交互化后作废: 那时右键隐藏不可逆才怕多分组)。详情表表头当前仍借表壳
+ *   组件 <aq-table> 的 thead 模式渲染(迁 grid 模式 = 计划 W1(3), T2 落地)。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 
@@ -86,55 +89,90 @@ function hrsHistIsBad(r) {
   return HRS_HIST_BAD_ACTIONS.indexOf(r.action) >= 0 || r.kind === "defer";
 }
 
-/* ---------------- HR 表注册表(计划 26-10-11-1722 P5) ----------------
- * 「HR 表身份」单点: 与主视图 TABLE_DEFS 同**模型**(label + columns + features), 但**不进**
- * TABLE_DEFS —— 后者由 TABLE_PAGES = Object.keys(TABLE_DEFS) 派生, 驱动列选择器 / colAlignCss /
- * 列偏好持久化, 把 HR 表收进去会让设置页的列选择器多出三个分组(观感变化, 计划 §06 风险 9)。
- * 故 HR 表自成一张同形注册表, 加一张 HR 表 = 在此加一行 + 模板里挂调用点。
+/* ---------------- HR 表注册表(计划 26-10-11-1722 P5; 26-11-17-0059 W1(1)(2) 并入全局枚举) ----------------
+ * 「HR 表身份」单点: 与主视图 TABLE_DEFS 同**模型**(label + columns + features + 描述符字段),
+ * 本体保留在本文件(HR 列语义与 hrs* 方法同址), 经 window.AQB_HR_TABLE_DEFS 桥并进 app.js 的
+ * ALL_TABLE_DEFS(E6: 新 page 键 hrDetail/hrWave/hrKv) —— 并入分两面: **枚举面**(列偏好持久化/
+ * 对齐注入/选择器枚举/断言)按 ALL_TABLE_PAGES 遍历, 并入即覆盖(当前对 HR 面是安全空转或被
+ * 过桥门挡住); **交互面**(拖宽/拖序/右键隐藏)由 grid 表头 DOM 驱动, 待 W1(3) grid 迁移落地
+ * 才生效。HR 分组进列选择器是 E6 拍板的隐藏列恢复入口(过桥门 pickerHold 暂挡, W1(3) 摘除;
+ * 旧口径「不并防多分组」是零交互时代的理由, 已作废, 见头注)。window 桥 +
+ * app.js 侧空对象兜底 = node 沙箱(app.js 截断切片, 无本文件)里 ALL_TABLE_DEFS 仍可求值
+ * (AQB_DRAWER_TPL_DEFS 同款先例); 生产四皮肤 manifest 本文件恒先于 app.js 载入, 恒有值
+ * (装载序守阵: test_frontend_table_registry_single_point 四皮肤断言)。
+ * 加一张 HR 表 = 在此加一行 + 模板里挂调用点 + columns_computed.js 挂一对 computed。
  *
- * columns: 列定义(key/label/num 与既有表头逐字一致 —— P5 硬验收是 DOM 逐字节等价)。
+ * columns: 列定义(key/label/num 与既有表头逐字一致)。26-11-17-0059 W1(1) 起每列补 tpl(轨道串,
+ *   直接喂 DT_TABLE.layout 单点)与 align(colAlignCss 注入消费)。R1 实证拍板: HR 面在
+ *   .hr-full-modal v-show 未展开时 display:none, 窗口实测轨拿不到可用宽度(columns_persist
+ *   recomputeEffective 的 _headEl 对无盒表头返回 null), 故三表默认走 **tpl 显式宽度**(固化轨);
+ *   tpl 首切值按现网原生表观感估定, T2 迁 HTML 时按逐列保真清单手验。
  *   hrDetail 十列全带 sortable: true —— 判据 = HRS_SORT_VAL 十键全有访问器(真能排的才标);
  *   漏标 = thead 行为侧 headActivate 按 col.sortable 早退, 该列静默失去排序(issue 26-10-29-1348:
  *   曾十列全漏, 表壳却按「可排序」画箭头/挂可点类, 视觉与行为各取一半)。
- * features: 只声明差异 —— hrDetail 有 sort(排序仍走 HR 自己的 hrsSetSort 三态, D3=B: 只借壳);
+ * features: 只声明差异 —— hrDetail 有 sort(E8: 排序并入引擎 setSort = W1(4), T2 落地);
  *   hrWave / hrKv 无排序无调宽(纯展示; 波次表行数 ≤4, 计划 26-10-02-1936 §3.4)。
- * header: false = 该表无列头(kv 表是两列固定 k/v 列表, 行模型 hrsKvRows 驱动, 只登记形状)。
- * 表头渲染: hrDetail 借表壳组件 thead 模式(shared/table.js, 与主视图同一份表壳);
+ * sort: dyn 形态(排序状态进根 data 的 dtSortState 映射, 与抽屉变体表同款) —— 随并入登记,
+ *   使 grid 表头点击的 $root.setSort(key, tableId) 对 HR 面良定义(sort.js _sortKeys 读
+ *   ALL_TABLE_DEFS[id].sort, 缺描述符即 TypeError); 行消费侧仍走 hrsCompareRows/hrsSetSort,
+ *   E8(T2)切换。hrWave/hrKv 无 sortable 列, 描述符纯为 registry 良定义(点击不可达)。
+ * header: false 已删(E7, 26-11-17-0059): hrKv 补列头「项/值」, k 列 locked —— 拆散 k/v 对的
+ *   操作(隐藏 k/拖走 k)不可表达(隐藏侧 headMenuHide/toggleColumn 引擎既有守卫, 拖序侧 W2)。
+ * pickerHold: 选择器**过桥门**(评审 minor, 26-11-17): T2 前 HR 面仍由 hrsCols() 全列 + 手写
+ *   td 渲染、不消费 colHidden —— 列选择器若列出 HR 分组, 用户勾掉列纹丝不动而意图却持久化
+ *   (静默无效果面)。故三表暂不进列选择器渲染面(tableDefs computed 过滤, columns_computed.js),
+ *   W1(3) grid 迁移落地时摘除, 摘除后 HR 分组即隐藏列恢复入口(E6)。只挡选择器渲染面 ——
+ *   列偏好/对齐/持久化枚举(ALL_TABLE_PAGES 遍历面)不受影响。
+ * 表头渲染: hrDetail 当前借表壳组件 thead 模式(shared/table.js, 迁 grid = W1(3) T2);
  *   hrWave 由模板 v-for 摆列(无排序语义, 不必上组件)。 */
 const HR_TABLE_DEFS = {
   hrDetail: {
     label: "HR 明细表", features: { sort: true },
+    grid: "hrDetailGrid", cols: "visibleHrDetailCols", headRef: null, tableRef: null, window: null,
+    pickerHold: true,
+    sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
-      { key: "lane", label: "档位", sortable: true },
-      { key: "name", label: "名称", sortable: true },
-      { key: "tid", label: "tid", sortable: true },
-      { key: "uploaded_bytes", label: "上传量", num: true, sortable: true },
-      { key: "downloaded_bytes", label: "下载量", num: true, sortable: true },
-      { key: "ratio", label: "分享率", num: true, sortable: true },
-      { key: "need_seed_seconds", label: "还需做种", num: true, sortable: true },
-      { key: "done_iso", label: "完成时间", sortable: true },
-      { key: "verified_ts", label: "核实结论", sortable: true },
-      { key: "last_seen", label: "在列", sortable: true },
+      { key: "lane", label: "档位", tpl: "84px", align: "left", sortable: true },
+      { key: "name", label: "名称", tpl: "minmax(180px, 2.2fr)", align: "left", sortable: true },
+      { key: "tid", label: "tid", tpl: "minmax(110px, 1.1fr)", align: "left", sortable: true },
+      { key: "uploaded_bytes", label: "上传量", num: true, tpl: "minmax(92px, 1fr)", align: "right", sortable: true },
+      { key: "downloaded_bytes", label: "下载量", num: true, tpl: "minmax(92px, 1fr)", align: "right", sortable: true },
+      { key: "ratio", label: "分享率", num: true, tpl: "84px", align: "right", sortable: true },
+      { key: "need_seed_seconds", label: "还需做种", num: true, tpl: "minmax(96px, 1fr)", align: "right", sortable: true },
+      { key: "done_iso", label: "完成时间", tpl: "104px", align: "left", sortable: true },
+      { key: "verified_ts", label: "核实结论", tpl: "minmax(150px, 1.4fr)", align: "left", sortable: true },
+      { key: "last_seen", label: "在列", tpl: "minmax(130px, 1.2fr)", align: "left", sortable: true },
     ],
   },
   hrWave: {
     label: "HR 波次表", features: {},
+    grid: "hrWaveGrid", cols: "visibleHrWaveCols", headRef: null, tableRef: null, window: null,
+    pickerHold: true,
+    sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
-      { key: "lane", label: "档位" },
-      { key: "status", label: "状态" },
-      { key: "pages", label: "页数", num: true },
-      { key: "rows", label: "行数", num: true },
-      { key: "cutoff", label: "截至深度", num: true },
-      { key: "fail_streak", label: "连续失效", num: true },
-      { key: "count", label: "对平(声称/命中)", num: true },
-      { key: "detail", label: "说明" },
+      { key: "lane", label: "档位", tpl: "84px", align: "left" },
+      { key: "status", label: "状态", tpl: "minmax(110px, 1.2fr)", align: "left" },
+      { key: "pages", label: "页数", num: true, tpl: "72px", align: "right" },
+      { key: "rows", label: "行数", num: true, tpl: "72px", align: "right" },
+      { key: "cutoff", label: "截至深度", num: true, tpl: "minmax(96px, 1fr)", align: "right" },
+      { key: "fail_streak", label: "连续失效", num: true, tpl: "84px", align: "right" },
+      { key: "count", label: "对平(声称/命中)", num: true, tpl: "minmax(96px, 1fr)", align: "right" },
+      { key: "detail", label: "说明", tpl: "minmax(160px, 2fr)", align: "left" },
     ],
   },
   hrKv: {
-    label: "HR 诊断表", features: {}, header: false,
-    columns: [{ key: "k", label: "项" }, { key: "v", label: "值" }],
+    label: "HR 诊断表", features: {},
+    grid: "hrKvGrid", cols: "visibleHrKvCols", headRef: null, tableRef: null, window: null,
+    pickerHold: true,
+    sort: { dyn: true, defKey: "", defDir: -1 },
+    columns: [
+      { key: "k", label: "项", tpl: "minmax(104px, 0.8fr)", align: "left", locked: true },
+      { key: "v", label: "值", tpl: "minmax(260px, 2.6fr)", align: "left" },
+    ],
   },
 };
+/* 并入桥(app.js 的 ALL_TABLE_DEFS 消费; 头注与注册表段注有完整口径) */
+window.AQB_HR_TABLE_DEFS = HR_TABLE_DEFS;
 
 window.AQB_HR_STATUS = {
   data() {

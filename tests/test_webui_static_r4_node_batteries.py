@@ -47,8 +47,11 @@
   1. camelCase 产物(gridTemplateColumns)白名单恰两件(内核 assertLayout 读 / 引擎
   _renderedWidths 读), 之外零命中; table.js **不在白名单**而是双向钉死(原文提及恰 1 处 =
   契约头注文档仍在 + 掩码后零命中 = 提及确在块注释内, 代码产物零放行 —— 白名单死条目会把
-  真实旁路放行成恒绿); 2. columns_computed 每条恰 _gridTemplate 单点委托形共 13 条且 id 集
-  与 app.js ALL_TABLE_DEFS 键互对(新表漏接单点 computed 即红); 3. kebab 声明
+  真实旁路放行成恒绿); 2. columns_computed 每条恰 _gridTemplate 单点委托形共 16 条且 id 集
+  与表注册表 ALL_TABLE_DEFS 键互对(新表漏接单点 computed 即红; 26-11-17-0059 W1(1)(2) E6
+  并入翻面: HR 三表定义源在 hr_status.js 的 HR_TABLE_DEFS, 经 window.AQB_HR_TABLE_DEFS 桥
+  并进 ALL_TABLE_DEFS —— 逐 id 落 app.js 或 hr_status.js 两空格字面行之一, 桥合并/桥导出在盘,
+  不旁路第二注册表); 3. kebab 声明
   (grid-template-columns)命中表面容器(.group-head/.group-row/.group-table/.detail-head/
   .h-cell/data-table)的规则恰 = D4 例外清单 1 条(04 的 .dt04-list .group-table 两列卡片栅格),
   且 .js 侧钉「选择器与首条声明同行」惯例(命中行必自带 { —— 多行规则形即红不静默逃逸,
@@ -1932,8 +1935,13 @@ ok("[camel] table.js 原文提及恰 1 处(契约头注文档仍在)",
 ok("[camel] table.js 掩码后零命中(文档提及确在块注释内, 代码产物零放行)",
    !camByFile["shared/table.js"]);
 
-/* 2. columns_computed.js: 每条都恰是单点委托形 this._gridTemplate("<id>"), id 集与 app.js
- *    表注册表(ALL_TABLE_DEFS 键)逐一互对 —— 新表注册了却没接单点 computed / 旁路 computed 即红。 */
+/* 2. columns_computed.js: 每条都恰是单点委托形 this._gridTemplate("<id>"), id 集与表注册表
+ *    (ALL_TABLE_DEFS 键)逐一互对 —— 新表注册了却没接单点 computed / 旁路 computed 即红。
+ *    计划 26-11-17-0059 W1(1)(2) E6 并入翻面: HR 三表(hrDetail/hrWave/hrKv)的定义源在
+ *    hr_status.js 的 HR_TABLE_DEFS(P5), 经 window.AQB_HR_TABLE_DEFS 桥并进 app.js 的
+ *    ALL_TABLE_DEFS(桥常量 HR_DEFS_BRIDGE) —— computed 计数冻结值随三表注册升到 16;
+ *    id 互对口径 = 每 id 落到「app.js 两空格字面行 或 hr_status.js HR_TABLE_DEFS 字面行」
+ *    之一, 且桥合并/桥导出在盘(HR 三表经 ALL_TABLE_DEFS 走单点, 不旁路第二注册表)。 */
 const ccHits = camByFile["shared/columns_computed.js"] || [];
 const ids = [];
 for (const h of ccHits) {
@@ -1941,12 +1949,17 @@ for (const h of ccHits) {
   if (m) ids.push(m[1]);
 }
 ok("[computed] 每条都是单点委托形(实得 " + ids.length + "/" + ccHits.length + " 条)",
-   ids.length === ccHits.length && ccHits.length === 13);
+   ids.length === ccHits.length && ccHits.length === 16);
 const appSrc = fs.readFileSync(path.join(ROOT, "shared", "app.js"), "utf8");
-ok("[computed] id 集与表注册表互对(逐 id 是 ALL_TABLE_DEFS 键)",
-   ids.length === 13 && ids.every((id) => new RegExp("^  " + id + ": \{", "m").test(appSrc)));
+const hrRegSrc = fs.readFileSync(path.join(ROOT, "shared", "hr_status.js"), "utf8");
+const HR_BRIDGE_IDS = ["hrDetail", "hrWave", "hrKv"];
+ok("[computed] id 集与表注册表互对(逐 id 是 ALL_TABLE_DEFS 键; HR 三表经 window 桥并入, W1(1)(2) E6)",
+   ids.length === 16 && ids.every((id) => new RegExp("^  " + id + ": \\{", "m").test(HR_BRIDGE_IDS.indexOf(id) >= 0 ? hrRegSrc : appSrc))
+   && HR_BRIDGE_IDS.every((id) => new RegExp("^  " + id + ": \\{", "m").test(hrRegSrc))
+   && /\.\.\.HR_DEFS_BRIDGE \}/.test(appSrc)
+   && /window\.AQB_HR_TABLE_DEFS = HR_TABLE_DEFS;/.test(hrRegSrc));
 const gridKeys = appSrc.match(/grid: "\w+"/g) || [];
-ok("[app] 每表恰一对 computed(grid: 恰 13 处, 实得 " + gridKeys.length + ")", gridKeys.length === 13);
+ok("[app] app.js 字面表恰一对 computed(grid: 恰 13 处, 实得 " + gridKeys.length + ")", gridKeys.length === 13);
 
 /* 3. kebab 声明(grid-template-columns, CSS 规则面): 命中表面 token 的规则只许是 D4 例外
  *    清单条目 —— 现清单恰 1 条(04 卡片形态面: 引擎行容器被变体覆写成两列卡片栅格);
@@ -2280,17 +2293,20 @@ def test_r4_dt_table_exception_list_geometry_guard():
     """计划 26-11-10-0027 W2(2), 拍板 D4: dt_table 例外清单守阵 —— 清单之外零旁路几何。
 
     例外清单(D4 拍板明文化, 本守阵是其机械面):
-      - HR 三表(hrDetail/hrWave/hrKv, 计划 §02 语义例外: 无 tpl/align 字段, 第二轮 D7 改造):
-        不接单点, 本电池钉「注册表在盘 + 零 grid 几何」的未接线状态;
+      - HR 三表(hrDetail/hrWave/hrKv): 注册面已随 26-11-17-0059 W1(1)(2) E6 并入翻面 ——
+        定义源在 hr_status.js 的 HR_TABLE_DEFS(P5), 经 window.AQB_HR_TABLE_DEFS 桥并进
+        app.js 的 ALL_TABLE_DEFS, 本电池钉「经 ALL_TABLE_DEFS 走单点 + 桥在盘」; 其余旧形态
+        断言(HTML 借壳形态 / HR 面零 grid 几何)仍钉旧状态, 随 T2/T3 同笔翻面;
       - 04 卡片形态面(drawerTrackerV04): 引擎行容器被变体有意覆写成两列卡片栅格
         (行是卡片非列状数据, parity e2e 另有「卡片形态规格」守阵), 例外条目 = 该 CSS 规则恰 1 处。
     断言六节: camelCase 产物白名单(恰两件; table.js 双向钉死 —— 原文提及恰 1 处 + 掩码后
-    零命中, 白名单死条目会把真实代码旁路放行成恒绿)/ columns_computed 每条恰单点委托形
-    且 id 集与 app.js 表注册表互对 / kebab 声明中命中表面容器的规则恰 = D4 例外清单(.js 侧
-    另钉「选择器与首条声明同行」惯例断言 —— 多行规则形即红不静默逃逸; .css/.html 侧保留
-    规则解析双轨)/ 例外条目存在性(04 本体 + HR 三表注册与零几何)/ 单点完整性(_gridTemplate
-    委托 + 无拼轨回潮)/ assert 侧豁免清单本体(ASSERT_SKIP_FACES 键集恰两键 + empty-row
-    行级豁免字面在 _assertLayoutPair —— 豁免被删即 04 面刷噪声, 删豁免即红)。
-    node 电池真跑(无 node 静默跳过)。"""
+    零命中, 白名单死条目会把真实代码旁路放行成恒绿)/ columns_computed 每条恰单点委托形共
+    16 条(13 张 app.js 字面表 + HR 三表经 window 桥并入)且 id 集与表注册表互对(逐 id 落
+    app.js 或 hr_status.js 字面行之一, 桥合并/桥导出在盘)/ kebab 声明中命中表面容器的规则恰 =
+    D4 例外清单(.js 侧另钉「选择器与首条声明同行」惯例断言 —— 多行规则形即红不静默逃逸;
+    .css/.html 侧保留规则解析双轨)/ 例外条目存在性(04 本体 + HR 三表注册与零几何)/
+    单点完整性(_gridTemplate 委托 + 无拼轨回潮)/ assert 侧豁免清单本体(ASSERT_SKIP_FACES
+    键集恰两键 + empty-row 行级豁免字面在 _assertLayoutPair —— 豁免被删即 04 面刷噪声,
+    删豁免即红)。node 电池真跑(无 node 静默跳过)。"""
     report = _run_probe(_NODE_DT_EXC_LIST_PROBE, STATIC_ROOT)
     _assert_battery(report, "dt_table 例外清单守阵")

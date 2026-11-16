@@ -22,6 +22,12 @@ Object.assign(window.AQB_COLUMNS, {
       for (const id of ALL_TABLE_PAGES) {
         const def = ALL_TABLE_DEFS[id];
         if (def.variantTab && this.dtBridgeTbl(def.variantTab) !== id) continue;
+        /* 过桥门(评审 minor, 26-11-17-0059): pickerHold 表暂不进列选择器渲染面 —— T2 前 HR 面
+         * 仍由 hrsCols() 全列 + 手写 td 渲染、不消费 colHidden, 列出分组会让用户勾掉列纹丝不动
+         * 而意图却持久化(静默无效果面)。W1(3) grid 迁移落地时摘除本行, 摘除后 HR 分组即隐藏
+         * 列恢复入口(E6); 标记单点在 hr_status.js 的 HR_TABLE_DEFS(pickerHold 注释有完整口径)。
+         * 只挡渲染面, 列偏好/对齐/持久化枚举(ALL_TABLE_PAGES 遍历面)不受影响。 */
+        if (def.pickerHold) continue;
         out.push({ id, label: def.label, columns: def.columns });
       }
       return out;
@@ -189,6 +195,28 @@ Object.assign(window.AQB_COLUMNS, {
     },
     visibleDrawerContentV11Cols() {
       return this._visibleCols("drawerContentV11");
+    },
+    /* HR 三表(计划 26-11-17-0059 W1(1)(2), E6 并入 ALL_TABLE_DEFS): 与变体表同一条
+     * _gridTemplate / _visibleCols 单点路径 —— 几何只经 DT_TABLE.layout(单一生产者延续),
+     * 列宽/隐藏/列序/对齐随并入自动覆盖。列定义单点在 hr_status.js 的 HR_TABLE_DEFS
+     * (经 window.AQB_HR_TABLE_DEFS 桥并入 app.js 的 ALL_TABLE_DEFS, 见那边注释)。 */
+    hrDetailGrid() {
+      return { gridTemplateColumns: this._gridTemplate("hrDetail") };
+    },
+    hrWaveGrid() {
+      return { gridTemplateColumns: this._gridTemplate("hrWave") };
+    },
+    hrKvGrid() {
+      return { gridTemplateColumns: this._gridTemplate("hrKv") };
+    },
+    visibleHrDetailCols() {
+      return this._visibleCols("hrDetail");
+    },
+    visibleHrWaveCols() {
+      return this._visibleCols("hrWave");
+    },
+    visibleHrKvCols() {
+      return this._visibleCols("hrKv");
     },
   },
 });
