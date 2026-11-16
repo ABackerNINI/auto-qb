@@ -48,6 +48,25 @@
 - test_v4_series_points_pre_window_chain_context_filtered_from_obs: (T2b 改判)窗前链上下文桶入流且响应被窗外过滤(D3 种子差分基线)
 - test_v4_seed_vacuum_null_t0_edge_band_chain_break: (issue 26-10-08-0141, F2 改判重锚)窗首种子边界带 —— 标记同界保留, 重启缝接收桶 = step/实测对跨(带内 295 / 带外 286 可区分)
 
+折叠态机与缓存防线单元(S4 缺口收口 26-11-17, 直构钉防御面契约; 集成面等价性归 bucket_cache 主阵):
+- test_bucket_index_correction_loops_float_interval: 点位归属双向校正环在非精确二进制
+  桶宽(配置 si 任意 float)下的触发实证与键语义不变式(两方向各一对实测触发点)
+- test_check_gap_bound_fail_fast_and_default: gap_bound_s 非正/非有限/非数值/bool
+  fail-fast + None 缺省 interval x 2 + 显式正值原样
+- test_fold_sanitize_window_realignment_defensive: 窗界再对齐防御契约(prev_slot/
+  marked_ts 复位 + 游程锚点滑出返回 True + 未立游程哨兵不误判)
+- test_fold_emit_window_filters_and_sealed_backfill_source: 发射窗外回填桶过滤(lo/hi
+  两向)+ 源桶封口后快照经 sealed 表解析(字节守恒)+ 封口表与累加器均无 KeyError
+- test_fold_emit_mark_window_filter: 窗外 null 标记不入发射列(与回填判据面互斥分 fold)
+- test_fold_held_at_scan_paths: held 初值降序首扫(越过 holding 桶/越过回填桶/标记清空
+  /fallback)
+- test_fold_sealed_floor_null_lo_fallback: 链首无观测 + 累加器非空 -> null_lo 兜底定影
+- test_fold_seam_allocation_zero_share_and_balance: 接缝摊配份额取整 0 与余额归接收桶
+  + 字节守恒(份额和 + delta == step_w)
+- test_day_cursor_valid_structural_invalid_paths: 天游标结构校验逐失效面(收缩/改写/
+  停驻块消失/记录数缩/末记录替换/非游程停驻/超游程长)+ 合法两形态对照
+- test_guard_group_order_fail_fast: 槽组时序倒挂 fail-fast + 正常时序放行
+
 活尾链端延伸 holding 槽响应面(F4, 计划 26-11-14-1313; F2 最小搬运改判):
 - test_v4_hold_slot_fills_tail_grid_bucket: 活跃链延伸前尾桶(进行中桶)null(G5 复现),
   传 now 后尾桶恒有观测且值接续末观测桶值(持有面平接 1000/500 —— 旧 750/375 含
@@ -103,8 +122,14 @@ from auto_qb.core.traffic_grid import (
     _V4_SEAM_LOOKBACK_S,
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
+    _V4BucketDayCursor,
+    _V4SeriesFold,
     _bucket_delta,
+    _bucket_index,
+    _check_gap_bound,
     _floor_buckets,
+    _guard_group_order,
+    _v4_bucket_day_cursor_valid,
 )
 
 from auto_qb.core.traffic_store import (
@@ -1142,3 +1167,253 @@ def test_v4_series_points_pre_window_chain_context_filtered_from_obs():
     obs = v4_grid_obs(pts, g)
     assert set(obs) == {first}, "窗外链上下文桶不得出观测"
     assert obs[first] == BucketObs(20, 10, 1600, 800)  # 窗前基线 -> 首桶 delta(600,300)/30s
+
+
+# ======================================================================
+# 折叠态机与缓存防线单元(S4 缺口收口, 26-11-17; 主会话拍板「写真测试不降窗」)
+# 直构 _V4SeriesFold / 游标 / 槽组 —— 钉防御面契约本体(函数 docstring 承诺的行为),
+# 集成面等价性由 test_traffic_grid_bucket_cache 的逐位对账主阵承管, 两层互不替代。
+# ======================================================================
+
+
+def test_bucket_index_correction_loops_float_interval():
+    """(缺口收口)点位归属桶序双向校正环(_bucket_index i-=1 / i+=1 两环):
+    floor((ts-first)/interval) 的除法舍入与键表达式 first + i x interval 的乘法舍入
+    在**非精确二进制桶宽**下可相差一格 —— 配置 si 是任意 float(如 2.4), 桶宽 = si x k
+    同样非精确, 除法把 74.39999999999999/2.4 舍入到 30(偏小)而键 31 x 2.4 恰含 ts(偏
+    大), 反向 1.7/0.1 舍入到 17 而键 17 x 0.1 = 1.7000000000000002 越过 ts。两环把两个
+    方向都拉回键语义: 结果桶恒满足 first + i x B <= ts < first + (i+1) x B(与键查找
+    obs.get 恒命中的不变式同源)。生产精确二进制桶宽(1.5/4.5/22.5/43.5/87/174,
+    si=1.5 x k)下两环不触发(1e6 随机扫描零命中) —— 触发面收窄到任意 si 配置形态。"""
+    # dec 环(除法下标偏大): 键 17 x 0.1 舍入越过 ts -> 回退到桶 16
+    i = _bucket_index(1.7, 0.0, 0.1)
+    assert i == 16
+    assert 0.0 + i * 0.1 <= 1.7 < 0.0 + (i + 1) * 0.1
+    # inc 环(除法下标偏小): 键 31 x 2.4 恰含 ts -> 进到桶 31
+    ts = 74.39999999999999
+    j = _bucket_index(ts, 0.0, 2.4)
+    assert j == 31
+    assert 0.0 + j * 2.4 <= ts < 0.0 + (j + 1) * 2.4
+
+
+def test_check_gap_bound_fail_fast_and_default():
+    """(缺口收口)gap_bound_s 校验与缺省单点(_check_gap_bound): 非正 / 非有限 / 非数值
+    / bool 一律 ValueError fail-fast(v4_series_points 与桶值缓存共用同一判据, 传坏值
+    不得静默落进判据面); None 缺省 = interval x 2(F1 raw 桶宽恒采样整倍 B >= si,
+    与调用面 max(B, si) x 2 数学恒等); 显式正值原样返回(float 归一)。"""
+    for bad in (0, -1.0, float("inf"), float("nan"), "3", True, [], 3 + 4j):
+        with pytest.raises(ValueError, match="非法 gap_bound_s"):
+            _check_gap_bound(bad, 1.5)
+    assert _check_gap_bound(None, 1.5) == 3.0
+    assert _check_gap_bound(7.5, 1.5) == 7.5
+
+
+def test_fold_sanitize_window_realignment_defensive():
+    """(缺口收口)增量折叠前的窗界再对齐(_V4SeriesFold.sanitize)防御契约: prev_slot /
+    marked_ts 滑出回看界 -> 复位 None(对齐全量现算在当前 null_lo 下不消费界外态);
+    游程锚点(run[1])滑出回看界 -> 返回 True(调用方必须整条目冷重建 —— docstring 承诺
+    的语义, 单个读集前沿生命周期内常态不可达, 失效面组合可造出, 直构钉住契约本体);
+    未立游程(run[0] None 且 run_list 空 —— 锚 0.0 是初值哨兵)不判滑出。"""
+    f = _V4SeriesFold()
+    f.prev_slot = (999.0, (1, 2))
+    f.marked_ts = 998.0
+    f.dl_run = [None, 0.0, [], 0]
+    f.up_run = [None, 0.0, [], 0]
+    assert f.sanitize(1000.0) is False
+    assert f.prev_slot is None and f.marked_ts is None
+    f.dl_run = [(999.0, (1, 2)), 999.0, [(999.0, 10, True, 999.0)], 0]
+    assert f.sanitize(1000.0) is True  # dl 游程锚点滑出 -> 冷重建信号
+    f2 = _V4SeriesFold()
+    f2.up_run = [(999.0, (1, 2)), 999.0, [(999.0, 10, True, 999.0)], 0]
+    assert f2.sanitize(1000.0) is True  # up 向独立同判
+    f3 = _V4SeriesFold()
+    f3.dl_run = [(1050.0, (1, 2)), 1050.0, [(1050.0, 10, True, 1050.0)], 0]
+    assert f3.sanitize(1000.0) is False  # 锚点在界内 = 常态面
+
+
+def _cell(dl_delta: int, hold: bool = False) -> list:
+    """直构桶累加器(布局单点 = fold 主循环 cells[key] 九列): [dl_share, dl_cov_ms,
+    up_share, up_cov_ms, 快照 ts, dl_total, up_total, broke, is_hold]"""
+    return [dl_delta, 1000, 0, 1000, 1.0, 100, 50, False, hold]
+
+
+def test_fold_emit_window_filters_and_sealed_backfill_source():
+    """(缺口收口)发射窗界过滤与回填源桶解析(_V4SeriesFold.emit): 窗外回填桶
+    (bf_key < lo / bf_key 越过 hi 或 hi 排他等值)不发射 —— 响应桶集恒 == 与窗的交集
+    (链上下文不入响应); 回填源桶已封口裁剪(cells 无键)时快照经 sealed 封口值表解析
+    (字节守恒: 回填点 totals = 源桶末次快照), 封口表与累加器均无 = KeyError fail-fast
+    (结构性异常不静默造点)。"""
+    g = _V4SeriesFold()
+    slots = (
+        V4Slot(ts=1.0, dt_s=1.0, obs=(100, 50, 1000, 500), is_zero=False, is_hold=False),
+        V4Slot(ts=3.0, dt_s=2.0, obs=(100, 50, 1100, 550), is_zero=False, is_hold=False),
+    )
+    g.fold([(slots, False)], 0.0, 10.0, 1.0, 10.0, -1.0, 3.0)  # 跨桶 2 的有界空桶 -> 回填 (2.0 -> 1.0)
+    assert g.backfills == [(2.0, 1.0)]
+    full = g.emit(None, None, None)
+    assert [(p.t, p.is_hold, p.dl_total, p.up_total) for p in full] == [
+        (1.0, False, 1000, 500),  # 链首桶 0 线(D4, 无缝链首不置旗)
+        (2.0, True, 1000, 500),  # 回填持有点: 速率持源桶 0 线, totals = 源桶快照(链 0 增量)
+        (3.0, False, 1100, 550),
+    ]
+    assert [p.t for p in g.emit(2.5, None, None)] == [3.0]  # 回填桶 bf_key < lo 过滤
+    assert [p.t for p in g.emit(None, 2.0, None, hi_inclusive=False)] == [1.0]  # bf_key == hi(排他)过滤
+    # 源桶封口裁剪(cells+cell_keys 同步移除, 模拟 _publish 地平线裁剪后的折叠态形态):
+    # 快照经封口值表解析, 回填点 totals 逐位 = 封口值
+    del g.cells[1.0]
+    g.cell_keys.remove(1.0)
+    sealed = g.emit(None, None, None, sealed={1.0: V4PointEntry(1.0, 100, 50, 1000, 500)})
+    assert [(p.t, p.is_hold, p.dl_total, p.up_total) for p in sealed if p.is_hold] == [(2.0, True, 1000, 500)]
+    with pytest.raises(KeyError, match="回填源桶缺失"):
+        g.emit(None, None, None, sealed=None)
+
+
+def test_fold_emit_mark_window_filter():
+    """(缺口收口)标记点窗界过滤(emit 标记循环 t < lo continue): null 标记在窗界前
+    不入发射列(断连标记是链上下文面, 响应窗不消费); 窗内标记照常入列参与 held 合并
+    (null 点清空持有面)。与回填过滤分 fold 直构 —— 标记点入发射列会改变全量发射点列
+    形态(标记占发射序)与链首 broke 面, 故与回填过滤形态分开直构, 两判据面互不缠绕。"""
+    b = _V4SeriesFold()
+    slots = (
+        V4Slot(ts=0.5, dt_s=1.0, obs=None, is_zero=False, is_hold=False),  # n 槽 -> 标记 t=0
+        V4Slot(ts=1.5, dt_s=1.0, obs=(100, 50, 1000, 500), is_zero=False, is_hold=False),
+        V4Slot(ts=4.0, dt_s=2.5, obs=(100, 50, 1100, 550), is_zero=False, is_hold=False),
+    )
+    b.fold([(slots, False)], 0.0, 10.0, 1.0, 10.0, -1.0, 9.0)
+    assert b.marks == [0]
+    assert [p.t for p in b.emit(None, None, None)] == [0, 1.0, 2.0, 3.0, 4.0]  # 标记占发射序
+    assert [p.t for p in b.emit(3.0, None, None)] == [3.0, 4.0]  # 标记 0 < lo 过滤, 观测桶照常
+
+
+def test_fold_held_at_scan_paths():
+    """(缺口收口)held 面合并扫描单点(_V4SeriesFold.held_at): 缓存路径发射的 held 初值
+    = 开放面 < position 的降序首扫 —— 首个非持有观测桶给其速率; holding 桶(回填/尾桶)
+    不携带不入账, 跳过继续向前扫; null 标记先行即 None(None 点清空持有面); 开放面无项
+    -> fallback(封口面末端 held 值)。与全量发射的合并序逐位同判(docstring 承诺)。"""
+    h = _V4SeriesFold()
+    h.cells = {1.0: _cell(100), 2.0: _cell(0, hold=True), 4.0: _cell(300)}
+    h.cell_keys = [1.0, 2.0, 4.0]
+    assert h.held_at(3.0, None) == (100, 0)  # position 前最新观测桶是 holding -> 跳过, 取再前观测桶
+    assert h.held_at(5.0, None) == (300, 0)  # 最新观测桶非持有 -> 直取
+    h2 = _V4SeriesFold()
+    h2.cells = {1.0: _cell(100)}
+    h2.cell_keys = [1.0]
+    h2.backfills = [(2.0, 1.0)]
+    assert h2.held_at(2.5, None) == (100, 0)  # 回填桶不携带 held, 越过取观测桶
+    h3 = _V4SeriesFold()
+    h3.backfills = [(2.0, 1.0)]
+    assert h3.held_at(2.5, "FB") == "FB"  # 仅回填可扫 -> fallback
+    h4 = _V4SeriesFold()
+    h4.cells = {1.0: _cell(100)}
+    h4.cell_keys = [1.0]
+    h4.marks = [2.0]
+    assert h4.held_at(2.5, "FB") is None  # null 标记先行: 持有面清空(优先于观测桶)
+
+
+def test_fold_sealed_floor_null_lo_fallback():
+    """(缺口收口)封口边界的回看界兜底(_V4SeriesFold.sealed_floor): prev_slot 为 None
+    (链首无观测)而累加器非空(观测全在回看界外)时以 null_lo 兜底 —— 回看界外桶值不再
+    受任何后续槽影响(新槽消费下界同界), 视同定影; 有 prev_slot 时以链末观测桶键为界
+    (常态面); 无任何候选返回 None。"""
+    s = _V4SeriesFold()
+    s.cells = {1.0: _cell(100)}
+    assert s.sealed_floor(0.0, 1.0, 1234.0) == 1234.0  # 链首无观测 + 累加器非空 -> null_lo 兜底
+    s2 = _V4SeriesFold()
+    s2.prev_slot = (500.0, (1, 2))
+    assert s2.sealed_floor(0.0, 1.0, 1234.0) == 500.0  # 常态面: 链末观测桶键
+    s3 = _V4SeriesFold()
+    assert s3.sealed_floor(0.0, 1.0, 1234.0) is None  # 无观测无游程
+
+
+def test_fold_seam_allocation_zero_share_and_balance():
+    """(缺口收口)接缝摊配的按比例取整面(fold 游程闭合分支): span > cov 的含缝 z 游程
+    台阶按覆盖份额缩放(step_w = step x cov // span), 逐项份额 = step_w x 累计 // cov_ms
+    —— 份额取整可为 0(小份额项不进桶), 余额(delta = step_w - acc)归接收桶; 字节守恒
+    不变式: 各游程桶份额 + 接收桶 delta == step_w(缩放后的总量一分不丢)。z 槽桶份额
+    恒 0 与「空闲段 0 线」并存(摊配份额只进非零项)。"""
+    f = _V4SeriesFold()
+    # z 游程 9 槽: 墙钟步 10s / 声称覆盖 5s(含缝对) -> span 100s, cov 50s(8 x 5s + 台阶对 10s, 首槽立游程不进 run_list)
+    slots = tuple(
+        V4Slot(ts=float(k * 10), dt_s=5.0, obs=(0, 0, 1000, 500), is_zero=True, is_hold=False) for k in range(9)
+    )
+    slots += (V4Slot(ts=100.0, dt_s=10.0, obs=(50, 25, 1010, 505), is_zero=False, is_hold=False), )
+    f.fold([(slots, False)], 0.0, 200.0, 1.0, 200.0, -1.0, 0.0)
+    # step = 10 字节, step_w = 10 x 50000 // 100000 = 5; 累计 5k..40k(8 项) -> 份额 0,0,1,0,1,0,1,0,1
+    shares = {k: f.cells[k][0] for k in sorted(f.cells) if k < 100.0}
+    assert shares == {0.0: 0, 10.0: 0, 20.0: 1, 30.0: 0, 40.0: 1, 50.0: 0, 60.0: 1, 70.0: 0, 80.0: 1}
+    assert f.cells[100.0][0] == 1  # 接收桶 delta = 余额 5 - 4
+    assert sum(shares.values()) + f.cells[100.0][0] == 5  # 字节守恒 == step_w
+
+
+def test_day_cursor_valid_structural_invalid_paths():
+    """(缺口收口)天游标结构一致性校验(_v4_bucket_day_cursor_valid)逐失效面: 天文件
+    收缩(starts 超出 blocks)/ 前缀起点被改写 / 停驻块消失或起点不符 / 停驻块记录数缩
+    (rec_idx 越界)/ 末消费记录被替换 / 停驻记录非游程型 / slots_done 超游程长 / 块界
+    停驻的末消费记录不符 —— 任一不符 = 结构性变化, 调用方整条目冷重建(不得以陈旧游标
+    续折)。合法游标两形态(整块边界停驻 / 游程中段停驻)对照 True。"""
+    blk1 = V4Block(1000, 2, 100, 50, (V4Sample(10, 5, 100, 50), V4Sample(10, 5, 110, 60), V4ZeroRun(3, 110, 60)))
+    blk2 = V4Block(2000, 2, 110, 60, (V4Sample(20, 10, 140, 90), V4ZeroRun(2, 140, 90), V4Sample(5, 5, 150, 95)))
+
+    def mk(**kw):
+        cur = _V4BucketDayCursor()
+        for k, v in kw.items():
+            setattr(cur, k, v)
+        return cur
+
+    assert _v4_bucket_day_cursor_valid(mk(starts=(1000, )), (blk1, blk2)) is True  # 块界停驻对照
+    assert _v4_bucket_day_cursor_valid(
+        mk(
+            starts=(1000, ),
+            cur_start=2000,
+            rec_idx=1,
+            slots_done=2,
+            last_ts=2001.0,
+            run_base=0.0,
+            run_spacing=2.0,
+            last_rec=blk2.records[1]
+        ),
+        (blk1, blk2),
+    ) is True  # 游程中段停驻对照(slots_done == run_len 上界内)
+    assert _v4_bucket_day_cursor_valid(mk(starts=(1000, 2000)), (blk1, )) is False  # 天文件收缩
+    assert _v4_bucket_day_cursor_valid(mk(starts=(1000, )), (V4Block(999, 2, 100, 50, blk1.records), )) is False  # 前缀改写
+    assert _v4_bucket_day_cursor_valid(mk(starts=(1000, ), cur_start=2000), (blk1, )) is False  # 停驻块消失
+    assert _v4_bucket_day_cursor_valid(
+        mk(starts=(1000, ), cur_start=2000), (blk1, V4Block(2999, 2, 110, 60, blk2.records))
+    ) is False  # 起点不符
+    assert _v4_bucket_day_cursor_valid(
+        mk(starts=(1000, ), cur_start=2000, rec_idx=9, slots_done=2, last_rec=blk2.records[0]), (blk1, blk2)
+    ) is False  # 记录数缩(rec_idx 越界)
+    assert _v4_bucket_day_cursor_valid(
+        mk(starts=(1000, ), cur_start=2000, rec_idx=0, slots_done=1, last_rec=blk2.records[1]), (blk1, blk2)
+    ) is False  # 末消费记录被替换
+    assert _v4_bucket_day_cursor_valid(
+        mk(starts=(1000, ), cur_start=2000, rec_idx=0, slots_done=1, last_rec=blk2.records[0]), (blk1, blk2)
+    ) is False  # 停驻记录非游程型(r 槽无中段续展形态)
+    assert _v4_bucket_day_cursor_valid(
+        mk(
+            starts=(1000, ),
+            cur_start=2000,
+            rec_idx=1,
+            slots_done=9,
+            last_ts=2001.0,
+            run_base=0.0,
+            run_spacing=2.0,
+            last_rec=blk2.records[1]
+        ),
+        (blk1, blk2),
+    ) is False  # slots_done 超游程长
+    assert _v4_bucket_day_cursor_valid(
+        mk(starts=(1000, ), cur_start=2000, rec_idx=2, slots_done=0, last_rec=blk2.records[0]), (blk1, blk2)
+    ) is False  # 块界停驻的末消费记录不符
+
+
+def test_guard_group_order_fail_fast():
+    """(缺口收口)槽组时序守卫(_guard_group_order, 缓存路径防御面): 槽组按 (日期, 块序)
+    构造恒时序递增, 首槽倒挂(先于前组末槽 - 真空 epsilon)= 解析产物结构性异常 ->
+    ValueError fail-fast 拒折, 不静默产出负对跨的脏速率; 时序正常组不拦截。"""
+    def slot(t):
+        return V4Slot(ts=t, dt_s=1.0, obs=(0, 0, 1, 1), is_zero=False, is_hold=False)
+
+    with pytest.raises(ValueError, match="槽组时序倒挂"):
+        _guard_group_order([((slot(100.0), ), False), ((slot(50.0), ), False)])
+    _guard_group_order([((slot(100.0), ), False), ((slot(200.0), ), False)])  # 正常时序

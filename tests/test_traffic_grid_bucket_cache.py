@@ -22,6 +22,14 @@
 - test_cache_lru_eviction_and_multi_key: LRU 上限逐出(超限最久未用先逐出)后重查冷算
   仍等价; 多系列键(组图 M 成员键面)同实例互不串扰; 同输入重算恒等(幂等)。
 
+缓存防线单元(S4 缺口收口 26-11-17):
+- test_bucket_cache_rejects_non_raw_segment: 非 raw 段窗(hour)传入 = ValueError
+  fail-fast(封口值表/游标机只服务 raw 槽流)
+- test_cache_future_block_empty_slot_group_cursors_advance: 天文件内 t1 之后的块展开
+  = 空槽组不进组但游标照常停驻推进(cur_start 登记), t1 右移后块首续展逐位等价
+- test_cache_mid_run_pause_resume_last_rec: t1 落长 z 游程中部 -> 部分消费游标
+  (slots_done/run_base/run_spacing/last_rec)记账, 续展与全量现算逐位等价
+
 线程/时钟纪律: 纯函数层 + V4DayCache 真文件(tmp_path, test.* 已内置 TMPDIR 不手工加
 前缀); 轮询时刻为仿真推进值(不触系统时钟); 计时用 time.perf_counter(实测数字非断言
 精确值, 阈值断言放宽防环境噪声); 代码/断言零 emoji 零图形符号。
@@ -512,3 +520,110 @@ def test_cache_lru_eviction_and_multi_key(tmp_path):
     # 同输入幂等: 同栅格同解析产物重算恒等
     again = v4_grid_obs(bucket_cache.series_points("global", d4, g4, (), gb4, _SI), g4)
     assert again == got4
+
+
+# ======================================================================
+# 缓存防线单元(S4 缺口收口, 26-11-17; 主会话拍板「写真测试不降窗」)
+# ======================================================================
+
+
+def test_bucket_cache_rejects_non_raw_segment(tmp_path):
+    """(缺口收口)桶值缓存段窗门闩(series_points 非 raw 分支): 桶值单调缓存的封口
+    值表/游标机只服务 raw 段窗(hour/day 段消费 agg 行, 无槽流可折) —— 传入 hour 段
+    栅格 = ValueError fail-fast, 不静默产出错几何的桶点。"""
+    bucket_cache = V4SeriesBucketCache()
+    grid_hour = build_grid("3d", _BASE + 4000.0, _SI)  # hour 段窗(桶宽恒 3600)
+    assert grid_hour.segment == "hour"
+    with pytest.raises(ValueError, match="桶值缓存仅服务 raw 段窗"):
+        bucket_cache.series_points("global", (), grid_hour, (), _SI * 2.0, _SI)
+
+
+def test_cache_future_block_empty_slot_group_cursors_advance(tmp_path):
+    """(缺口收口)增量展开的空槽组面(_advance 新块循环 slots 为空不进组但游标照常
+    推进): 天文件里 t1 之后的块(read_window 返回整天文件全部块, 不按 t1 切)展开时
+    首槽即 >= t1 -> 空槽组, 该块以 cur_start 停驻游标登记(下一拍 t1 右移后从块首续展)
+    —— 空组不得误触冷重建也不得吞掉游标推进。缓存路径与全量现算逐位等价; 另以条目
+    续存证据钉住「未冷重建」(phase-2 调用前捕获 fold/游标表引用, 调用后对捕获值断言
+    同一 —— 冷重建路径换新 fold 对象并整表重建游标, 增量路径全部原地变异, 捕获式对象
+    同一即判别面)。"""
+    data_dir = str(tmp_path)
+    key = "global"
+    writer = _SeriesWriter(data_dir, key)
+    v4 = V4DayCache(data_dir)
+    bucket_cache = V4SeriesBucketCache()
+    t = v4_day_epoch(_BASE) + 3600.0
+    writer.r(t, 40_000, 20_000)
+    writer.r(t + 2.0, 41_000, 20_000)
+    writer.reopen()  # 块 B: 首槽在 t1 之后(未来块)
+    writer.r(t + 300.0, 42_000, 20_000)
+    writer.r(t + 302.0, 43_000, 20_000)
+    writer.write()
+    grid = build_grid("1m", t + 100.0, _SI)
+    days = v4.read_window(key, grid.t0 - grid.interval, grid.t1)
+    gb = max(grid.interval, _SI) * 2.0
+    points = bucket_cache.series_points(key, days, grid, (), gb, _SI)
+    blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
+    ref = v4_grid_obs(v4_series_points(blocks, grid, gap_bound_s=gb), grid)
+    assert v4_grid_obs(points, grid) == ref
+    ent = bucket_cache._entries[(key, "1m")]
+    (cur, ) = ent.day_cursors.values()
+    assert cur.starts == (t, )  # 块 A 整块消费入 starts(块首 ts = 天起点 + 1h)
+    assert cur.cur_start == t + 300.0  # 块 B 以空槽组停驻游标(首槽 >= t1)
+    assert cur.rec_idx == 0 and cur.slots_done == 0
+    # t1 越过块 B 首槽: 从停驻块首续展, 逐位等价(调用前捕获 fold/游标表引用, 供调用后
+    # 续存断言 —— 同对象同时刻双读恒真, 捕获式引用才使 reset 冷重建变红)
+    fold_before = ent.fold
+    dc_before = ent.day_cursors
+    grid2 = build_grid("1m", t + 320.0, _SI)
+    days2 = v4.read_window(key, grid2.t0 - grid2.interval, grid2.t1)
+    points2 = bucket_cache.series_points(key, days2, grid2, (), gb, _SI)
+    blocks2 = tuple(blk for _, parsed in days2 if parsed for blk in parsed.blocks)
+    ref2 = v4_grid_obs(v4_series_points(blocks2, grid2, gap_bound_s=gb), grid2)
+    assert v4_grid_obs(points2, grid2) == ref2
+    # 条目续存证据(误触冷重建即红): 增量路径原地折, 冷重建(reset 分支)换新 fold 对象 +
+    # 整表重建游标 —— 对捕获引用断言同一, 两处均红
+    ent2 = bucket_cache._entries[(key, "1m")]
+    assert ent2 is ent  # 条目未逐出未重建
+    assert ent2.fold is fold_before and ent2.day_cursors is dc_before  # 折叠态/游标表续存
+    (cur2, ) = ent2.day_cursors.values()
+    assert cur2 is cur  # 停驻游标对象续存(冷重建另起新游标)
+    # 块 B 自停驻块首续展消费(推进未被吞): 两 r 记录全消费(rec_idx 越过末记录, 游标机
+    # 整块展完 = (len(records), 0, ..)), 开放末块不并入 starts(追加不变式, 仍停驻块首)
+    assert cur2.starts == (t, )
+    assert cur2.cur_start == t + 300.0 and cur2.rec_idx == 2 and cur2.slots_done == 0
+
+
+def test_cache_mid_run_pause_resume_last_rec(tmp_path):
+    """(缺口收口)游程中段停驻游标的 last_rec 记账(_day_cursor_after slots_done > 0
+    分支): t1 落在长 z 游程中部 -> 部分消费游标(slots_done > 0, run_base/spacing 存
+    锚)记 last_rec = 停驻游程记录(前缀防伪的等值校验面), 下一拍续展与全量现算逐位
+    等价(游程实测终点链式自洽, 零漂移)。"""
+    data_dir = str(tmp_path)
+    key = "global"
+    writer = _SeriesWriter(data_dir, key)
+    v4 = V4DayCache(data_dir)
+    bucket_cache = V4SeriesBucketCache()
+    t = v4_day_epoch(_BASE) + 3600.0
+    writer.r(t, 40_000, 20_000)
+    writer.r(t + 2.0, 41_000, 20_000)
+    writer.z(t + 62.0, 30)  # 60s z 游程(t+2..t+62], 30 槽 @2s
+    writer.write()
+    gb = _SI * 2.0
+
+    def _read(now):
+        grid = build_grid("1m", now, _SI)
+        days = v4.read_window(key, grid.t0 - grid.interval, grid.t1)
+        points = bucket_cache.series_points(key, days, grid, (), gb, _SI)
+        blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
+        ref = v4_grid_obs(v4_series_points(blocks, grid, gap_bound_s=gb), grid)
+        return v4_grid_obs(points, grid), ref, bucket_cache._entries[(key, "1m")]
+
+    got, want, ent = _read(t + 40.0)  # t1 落游程中部 -> 部分消费
+    assert got == want
+    (cur, ) = ent.day_cursors.values()
+    assert cur.cur_start is not None and cur.slots_done > 0
+    assert cur.rec_idx == 2  # 停驻在 z 游程记录(第 3 条)
+    assert getattr(cur.last_rec, "run_len", None) == 30  # last_rec = 停驻游程记录
+    assert cur.run_base == _SI and cur.run_spacing == _SI  # 块首游程锚点形态(块首 z 槽恰在 B.start, base=spacing=si)
+    got2, want2, _ = _read(t + 70.0)  # t1 越过游程实测终点 -> 中段续展
+    assert got2 == want2

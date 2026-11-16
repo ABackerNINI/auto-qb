@@ -918,7 +918,7 @@ def test_api_traffic_qb_group_member_only_zruns_not_empty(web_env):
 
 def test_service_defensive_paths(web_env, monkeypatch):
     """读侧装配的防御面(直接驱动服务对象, 免端点样板):
-    - limitscache 构造期预建(无惰性双构造面); 限速读失败 = 空注解面(不 500, 缺线不冒充空态)
+    - limitscache/bucketcache 构造期预建(无惰性双构造面); 限速读失败 = 空注解面(不 500, 缺线不冒充空态)
     - 活尾未封口部分行按段过滤(无该型行 = ())
     - 组成员天文件读竞态 -> 该成员按空观测面计 + 降级标 stale(不冒充无数据)
     - 组成员 agg 读竞态 -> 成员行按 () 计 + 降级; 单系列 all 窗竞态 -> 栅格兜底
@@ -933,6 +933,7 @@ def test_service_defensive_paths(web_env, monkeypatch):
     _enable_qb_traffic(mgr)
     svc = QbTrafficChartApi(mgr)
     assert svc.limitscache is svc._limitscache  # 构造期预建单例
+    assert svc.bucketcache is svc._bucketcache  # 桶值缓存构造期预建单例(F4-2/3 只读引用)
 
     def boom(*args, **kwargs):
         raise OSError("read race")

@@ -39,6 +39,13 @@ mut-core W4 S5 定向补测(变异审计确认真洞守阵, 2026-10-31; 红验 t
 
 mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验 tmp-analysis/redverify-s6-w4.py):
 
+在线聚合封口防线单元(S4 缺口收口 26-11-17):
+- test_acc_upsert_row_same_epoch_replace_else_append: 累计器行表同 epoch 原位替换 /
+  无此 epoch 追加(不得产生同 epoch 重复行)
+- test_agg_reseal_closed_day_stub_first_write_and_month_mismatch: 已关日迟到重封 ——
+  存根无此小时追加首写(354)/ 有此小时合流替换(对照)/ 月层都不匹配日行落盘月层
+  零动作(361->exit, 背日不级联翻月)
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -345,3 +352,65 @@ def test_v4_merge_agg_day_cov_capped_at_86400():
     m = v4_merge_agg(prev, late)
     assert m.kind == "day" and m.cov_s == 86_400  # 上限 = 当日宽(非 28 天起的月宽)
     assert m.dl_avg == int(round((10 * 60_000 + 30 * 40_000) / 100_000))  # 加权均值不受截断影响
+
+
+# ======================================================================
+# 在线聚合封口防线单元(S4 缺口收口, 26-11-17)
+# ======================================================================
+
+
+def test_acc_upsert_row_same_epoch_replace_else_append():
+    """(缺口收口)累计器/存根行表的同 epoch 替换单点(_acc_upsert_row): 已有行同
+    epoch = 原位替换(重封行覆盖旧行, 不追加重复行), 无此 epoch = 追加(首写)——
+    迟到重封与首写两形态都不得产生同 epoch 重复行(读侧按「同 epoch 取最后一行」
+    解析, 重复行 = 行表无序化)。"""
+    from auto_qb.core.modules.traffic_sample_agg import _SampleAggMixin
+    from auto_qb.core.traffic_store_paths import v4_day_epoch
+
+    d0 = v4_day_epoch(1_800_000_000)
+    row0 = AggRow("hour", d0, 1, 1, 1, 1, 1, 1, 3600)
+    rows = [row0]
+    _SampleAggMixin._acc_upsert_row(rows, AggRow("hour", d0 + HOUR_SECONDS, 9, 9, 9, 9, 9, 9, 3600))
+    assert len(rows) == 2 and rows[-1].epoch == d0 + HOUR_SECONDS  # 无此 epoch -> 追加
+    repl = AggRow("hour", d0, 5, 5, 5, 5, 5, 5, 3600)
+    _SampleAggMixin._acc_upsert_row(rows, repl)
+    assert len(rows) == 2 and rows[0] is repl  # 同 epoch -> 原位替换(对象同一, 非尾部追加)
+
+
+def test_agg_reseal_closed_day_stub_first_write_and_month_mismatch():
+    """(缺口收口)已关日 hour 迟到重封的存根合流面(_agg_reseal_closed_day, issue
+    26-11-07-0527 R1#63): 存根无此小时(此前整点无行)= 追加首写(354)而非合流 ——
+    修复前残余行未经合流直接落盘被读侧「同 epoch 取最后一行」静默腐蚀; 存根有此小时
+    = v4_merge_agg 合流替换(对照面); 存根行表重建完整日行(v4_rollup_agg 替换语义)
+    随批落盘, 开放月吃重建日行(month_days upsert); **月层都不匹配**(背日超过一个月,
+    信用回溯到不了的防御面)时日行照常落盘、月层零动作 —— 背日行不得级联翻月。"""
+    from auto_qb.core.modules.traffic_sample_agg import _SampleAggMixin
+    from auto_qb.core.modules.traffic_sample_common import SeriesAgg
+    from auto_qb.core.traffic_store_paths import v4_day_epoch, v4_month_epoch
+
+    d0 = v4_day_epoch(1_800_000_000)
+
+    def mk(epoch, dl):
+        return AggRow("hour", epoch, dl, dl, dl // 2, dl // 2, 1000 + dl, 500 + dl // 2, 3600)
+
+    stub9, stub11 = mk(d0 + 9 * HOUR_SECONDS, 100), mk(d0 + 11 * HOUR_SECONDS, 200)
+    # 存根无此小时(10 点缺) -> 追加首写 + 日行重建(3 小时等权 cov 10800) + 开放月吃日行
+    agg = SeriesAgg(closed_day=(d0, [stub9, stub11]), month_epoch=v4_month_epoch(d0), month_days=[])
+    rows_out = []
+    _SampleAggMixin._agg_reseal_closed_day(agg, mk(d0 + 10 * HOUR_SECONDS, 150), rows_out)
+    assert [(r.kind, (r.epoch - d0) // HOUR_SECONDS) for r in rows_out] == [("hour", 10), ("day", 0)]
+    assert [(h.epoch - d0) // HOUR_SECONDS for h in agg.closed_day[1]] == [9, 11, 10]  # 存根追加首写
+    assert rows_out[1].cov_s == 3 * HOUR_SECONDS and rows_out[1].dl_avg == 150  # 重建日行(等权)
+    assert len(agg.month_days) == 1 and agg.month_days[0] is rows_out[1]  # 开放月 upsert 重建日行
+    # 存根有此小时 -> 合流替换(对照面: v4_merge_agg 保覆盖语义)
+    agg_b = SeriesAgg(closed_day=(d0, [stub9]), month_epoch=v4_month_epoch(d0), month_days=[])
+    rows_b = []
+    _SampleAggMixin._agg_reseal_closed_day(agg_b, mk(d0 + 9 * HOUR_SECONDS, 300), rows_b)
+    assert agg_b.closed_day[1][0].dl_avg == 200  # 合流行(100/300 覆盖加权)
+    assert [(r.epoch - d0) // HOUR_SECONDS for r in rows_b] == [9, 0]
+    # 月层都不匹配(背日超月) -> 日行落盘, 月层零动作
+    agg_c = SeriesAgg(closed_day=(d0, [stub9]), month_epoch=v4_month_epoch(d0) + 1, closed_month=None, month_days=[])
+    rows_c = []
+    _SampleAggMixin._agg_reseal_closed_day(agg_c, mk(d0 + 9 * HOUR_SECONDS, 300), rows_c)
+    assert [r.kind for r in rows_c] == ["hour", "day"]  # 无 month 行
+    assert agg_c.month_days == []  # 开放月累计器未动(背日行不级联翻月)

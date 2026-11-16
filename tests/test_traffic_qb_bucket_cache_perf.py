@@ -34,10 +34,19 @@ p95 = sorted[ceil(0.95*n)-1]; 假钟(FakeClock 实例)钉端点取时单点并�
 与写侧名义链漂移, 跨天块首游程与前天链尾倒挂会触发槽组时序守卫)。线程/时钟纪律:
 假钟走 tests/clock.py 单点(monkeypatch tq.SYSTEM_CLOCK); 文件落 tmp_path(test.* 已
 内置 TMPDIR, 不手工加前缀); 代码/断言零 emoji 零图形符号。
+
+标定环境(skipif 单点, 26-11-17 主会话拍板): 本电池只在**无插桩**环境跑(test.one /
+test.quick 的 --no-cov 与无 cov 裸跑)—— pytest-cov 的行追踪使 CPU 密集冷路径(全量解析 +
+全量折叠 57600 槽)膨胀 ~4.6x(隔离实测 345-380ms -> 带 cov 实测 1581-1724ms), A4 阈值
+断言在插桩环境下数字无意义, 故整体 skip 而不是抬线(抬线会让 A4 判据在正常环境失真)。
+A4 判据本体(温态 p95 <100ms / 组图 <150ms / 冷态 <1.5s)只在标定环境有效, 实测誊写
+口径见基线切片 26-11-17-0617 验收数字节 A4 标定环境条目。
 """
 import math
 import sys
 import time
+
+import pytest
 
 from auto_qb.infra.utils_paths import encode_group_key
 from auto_qb.webui.server.traffic_qb import QbTrafficChartApi
@@ -45,6 +54,18 @@ from auto_qb.webui.server.traffic_qb import QbTrafficChartApi
 from clock import FakeClock
 
 from test_traffic_grid_bucket_cache import _SeriesWriter
+
+try:
+    from coverage import Coverage as _Coverage
+
+    _COV_MEASURING = _Coverage.current() is not None
+except ImportError:  # pragma: no cover - coverage 是 pytest-cov 的强制依赖, 此分支不可达
+    _COV_MEASURING = False
+
+pytestmark = pytest.mark.skipif(
+    _COV_MEASURING,
+    reason="A4 基准标定环境 = 无插桩(--no-cov): pytest-cov 追踪使冷路径膨胀 ~4.6x, 插桩环境数字无意义(见模块 docstring)",
+)  # owner: abacker
 
 _SI = 1.5  # 生产采样间隔(main_tick 1.5s)
 _DAY = 86_400.0

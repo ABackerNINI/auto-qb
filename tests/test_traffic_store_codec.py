@@ -16,6 +16,10 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
 - test_v4_decimal_interval_roundtrip_and_bad_parse: 块头 interval_s 小数秒 —— B 行 1.5 roundtrip +
   标称槽位推进 1.5s + 解析侧非法族整行计坏; 整值形态不变
 - test_v4_format_fail_fast_and_torn_tail: 序列化 fail-fast + 撕裂尾行豁免口径
+- test_v4_block_slots_from_cursor_stopped_at_non_run_record_fails_fast: (S4 缺口收口
+  26-11-17)游标中段续展停驻记录型门闩 —— 停驻在 r 记录 = TypeError fail-fast
+- test_v4_block_slots_unknown_record_type_fails_fast: (S4 缺口收口)槽展开记录型白名单
+  —— 未知型 TypeError fail-fast 不静默跳过
 - test_v4_parse_discipline_dual_parser_same_verdict: 同纪律夹具双 parser 同判(issue 26-10-29-1304 R07-T06
   解析纪律收敛 _parse_v4_text 单点的行为守阵)—— 空文本/头行缺失与旧头行(整文件坏含头行本身)/
   坏行族+空行注释跳/撕裂尾(末行坏才豁免)/完整末行无换行 五组夹具, day 与 agg 纪律面逐项同判
@@ -140,6 +144,7 @@ from auto_qb.core.traffic_store import (
     v4_block_agg_totals,
     v4_block_gap_continuous,
     v4_block_slots,
+    v4_block_slots_from,
     v4_date_str_epoch,
     v4_day_epoch,
     v4_day_file_date,
@@ -1000,3 +1005,30 @@ def test_v4_bad_line_warn_message_fields_and_source_identity(tmp_path, caplog, m
         store.read_day("global", "2026-10-04")
     warns2 = [r.getMessage() for r in caplog.records if "坏行" in r.getMessage()]
     assert len(warns2) == 1 and "坏行 3/40 行" in warns2[0]
+
+
+# ======================================================================
+# 槽展开 fail-fast 面(S4 缺口收口, 26-11-17)
+# ======================================================================
+
+
+def test_v4_block_slots_from_cursor_stopped_at_non_run_record_fails_fast():
+    """(缺口收口)游标中段续展的停驻记录型门闩(v4_block_slots_from slots_done > 0
+    分支): 中段续展的数学(余下槽 = 锚点 + base + spacing x k)只对游程型(z/n)成立
+    —— 游标停驻在 r 记录(V4Sample)= 游标机被外部破坏(结构性异常), TypeError
+    fail-fast 不静默产出错位槽流。"""
+    blk = V4Block(1000, 2, 100, 50, (V4ZeroRun(2, 100, 50), V4Sample(10, 5, 110, 60)))
+    with pytest.raises(TypeError, match="游标停驻记录须为游程型"):
+        v4_block_slots_from(blk, (1, 1, 1000.0, 0.0, 2.0), None)
+
+
+def test_v4_block_slots_unknown_record_type_fails_fast():
+    """(缺口收口)槽展开的记录型白名单(v4_block_slots_from 尾部 TypeError): 只认
+    V4Sample/V4ZeroRun/V4NullRun 三型(与 v4_block_slots 同判) —— 未知型(手构块/
+    未来新行型未接读侧)= TypeError fail-fast, 不静默跳过(跳过 = 槽流静默缺段)。"""
+    class _Weird:  # 未知记录型(解析器产不出, 防直构块/未来行型)
+        pass
+
+    blk = V4Block(1000, 2, 100, 50, (_Weird(), ))
+    with pytest.raises(TypeError, match="未知块记录型"):
+        v4_block_slots_from(blk, (0, 0, None, None, None), None)

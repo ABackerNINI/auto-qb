@@ -5,6 +5,7 @@
 **Updated:** 2026-11-15
 **Summary:** 流量图读侧根修与毫秒级响应: 栅格单几何化/桶宽对齐采样/增量缓存/补尾格/环境层解绑/轮询节奏统一
 **Topics:** webui-traffic-root-revamp
+**Refs:** memory-bank/testing/baselines/26-11-17-0617-webui-traffic-root-revamp-s4.md, memory-bank/testing/baselines/26-11-17-0706-webui-traffic-root-revamp-s4-green.md
 
 ## 本篇只回答
 
