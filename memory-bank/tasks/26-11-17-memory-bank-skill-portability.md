@@ -5,7 +5,7 @@
 **Updated:** 2026-11-17
 **Summary:** 自制 skill 轨道可移植性改造
 **Topics:** memory-bank-skill-portability
-**Refs:** memory-bank/plans/26-11-17-0010-plan-skill-portability.html, memory-bank/reports/26-11-17-0010-report-skill-portability.md
+**Refs:** memory-bank/plans/26-11-17-0010-plan-skill-portability.html, memory-bank/reports/26-11-17-0010-report-skill-portability.html
 
 ## 本篇只回答
 

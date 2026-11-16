@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>自制 skill 可移植性改造报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="skill-portability">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-17-0010">
+<meta name="doc-updated" content="26-11-17-0010">
+<meta name="doc-refs" content="memory-bank/plans/26-11-17-0010-plan-skill-portability.html, memory-bank/tasks/26-11-17-memory-bank-skill-portability.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: skill-portability</div>
+<h1>自制 skill 可移植性改造报告</h1>
+<p class="lede">本篇只回答: 消费者视角的移植摩擦实录 —— 为在 auto-qb 侧做可移植性改造提供依据</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-17-0010 · <b>doc-updated</b> 26-11-17-0010 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 收编自 PTSKIT-farm-helper <code>docs/skill-portability-report.md</code> · 经用户显式授权原样拷入(D8) · 2026-11-17 存档为 .md, 后转单文件 HTML 壳(正文保真, 载体转换)
+</div>
+
+<div class="aside">
+<p><b>收编注记 (2026-11-17, auto-qb 仓)</b>: 本件由 <code>PTSKIT-farm-helper/docs/skill-portability-report.md</code> 经用户显式授权原样拷入(存档特例: reports/ 惯例为单文件 HTML, 此处保真优先保 .md; 改造计划见 <code>memory-bank/plans/26-11-17-0010-plan-skill-portability.html</code>)。</p>
+<p>原文中的「本仓」指<b>源仓 PTSKIT-farm-helper</b>; 文内指向源仓 git 历史与 <code>memory-bank/tasks/26-11-14-kb-init-porting.md</code> 的引用在拷贝后失效, 证据以本文所记文字为准。</p>
+<p>原文「改造实施时建议把本文件挪到 auto-qb 仓库」已由本次收编执行。</p>
+<p><span class="tag">[载体转换: 正文保真]</span> 本件已由 .md 转为单文件 HTML 壳(正文保真, 未删减不改写); 上行注记为 .md 存档期的原文, 照样保留。</p>
+</div>
+
+<div class="aside">
+<p>依据:2026-11-13/14 auto-qb → PTSKIT-farm-helper 的一次完整实战移植(7 自制 skill + 命令包轨道 + 守卫薄壳,
+7 笔提交、9 个评审/复评代理、1 起清库事故)。本报告是<b>消费者视角的摩擦实录</b>,为在 auto-qb 侧做可移植性改造提供依据。
+定位:改造实施时建议把本文件挪到 auto-qb 仓库(此处仅存档)。所有"本次证据"均可在本仓 git 历史与
+<code>memory-bank/tasks/26-11-14-kb-init-porting.md</code> 追溯。</p>
+</div>
+
+<h2><span class="no">§01</span>一句话结论</h2>
+<p>移植摩擦的根因高度集中:<b>"自足"只在 skill 目录边界内成立,边界外的东西——项目词汇、项目专属守卫、项目数据件、工作流轨道——既没声明也没隔离</b>。改造主轴一句话:<b>把这四类绑定从代码移进配置/数据,把 PORTING.md 从"skill 拷贝指南"升级为"轨道移植 runbook"</b>。</p>
+
+<h2><span class="no">§02</span>验证有效的设计(改造时不要动)</h2>
+<table>
+<tr><th>设计</th><th>本次证据</th></tr>
+<tr><td>commands 引擎:<code>find_root</code> 靠 <code>.git</code> 向上探测 + <code>&lt;skill-dir:NAME&gt;</code> 占位符</td><td><b>零代码改动</b>移植成功</td></tr>
+<tr><td>ship 配置外置 <code>.my-commit-flow.toml</code>(引擎不认识"提交")</td><td>my-commit-flow 适配<b>只改了这一个文件</b>(3429 字符),脚本零改</td></tr>
+<tr><td>timekit UTC+8 naive 钉死、单点取时</td><td>全部日期在 <b>UTC-8 时区的沙箱里</b>取值仍全对;kb.time 三行格式稳定</td></tr>
+<tr><td>create-issue 物理并入 memory-bank(脚本/模板/常量合一)</td><td>零额外移植工作,只拷 SKILL.md</td></tr>
+<tr><td><code>templates/</code> + SLOT 派生机制</td><td>kb.new/kb.wrap 建件全部机械派生,零手写时间戳</td></tr>
+<tr><td>code-review ③"本地分支态探针"</td><td>无远端 bootstrap 期全程可用,未阻塞一次评审</td></tr>
+<tr><td>PORTING.md 存在 + 三步骨架</td><td>方向正确(本报告只谈它的覆盖缺口)</td></tr>
+<tr><td>第三方 skill 的"单文件零依赖"标准</td><td>grilling(31 行)/gitmoji <b>零摩擦</b>——这就是可移植性的对照基准</td></tr>
+<tr><td>守卫薄壳"进程内 import"测试模式</td><td>45 条用例 0.4s 跑完,无子进程、无环境依赖</td></tr>
+</table>
+
+<h2><span class="no">§03</span>需要改造的清单(按 skill,含本次临时补丁作证据)</h2>
+<p>优先级:<b>P0</b> = 本次实测踩雷/出事故;<b>P1</b> = 本次花了手工改造成本;<b>P2</b> = 洁癖级。</p>
+
+<h3>2.1 memory-bank(核心,改动最多)</h3>
+<table>
+<tr><th>#</th><th>问题</th><th>本次证据</th><th>根因</th><th>改造方案</th><th>级</th></tr>
+<tr><td>1</td><td><b><code>TASK_DOMAINS</code> 项目词汇硬编码</b>在 <code>_common.py</code></td><td>T5 被迫改代码(<code>userscript/dom/kb/...</code>),否则 <code>kb.new task</code> 拒收</td><td>领域枚举是项目词汇,却住在"自足"脚本里</td><td>移到项目侧配置(如 <code>memory-bank/config.toml [domains]</code>),<code>_common</code> 读配置、无配置回落内置默认;SKILL.md 只写"枚举单点在 KB 配置"</td><td>P0</td></tr>
+<tr><td>2</td><td><b><code>new_doc.py</code> 跨 clone 查重硬编码 <code>../auto-qb-*</code> glob</b></td><td>T3 删 <code>_sibling_tasks_dirs</code>(31 行 diff)</td><td>多 clone 工作区假设写死进代码</td><td>同一配置文件加 <code>[siblings]</code> 路径列表(空=单 clone),删 glob</td><td>P0</td></tr>
+<tr><td>3</td><td><b><code>check_mutation_anchor</code> 混在 kb.check 默认链</b>且 fail-closed(锚缺失判红)</td><td>T5 实测 PLAN"空库自然通过"预判错误 → 被迫立锚占位 issue → 用户拍板清退(ee86af6)</td><td>项目专属守卫(变异测试审计)伪装成通用守卫随 skill 出走;fail-closed 无 opt-out</td><td>与 <code>check_context_caps</code> 同等对待:列入 PORTING"<b>项目可选守卫,勿默认移植</b>"清单;或 kb.check 配置化(<code>[guards]</code> 开关)。<b>原则:默认链只允许"对空库恒绿"的检查</b></td><td>P0</td></tr>
+<tr><td>4</td><td>SKILL.md 内嵌项目绑定:qB 真机自检段、<code>../auto-qb-*</code>、源仓 AGENTS.md 章节名、conventions 数据件引用</td><td>T3 四处改造</td><td>协议层与项目层未分离</td><td>SKILL.md 只留协议;真机轨细节全下放 <code>testing/real-machine.md</code>(数据件);跨项目引用一律写成"本项目 AGENTS.md / 本 KB conventions/..."</td><td>P1</td></tr>
+<tr><td>5</td><td><b>KB 数据件无模板</b>:SKILL.md 引用 <code>conventions/{doc-forms,collaboration}.md</code>、<code>testing/{baseline,real-machine}.md</code>,PORTING 让你自己写</td><td>T5 从零手写 4 件(~3000 字符/件)</td><td>templates/ 只覆盖 task/slice/pitfall 等,缺 conventions/testing 类</td><td>templates/ 增补这 4 件的骨架模板(带 TODO 占位 + 三行头),PORTING 第 2 步改"复制后填空"</td><td>P1</td></tr>
+<tr><td>6</td><td>SKILL.md 正文混大量演进史(裁定编号、复盘故事、源仓 reports 链接)</td><td>T3 逐条判定"provenance 保留/操作性改写",花裁决成本</td><td>协议与历史未分层</td><td>演进史下沉 <code>references/history.md</code>,SKILL.md 正文只留协议(历史引用一次即可)</td><td>P2</td></tr>
+</table>
+
+<h3>2.2 my-commit-flow(配置外置做得最好,仍有四点)</h3>
+<table>
+<tr><th>#</th><th>问题</th><th>本次证据</th><th>改造方案</th><th>级</th></tr>
+<tr><td>1</td><td><b>gates 节深度绑定项目任务</b>(dev.fmt/yapf、test.pkg.scoped、vnu jar、check_context_caps)</td><td>T4 重写整个闸门节(12 条→3 条起步)</td><td><code>.my-commit-flow.toml</code> 出厂<b>最小模板</b>随包发布(可选闸门注释掉+一行说明),PORTING 链接它;项目自行启用</td><td>P1</td></tr>
+<tr><td>2</td><td><b>red_lines/warn_lines 匹配语义反直觉</b>:<code>hit()</code> = 前缀 startswith <b>或子串 in</b>,非 glob——<code>*.cookies*</code> 永不命中且无告警</td><td>T4 面A评审实测确认;我们的配置头注补了语义说明</td><td>①config 模板头注写死语义与正反例;②或支持 glob(<code>fnmatch</code>)——建议前者,语义改动影响面大</td><td>P1</td></tr>
+<tr><td>3</td><td><b>真 bug:<code>test_snapshot.py</code> 清理可 <code>rmtree(Path("").parent)</code>=仓库根</b>(子进程解析失败时 <code>snap=Path("")</code>,cleanup 注册在断言前)</td><td><b>T4 清库事故</b>(沙箱 shim 使 <code>sys.executable</code> 失真触发),已加固</td><td>双防线:①cleanup 注册前<b>必须</b>校验路径非空、不在 cwd/仓库根下(写进包内测试守则);②全包 grep <code>rmtree|unlink</code> 审计一遍"解析值直接当路径"模式;③运行期 <code>_snapshot.py</code> 同款防御</td><td><b>P0</b></td></tr>
+<tr><td>4</td><td>环境绑定:<code>[sys.executable, ...]</code> 子进程(shim 环境下失真)、两处 Windows 断言</td><td>T4 事故根因链 + 2 处 <code>os.name=="nt"</code> 守卫</td><td>测试守则:平台断言一律 <code>os.name</code> 条件化;<code>sys.executable</code> 派生子进程前校验是真实解释器(可 <code>shutil.which</code> 兜底)</td><td>P1</td></tr>
+</table>
+
+<h3>2.3 review 包</h3>
+<table>
+<tr><th>#</th><th>问题</th><th>本次证据</th><th>改造方案</th><th>级</th></tr>
+<tr><td>1</td><td><b><code>review_lane.py</code>(1000 行)+ <code>review.lane.*</code> 六个 task id 是 R4 存量评审专属</b>,混在核心包里</td><td>T4 裁剪(config 重写 + test 删三个 Lane 测试类)</td><td>拆到独立目录(如 <code>.commands/review-lane/</code>)或标 <code># LEGACY (R4)</code> 区块;PORTING 标"不移植"</td><td>P1</td></tr>
+<tr><td>2</td><td>config 里 <code>uv run python</code> 环境假设</td><td>T4 统一改 <code>python3</code></td><td>出厂配置用 <code>python3</code>(脚本纯 stdlib),uv 是项目偏好不入默认</td><td>P2</td></tr>
+<tr><td>3</td><td>check_review_trace 从 <code>.my-commit-flow.toml</code> 读红线——已同源通用</td><td>面A核验通过</td><td>保持,无需动</td><td>—</td></tr>
+</table>
+
+<h3>2.4 对照组:无需改造</h3>
+<p><b>commands / create-issue / scope-guard 零改动通过</b>。scope-guard 纯语义单文件;create-issue 随 memory-bank;commands 引擎如上。它们是"可移植"的活样板——改造其他 skill 时对齐它们的标准即可:<b>判断在 SKILL.md(语义层),机械在 scripts(自足层),项目差异在配置/数据(外置层)</b>。</p>
+
+<h3>2.5 <code>scripts/sync_agent_skills.py</code>(半自制)</h3>
+<table>
+<tr><th>#</th><th>问题</th><th>本次证据</th><th>改造方案</th><th>级</th></tr>
+<tr><td>1</td><td><code>EXCLUDED = {"autoclaw-design-capability"}</code> 硬编码项目条目</td><td>T2 拷贝后清空</td><td>排除表配置文件化(如 <code>.agents/skills/.sync-exclude</code>,一行一个)</td><td>P1</td></tr>
+<tr><td>2</td><td><code>LINK_TARGETS</code> 只有 <code>.codebuddy/skills</code>(workbuddy CLI 假设)</td><td>本仓同样只挂了一处</td><td>目标列表同样进配置(多 harness:.codebuddy/.zcode/...)</td><td>P2</td></tr>
+</table>
+
+<h3>2.6 PORTING.md 本身(最大的杠杆点)</h3>
+<table>
+<tr><th>#</th><th>缺口</th><th>本次证据</th><th>改造方案</th><th>级</th></tr>
+<tr><td>1</td><td><b>覆盖面只有 memory-bank skill 本体</b>——实际的移植单位是"轨道":skill + commands 引擎 + <code>.commands/{kb,my-commit-flow,review,test}</code> + <code>scripts/sync_agent_skills.py</code> + KB 数据件</td><td>T4/T5 的一半工作量在 PORTING 没写的地方</td><td>升级为<b>轨道 runbook</b>:一张移植单位清单表(拷什么/改什么配置/建什么数据件/跑什么验收),以本次移植为校准用例</td><td>P0</td></tr>
+<tr><td>2</td><td><b>缺"项目可选守卫"清单</b></td><td>check_mutation_anchor 教训(见 2.1-3)</td><td>列出所有"要求项目对象存在"的检查,标注默认不移植</td><td>P0</td></tr>
+<tr><td>3</td><td>缺最小配置模板集(<code>.my-commit-flow.toml</code> / kb 包 / test 包)</td><td>T4 重写、T6 从零建</td><td>模板随包发布,PORTING 只写"复制+改键"</td><td>P1</td></tr>
+<tr><td>4</td><td>缺数据件骨架</td><td>T5 手写 4 件</td><td>见 2.1-5</td><td>P1</td></tr>
+</table>
+
+<h3>2.7 test 包</h3>
+<p>源仓 test 包(Docker testbed/TMPDIR 自举/覆盖率闸/随机序)深度项目绑定,<b>不值得改造成可移植</b>——正确做法是 PORTING 附一个"最小 test 包模板"(node --check + pytest tests 两条起步,本仓 <code>.commands/test/config.toml</code> 可直接当模板),不试图移植原包。</p>
+
+<h2><span class="no">§04</span>横切原则(从摩擦提炼,改造时的判据)</h2>
+<ol>
+<li><b>配置/数据与代码分离</b>:项目词汇(领域枚举)、项目路径(sibling workspaces)、排除表、闸门清单一律外置;代码读配置、无配置回落通用默认。判定法:<b>换项目时不该需要改任何 <code>.py</code></b>。</li>
+<li><b>fail-closed 守卫必须显式 opt-in</b>:默认检查链只允许"对新空库恒绿"的成员;要求"某文件必须存在"的守卫属于项目层,进可选清单。</li>
+<li><b>环境中立默认值</b>:<code>python3</code> 而非 <code>uv run</code>;单远端而非 gitee/github 双远端假设;<b>无远端是合法稳态</b>(本地分支、离线 bootstrap)。</li>
+<li><b>测试卫生</b>:清理路径先校验后删(非空 + 不在 cwd 下);<code>sys.executable</code> 派生子进程要防御解释器失真;平台断言条件化。移植是测试最好的 cross-check——<b>本次唯一真 bug 就是移植暴露的</b>。</li>
+<li><b>协议与演进史分离</b>:SKILL.md 是协议,历史进 references/history.md。</li>
+<li><b>可移植性声明</b>:每个 skill 的 PORTING 段落给一张"依赖面清单"(需要项目提供哪些数据件/配置键/可选守卫),让消费者一眼知道要建什么。</li>
+</ol>
+
+<h2><span class="no">§05</span>建议波次</h2>
+<table>
+<tr><th>波次</th><th>内容</th><th>验证法</th></tr>
+<tr><td><b>波次 1(P0,防复发)</b></td><td>①test_snapshot 类清理加固 + 全包 rmtree 审计;②check_mutation_anchor 出默认链 + PORTING 可选守卫清单;③TASK_DOMAINS 与 sibling-glob 配置化</td><td>用本仓重放:重新从改后的 auto-qb 拷 skill 到一个干净目录,<b>0 行代码 diff</b> 即通过</td></tr>
+<tr><td><b>波次 2(P1,降手工)</b></td><td>④PORTING 升级轨道 runbook + 三份最小配置模板 + 4 份数据件骨架模板;⑤my-commit-flow gates 出厂模板;⑥review_lane 拆分;⑦sync 脚本排除表配置化</td><td>照新 runbook 在第三个项目做一次演练移植,记录手工步骤数(目标 ≤ 半天)</td></tr>
+<tr><td><b>波次 3(P2,洁癖)</b></td><td>⑧SKILL.md 去项目化措辞/历史下沉;⑨red_lines 语义文档化、uv→python3 默认;⑩sync 链接目标配置化</td><td>grep 白名单审计(见下)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>改造后的可判定验收标准</h2>
+<ol>
+<li><b>最小移植 = 拷目录 + 填 ≤10 个配置键 + 0 行代码 diff</b>(以本仓为对照组重放)。</li>
+<li>kb.check 默认链对<b>空库首跑绿</b>(无需先立任何占位对象)。</li>
+<li><code>grep -rn 'auto-qb\|auto_qb\|qBittorrent\|gitee' skills/</code> 命中仅在白名单(provenance 注释/历史文档),<b>操作性代码零命中</b>。</li>
+<li>PORTING runbook 照做能复现本仓结果(把本仓当移植测试场,diff 应只剩配置/数据差异)。</li>
+<li>my-commit-flow 自带测试 Linux/Windows 双绿;全包无"未校验路径直接 rmtree"调用点。</li>
+</ol>
+
+<h2><span class="no">§07</span>本次临时补丁 → 改造方向对照(附录)</h2>
+<table>
+<tr><th>本次补丁(本仓)</th><th>对应改造项</th></tr>
+<tr><td>SKILL.md 四处改造(21354a9)</td><td>2.1-4</td></tr>
+<tr><td><code>new_doc.py</code> 删 <code>_sibling_tasks_dirs</code>(同上)</td><td>2.1-2</td></tr>
+<tr><td><code>_common.py</code> TASK_DOMAINS 换血(d4b2e37)</td><td>2.1-1</td></tr>
+<tr><td>锚占位 → 清退(d4b2e37 → ee86af6)</td><td>2.1-3</td></tr>
+<tr><td><code>.my-commit-flow.toml</code> 适配(cea09a2)</td><td>2.2-1/2</td></tr>
+<tr><td>test_snapshot 加固(cea09a2)</td><td>2.2-3</td></tr>
+<tr><td>review 包裁剪 R4/Lane(cea09a2)</td><td>2.3-1</td></tr>
+<tr><td>sync_agent_skills 清空 EXCLUDED(21354a9)</td><td>2.5-1</td></tr>
+<tr><td>tests 四件 3064→1205 行剔除清单(c2cd672)</td><td>2.1-1/2 旁证:项目断言全部可辨识、可剥离——说明"剥离点"存在,只欠声明</td></tr>
+<tr><td>手写 4 份 KB 数据件(d4b2e37)</td><td>2.1-5</td></tr>
+</table>
+
+</div>
+</body>
+</html>
