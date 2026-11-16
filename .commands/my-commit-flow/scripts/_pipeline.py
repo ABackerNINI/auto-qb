@@ -343,15 +343,23 @@ def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:
 
 
 def hit(files: list[str], patterns) -> list[str]:
-    return [f for f in files if any(f.startswith(p) or p in f for p in patterns)]
+    """glob 命中面(2026-11-17 S4, 计划 26-11-17-0010 D9): fnmatch 语义, 大小写敏感(fnmatchcase,
+    不随宿主 OS 归一), `*` 跨 `/`。
+
+    条目一律写显式 glob: 前缀意图 `foo*`、子串意图 `*foo*`、精确 `foo` —— 不带通配元的裸串
+    就是**精确相等**(旧「前缀 startswith 或子串 in」双口径已退役)。`""` 不是 glob(匹配不到
+    任何路径), 它是「每次提交都命中」哨兵, 由 `gates_for` 在进本函数之前消费。
+    """
+    return [f for f in files if any(fnmatch.fnmatchcase(f, p) for p in patterns)]
 
 
 def gates_for(files: list[str], gates: list[dict]) -> list[dict]:
     """命中的闸门 —— 返回完整 dict(auto / timeout 在里头, 后面要靠它们决定"跑不跑")。
 
-    ! `match` 里含空串 = **每次提交都命中**, 哪怕本次改动清单为空。`hit()` 靠 startswith 匹配,
-    空清单上恒为 False —— 于是"每次提交跑"的闸门在**纯删除提交**上静默不跑(commit.py 传给它的
-    `present` 只收工作区仍存在的路径): 删 500 行可零评审入库(2026-11-06 评审实测)。
+    ! `match` 里含空串 = **每次提交都命中**, 哪怕本次改动清单为空(空串哨兵在这里短路, 不走
+    glob 匹配)。`hit()` 是 glob 匹配, 空清单上恒为 False —— 于是"每次提交跑"的闸门在**纯删除
+    提交**上会静默不跑(commit.py 传给它的 `present` 只收工作区仍存在的路径): 删 500 行可零
+    评审入库(2026-11-06 评审实测)。
     """
     return [g for g in gates if "" in g.get("match", []) or hit(files, g.get("match", []))]
 

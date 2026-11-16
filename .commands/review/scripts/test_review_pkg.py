@@ -409,7 +409,7 @@ class PackTest(unittest.TestCase):
 
     def test_flags_redline_with_hit_detail(self):
         red_line = _line_of(self.proc.stdout, "红线预警:")
-        self.assertIn("config.yml (命中 config.yml)", red_line)  # 命中细节, 不是空洞标签
+        self.assertIn("config.yml (命中 *config.yml*)", red_line)  # 命中细节, 不是空洞标签(条目= glob 原文)
         self.assertIn("出现即停", red_line)
 
     def test_flags_warn_list(self):
@@ -575,7 +575,7 @@ class PackTest(unittest.TestCase):
         d.mkdir()
         (d / "state.json").write_text("{}", encoding="utf-8")
         proc = _run_script("pack", "--base", self.base, "--root", str(self.tmp))
-        self.assertIn("auto-qb-data/state.json (命中 auto-qb-data/)", proc.stdout)  # 尾斜杠规则
+        self.assertIn("auto-qb-data/state.json (命中 *auto-qb-data/*)", proc.stdout)  # glob 目录规则(2026-11-17 S4)
 
     def test_pplus_header_not_treated_as_sensitive_content(self):
         # 文件名含 api_key 但不在路径标记词内、内容普通; 必须 git add 才进 +++ 头(否则用例恒真)
@@ -612,7 +612,8 @@ class BenignPackTest(unittest.TestCase):
         self.assertIn("全能", self.proc.stdout)
 
     def test_redline_and_warn_still_hit(self):
-        self.assertIn("config.yml (命中 config.yml)", _line_of(self.proc.stdout, "红线预警:"))
+        # 红线条目已是 glob 口径(2026-11-17 S4): 预警面照实显示命中的条目原文
+        self.assertIn("config.yml (命中 *config.yml*)", _line_of(self.proc.stdout, "红线预警:"))
         self.assertIn("想法.md", _line_of(self.proc.stdout, "警告清单:"))
 
 

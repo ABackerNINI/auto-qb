@@ -3,6 +3,7 @@
 
 ## 测试计划
 - test_stage_plan_*                       暂存计划: 全量 / 子集(omitted 去重可见) / 拒批量 / 红线 / 空改动
+                                          (红线 glob 口径 2026-11-17 S4: 嵌套/带后缀仍拦, 裸串=精确)
 - test_omitted_note_*                     子集提示按索引状态分组(issue 26-10-16-1523): 已暂存仍随整索引进本笔 / 未暂存不进本笔 / 示例截断且空组不列
 - test_message_default_path               约定消息路径 = <root>/.git/COMMIT_MSG_AI.txt
 - test_message_missing_fails_early        消息缺失 → 提交失败一行, 不碰 git 写操作
@@ -102,7 +103,7 @@ from _pipeline import run_capture  # noqa: E402
 from _ship_config import config_problems  # noqa: E402
 
 PKG = Path(__file__).resolve().parent.parent
-RED = ["config.yml", "auto-qb-data/"]
+RED = ["*config.yml*", "*auto-qb-data/*"]  # 与真实 .my-commit-flow.toml 同款 glob 口径(2026-11-17 S4)
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -218,6 +219,18 @@ def test_stage_plan_bulk_refused():
 def test_stage_plan_red_lines_refused():
     _, _, refuse = commit_mod.resolve_stage_plan([], RED, ["config.yml"], ["src/a.py"])
     assert refuse and "config.yml" in refuse
+
+
+def test_stage_plan_red_line_glob_hits_nested_and_suffixed_paths():
+    # 红线覆盖不缩(R-1): glob 化后嵌套/带后缀形态仍拦 —— 拦截面从旧子串口径迁移零缩水
+    _, _, refuse = commit_mod.resolve_stage_plan([], RED, ["backup/config.yml.old"], ["sub/auto-qb-data/state.json"])
+    assert refuse and "config.yml.old" in refuse and "state.json" in refuse
+
+
+def test_stage_plan_bare_string_red_is_exact_only():
+    # 裸串条目 = 精确相等(旧前缀/子串双口径退役): 写红线时应显式写 glob
+    _, _, refuse = commit_mod.resolve_stage_plan([], ["config.yml"], ["xconfig.yml"], ["a/config.yml.bak"])
+    assert refuse is None
 
 
 def test_stage_plan_nothing_to_commit():
@@ -724,7 +737,7 @@ def test_post_rebase_rerun_scans_remote_merged_kb(repo, tmp_path, monkeypatch, c
     cfg = dict(_CFG_ALLOW)
     cfg["gates"] = [
         {
-            "match": ["memory-bank/"],
+            "match": ["memory-bank/*"],
             "run": [f'"{sys.executable}" kb_probe.py <changed:memory-bank/**>'],
             "auto": True,
             "timeout": 30,
@@ -775,7 +788,7 @@ def test_post_rebase_rerun_scans_non_kb_html(repo, tmp_path, monkeypatch, capsys
     cfg = dict(_CFG_ALLOW)
     cfg["gates"] = [
         {
-            "match": [".html"],
+            "match": ["*.html"],
             "run":
                 [
                     f'"{sys.executable}" html_probe.py all <changed:**/*.html>',
@@ -1202,6 +1215,6 @@ def test_always_gate_hits_even_on_empty_change_list():
     """
     from _pipeline import gates_for
 
-    gates = [{"match": [""], "run": ["x"], "note": "always"}, {"match": ["src/"], "run": ["y"], "note": "src"}]
+    gates = [{"match": [""], "run": ["x"], "note": "always"}, {"match": ["src/*"], "run": ["y"], "note": "src"}]
     assert [g["note"] for g in gates_for([], gates)] == ["always"]
     assert [g["note"] for g in gates_for(["src/a.py"], gates)] == ["always", "src"]

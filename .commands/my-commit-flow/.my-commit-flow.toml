@@ -15,10 +15,21 @@ mirror_host_mark = "github.com"
 # 摆到提交那一刻眼前(库里的约束不接到决策点上就等于没写)。留空 = 不打印。
 pitfalls_index = "memory-bank/pitfalls/git/_index.md"
 
+# ---------------------------------------------------------------------------
+# 匹配语义(2026-11-17 S4, 计划 26-11-17-0010 D9): red_lines / warn_lines / gates[].match
+# 的条目一律是 fnmatch glob(整路径匹配, 大小写敏感, `*` 跨 `/`):
+#   前缀意图写 `foo*`   子串意图写 `*foo*`   精确相等写 `foo`
+# 正例: `*config.yml*` 命中 config.yml / src/config.yml / config.yml.bak; `src/*` 命中 src/a.py
+#       与 src/auto_qb/a.py; `*.html` 只命中 .html 结尾路径
+# 反例: 裸串 `config.yml` 只精确命中同名路径(不再有旧的前缀/子串双口径);
+#       `*.cookies*` 这类写法现在**会**命中(旧实现下永不命中且无告警 —— T4 面 A 已修);
+#       glob 元字符(? [ ])有特殊含义, 字面量须转义(如 `data[[]1[]].txt`)
+# ---------------------------------------------------------------------------
+
 # 出现即 STOP: 生产配置 / 运行时数据(见 AGENTS.md 红线节)
-red_lines = ["config.yml", "auto-qb-data/"]
+red_lines = ["*config.yml*", "*auto-qb-data/*"]
 # 出现需人工确认: 用户自己的在途改动 / 不该入库的项目数据
-warn_lines = ["想法.md", ".workbuddy-ai/"]
+warn_lines = ["*想法.md*", "*.workbuddy-ai/*"]
 
 platform_hints = ["winreg", "dir_fd", "socket", "subprocess"]
 staged_panic = 200
@@ -54,7 +65,7 @@ generated_regen_cmd = "python <skill-dir:memory-bank>/scripts/gen_all.py"
 # ---------------------------------------------------------------------------
 
 [[gates]]
-match = ["src/", "tests/"]
+match = ["src/*", "tests/*"]
 # ! 不在这里抄命令 —— 走 `commands` 引擎的 `dev.fmt`(yapf 只在包里定义一处)。
 #   改动清单由预检算(它才是"本次改了哪些文件"的权威), 经 `<changed:>` 展开后当 `<args>` 传给 task。
 # WARN: 2026-10-08: yapf 的语法缓存目录 `%LOCALAPPDATA%\Google\YAPF\Cache` 不在 agent 沙箱白名单里
@@ -68,7 +79,7 @@ timeout = 60
 note  = "格式化: 只碰本次改过的 py 文件(经 commands 引擎调 dev.fmt); timeout 60s 是给 yapf 沙箱缓存问题兜底"
 
 [[gates]]
-match = ["src/", "tests/"]
+match = ["src/*", "tests/*"]
 # ! 不在这里抄命令 —— 走 `commands` 引擎的 `test.quick`。命令只有一处定义(在 `.commands/test/`),
 #   抄一份到这里就是第 N+1 处副本, 而"哪份才是生效的那份"不写在命令旁边(见 commands SKILL.md 初衷)。
 #   TMPDIR / cmd.exe 写法 / 引号这些陷阱跟着 task 走, 由包自持, 这里看不见也不需要看见。
@@ -84,7 +95,7 @@ note  = "全量测试(跳覆盖率报表): 经 commands 引擎跑 test.quick, �
 # 按 <changed:> 归并受影响包, 单包只跑该包、≥2 包保守整跑(D4); 引擎目录(.agents/skills/commands/)
 # 改动走第二条 --full 整跑(引擎测试贴着引擎放, 改引擎永远全跑)。TMPDIR/写法配方单点仍在
 # test 包(wrapper 内置), 这里不抄第二份。test.pkg 本体保留: 手工整跑 + scoped --full 的转调目标。
-match = [".commands/", ".agents/skills/commands/"]
+match = [".commands/*", ".agents/skills/commands/*"]
 run   = ["python <skill-dir:commands>/scripts/run.py run test.pkg.scoped -- <changed:.commands/**>",
          "python <skill-dir:commands>/scripts/run.py run test.pkg.scoped --full -- <changed:.agents/skills/commands/**>"]
 auto  = true
@@ -96,7 +107,7 @@ timeout = 300
 note  = "包与引擎的脚本测试: 改哪个包跑哪个包(≥2 包/引擎改动保守整跑) —— test.pkg 本体保留给手工整跑与 scoped 的 --full 转调"
 
 [[gates]]
-match = ["memory-bank/"]
+match = ["memory-bank/*"]
 # 2026-10-11 补两条 (静默红根因, issue 26-10-11-1630): 原清单只有索引生成器 + timekit, 漏了
 #   `gen_baseline_recent --check` 与 `check_wording --check` —— 二者都在 `kb.check` 的 run 列表里
 #   (即"该跑的"), 却没进闸门, 于是"能判红却不在闸门里" = **静默红** (实测: 三份基线切片缺三行头
@@ -130,23 +141,23 @@ note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线�
 # 增量面**: 本次改动的 HTML 才过 W3C v.Nu —— 改谁谁达标, 未触动的存量 320 条 error 不进闸门。
 # vnu.jar 在 <root>/.tools/(gitignored, 缺时自动下载 ~32MB, 需 java); 无 HTML 改动时跳过。
 # 2026-11-01 扩面: <changed:> 从 memory-bank/** 放开到全仓 —— memory-bank 外还有存量 HTML
-# (skill 骨架样例等), 改谁都该达标; match 用子串 ".html"(真有 HTML 改动才命中闸门,
+# (skill 骨架样例等), 改谁都该达标; match 用 `*.html`(真有 HTML 改动才命中闸门,
 # 纯 md/py 提交不空跑, 无匹配仍走 <changed:> 的静默跳过语义)。
-match = [".html"]
+match = ["*.html"]
 run   = ["python <skill-dir:memory-bank>/scripts/check_html.py --vnu --strict <changed:**/*.html>"]
 auto  = true
 timeout = 120
 note  = "HTML 规范级增量检查(v.Nu): 全仓改动 HTML 都查(2026-11-01 起不限 memory-bank); 有 error 即 STOP; 修复后重跑, 或 commands run kb.html-audit 看全库报告"
 
 [[gates]]
-match = ["memory-bank/active-context/"]
+match = ["memory-bank/active-context/*"]
 run   = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check"]
 auto  = true
 timeout = 60
 note  = "会话切片: 命名定宽前缀 / 三行头 / cap —— 该脚本只校验, 不写文件"
 
 [[gates]]
-match = ["memory-bank/", "docs/", "AGENTS.md"]
+match = ["memory-bank/*", "docs/*", "AGENTS.md"]
 run   = ["python <skill-dir:memory-bank>/scripts/check_doc_links.py --quiet"]
 auto  = true
 timeout = 60
@@ -160,7 +171,7 @@ note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试
 #   `push.py --help` 真的推送(推送顺序固定, 尤其禁止)。所以 --with-safety 让展开先问每个
 #   脚本自己的 `--safety` 探针, 把「无参即真动作」的摘出去(摘掉会在输出里写明, 不是静默丢)。
 #   WARN: 这条闸门**不配 auto = true** 也能兜住 —— 展开是统一入口(run.py 与 commit 闸门共用)。
-match = [".agents/skills/", ".commands/"]
+match = [".agents/skills/*", ".commands/*"]
 run   = ["python <each:.agents/skills/**/scripts/*.py|--with-safety> --help",
          "python <each:.commands/**/scripts/*.py|--with-safety> --help"]
 auto  = true
@@ -186,7 +197,7 @@ note  = "评审留痕: 可评内容 >0 行(代码+事实性文档)或触安全�
 # 消息缺失拒跑)。消息文件存在时预跑照跑 —— 提前发现忘写 trailer。
 
 [[gates]]
-# 空串 = 每次提交都命中 (hit 用 startswith/子串匹配, 空串匹配一切路径)。
+# 空串 = 每次提交都命中(哨兵, 由 gates_for 在 glob 匹配前短路 —— 空串不是 glob, 匹配不到任何路径)。
 # 为什么需要"每次"而不是只匹配 .agents/skills/: 从远端 pull 进来的 skill 改动在
 # 本地不产生 diff (HEAD 已经跟着往前走了), 按路径匹配永远命中不了 —— 只能靠每次
 # 提交跑一次幂等同步来兜, 接受的代价是"落后到下一次提交"(不值得为它给每个
@@ -210,7 +221,7 @@ note  = "skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"
 # 2026-11-01 起按改动收窄(计划 26-11-01-0434 方案 D, 拍板 D5): 一条拆三条, <changed:> 无匹配
 # 即静默跳过; 硬规定语义不变(AGENTS.md 超限且改动命中仍 STOP); 债务只算本次改动的文件 ——
 # 存量债务的可见性收敛到「该文件被改时 + 清理会话 doc.caps --strict」(滞后接受)。
-match = ["AGENTS.md", ".agents/skills/", "memory-bank/"]
+match = ["AGENTS.md", ".agents/skills/*", "memory-bank/*"]
 run   = ["python scripts/check_context_caps.py --files <changed:AGENTS.md>",
          "python scripts/check_context_caps.py --files <changed:.agents/skills/**>",
          "python scripts/check_context_caps.py --files <changed:memory-bank/**>"]

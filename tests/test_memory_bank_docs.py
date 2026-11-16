@@ -1153,7 +1153,7 @@ def test_html_guard_wired_into_kb_check_and_gate() -> None:
     gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
     assert "check_html.py --check" in kb_cfg, "check_html.py 未挂进 kb.check"
     assert "check_html.py --check" in gate_cfg, "check_html.py 未挂进提交闸门 (静默红)"
-    assert 'match = [".html"]' in gate_cfg, "v.Nu 闸门触发面未放开到全仓改动 HTML (静默漏)"
+    assert 'match = ["*.html"]' in gate_cfg, "v.Nu 闸门触发面未放开到全仓改动 HTML (静默漏; 2026-11-17 S4 起 match 条目为 fnmatch glob, 旧子串写法 .html 已退役)"
     assert "--vnu --strict <changed:**/*.html>" in gate_cfg, "v.Nu 增量闸门行缺失"
     assert "kb.html-audit" in kb_cfg, "kb.html-audit 巡检任务缺失"
 

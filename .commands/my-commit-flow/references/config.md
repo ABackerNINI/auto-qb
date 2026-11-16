@@ -17,6 +17,29 @@ python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 （空 `gates` 意味着提交前没有任何机检，零依赖仓库最容易踩）。平台关键词按识别出的技术栈给
 （Python / Node / Make 各不相同），未识别则留空让人手写。
 
+## 匹配语义：red_lines / warn_lines / gates[].match
+
+三个清单的条目一律是 **fnmatch glob**（2026-11-17 S4 起，计划 26-11-17-0010 D9）：
+
+- 对改动的**仓库相对整路径**匹配；**大小写敏感**（`fnmatchcase`，不随宿主 OS 归一）；`*` **跨 `/`**。
+- **不带通配元的裸串 = 精确相等**。旧实现（前缀 `startswith` 或子串 `in` 双口径）已退役——
+  迁移时按意图显式化：**前缀意图写 `foo*`，子串意图写 `*foo*`，精确相等写 `foo`**。
+
+| 写法 | 命中 | 不命中 |
+|---|---|---|
+| `config.yml`（精确） | `config.yml` | `src/config.yml`、`xconfig.yml` |
+| `src/*`（前缀） | `src/a.py`、`src/auto_qb/a.py`（`*` 跨 `/`） | `lib/src/a.py`、`srcx/a.py` |
+| `*config.yml*`（子串） | `config.yml`、`src/config.yml`、`config.yml.bak` | `config-yml.txt` |
+| `*.cookies*` | `a/b.cookies.txt`、`x.cookies` | 旧实现下这类写法**永不命中且无告警**（T4 面 A，已修） |
+
+- glob 元字符 `?` / `[` / `]` 有特殊含义；字面量要转义（如文件名 `data[1].txt` 写
+  `data[[]1[]].txt`）。
+- `""`（空串）不是 glob——它是 `gates[].match` 的「每次提交都命中」哨兵，在
+  `gates_for` 里于 glob 匹配**之前**短路（纯删除提交上闸门仍要跑，见 `_pipeline.gates_for`
+  docstring），不要往 `red_lines` / `warn_lines` 里写空串。
+- 同源面：`commit.py` 红线拦截面（`resolve_stage_plan`）、review 包 `_match_rule` /
+  `sensitive_hit` 都走同一 fnmatch 口径——改语义要四处一起动（条目写法以本节为准）。
+
 ## 闸门字段：auto / timeout / each_limit
 
 | 字段 | 默认 | 含义 |

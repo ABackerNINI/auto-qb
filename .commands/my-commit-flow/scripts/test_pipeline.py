@@ -13,6 +13,10 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 
 ## 测试计划
 - GlobMatchTest                <changed:>/<each:> 的 GLOB 语义(**/ 跨目录)
+- HitTest                      red_lines/warn_lines/gates match 的命中面(2026-11-17 S4 起 fnmatch glob):
+                               裸串=精确(旧前缀/子串双口径退役, 显式化写 foo*/*foo*)/ `*` 跨 `/` /
+                               `*.cookies*` 类写法可命中(T4 面 A 回归)/ glob 元字符与转义 /
+                               大小写敏感(不随宿主归一) / 空串哨兵匹配零 + gates_for 空清单仍命中
 - ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
                                + 复跑扩面只喂 <changed:>(changed_extra 去重保序 / <each:> 不读)
                                + 长度守卫(<changed:> 超预算分片不丢件 / 分片后仍超限 ExpandError /
@@ -77,6 +81,62 @@ class GlobMatchTest(unittest.TestCase):
         self.assertTrue(_pipeline._glob_match(".agents/skills/my-commit-flow/scripts/sync.py", pat))
         self.assertTrue(_pipeline._glob_match(".agents/skills/a/b/scripts/x.py", pat))
         self.assertFalse(_pipeline._glob_match(".agents/skills/a/b/x.py", pat))
+
+
+class HitTest(unittest.TestCase):
+    """红线/警告/闸门 match 的命中面(_pipeline.hit, 2026-11-17 S4 起 fnmatch glob 语义)。
+
+    旧实现 = 前缀 startswith 或子串 in 双口径; 新口径: 条目一律 fnmatch glob(整路径,
+    大小写敏感, `*` 跨 `/`), 裸串 = 精确相等。迁移对照表(零意图漂移)在
+    memory-bank/tasks/26-11-17-memory-bank-skill-portability.md 进度日志。
+    """
+    def test_exact_bare_string_is_no_longer_prefix_or_substring(self) -> None:
+        # 裸串只精确相等 —— 旧口径下 "xconfig.yml" 有前缀命中、"a/config.yml.bak" 有子串命中, 现在都不
+        self.assertEqual(
+            _pipeline.hit(["config.yml", "xconfig.yml", "a/config.yml.bak"], ["config.yml"]), ["config.yml"]
+        )
+        # 旧双口径的完整覆盖面 = 子串语义, 迁移后用 `*x*` 显式化(本仓红线条目的写法)
+        self.assertEqual(
+            _pipeline.hit(["config.yml", "xconfig.yml", "a/config.yml.bak"], ["*config.yml*"]),
+            ["config.yml", "xconfig.yml", "a/config.yml.bak"]
+        )
+
+    def test_prefix_glob(self) -> None:
+        self.assertEqual(
+            _pipeline.hit(["src/a.py", "src/auto_qb/b.py", "lib/src/c.py", "srcx/d.py"], ["src/*"]),
+            ["src/a.py", "src/auto_qb/b.py"]
+        )  # `*` 跨 `/`; 不吃嵌套/异名前缀
+
+    def test_substring_glob(self) -> None:
+        self.assertEqual(
+            _pipeline.hit(["想法.md", "docs/想法.md", "想法.md.bak"], ["*想法.md*"]), ["想法.md", "docs/想法.md", "想法.md.bak"]
+        )
+
+    def test_cookies_glob_actually_hits(self) -> None:
+        # T4 面 A 回归: `*.cookies*` 类写法在旧实现下永不命中且无告警; glob 化后必须命中
+        self.assertEqual(
+            _pipeline.hit(["a/b.cookies.txt", "x.cookies", "a.md"], ["*.cookies*"]), ["a/b.cookies.txt", "x.cookies"]
+        )
+
+    def test_glob_metachars_are_special_and_escaping_works(self) -> None:
+        self.assertEqual(_pipeline.hit(["datax1.txt"], ["data?1.txt"]), ["datax1.txt"])  # ? = 单字符
+        self.assertEqual(_pipeline.hit(["data[1].txt"], ["data[1].txt"]), [])  # [1] 是字符组 = x
+        self.assertEqual(_pipeline.hit(["data[1].txt"], ["data[[]1[]].txt"]), ["data[1].txt"])  # 转义字面量
+
+    def test_case_sensitive_regardless_of_host(self) -> None:
+        # fnmatchcase 钉死大小写敏感 —— fnmatch.fnmatch 在 Windows 上会归一, 会静默放宽红线面
+        self.assertEqual(_pipeline.hit(["Config.YML"], ["*config.yml*"]), [])
+
+    def test_empty_pattern_matches_nothing(self) -> None:
+        # 空串不是 glob: 命中面为零; 「每次提交都跑」哨兵由 gates_for 在进 hit 之前短路
+        self.assertEqual(_pipeline.hit(["a.py"], [""]), [])
+
+    def test_gates_for_sentinel_fires_on_empty_file_list(self) -> None:
+        # 纯删除提交: present 只收工作区仍存在的路径, 可为空 —— 空串哨兵闸门仍要命中
+        # (2026-11-06 评审实测: 删 500 行可零评审入库的洞, 靠这条哨兵短路兜住)
+        gate = {"match": [""], "run": ["x"], "auto": True}
+        self.assertEqual(_pipeline.gates_for([], [gate]), [gate])
+        self.assertEqual(_pipeline.gates_for([], [{"match": ["memory-bank/*"], "run": ["x"]}]), [])
 
 
 class ExpandTest(unittest.TestCase):

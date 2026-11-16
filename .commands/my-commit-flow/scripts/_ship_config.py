@@ -341,11 +341,11 @@ def _detect_project(root: Path) -> tuple[list[dict], list[str], list[str]]:
         ):
             run.insert(0, "ruff format <changed:*.py>")
             why.append("格式化 ruff(依据: ruff 配置)")
-        gates.append({"match": ["src/", "tests/"], "run": run, "note": "Python 改动", "auto": True})
+        gates.append({"match": ["src/*", "tests/*"], "run": run, "note": "Python 改动", "auto": True})
         kinds.append("python")
 
     if (root / "package.json").exists():
-        gates.append({"match": ["src/", "tests/"], "run": ["npm test"], "note": "前端改动", "auto": True})
+        gates.append({"match": ["src/*", "tests/*"], "run": ["npm test"], "note": "前端改动", "auto": True})
         why.append("前端(依据: package.json)")
         kinds.append("node")
 
@@ -391,6 +391,7 @@ def render_template(root: Path) -> str:
         f'mirror_host_mark = "{mirror_mark}"',
         "",
         "# 出现即 STOP —— **必须手填**: 生产配置 / 运行时数据 / 永不入 Git 的目录",
+        "# 条目是 fnmatch glob(整路径, 大小写敏感): 前缀写 foo* / 子串写 *foo* / 精确写 foo",
         "# 下列候选来自 .gitignore(已滤掉构建缓存), 只作提示, 请自行增删:",
     ]
     out += [f"#   - {c}" for c in cands] if cands else ["#   (未找到候选 —— 请按仓库的治理规则手写)"]
@@ -424,7 +425,7 @@ def render_template(root: Path) -> str:
         out += [
             "# (未识别项目类型, 未生成任何闸门 —— 请照下面格式手写, 否则提交前不会有任何机检)",
             "# [[gates]]",
-            '# match = ["src/"]',
+            '# match = ["src/*"]',
             '# run   = ["<未填: 测试命令>"]',
             '# auto  = true',
             '# note  = "改动源码"',

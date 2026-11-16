@@ -13,6 +13,8 @@
 - test_clean_tree_reports_nothing_to_run           树净 → rc 0 + 一行「树净, 无闸门可跑」, 不碰闸门
 - test_config_stop_fails_fast                      配置体检 STOP(未知键) → 失败一行 rc 1, 不跑闸门
 - test_red_lines_warn_only_gates_still_run         红线命中 → 只打 WARN 行, 闸门照跑(拍板 D6)
+- test_red_line_glob_hits_nested_and_suffixed_paths  红线 glob 口径(2026-11-17 S4): *config.yml*/
+                                                   *auto-qb-data/* 仍命中嵌套/带后缀形态(覆盖不缩, R-1)
 - test_warn_lines_note_only_gates_still_run        warn_lines 半边独立钉住: 「人工确认项」打行分支
                                                    回归(循环被删/键名改错)时红线用例救不了(分面 2)
 - test_present_filters_vanished_paths              工作区已不存在的路径不进 present(与 commit 同口径);
@@ -165,13 +167,27 @@ def test_red_lines_warn_only_gates_still_run(repo, monkeypatch, capsys):
     assert spy.calls and "src/a.py" in spy.calls[0][1]["changed"]  # 闸门照跑
 
 
+def test_red_line_glob_hits_nested_and_suffixed_paths(repo, monkeypatch, capsys):
+    # 红线覆盖不缩(计划 26-11-17-0010 R-1): 迁移后 `*config.yml*` 仍命中嵌套/带后缀形态 ——
+    # 旧子串口径下这些路径会被拦/亮, glob 口径漏了就是「该红不红」。
+    _patch_changed(monkeypatch, staged=["backup/config.yml.old", "sub/auto-qb-data/state.json"])
+    _patch_cfg(monkeypatch)
+    spy = _GateSpy(ran=0)
+    monkeypatch.setattr(gate_mod, "run_gates", spy)
+    ok, _, _ = gate_mod.run_gate_prerun([])
+    out = capsys.readouterr().out
+    assert ok  # 预跑只亮不拦(拦截语义在 commit)
+    assert "WARN: 红线命中" in out
+    assert "backup/config.yml.old" in out and "sub/auto-qb-data/state.json" in out
+
+
 def test_warn_lines_note_only_gates_still_run(repo, monkeypatch, capsys):
     # warn_lines 半边(分面 2 发现 1): 「人工确认项」打行分支独立于红线, 回归(循环被删/键名改错)时
     # 红线用例救不了它 —— 预跑会静默丢人工确认项提示。
     (repo / "src").mkdir()
     (repo / "src" / "a.py").write_text("x = 1\n", encoding="utf-8")
     _patch_changed(monkeypatch, staged=["src/a.py"])
-    _patch_cfg(monkeypatch, warn_lines=["src/"])
+    _patch_cfg(monkeypatch, warn_lines=["src/*"])  # glob 口径(2026-11-17 S4): 裸串 src/ 匹配不到任何路径
     spy = _GateSpy(ran=1)
     monkeypatch.setattr(gate_mod, "run_gates", spy)
     ok, line, _ = gate_mod.run_gate_prerun([])
@@ -187,7 +203,7 @@ def test_present_filters_vanished_paths(repo, monkeypatch, capsys):
     _patch_changed(monkeypatch, staged=["gone.txt", "kept.txt"])
     _patch_cfg(
         monkeypatch, gates=[{
-            "match": ["src/"],
+            "match": ["src/*"],
             "run": ["echo hi"],
             "auto": True,
             "timeout": 60,

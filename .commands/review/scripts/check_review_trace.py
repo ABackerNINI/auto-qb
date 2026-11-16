@@ -56,6 +56,7 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import os
 import re
 import subprocess
@@ -145,10 +146,12 @@ def red_lines(root: Path) -> list[str]:
 
 
 def sensitive_hit(files: list[str], reds: list[str]) -> list[str]:
+    # reds 条目是 fnmatch glob(2026-11-17 S4 起, 与提交闸门 _pipeline.hit 同口径: 大小写敏感,
+    # `*` 跨 `/`); SENSITIVE_PATH_MARKERS 是路径标记词, 保持子串语义(词面 in 小写路径)。
     hits = []
     for f in files:
         low = f.lower()
-        if any(r in f for r in reds) or any(m in low for m in SENSITIVE_PATH_MARKERS):
+        if any(fnmatch.fnmatchcase(f, r) for r in reds) or any(m in low for m in SENSITIVE_PATH_MARKERS):
             hits.append(f)
     return hits
 

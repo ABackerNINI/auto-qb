@@ -170,7 +170,8 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str]
     paths 为空 → 全量改动(权威单点 changed_files); 传路径 → 子集, omitted = 未传给脚本的其余改动
     (去重 —— MM 文件同时在 staged / unstaged 两份清单里, 不去重计数与示例会翻倍)。
     omitted 与「是否进了本笔」的关系由 omitted_note 按索引状态分组说明 —— 子集只限制 add 清单,
-    git commit 提交的是整个索引(issue 26-10-16-1523)。红线按既有的子串口径匹配。
+    git commit 提交的是整个索引(issue 26-10-16-1523)。红线按 glob 口径匹配(2026-11-17 S4:
+    与 hit() 同源 fnmatch, 大小写敏感, 旧子串口径退役 —— 条目写法见 config.md 匹配语义节)。
     """
     bulk = [p for p in paths if p in BULK]
     if bulk:
@@ -184,7 +185,7 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str], staged: list[str]
         omitted = []
     if not to_stage:
         return [], [], "没有可提交的改动 —— 工作区与索引都干净"
-    red = [p for p in to_stage if any(r in p for r in red_lines)]
+    red = hit(to_stage, red_lines)  # glob 口径单点在 _pipeline.hit(与闸门/预警三面同源)
     if red:
         return [], [], f"红线文件不得提交: {' '.join(red)} —— 移出提交范围后重跑(见 AGENTS.md「红线」节)"
     return to_stage, omitted, None
