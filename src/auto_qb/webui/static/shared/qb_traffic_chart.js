@@ -3131,6 +3131,12 @@ window.AQB_QB_TRAFFIC = {
         ? [u.data[0].slice(a.pad), u.data[1].slice(a.pad), u.data[2].slice(a.pad)]
         : [u.data[0], u.data[1], u.data[2]]);
       u._qbPad = dropPad ? 0 : (u._qbPad || 0);
+      // 根因二次纠正(issue 26-11-17-0936): uPlot 只在 scale 变化时置轴重算脏标记(mt), 走 Dn()
+      // 重算 _splits/_values。L0 末帧钳零后, 收敛帧 setData 推出的 x range 与末帧视口逐位相同
+      // —— scale 未变 -> 轴不重算 -> 刚清掉的 tick freeze 旧标签滞留在 _values 里, 要等下一拍
+      // 第一个 setScale 改视口才刷新(底部时刻标签比刻位慢一拍, 一帧跳)。这里强制 mt=true 让
+      // 本次提交重算一次轴值; 第一参 false 只让 redraw 走 Jn() 提交, 不再写 x scale。
+      u.redraw(false, true);
       // F2 常驻菱形锚 · 同步点 2/4(收敛帧): 真值落袋后把锚位写到终值(shown=target), 拍间常驻
       // 位置与曲线尾点对齐 —— setData 提交本会经锚钩子带上, 此处显式落笔钉住计划四处之一(R3)。
       this._qbFxAnchorSync(u);

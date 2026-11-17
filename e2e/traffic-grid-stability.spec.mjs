@@ -265,15 +265,17 @@ test.describe('R1 处置 · hour 段窗(3天档)栅格语义: floor+1 形状 + �
 });
 
 /* ============================================================================ */
-/* A4-b(issue 26-11-17-0936 12:35 根因纠正): 每拍 +1 桶真实几何下 x 轴首刻位逐帧单调不减。
+/* A4-b(issue 26-11-17-0936 12:35 + 13:2x 两次根因纠正): 每拍 +1 桶真实几何下 x 轴首刻位
+ * 逐帧单调不减, 且非冻结帧标签与刻位同源。
  *
  * 为什么 A4 本体没抓到: A4 用每拍 +30 桶(整窗)压缩桩, dx0=30 格走 rewin 瞬时落地、根本
  * 不播 L0, 从不进入末帧 ulp 区。生产每拍 +1 桶(轮询=桶宽=1.5s)播 L0, 末帧 rem=(1-p)^3
  * 逼近 0 时 x.min 落在刻度整数边界前一丁点(120.9999788 而非 121.0), uPlot time splits
  * 据该残差把首刻位低一格(125->124), 下一帧收敛帧精确 121.0 又恢复 —— 单帧刻位/网格线
- * 回跳。本用例用真实每拍 +1 桶几何逐帧采 _splits[0], 钉死单调不减, 堵住 A4 的 L0 盲区。
+ * 回跳。钳零修掉它后暴露第二层: 收敛帧 scale 与末帧逐位相同, uPlot 不重算 axes, 冻结
+ * 标签滞留到下一拍。本用例逐帧采 _splits[0]/_values[0], 同时堵住两条回潮路径。
  * ============================================================================ */
-test.describe('A4-b 每拍 +1 桶真实几何 · L0 末帧刻位不回跳(issue 26-11-17-0936)', () => {
+test.describe('A4-b 每拍 +1 桶真实几何 · 末帧刻位不回跳 + 收敛标签不滞留(issue 26-11-17-0936)', () => {
   installRuntimeErrorGuard(test);
 
   const N1 = 41;   // 1m 窗 60/1.5 = 40 整桶 + 1 进行中桶
@@ -316,8 +318,14 @@ test.describe('A4-b 每拍 +1 桶真实几何 · L0 末帧刻位不回跳(issue 
         if (u && u.data && u.data.length && u.axes && u.axes[0]) {
           const st = u._qbBeat;
           const sp = u.axes[0]._splits;
+          const lv = u.axes[0]._values;
           if (sp && sp.length && st && st.xs0 != null) {
-            s.frames.push({ sp0: sp[0], xs0: st.xs0, vMin: u.scales.x.min, vMax: u.scales.x.max });
+            s.frames.push({
+              sp0: sp[0], xs0: st.xs0, vMin: u.scales.x.min, vMax: u.scales.x.max,
+              lab0: lv && lv[0],
+              expectLab0: vm._qbTickLabel(sp[0], vm.qbCurScope || 'torrent'),
+              frozen: !!u._qbTickFreeze, pending: !!u._qbTickFreezePending,
+            });
             if (s.xs0s === undefined) s.xs0s = new Set();
             s.xs0s.add(st.xs0);
             if (s.xs0s.size >= 9) s.done = true;
@@ -336,6 +344,18 @@ test.describe('A4-b 每拍 +1 桶真实几何 · L0 末帧刻位不回跳(issue 
       expect(frames[i].sp0, `第 ${i} 帧首刻位 ${frames[i].sp0} 不得小于前帧 ${frames[i - 1].sp0}`
         + '(L0 末帧残差令 splits 首刻位回跳 = issue 26-11-17-0936 根因回潮)')
         .toBeGreaterThanOrEqual(frames[i - 1].sp0);
+    }
+
+    /* 本体 2(13:2x 二次纠正): 收敛帧清掉 tick freeze 后必须当场重算标签。uPlot 在 scale
+     * 不变时不重算 axes —— L0 末帧钳零令收敛帧 scale 与上帧逐位相同, 少了强制重算则
+     * _values 仍是冻结旧标签, 会滞留到下一拍首个 setScale 才补跳(底部时刻一帧闪动)。
+     * 冻结态/挂起态天然允许旧标签, 只钉「非冻结非挂起」帧: 收敛帧与拍间静止帧。 */
+    const settled = frames.filter((f) => !f.frozen && !f.pending && f.lab0 != null);
+    expect(settled.length, '采样窗应覆盖收敛/静止帧(非冻结非挂起)').toBeGreaterThan(0);
+    for (const f of settled) {
+      expect(f.lab0, `刻位 ${f.sp0} 的非冻结帧标签 ${f.lab0} 必须等于现算值 ${f.expectLab0}`
+        + '(收敛帧未强制重算 axes, 冻结标签滞留下一拍 = issue 26-11-17-0936 二次根因回潮)')
+        .toBe(f.expectLab0);
     }
   });
 });

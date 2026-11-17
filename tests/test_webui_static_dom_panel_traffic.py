@@ -1752,6 +1752,13 @@ def test_frontend_qb_beat_kernel_battery():
     conv_body = conv_blk.group(1)
     assert conv_body.index("u._qbTickFreeze = null;") < conv_body.index("u.setData(dropPad"), \
         "收敛帧必须先清 ticks 冻结再 setData(同一次提交内完成一次性刷新)"
+    # issue 26-11-17-0936 13:2x 二次纠正: L0 末帧钳零后收敛帧 scale 与末帧逐位相同, uPlot
+    # 不置轴重算脏标记 -> values 回调不执行 -> 刚清掉的冻结旧标签滞留在 _values, 下一拍才跳。
+    # 收敛帧必须在 setData 之后强制 mt=true 重算一次轴值, 让标签当场与 _splits 对齐。
+    assert "u.redraw(false, true);" in conv_body \
+        and conv_body.index("u.setData(dropPad") < conv_body.index("u.redraw(false, true);"), \
+        "收敛帧 setData 后必须 u.redraw(false, true) 强制重算 axes(scale 未变时 uPlot 不会" \
+        "重算 _values, 冻结标签滞留下一拍 = issue 26-11-17-0936 二次根因回潮)"
     assert "u._qbTickFreeze.length === splits.length" in js, \
         "ticks 冻结必须带等长守卫(过渡中 splits 数变化即解除缓存回落现算, 防标签与刻位错位)"
     # d. reduce 短路读有效值单点(on = enabled && !reduce 的 S0-b 产物)
