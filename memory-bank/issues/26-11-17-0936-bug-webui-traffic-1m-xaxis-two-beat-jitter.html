@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>流量图 x 轴网格每两拍跳变: 真机 ulp 残差跨刻位边界, 阈值 1e-3 钳零修复待复测 · bug · 计划外问题</title>
+<title>流量图 x 轴网格每两拍跳变: 真机 ulp 残差跨刻位边界, 阈值 1e-3 钳零已修复 · bug · 计划外问题</title>
 <meta name="issue-slug" content="webui-traffic-1m-xaxis-two-beat-jitter">
 <meta name="issue-stamp" content="26-11-17-0936">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-traffic-xaxis-jitter">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="流量图 x 轴网格每两拍跳变: 真机 ulp 残差跨刻位边界, 阈值 1e-3 钳零修复待复测">
-<meta name="issue-summary" content="根因第五次取证（2026-11-17 17:0x）真机 report 锁定：torrent 图 L0 末帧 clock=425 时 rem=1.71e-4 越过旧钳零阈值 1e-4 未归零，x.min 停在 1794905846.9997427（距刻位边界仅 0.00026s≈0.011px），uPlot splits 首刻位当帧 1794905850→1794905849、下一帧恢复，表现为整条网格线单帧回跳一格。根因是「残差是否跨刻位边界」的二值问题，非残差大小；0.011px 几何不可见却足以令 splits 换格。修法：_QB_FX_L0_SNAP_REM 从 1e-4 上调至 1e-3，覆盖末段两帧（4.05e-4/1.71e-4）提前钳零，几何偏差 <0.01px。静态电池 16/16。§05 后端、§07 一~四次修复均为有效阶段性修复保留追溯。状态保持 Open，待用户真机硬刷新复测确认。">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="流量图 x 轴网格每两拍跳变: 真机 ulp 残差跨刻位边界, 阈值 1e-3 钳零已修复">
+<meta name="issue-summary" content="根因第五次取证（2026-11-17 17:0x）真机 report 锁定：torrent 图 L0 末帧 clock=425 时 rem=1.71e-4 越过旧钳零阈值 1e-4 未归零，x.min 停在 1794905846.9997427（距刻位边界仅 0.00026s≈0.011px），uPlot splits 首刻位当帧 1794905850→1794905849、下一帧恢复，表现为整条网格线单帧回跳一格。根因是「残差是否跨刻位边界」的二值问题，非残差大小；0.011px 几何不可见却足以令 splits 换格。修法：_QB_FX_L0_SNAP_REM 从 1e-4 上调至 1e-3，覆盖末段两帧（4.05e-4/1.71e-4）提前钳零，几何偏差 <0.01px。静态电池 16/16；提交 d47d6d65。真机复测（2026-11-17 23:2x）：桩上跳变消失，用户在真实浏览器硬刷新后确认跳变消失，1m/5m/30m 底部刻度+纵线每两拍单帧回跳不再出现。§05 后端、§07 一~四次修复均为有效阶段性修复保留追溯。状态 Done（已修复并真机确认）。">
 <style>
   :root {
     --bg: #10151a;
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（根因已锁定 · 修复待真机复测）· bug</div>
-<h1>流量图 x 轴网格每两拍跳变: 真机 ulp 残差跨刻位边界, 阈值 1e-3 钳零修复待复测</h1>
-<p class="lede">历经四轮桩取证「内部 x 量全平滑、右缘根因证伪」后，第五次改用<b>用户真实环境全自动探针</b>抓到决定性一帧：torrent 图 L0 末帧 <code>clock=425</code> 的 <code>rem=1.71e-4</code> 越过旧钳零阈值 <code>1e-4</code> 未归零，<code>x.min=1794905846.9997427</code>（距刻位边界仅 <code>0.00026s≈0.011px</code>），uPlot splits 首刻位当帧 <code>1794905850→1794905849</code>、下一帧恢复 —— 整条网格线单帧回跳一格。<b>根因是「残差是否跨刻位边界」的二值问题，不是残差大小</b>：<code>0.011px</code> 几何不可见，却足以令 splits 换格。修法 = 钳零阈值 <code>1e-4→1e-3</code>，覆盖该帧及前两帧提前钳零，几何偏差 <code>&lt;0.01px</code>；静态电池 16/16 通过。前四轮修复（后端浮点锚 / 首轮 ulp 钳零 / 收敛轴重算 / 去 tick freeze / 右缘过滤）均为有效阶段性修复，保留追溯；本单状态保持 <strong>Open</strong>，待用户真机硬刷新复测确认跳变消失。</p>
+<div class="kicker">计划外问题（根因已锁定 · 已修复并真机复测确认）· bug</div>
+<h1>流量图 x 轴网格每两拍跳变: 真机 ulp 残差跨刻位边界, 阈值 1e-3 钳零已修复</h1>
+<p class="lede">历经四轮桩取证「内部 x 量全平滑、右缘根因证伪」后，第五次改用<b>用户真实环境全自动探针</b>抓到决定性一帧：torrent 图 L0 末帧 <code>clock=425</code> 的 <code>rem=1.71e-4</code> 越过旧钳零阈值 <code>1e-4</code> 未归零，<code>x.min=1794905846.9997427</code>（距刻位边界仅 <code>0.00026s≈0.011px</code>），uPlot splits 首刻位当帧 <code>1794905850→1794905849</code>、下一帧恢复 —— 整条网格线单帧回跳一格。<b>根因是「残差是否跨刻位边界」的二值问题，不是残差大小</b>：<code>0.011px</code> 几何不可见，却足以令 splits 换格。修法 = 钳零阈值 <code>1e-4→1e-3</code>，覆盖该帧及前两帧提前钳零，几何偏差 <code>&lt;0.01px</code>；静态电池 16/16 通过，提交 <code>d47d6d65</code>。前四轮修复（后端浮点锚 / 首轮 ulp 钳零 / 收敛轴重算 / 去 tick freeze / 右缘过滤）均为有效阶段性修复，保留追溯；<b>真机复测确认跳变消失</b>（2026-11-17 23:2x：先在实时流量桩上目视确认，再由用户在真实浏览器硬刷新后确认 1m/5m/30m 底部刻度+纵线每两拍单帧回跳不再出现），本单状态 <strong>Done</strong>。</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-0936-bug-webui-traffic-1m-xaxis-two-beat-jitter</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 09:36</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
 </div>
@@ -99,7 +99,7 @@
 <section id="s1">
   <h2><span class="no">§01</span>现象与发现场景</h2>
   <p>用户复测反馈「流量图 x 轴跳动依然没有彻底解决：<b>之前每拍跳一下，现在每两拍跳一下</b>」。按 1m 窗深挖：该窗桶宽=采样间隔=轮询周期=1.5s、桶数恒 41（没有非整倍窗的 497↔498 翻动拍，排除先前复刻的 R5 根因）；同采样间隔下 5m 窗桶宽也恰为 1.5s、桶数恒 201，命中同一机制。用户随后补报「30m 视图也有轻微抖动，没有 1m 剧烈，也是两拍抖动一次」；真算确认 30m 桶宽 4.5s、桶数恒 401，同源但只走 0/+4.5s（1 格），故更轻。首轮只扫 <code>frac(now)</code> 得出「≥0.5 才二拍」，复评二维复扫发现该判据不成立：<code>frac=0.7</code> 也可能干净（<code>int(now₀)=1000002</code>, mod3=0），<code>frac=0.0</code> 也可能二拍（同样 mod3=0）。1m/5m 的真正判据是 <code>(int(now₀) mod 3, frac(now₀))</code>，30m 走 <code>(int(now₀) mod 9, frac(now₀))</code>，详见 §02。</p>
-  <p>取证方式：Python 直接调 <code>build_grid</code> 扫相位 + Node 加载真 <code>qb_traffic_chart.js</code> 把生成的 xs 喂给 <code>_qbRollJudge</code>/<code>_qbPadTailColumns</code> 并模拟收敛帧 <code>dropPad</code>，测 settled 视口。<b>未做浏览器目视复现</b>（见 §07 复验 TODO）。</p>
+  <p>取证方式：Python 直接调 <code>build_grid</code> 扫相位 + Node 加载真 <code>qb_traffic_chart.js</code> 把生成的 xs 喂给 <code>_qbRollJudge</code>/<code>_qbPadTailColumns</code> 并模拟收敛帧 <code>dropPad</code>，测 settled 视口。初期未做浏览器目视复现；后续第五次取证改用真机探针 + 实时流量桩 + 用户硬刷新实测完成目视确认（见 §07「真机复测确认与关闭」）。</p>
 </section>
 
 <section id="s2">
@@ -246,9 +246,10 @@ A=int(now0) | A%9 | frac | first 逐拍位移（k=1..12，单位 s，step=4.5 �
     <li>2026-11-17 16:2x — <b>阈值校正复测</b>：发现上段判据「相邻位移 &gt; 5s」阈值恰等于一条刻位间隔、会漏掉单格跳，遂改用 0.3s/20px 阈值 + 抓 <code>_splits</code> 全量 + 按刻位值身份逐条追踪每条物理网格线。真实挂钟锚桩 999 次提交 / 14 拍：<code>sp0</code> 数组首元素单帧跳 102px 共 4 次，但逐条追踪证明每条物理网格线跨帧最大位移仅 4.42px、&gt;20px 事件 0 —— 102px 是 <code>splits</code> 数组轮换（最左滑出/最右滑入）的假象，非同一条线位置跳。<code>vMin/vMax</code> 低阈值仍 0 跳、<code>xs0</code> 步长恒 +1.5、<code>spLen</code> 恒 12、bbox 恒定。四轮内部状态平滑的结论<b>经受住正确阈值复测</b>。状态保持 <strong>Open</strong>，转真实环境三 scope 探针取证。</li>
     <li>2026-11-17 16:4x — 用户复测补充：跳变仅约 1 帧、人工无法 mark；且<b>几个流量图都跳</b>。探针改为全自动捕获（环形缓冲 + 跳变自动冻结前后 12 帧 + 三 scope 同时监控 + setSize 事件记录），自检通过。「几图同跳」把根因方向进一步收窄到页面级共享因素（轮询→布局回流→多图 setSize / 共享绘制层），与内部 x 量全平滑一致。状态保持 <strong>Open</strong>。</li>
     <li>2026-11-17 17:0x — <b>根因第五次锁定（真机 report 决定性证据）</b>：全自动探针在真实浏览器抓到 torrent 图 L0 末帧三连帧 <code>clock=416.7/425/433.3</code>，<code>rem</code> 按 <code>(1−clock/shiftMs)³</code> 拟合出 <code>shiftMs=450</code>、<code>dxMin0=1.5</code>；<code>clock=425</code> 帧 <code>rem=1.71e-4</code> 越过旧阈值 <code>1e-4</code> 未钳零，<code>x.min=1794905846.9997427</code>（残差 0.00026s≈0.011px），uPlot splits 首刻位当帧 <code>1794905850→1794905849</code>、下一帧精确落锚恢复 <code>1850</code>。<b>二值根因</b>：不是残差大小，而是残差是否为负（是否跨刻位边界）——首轮钳零阈值 1e-4 太小。修法 <code>_QB_FX_L0_SNAP_REM: 1e-4→1e-3</code>，静态断言同步，静态电池 16/16。状态保持 <strong>Open</strong>，待用户真机硬刷新复测。</li>
+    <li>2026-11-17 23:2x — <b>真机复测确认，跳变消失，关闭本单</b>：先用实时流量诊断桩（<code>diag_qb_traffic_live.py</code>，1.5s 桶宽 / 41 桶 / 真 <code>build_grid</code> 现算，真机同构几何）目视确认每两拍单帧跳变消失；随后用户在真实浏览器硬刷新加载修复后前端，确认 1m / 5m / 30m 底部时间刻度 + 纵向网格线的每两拍单帧回跳<b>不再出现</b>。终结修复 <code>_QB_FX_L0_SNAP_REM: 1e-4→1e-3</code> 已提交 <code>d47d6d65</code>。状态 <strong>Open → Done</strong>（kb.status，badge + meta 一致）。详见下方「真机复测确认与关闭」节。</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p class="good">复验：2026-11-17 23:2x 已消失 —— 实时流量桩目视确认 + 用户真实浏览器硬刷新确认，1m/5m/30m 底部刻度 + 纵线每两拍单帧回跳不再出现（详见下方「真机复测确认与关闭」）。</p>
   <h3>根因纠正（2026-11-17 12:35，真浏览器逐帧取证）</h3>
   <p>§05 的后端结论<b>不是当前观感的根因</b>。按 §06 方案 A 实施 <code>t1=float(now)</code>（提交 <code>01ae0f2b</code>）后，真 <code>build_grid</code> 复扫确认 1m/5m 的 <code>Δfirst</code> 恒 +1.5、30m 每 3 拍 +4.5 无二拍簇——后端修对了。但用户复测「问题没有丝毫改善」。遂在真浏览器（Playwright + 生产形状桩：1m 窗 / interval=1.5s / 每拍 +1 桶 / 全桶真值等距）逐帧采样视口、xs 锚、uPlot 刻位三组量，结论如下。</p>
   <pre><code>=== 判定帧采样(每拍) ===
@@ -375,7 +376,18 @@ A=int(now0) | A%9 | frac | first 逐拍位移（k=1..12，单位 s，step=4.5 �
   <p><b>实际修法</b>：<code>src/auto_qb/webui/static/shared/qb_traffic_chart.js</code> 将 <code>_QB_FX_L0_SNAP_REM</code> 从 <code>1e-4</code> 上调至 <code>1e-3</code>，帧循环 <code>const r = rem &lt; _QB_FX_L0_SNAP_REM ? 0 : rem;</code> 不变，<code>dx/dxMin/dxMax</code> 三方向继续同用钳零后的 <code>r</code> 派生。<code>1e-3</code> 覆盖 <code>clock=416.7/425</code> 两帧（<code>4.05e-4/1.71e-4</code>）提前钳零，把末帧视口精确钉在锚点，splits 不再换格。几何代价上限 <code>1e-3×dxMin0</code>：1m <code>1.5s→1.5ms</code>、30m <code>4.5s→4.5ms</code>、24h <code>174s→0.174s</code>，在各自视口下均 <code>&lt;0.01px</code>。</p>
   <p><b>为何前四轮桩与阈值校正都漏掉它</b>：① 旧判据 <code>相邻位移 &gt; 5s</code> 恰等于一格刻位，把单格跳整个漏掉（已在 16:2x 段自纠）；② L0 末帧 <code>rem</code> 在 (<code>1e-4</code>, <code>1e-3</code>) 窗口内只停留约 2 帧，桩的固定 <code>clock</code> 步长未必凑巧采到，且判定帧 <code>setData+setScale</code> 被 uPlot <code>Un</code> 标志合并、中间半帧不可见；③ 只有在真实浏览器、真实 beat 时钟相位与真实数据长度下，<code>clock=425</code> 才恰好把 <code>x.min</code> 压在刻位边界下方 <code>0.00026s</code>。故前四轮「内部 x 量全平滑」并非错误，而是采样未覆盖这个二值边界帧。</p>
   <p><b>驯服方式 / 验证</b>：静态电池 <code>test_webui_static_dom_panel_traffic.py</code> 把 <code>_QB_FX_L0_SNAP_REM</code> 常量钉为 <code>1e-3</code>，并保留「<code>dx/dxMin/dxMax</code> 三方向同用钳零 <code>r</code>」断言防回退；A4-b e2e（每拍 +1 桶真实几何，<code>sp0</code> 逐帧单调 + 右缘刻位 <code>&lt;vMax−ε</code>）保持。静态电池 <strong>16/16</strong> 通过。</p>
-  <p><b>待用户真机复测</b>：硬刷新（必要时重启服务）加载新阈值后，在 1m / 5m / 30m 窗口观看底部时间刻度 + 纵向网格线是否仍有每两拍单帧跳变；若消失本单可关闭，若仍在请回传新的 <code>xgridProbe.report()</code>。状态保持 <strong>Open</strong>。</p>
+  <p><b>复测结果（2026-11-17 23:2x，已完成）</b>：硬刷新加载新阈值后，用户确认 1m / 5m / 30m 窗口底部时间刻度 + 纵向网格线的每两拍单帧跳变<b>消失</b>。<span class="good">本单已关闭（Done）</span> —— 详见下方「真机复测确认与关闭」。</p>
+
+  <h3>真机复测确认与关闭（2026-11-17 23:2x）</h3>
+  <div class="callout"><b>【结论】跳变消失，五轮取证收敛到单一二值根因，终结修复经两级复测确认。</b>先用实时流量诊断桩在浏览器目视确认，再由用户在真实环境硬刷新后确认 —— 两种环境下每两拍单帧回跳均不再出现。本单从 <strong>Open</strong> 翻 <strong>Done</strong>。</div>
+  <p><b>两级复测</b>：</p>
+  <ul>
+    <li><b>第一级 · 实时流量桩</b>（<code>scripts/diag_qb_traffic_live.py</code>）：复用生产 <code>create_app</code> + 真 <code>QbManager</code> + FakeClient，仅数据合成；<code>main_tick=1.5</code> / <code>sample_interval_multiplier=1</code> → 1m 窗走真 <code>build_grid</code> 现算得 41 桶 / 桶宽 1.5s，与真机同构几何。Playwright 真浏览器验证：qB 入口可见、1m tab 正常、图 41 桶 / 12 splits / bbox 1273px、<code>xs0</code> 逐拍 +1.5s、零页面错误。在该桩上目视观察底部刻度 + 纵线，<span class="good">每两拍跳变消失</span>。</li>
+    <li><b>第二级 · 用户真实浏览器</b>：硬刷新加载修复后前端（<code>_QB_FX_L0_SNAP_REM=1e-3</code>，提交 <code>d47d6d65</code>），用户在 1m / 5m / 30m 窗口实测，<span class="good">每两拍单帧跳变确认消失</span>。</li>
+  </ul>
+  <p><b>终结修复回溯</b>：<code>_QB_FX_L0_SNAP_REM: 1e-4→1e-3</code>，把 L0 末帧 <code>rem∈(1e-4,1e-3)</code> 的视口精确钉回锚点，消除令 uPlot splits 首刻位换格的 <code>0.011px</code> ulp 残差（详见上节「根因第五次锁定」三连帧证据）。几何代价 <code>1e-3×dxMin0</code> 最大 <code>0.174s</code>（24h 窗）<code>&lt;0.01px</code>，肉眼不可见，不动真值 / tooltip / 数据锚。</p>
+  <p><b>验证矩阵（提交前）</b>：ship.gate 两轮全绿（8 条/15 命令）；两个分面评审（正确性 + 诊断脚本安全面）blocker 0、3 条 minor 当场修复；review.check 3/3 PASS；静态电池 + ASCII 守卫 29/29；traffic e2e 6 spec 64/64；探针 <code>node --check</code> 通过；真浏览器桩验证零错误。提交 <code>d47d6d65</code> 已推送 origin/develop。</p>
+  <p><b>经验沉淀（供同类问题）</b>：① 观感跳变若持续多轮「内部状态全平滑」取证仍复现，优先怀疑<b>二值边界翻转</b>（残差是否跨刻位/阈值），而非残差幅度——0.011px 的 ulp 残差足以令整条网格线跳一格；② 采样阈值不要等于被观测量的自然间隔（本例「相邻位移 &gt;5s」恰好漏掉一格跳，16:2x 自纠）；③ 桩取证必须覆盖真实环境的<b>时钟相位与数据长度</b>，否则 L0 末帧的窄窗口（约 2 帧）采不到；④ 真机自动探针（环形缓冲 + 跳变自动冻结前后帧）是唯一能抓到单帧瞬态的手段，已随本单入库供复用。</p>
 </section>
 
 <footer>
