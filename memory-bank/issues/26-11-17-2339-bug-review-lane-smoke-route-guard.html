@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="review-lane-smoke-route-guard">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="review_lane smoke 清理路径未过 _guard_snap_path 守卫">
 <meta name="issue-summary" content="cmd_smoke 用 CLI --route 原样拼快照清理路径并 rmtree,未过 _guard_snap_path 容器守卫">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-2339-bug-review-lane-smoke-route-guard</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 23:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -150,11 +150,13 @@ $ sed -n '922p;936p' .commands/review/scripts/review_lane.py   # cmd_smoke 内
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）；修法: smoke 入口对 route 做白名单格式校验（不走 _guard_snap_path）</li>
+</ul>
   <h3>复验</h3>
   <p>2026-11-17 23:39（入池前, HEAD <code>eff52f0a</code>）: 仍复现 —— <code>cmd_smoke</code> 拼路径与 rmtree 未过守卫, grep 证据见 §02。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法（2026-11-18）: 按拍板方案走格式校验、不调 <code>_guard_snap_path</code> —— <code>.commands/review/scripts/review_lane.py</code> 新增 <code>ROUTE_ID_RE</code> + <code>_require_route_id</code>（白名单: 字母/数字开头结尾、中间仅字母/数字/-/_，与 lane.toml <code>[[route]]</code> id 同域），<code>cmd_smoke</code> 入口在 <code>_resolve_root</code>/<code>_load_lane_config</code> 等 IO 之前先校验 <code>args.route</code>，不过即 rc 2 停手；该值拼的 route JSON / findings / notes / <code>_smoke-{route}</code> 快照子目录等清理路径一并被覆盖。§05 未排查项随之收口：route 在 claim 等子命令侧仍只有「在不在 manifest.routes」校验，无格式校验 —— smoke 是目前唯一有格式校验的入口。</p>
+  <p>验证方式与测试数字: <code>.commands/review/scripts/test_review_pkg.py</code> 新增 <code>LaneSmokeRouteGuardTest</code>（合法 id 放行 / 14 种非法形态拒 rc=2 / 坏 root 上先报 route 非法证明校验先于 IO）；实测 <code>test.pkg.scoped -- .commands/test .commands/review</code>（两包 → D4 整跑）553 passed + 36 subtests passed (49.13s)；手工负例 <code>smoke --route ../evil</code> rc 2 含「--route 非法」，正例 <code>--route R1</code>（坏 root）按序进入 root 校验。</p>
 </section>
 
 <footer>

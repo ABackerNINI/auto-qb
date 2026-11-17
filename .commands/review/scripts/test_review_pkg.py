@@ -16,6 +16,7 @@
 - LaneTipTest         _require_tip 三分支直驱(临时真仓, 本地 bare 仓当远端, 零网络): 无远端 note+本地 HEAD(D18) / remote 可解析但 ls-remote 失败 rc=1 / 远端无该分支 ref rc=1 / HEAD!=远端 tip rc=1 / 同步态放行且无 note
 - LaneManifestGuardTest cmd_manifest 守卫直驱(临时真仓, 无远端 D18): 有路线认领状态即拒重生成(rc=1, 不写 manifest) / 分层范围内漏配文件即拒并列清单(rc=1, 列出漏配文件, 不写 manifest)
 - LaneStateTest       状态机直驱单测(签名带 cfg): batch 转换与原子写(无 .tmp 残留)/坏批次 id 拒/重复勾选拒/done 批次未齐拒/产出缺失拒/合法终态/done 需进行中态/schema 校验(status 枚举/批次条目/缺文件)/require_clean lane 边界(lane 内未跟踪与修改放行/lane 外拒/lane 内改名到 lane 外拒)
+- LaneSmokeRouteGuardTest smoke 入口 route 白名单格式校验(issue 26-11-17-2339): 合法 id(字母/数字开头结尾, 中间字母/数字/-/_)放行/穿越段·路径分隔符·非法字符·空串拒 rc=2/校验先于一切 IO(坏 root 上也报 route 非法)
 - PackTest            敏感 fixture: 基线/HEAD 后缀; 敏感面 -> 分面档; 文件清单精确行(rename 拆删增两行与实算同口径: 旧路径带 [已删除]、新路径单独一行; 改名对提示行含两侧路径与相似度码, 不动实算行数); 红线命中行含"出现即停"; 警告清单; 敏感面按元素归因(新增行/已跟踪路径标记/未跟踪内容/未跟踪路径/+++ 头归因, 且无幻影键); 评审规模=闸门逐笔实算口径(15 行金值 + 多笔提交逐笔和≠树差 7/6 + 记账类/生成物排除面不计行不入清单 + 二进制 0 行 + --base≠锚点可见警告 + repo excludesFile 不改写未跟踪集合, 2026-11-11 统计口径对齐闸门); 尾斜杠目录规则; +++ 头不算内容; 空文件 0 行; 默认 root; 大 diff 用独立无敏感仓库证明分面来自行数
 - BenignPackTest      无敏感内容的小 diff -> 全能档(纯行数路径); 红线/警告清单仍命中
 - CleanPackTest      干净树 -> 评审规模 0 行(闸门实算口径)且全能; 缺/坏闸门配置 -> 可见降级 + 红线预警"无"; 坏 --base / 非 git --root / 非仓库 cwd -> rc=2; 提交后 HEAD!=base 无后缀且已提交改动仍在范围内
@@ -728,6 +729,39 @@ class LaneStateTest(unittest.TestCase):
 
     def test_script_exists(self):
         self.assertTrue(SCRIPT.is_file())
+
+
+class LaneSmokeRouteGuardTest(unittest.TestCase):
+    """smoke 入口 route 白名单格式校验(issue 26-11-17-2339 拍板方案): 穿越段/路径分隔符/非法
+    字符/空串一律拒(rc=2), lane.toml [[route]] id 同域形态放行; 校验发生在一切 IO 之前。
+    """
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("review_lane_smoke_guard_test", LANE_SCRIPT)
+        cls.lane = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.lane)
+
+    def test_valid_route_ids_pass(self):
+        for rid in ("R1", "R2", "R9", "a", "R1-1", "route_1", "x-Y_2"):
+            self.lane._require_route_id(rid)  # 不抛即放行
+
+    def test_invalid_route_forms_rejected(self):
+        cases = ["", "..", "../x", "a/b", "a\\b", ".", ".git", "-x", "R1-", "R1;", "x y", "R1\t", "a:b", "R1."]
+        for route in cases:
+            err = io.StringIO()
+            with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+                self.lane._require_route_id(route)
+            self.assertEqual(cm.exception.code, 2, route)
+            self.assertIn("--route 非法", err.getvalue(), route)
+
+    def test_smoke_validates_route_before_any_io(self):
+        # 坏 route 在 _resolve_root/_load_lane_config 之前拒: 不存在的 root 也必须报 route 非法, 不是别的错
+        err = io.StringIO()
+        ns = argparse.Namespace(route="../evil", remote="origin", root="Z:/no-such-repo-here", dry_run=False)
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+            self.lane.cmd_smoke(ns)
+        self.assertEqual(cm.exception.code, 2)
+        self.assertIn("--route 非法", err.getvalue())
 
 
 class PackTest(unittest.TestCase):

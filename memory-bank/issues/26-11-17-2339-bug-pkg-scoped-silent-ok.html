@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="pkg-scoped-silent-ok">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.pkg.scoped 零包时静默报 ok 不实跑">
 <meta name="issue-summary" content="零包路径静默 rc 0,引擎报 [ok] (0.0s),与实跑成功不可区分,反馈语义误导(批6 脏树场景实测)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-2339-bug-pkg-scoped-silent-ok</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 23:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -136,6 +136,7 @@ $ grep -n "if not pkgs" .commands/test/scripts/pkg_scoped.py
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <div class="callout">待查（已排除: wrapper 自身按已提交 diff 判定 —— pkg_scoped.py 无 git 调用, 只消费闸门喂参; 闸门 changed 口径含未提交改动）。批6 实际触发路径待查。</div>
+  <p>补记（2026-11-18 取证, 修后回填）: 闸门路径喂不出零包 —— <code>expand_run</code>（<code>_pipeline.py</code> <code>&lt;changed:&gt;</code> 展开处）对零匹配直接整条跳过（返回 skip 原因「无匹配文件」, <code>run_gates</code> 静默 <code>continue</code>）, 包根本不启动; 且凡 <code>&lt;changed:.commands/**&gt;</code> 有匹配, 喂进 <code>plan()</code> 的路径必含 <code>.commands/&lt;pkg&gt;</code> 段（≥1 包）。闸门命中判定（<code>gates_for</code>）用的 <code>present</code> 与展开面（<code>changed_for_expand</code> = present + changed_extra）不同源, 只会造成「run 1 整条跳过、run 2 --full 照跑」, 不产生零包实调。故批6 观察到的「脏树仍跳过 + [ok] (0.0s)」最可能来自裸调/直调 wrapper（零参数路径, 即 §02 复现的形态）, 而非闸门链路。</p>
 </section>
 
 <section id="s6">
@@ -147,11 +148,13 @@ $ grep -n "if not pkgs" .commands/test/scripts/pkg_scoped.py
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）；修法: 零包路径 return 0 前打一行可区分提示（rc 语义不变）</li>
+</ul>
   <h3>复验</h3>
   <p>2026-11-17 23:39（入池前, HEAD <code>eff52f0a</code>）: 仍复现 —— 裸调实测 <code>[ok] test.pkg.scoped (0.0s)</code> rc 0 未跑 pytest, 见 §02。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法（2026-11-18）: 按拍板方案只加提示行 —— <code>.commands/test/scripts/pkg_scoped.py</code> 的 <code>main</code> 零包路径（<code>if not pkgs:</code>）在 <code>return 0</code> 前打一行 <code>[pkg.scoped] 0 包, 跳过实跑(兜底 rc 0; 闸门 &lt;changed:&gt; 无匹配本应整条跳过)</code>，输出上与「实跑通过」可区分；rc 保持 0，触发条件未收紧。模块 docstring 的「0 包 → 静默 rc 0」表述同步更新。</p>
+  <p>验证方式与测试数字: ①裸调实测 <code>commands run test.pkg.scoped</code>（零包）—— rc 0 且输出含上述提示行（引擎行 [ok] 0.1s, 不再静默）；②包内自测 <code>.commands/test/scripts/test_pkg_scoped.py</code> 的 <code>TestMain.test_zero_pkg_prints_hint_then_rc0</code>（断言 rc 0 / 不起子进程 / 输出含「0 包」「跳过实跑」）；③<code>test.pkg.scoped -- .commands/test .commands/review</code>（两包 → D4 整跑）实测 553 passed + 36 subtests passed (49.13s)。§05 触发路径取证见 §05 补记。</p>
 </section>
 
 <footer>

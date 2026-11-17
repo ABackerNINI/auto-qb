@@ -234,6 +234,24 @@ def _resolve_root(explicit: str | None) -> Path:
     return Path(proc.stdout.strip()).resolve()
 
 
+ROUTE_ID_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
+
+
+def _require_route_id(route: str) -> None:
+    """smoke 入口的 route 白名单格式校验(issue 26-11-17-2339 拍板: 格式校验, 不走 _guard_snap_path)。
+
+    route 原样拼进 route-{route}.json / -findings / -notes(cleanup unlink)与快照子目录
+    _smoke-{route}(cleanup rmtree)等删除路径, 含 `..`/路径分隔符/其它非常规字符的值会把
+    删除面带出 lane 目录 —— 从严白名单拒收: 字母或数字开头结尾, 中间仅字母/数字/-/_
+    (与 lane.toml [[route]] id 实际取值形态同域)。
+    """
+    if not ROUTE_ID_RE.fullmatch(route):
+        _die(
+            f"--route 非法: {route!r} —— 只允许字母/数字开头结尾、中间仅字母/数字/-/_ 的路线 id"
+            "(与 lane.toml [[route]] id 同域); 该值要拼 route JSON/findings/notes 与快照子目录等清理路径"
+        )
+
+
 def _porcelain(root: Path) -> list[str]:
     out = _git(root, "status", "--porcelain").stdout
     rows = []
@@ -914,11 +932,13 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     共享快照; 预清理只动 owner=smoke 的残留认领, 真实认领一律拒绝运行。
     负例断言: rejected 标志在 except 内置位, cleanup+_fail 全部落在 try 之外 ——
     守卫真失效时 _fail 不会再被自己的 except 吞掉(评审实证的自吞缺陷)。
+    route 白名单格式校验(issue 26-11-17-2339)在一切 IO 之前: 该值要拼进下面的清理路径。
     """
+    route = args.route
+    _require_route_id(route)
     root = _resolve_root(args.root)
     cfg = _load_lane_config()
     ns = argparse.Namespace
-    route = args.route
     snap = _snapshot_dir(root, None, cfg) / f"_smoke-{route}"
     lane = root / cfg["lane_dir"]
     rpath = lane / f"route-{route}.json"
@@ -1052,7 +1072,7 @@ def main() -> int:
     p.add_argument("--root")
 
     p = sub.add_parser("smoke", help="全环真冒烟(含负例断言, 结束清理)")
-    p.add_argument("--route", required=True, help="冒烟用的路线 id(结束后清理其全部痕迹)")
+    p.add_argument("--route", required=True, help="冒烟用的路线 id(仅字母/数字开头结尾、中间字母/数字/-/_; 结束后清理其全部痕迹)")
     p.add_argument("--remote", default="origin")
     p.add_argument("--root")
 

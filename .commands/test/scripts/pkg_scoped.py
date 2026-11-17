@@ -6,8 +6,9 @@
 
 归并规则(D4, 2026-11-01 拍板): 改动文件按 `.commands/<包>/` 前缀归并出受影响包集合 ——
 单包 → 只跑该包(`uv run pytest .commands/<包> -q --no-cov -n 8`); ≥2 包或 --full → 转调
-`run.py run test.pkg`(引擎测试贴着引擎放, 改引擎永远全跑); 0 包 → 静默 rc 0
-(闸门 `<changed:>` 无匹配本应整条跳过, 这里只兜底)。
+`run.py run test.pkg`(引擎测试贴着引擎放, 改引擎永远全跑); 0 包 → 打一行可区分提示后
+rc 0(闸门 `<changed:>` 无匹配本应整条跳过, 这里只兜底 —— issue 26-11-17-2339: 输出必须
+与「实跑通过」可区分)。
 
 TMPDIR(2026-11-02, 计划 26-11-02-0657): 不再内置 R:/ 前缀(自 2026-11-01 引入起在本机从未生效,
 必走 WARN 分支); 由子进程 pytest 的 tests/_tmp_bootstrap.py 自举探测(R→H→系统temp)——
@@ -46,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return subprocess.run([sys.executable, str(RUN_PY), "run", "test.pkg"]).returncode
     if not pkgs:
+        print("[pkg.scoped] 0 包, 跳过实跑(兜底 rc 0; 闸门 <changed:> 无匹配本应整条跳过)")
         return 0
     target = f".commands/{pkgs[0]}"
     print(f"[pkg.scoped] 受影响包: {pkgs[0]} → 只跑 {target}")

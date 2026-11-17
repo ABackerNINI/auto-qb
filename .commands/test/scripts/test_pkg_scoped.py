@@ -4,7 +4,8 @@
 
 ## 测试计划
 - TestPlan   plan(): 单包 / 多包归并排序 / 引擎路径不归并为包 / --full 旗标 / 反斜杠归一 / 去重 / 裸 -- 过滤
-- TestMain   main(): 0 包 → rc 0 且不起子进程; 单包 → pytest 目标收窄到该包;
+- TestMain   main(): 0 包 → 打可区分提示行(0 包, 跳过实跑)后 rc 0 且不起子进程
+             (issue 26-11-17-2339: 输出与「实跑通过」可区分); 单包 → pytest 目标收窄到该包;
              --full → 转调 run.py run test.pkg; 两包 → D4 保守整跑
              (TMPDIR 自 2026-11-02 起不再由 wrapper 注入, 由子进程 _tmp_bootstrap 自举)
 """
@@ -52,11 +53,14 @@ class TestMain:
 
         monkeypatch.setattr(pkg_scoped.subprocess, "run", fake_run)
 
-    def test_zero_pkg_is_silent_zero(self, monkeypatch) -> None:
+    def test_zero_pkg_prints_hint_then_rc0(self, monkeypatch, capsys) -> None:
+        # issue 26-11-17-2339: 零包兜底必须打可区分提示行, 不再静默 rc 0
         calls: list[list[str]] = []
         self._fake_run(monkeypatch, calls)
         assert pkg_scoped.main([]) == 0
         assert calls == []
+        out = capsys.readouterr().out
+        assert "0 包" in out and "跳过实跑" in out
 
     def test_single_pkg_scopes_pytest(self, monkeypatch) -> None:
         calls: list[list[str]] = []
