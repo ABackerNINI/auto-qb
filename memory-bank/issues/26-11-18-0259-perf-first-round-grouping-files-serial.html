@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>重启首轮归组 files 逐种子单发(210 次量级)串行阻塞主循环, groups 视图首份数据被挡 · perf · 计划外问题</title>
+<meta name="issue-slug" content="first-round-grouping-files-serial">
+<meta name="issue-stamp" content="26-11-18-0259">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="webui-boot-first-data">
+<meta name="doc-refs" content="memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="重启首轮归组 files 逐种子单发(210 次量级)串行阻塞主循环, groups 视图首份数据被挡">
+<meta name="issue-summary" content="重启后 store 重建, 首个全量轮把全部种子当新增逐个拉 files 归组(单 hash 端点无法批量), 主循环线程串行约 2-6s, 含落库数据的视图代被挡在管线之后, groups 首份数据随之延迟">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· perf</div>
+<h1>重启首轮归组 files 逐种子单发(210 次量级)串行阻塞主循环, groups 视图首份数据被挡</h1>
+<p class="lede">重启后 store 重建, 首个全量轮把全部种子当新增逐个拉 files 归组(单 hash 端点无法批量), 主循环线程串行约 2-6s, 含落库数据的视图代被挡在管线之后, groups 首份数据随之延迟</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-18-0259-perf-first-round-grouping-files-serial</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 02:59</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>立项分析轮(plan 26-11-18-0259 §02.2)取证撞见: auto-qb 重启后 store 为空, 首个同步必为全量轮, 全部种子走 <code>torrents_added</code> 相位 —— 归组一步对<b>每个</b>新增种子单发一次 qB files API, 主循环线程串行, 与用户报告的「重启后 WebUI 首份数据 5-15s(约 210 种子)」直接相关。与平台/配置无关, 种子量线性放大。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-18 02:5x, 代码事实(行号为当时):
+# 1. 重启首轮全量种子全走 added 相位: store 不持久化种子记录(state.json 只存规则执行史/基线)
+# 2. 归组逐种子单发 files:
+#    grouping_mod.py:111  phases.on("torrents_added", self._on_torrents_added)
+#    grouping_mod.py:398  def _assign_new_torrent(hash, dry_run):
+#    grouping_mod.py:401      files = torrent.files(self._ctx.api.client)   # 每种子 1 次 qB 往返
+# 3. 单发不可合并: qB WebAPI /torrents/files 仅单 hash 参数(qbittorrentapi TorrentsAPIMixIn.torrents_files
+#    源码 data = {"hash": torrent_hash}, 实测 inspect 取证 2026-11-18) —— 210 种子 = 210 次 HTTP 往返
+# 4. 均在主循环线程 _refresh_torrents(qbmanager.py:939)内串行, 主循环 flush 的含数据代被挡在整条管线之后
+#    (qbmanager.py:851→:853; 请求线程触发的提前发布只能拿到落库前的空代, 机制见 plan 26-11-18-0259 §02.2)
+# 5. 单次往返估 10-30ms(本机 qB) → 210 次 ≈ 2-6s; 真机数字待 S0 取证回填</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>auto-qb 进程重启(store 空)后的首个全量同步; 种子量线性放大(210 ≈ 2-6s, 千级更显著); 平台/配置无关</td></tr>
+    <tr><td>影响范围</td><td>主循环线程整条管线时长(首轮): groups 视图首份数据、首轮任务线节拍、同步线被推迟; 与「首轮管线挡首次发布」同根(plan 26-11-18-0259 §02.2), 提前发布(S1)修掉 UI 空窗后, 本件独立决定 groups 第二跳时刻</td></tr>
+    <tr><td>严重度</td><td>中 —— 重启后分组数据晚 2-6s(210 种子量级); 不影响稳态(增量轮 added=∅ 不触发)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/modules/grouping_mod.py:398/:401</code>（取证 2026-11-18 02:59）· <code>_assign_new_torrent</code> · grep <code>torrent.files(self._ctx.api.client)</code> —— 逐种子单发点</li>
+    <li><code>src/auto_qb/core/modules/grouping_mod.py:111</code>（同上）· <code>phases.on("torrents_added")</code> —— 相位订阅入口</li>
+    <li><code>src/auto_qb/torrents/record.py:311/:316</code>（同上）· <code>TorrentRecord.files</code> · grep <code>_files</code> —— 惰性缓存槽(跨 tick, 归组后冲突检查复用, 不重复打)</li>
+    <li><code>src/auto_qb/core/qbmanager.py:939/:1045</code>（同上）· <code>_refresh_torrents</code> · grep <code>phases</code> / <code>torrents_added</code> —— 管线宿主(主循环线程)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">已知机制(非猜测, 取证见 §02): qB WebAPI files 端点单 hash 专用, 无法批量合并 → N 种子 = N 次串行往返; 且全部落在主循环线程的首轮关键路径上(与主循环 flush 的含数据代同拍串行)。已排除: 归组逻辑本身的 CPU 开销(文件映射/组键计算为内存操作, 毫秒级)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>方向: 把首轮 files 拉取从「单轮全量串行」改为「按预算分 tick 渐进归组」, 主循环每 tick 拉一部分(先例: <code>SEARCH_INDEX_BUILD_BUDGET=500</code>, webui/views_common.py), 组视图渐进落位。</p>
+  <ul>
+    <li>候选① 预算化分 tick: 每轮拉 BUDGET 条, 未完保持 dirty 下轮续 —— 代价: 归组完成时间拉长(但不再阻塞整拍); 需处理「归组进行中」的视图语义(plan 26-11-18-0259 S1 的基础视图已是 groups 空形态, 兼容)。</li>
+    <li>候选② 挪工作线程: 后台线程拉 files + 结论回灌主循环(并发约束口径: 工作线程不写共享结构, 26-11-11-0039 §02) —— 代价: 状态机复杂度 + qB 并发请求面。</li>
+    <li>判据: real-machine 轨道 ≈210 假种子, 重启后 groups 第二跳时刻显著缩短且主循环单拍不再被 files 拉取占满(拍时长 ≤ 500ms 线(26-11-11-0039 §01 用户口径, 非命令慢日志线 CMD_SLOW_MS=300ms)); 静态守阵钉预算常量消费位。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-18 02:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-18-0259-perf-first-round-grouping-files-serial.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

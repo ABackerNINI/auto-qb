@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>重启后 WebUI 首份数据 5-15s(首轮管线挡发布): 提前发布方案</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-boot-first-data">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-18-0259">
+<meta name="doc-updated" content="26-11-18-0259">
+<meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-boot-first-data</div>
+<h1>重启后 WebUI 首份数据 5-15s(首轮管线挡发布): 提前发布方案</h1>
+<p class="lede">本篇只回答: 重启后 WebUI 首份数据 5-15s 怎么修 —— 根因是重启后首个<b>含落库数据</b>的视图代要等首轮数据管线整条跑完才发布(请求触发的提前发布只能拿到落库前的空代), 修法是「启动首轮 apply_sync 落库后立即发布基础视图」; 归组 files 串行与挂载点探测两个管线重活不入本计划(已入池两条 issue 独立排期)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-18-0259 · <b>doc-updated</b> 26-11-18-0259 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话「auto-qb 重启后 WEBUI 刷新后主界面要 5-15 秒才出现(约 210 种子)」问答轮根因分析(取证 2026-11-18) + 两轮 grilling D1-D11 拍板(2026-11-18) + 用户指令「立项分析, grilling and then create a plan」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: 用户报告 auto-qb 重启 + WebUI 刷新后主界面 5-15s 才出现(约 210 种子)。此前 26-11-02 修过一次(issue 26-11-02-0902, 首访行高量齐 8.4s→97ms), 但那是<b>前端渲染段</b>; 本次 5-15s 在<b>后端首轮数据管线</b>, 不在那次修复面内。渲染面已排除: 210 行 ≥ <code>ROW_WIN_EST_MIN=200</code> 走估算开窗, 105 组精确路径实测百毫秒级。</p>
+<p><b>North Star(D1/D9 拍板)</b>: real-machine 轨道环境(D10: 不取生产数字)以 ≈210 假种子受控重启, <b>flat / singles / shows 首份数据出现 ≤ 2s</b> 硬判据; <b>groups 页第二跳时刻记录数字、不设硬判据</b> —— 物理上限: 归组必须 ≥210 次 files API 单发(<code>torrents_files</code> 单 hash 端点, qB WebAPI 无批量), ②的提速由 issue 承接, 本计划不背。</p>
+<p><b>设计底线 / 不变量</b>:</p>
+<ul>
+  <li>单一写线程不破 —— 提前发布仍在主循环线程内同一拍, 不引入新线程; <b>不引入第二把锁</b>(仍只有 view_lock)。</li>
+  <li>「四视图同轮发布」铁律不破 —— 提前发布只是<b>多落一代</b>(四份视图 + 版本号整体替换), 临时代里 groups 为空是内容问题不是结构问题。</li>
+  <li>不挂配置开关(D11): 本行为不写 qB / 不动种子, 不属「高风险动作」, 回退 = 单点 revert。</li>
+  <li>黄金法则 1/2/4/5 照常(幂等 / 保守默认 / fail-fast / 单写线程)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>02.1 排除面(本地桩实测, 取证 2026-11-18, 桩 = 真 create_app + 210 合成种子 + FakeClient)</h3>
+<table>
+  <tr><th>环节</th><th>实测</th><th>结论</th></tr>
+  <tr><td><code>/api/state</code> 冷(含首次发布 + 471KB 载荷)</td><td>52ms</td><td class="good">不是瓶颈</td></tr>
+  <tr><td>页面骨架 + 28 分片串行 + 81 脚本串行(全 ETag 协商, boot.js 串行链)</td><td>≈0.4s</td><td class="good">不是瓶颈</td></tr>
+  <tr><td>CLI 导入 / 渲染面(210 行估算开窗 / 105 组精确路径)</td><td>368ms / 百毫秒级</td><td class="good">不是瓶颈</td></tr>
+</table>
+<p>前端唯一放行闸 = bootstrap 的首个 <code>/api/state</code> 成功(<code>auth.js:173/:188</code>, <code>bootstrapping</code> 遮罩, <code>lifecycle.js:322</code> 免鉴权判定); 服务端该端点是纯内存读 + 惰性发布, 不会自己慢 5-15s。慢的是<b>数据什么时候有</b>。</p>
+<h3>02.2 根因链(取证 2026-11-18, 行号为当时)</h3>
+<ol>
+  <li>store 不持久化种子记录(state.json 只存规则执行史/基线) → 重启后 store 空, 首个同步必为<b>全量轮</b>, 210 个种子全部走 <code>added</code> 相位。</li>
+  <li><code>_sync_line</code>(qbmanager.py:842)里 <code>_refresh_torrents</code>(:939)整条管线跑完才有 <code>on_sync_line → flush_views</code>(:851→:853) —— <b>主循环 flush 的含落库数据代被挡在整条管线之后</b>(首请求抢先时 ensure_state 已先行发布空代, 见第 3 点)。管线内重活: <code>apply_sync</code> 全量 maindata(:956) → 全量轮 <code>path_map_selfcheck</code> 挂载点探测(:966) + <code>full_round</code> tracker 重匹配(:970) → <code>torrents_added</code> 归组<b>每种子一次 files 单发</b>(grouping_mod.py:401, 210 次往返 ≈2-6s) → post 冲突检查。</li>
+  <li>管线窗口期: <code>group_view_dirty</code> <b>初始 True</b>(runtime.py:112; runtime_views.py:406 是落代后的复位), rid 以进程启动时间播种(runtime.py:105, 恒非 0)。用户刷新后首个请求的 <code>ensure_state</code>(runtime_views.py:616, 脏即发布 :636-637)<b>早于 apply_sync 到达 → 立即发布一个空代</b>(rid=启动时间戳, 0 行)并把 dirty 压住; dirty 保持 False 直到管线跑完 flush_views 消费 view_changed, 期间轮询命中「零回传」(rid==ver 不回数组) → 界面壳先出、列表空。</li>
+  <li>管线结束 → flush_views 发布<b>含落库数据的一代</b> → SSE ver 推送 / 下一拍轮询 → 数据落位。<b>5-15s ≈ 首轮管线时长</b>(空窗主体 = 首请求早于 apply_sync + 管线期间无新发布代), 波动来自 files 往返 × qB 负载/磁盘。</li>
+</ol>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线(D3)</b>: 启动首轮在 <code>_refresh_torrents</code> 的 <code>apply_sync</code> 落库后、<code>need_validate</code> 分支之前, <b>先走一次既有发布单点</b>(flush_views → _publish_locked)发布<b>基础视图</b>: flat 全量; singles 为全量种子的<b>超集</b>(<code>_build_singles_view</code> 语义 = 不在任何组的种子, 归组前全体都算未归组), 第二跳收缩; shows 按名称解析可给; groups 为空(组键依赖文件列表, 归组尚不可得)。管线照常继续, 结束时 on_sync_line 正常第二次发布(归组/HR 派生字段/tracker 错误原因补齐)。前端两跳落位: 种子/剧集列表 1-2s 秒出, 分组随管线补齐。</p>
+<p><b>触发面(D4)</b>: 仅启动首轮; 其它全量轮(reset_runtime / qB 重启补 / 热重载 L2)行为不变 —— 它们已有「发布→管线重跑→再发布」的自然节奏。判据 = 「apply_sync 落库后, <b>此前发布的最后一代尚不含落库数据</b>」(以落库前 <code>store.rounds_applied == 0</code> 判定, 不依赖种子数) —— 用户首请求抢先触发过空代发布的竞态下不失效(见 §07 R3)。</p>
+<p><b>代价面(D6, 用户已接受)</b>: 视图多落一代(rid+1, delta 客户端多吃一代); 基础视图缺 HR 派生字段/tracker 错误原因(第二跳补齐); 基础代 singles 为全量超集、第二跳收缩(观感两跳, 语义自愈); 无配置开关(D11)。</p>
+<p><b>分期</b>: S0 取证 → S1 提前发布 → S2 守阵 → S3 真机验收(见 §04)。</p>
+<p><b>范围外(D5)</b>: ②首轮归组 files 逐种子单发预算化、③path_map_selfcheck/冲突检查挪出关键路径 —— 不入主修, 已入池: <code>26-11-18-0259-perf-first-round-grouping-files-serial</code> · <code>26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path</code>(Open 待排期, S0 数字喂基线)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S0</b> 真机取证</td><td>real-machine 轨道环境1/2(D10)加 ≈210 假种子, 受控重启一次: 量「重启 → flat/groups 各视图首份数据出现」时刻 + 首轮管线日志时间窗(files 拉取/归组/冲突检查), 数字进档案坐实根因链; 同时给两条 issue 喂基线数字</td><td>时间线与 §02.2 根因链吻合(首份数据出现时刻 ≈ 首轮管线完成时刻); 数字入档案</td></tr>
+  <tr><td><b>S1</b> 提前发布</td><td>qbmanager <code>_refresh_torrents</code> 在 <code>apply_sync</code> 后插入启动首轮发布点: 判据 = 「落库后此前发布的最后一代尚不含落库数据」(落库前 <code>store.rounds_applied == 0</code>, 不依赖种子数, 首请求抢先发布过空代的竞态不失效); 复用既有发布单点(主循环线程内, view_lock 单点), 不新增锁/线程/配置键</td><td>单测钉「apply_sync 后即有含落库数据的发布代」+ 非启动轮零行为变化; 非 JSON 原生类型面不回归</td></tr>
+  <tr><td><b>S2</b> 守阵</td><td>单测: 启动首轮两代发布语义 / rid 序列(+1)/ delta 客户端兼容 / groups 首代空、flat 首代满; e2e: 桩冷启动两跳落位形状; 静态守阵按需</td><td><code>commands run test.full</code> 全绿(数字见 kb.baseline)</td></tr>
+  <tr><td><b>S3</b> 真机验收</td><td>real-machine 环境同 S0 口径复测修复前/后对比, 分视图记录; 生产观察自愿(非判据, D10)</td><td>flat/singles/shows 首份数据 ≤2s(真机轨环境); groups 第二跳时刻记录并回写两条 issue</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>空 —— 11 问两轮 grilling 已全部拍板(2026-11-18), 结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>结论</th></tr>
+  <tr><td>D1</td><td>North Star 口径</td><td>只以「重启后首份数据出现 ≤2s(真机轨实测)」为目标; 管线总时长不是目标</td></tr>
+  <tr><td>D2</td><td>空窗期观感件(骨架屏/加载态)</td><td>不做; 真机验收仍感知才另入池</td></tr>
+  <tr><td>D3</td><td>主修法</td><td>方向① apply_sync 落库后先发布基础视图, 管线结束后第二次发布补全</td></tr>
+  <tr><td>D4</td><td>触发面</td><td>仅启动首轮(store 空 → 首个全量同步); 其它全量轮不动</td></tr>
+  <tr><td>D5</td><td>方向②③处置</td><td class="wr">改判: 不入主修、不做计划内 R 项, <b>入池两条 issue 独立排期</b>(2026-11-18 用户改判)</td></tr>
+  <tr><td>D6</td><td>代价面</td><td>接受: 多落一代 rid+1 / HR 字段两段式 / 基础代 singles 全量超集第二跳收缩 / 不破四视图同轮发布与单写线程</td></tr>
+  <tr><td>D7</td><td>取证与验收轨道</td><td>S0 取证步前置; 守阵/e2e 照常规; real-machine 轨道先行</td></tr>
+  <tr><td>D8</td><td>交付物</td><td>计划 HTML(Open) + 档案立档; 本轮零代码改动; commit 等显式指令</td></tr>
+  <tr><td>D9</td><td>North Star 观测面</td><td>分视图口径: flat/singles/shows ≤2s 硬判据; groups 第二跳记录数字不设硬判据(提速承接②)</td></tr>
+  <tr><td>D10</td><td class="wr">S0 取证场所</td><td class="wr">改判: <b>只用 real-machine 轨道环境</b>(环境1/2), 不取生产数字; 生产观察自愿非判据</td></tr>
+  <tr><td>D11</td><td>配置开关</td><td>不挂开关, 直接生效; 回退 = 单点 revert</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>提前发布代与管线中间态竞态</td><td>多线程并发写视图</td><td>发布点在主循环线程内同一拍、view_lock 单点, 结构上无并发写; 守阵钉单写线程断言</td></tr>
+  <tr><td>R2</td><td>delta 客户端多吃一代</td><td>SSE/轮询消费节奏</td><td>一次性代价; SSE 主路径每版必拉(消费动态实测口径)无积压; e2e delta-sync 回归覆盖</td></tr>
+  <tr><td>R3</td><td>启动判据误伤真 0 种子库 / 竞态下判据失效</td><td>qB 真库无种子; 或用户首请求早于 apply_sync 到达</td><td>判据 = 「落库前 <code>store.rounds_applied == 0</code> 且落库后发布」, 不依赖种子数(0 种子库发布空代 = 现状行为无差异), 竞态下(空代已存在)判据仍为真、发布照常触发</td></tr>
+  <tr><td>R4</td><td>基础视图缺 HR/错误原因字段被误读为数据丢失</td><td>用户在第二跳前看行字段</td><td>第二跳 ≤ 管线时长自愈; 档案记语义; 真机验收观察</td></tr>
+  <tr><td>R5</td><td>修后 groups 页仍 2-6s 被误判为未修</td><td>用户只看默认落地页</td><td>分视图口径已写明(§01/§06 D9); S0/S3 数字分视图记录; groups 提速指向②的 issue</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-18-0259</span> 初版: 会话问答轮根因分析(排除面桩实测 + 根因链取证) → 用户指令「立项分析, grilling and then create a plan」→ 两轮 grilling 11 问拍板(D5/D10 用户改判) → 计划入库 Open。S0-S3 待显式开工。</li>
+</ul>
+
+</div>
+</body>
+</html>
