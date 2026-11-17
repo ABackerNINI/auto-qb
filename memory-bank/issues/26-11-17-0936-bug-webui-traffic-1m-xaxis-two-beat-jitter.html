@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量图 1m/5m 窗 x 轴每两拍跳一下: 后端 int(now) 整秒截断撞 1.5s 轮询 → 窗起点 +3.0/0.0 交替 · bug · 计划外问题</title>
+<meta name="issue-slug" content="webui-traffic-1m-xaxis-two-beat-jitter">
+<meta name="issue-stamp" content="26-11-17-0936">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-traffic-xaxis-jitter">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="流量图 1m/5m 窗 x 轴每两拍跳一下: 后端 int(now) 整秒截断撞 1.5s 轮询 → 窗起点 +3.0/0.0 交替">
+<meta name="issue-summary" content="1m/5m 窗桶宽=采样间隔=轮询=1.5s; build_grid 用 t1=int(now) 整秒截断; Δfirst 由 (int(now0) mod 3, frac(now0)) 联合决定: A mod3=0 且 frac&lt;0.5, 或 A mod3=1 且 frac≥0.5 时窗起点每拍 +3.0(2格)/0.0 交替, 其余组合干净 +1.5; 前端 L0 把 2 格用固定 shiftMs 滑完(2 倍速度窜动)+ 死拍无 L0, 合成『每两拍跳一下』。">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>流量图 1m/5m 窗 x 轴每两拍跳一下: 后端 int(now) 整秒截断撞 1.5s 轮询 → 窗起点 +3.0/0.0 交替</h1>
+<p class="lede">1m/5m 窗桶宽=采样间隔=轮询=1.5s; build_grid 用 t1=int(now) 整秒截断; Δfirst 由 (int(now₀) mod 3, frac(now₀)) 联合决定: A mod3=0 且 frac&lt;0.5, 或 A mod3=1 且 frac≥0.5 时窗起点每拍 +3.0(2格)/0.0 交替, 其余组合干净 +1.5; 前端 L0 把 2 格用固定 shiftMs 滑完(2 倍速度窜动)+ 死拍无 L0, 合成『每两拍跳一下』。</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-0936-bug-webui-traffic-1m-xaxis-two-beat-jitter</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 09:36</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>用户复测反馈「流量图 x 轴跳动依然没有彻底解决：<b>之前每拍跳一下，现在每两拍跳一下</b>」。按 1m 窗深挖：该窗桶宽=采样间隔=轮询周期=1.5s、桶数恒 41（没有非整倍窗的 497↔498 翻动拍，排除先前复刻的 R5 根因）；同采样间隔下 5m 窗桶宽也恰为 1.5s、桶数恒 201，命中同一机制。首轮只扫 <code>frac(now)</code> 得出「≥0.5 才二拍」，复评二维复扫发现该判据不成立：<code>frac=0.7</code> 也可能干净（<code>int(now₀)=1000002</code>, mod3=0），<code>frac=0.0</code> 也可能二拍（同样 mod3=0）。真正的判据是 <code>(int(now₀) mod 3, frac(now₀))</code> 联合决定，详见 §02。</p>
+  <p>取证方式：Python 直接调 <code>build_grid</code> 扫相位 + Node 加载真 <code>qb_traffic_chart.js</code> 把生成的 xs 喂给 <code>_qbRollJudge</code>/<code>_qbPadTailColumns</code> 并模拟收敛帧 <code>dropPad</code>，测 settled 视口。<b>未做浏览器目视复现</b>（见 §07 复验 TODO）。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-17 09:2x / 09:5x 二维复扫，build_grid('1m', now, 1.5)，now=A+f+1.5k，看 first 逐拍位移（step=1.5s）
+A=int(now0) | A%3 | frac | first 逐拍位移（k=1..6）
+ 1000000    |  1  | 0.0  | +1.5 +1.5 +1.5 +1.5 +1.5 +1.5   (干净)
+ 1000000    |  1  | 0.7  | +3.0  0.0 +3.0  0.0 +3.0  0.0   (二拍)
+ 1000001    |  2  | 0.7  | +1.5 +1.5 +1.5 +1.5 +1.5 +1.5   (干净，反例)
+ 1000002    |  0  | 0.0  |  0.0 +3.0  0.0 +3.0  0.0 +3.0   (二拍，反例)
+ 1000002    |  0  | 0.7  | +1.5 +1.5 +1.5 +1.5 +1.5 +1.5   (干净)
+ 1000003    |  1  | 0.7  | +3.0  0.0 +3.0  0.0 +3.0  0.0   (二拍)
+ 1000005    |  0  | 0.0  |  0.0 +3.0  0.0 +3.0  0.0 +3.0   (二拍)
+
+# 判据: 二拍 iff (A%3==0 &amp;&amp; frac&lt;0.5) || (A%3==1 &amp;&amp; frac≥0.5)
+#       等价 (A - (frac≥0.5 ? 1 : 0)) % 3 == 0；其余组合干净 +1.5。
+# 首轮「只看 frac≥0.5」被两个反例证伪，故上表替换原单维相位表。
+# 5m 同构: build_grid('5m',1000000.7,1.5).interval=1.5, n=201，同一 A/frac 组合步长同为 +3.0/0.0。
+
+# 逐拍明细，A=1000000(mod3=1), frac=0.7：Δt1=+2/+1 交替 → first +3.0/0.0
+  k=0 now=1000000.70 t1=1000000 first=999939.0 n=41
+  k=1 now=1000002.20 t1=1000002 first=999942.0 n=41  dFirst=+3.0
+  k=2 now=1000003.70 t1=1000003 first=999942.0 n=41  dFirst=+0.0
+  k=3 now=1000005.20 t1=1000005 first=999945.0 n=41  dFirst=+3.0
+  k=4 now=1000006.70 t1=1000006 first=999945.0 n=41  dFirst=+0.0
+
+# Node 喂真前端函数 + 模拟收敛帧的 settled 视口（用户实际所见）
+=== A=1000000(mod3=1), frac=0.0（干净） ===
+  dx0=1.5 roll=true  settledView=[999940.5,1000000.5] d=+1.5
+  dx0=1.5 roll=true  settledView=[999942.0,1000002.0] d=+1.5     ← 每拍平滑 1 格
+=== A=1000000(mod3=1), frac=0.7（二拍） ===
+  dx0=3.0 roll=true  settledView=[999942.0,1000002.0] d=+3.0     ← 2 格高速滑动
+  dx0=0.0 roll=false settledView=[999942.0,1000002.0] d=+0.0     ← 死拍，无 L0
+  dx0=3.0 roll=true  settledView=[999945.0,1000005.0] d=+3.0
+  dx0=0.0 roll=false settledView=[999945.0,1000005.0] d=+0.0</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>桶宽=轮询=采样=1.5s 的窗（1m：n=41；5m：n=201）+ <code>(int(now₀) mod 3, frac(now₀))</code> 联合判据：<code>A%3=0 且 frac&lt;0.5</code> 或 <code>A%3=1 且 frac≥0.5</code>。config 现值 <code>qb_traffic.sample_interval: 1.5S</code>（<code>config.yml:544</code>）。30m 起 interval≥4.5s，首桶数拍内不动或稀疏跨格，非本次 +3.0/0.0 二拍形态；默认 24h 窗桶宽 174s，不受影响 —— 此前 24h 取证测不到。</td></tr>
+    <tr><td>影响范围</td><td>只影响 x 轴视口平移节奏（观感），不影响桶值 / tooltip 真值 / 悬停读数。三挂点（全局/分组/种子）共用同一前端逻辑，理论上同样命中；1m/5m 窗在满足上述联合判据时必现。</td></tr>
+    <tr><td>严重度</td><td><b>低—中</b> —— 无数据错误、无内容错位，纯视觉窜动；但正是用户复测反复报的「x 轴跳动未根治」，属上一次根修（计划 26-11-15-1104）的残留观感问题。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/traffic_grid.py:194</code>（取证 2026-11-17 09:2x）· <code>build_grid</code> raw 分支 · grep <code>t1 = int(now)</code> —— 整秒截断源头</li>
+    <li><code>src/auto_qb/core/traffic_grid.py:162-164</code> · <code>_floor_buckets</code> · grep <code>first = t0 - (t0 % interval)</code> —— 把 Δt1 的 +2/+1 映射成 +3.0/0.0</li>
+    <li><code>src/auto_qb/core/traffic_grid.py:191</code> · 桶宽 <code>interval = si × ceil(...)</code> · grep <code>MAX_RAW_BUCKETS</code> —— 1m→1.5s</li>
+    <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:665-671</code> · <code>_qbRollJudge</code> · grep <code>Math.abs(dx0) &gt; step * 2</code> —— dx0=2×step 恰在边界判非 rewin，放行 L0</li>
+    <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:587-603</code> · <code>_qbBeatTimeline</code> · grep <code>shiftMs</code> —— 滑动时长与格数无关，2 格用 1 格时间滑完 = 2×速度</li>
+    <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:1926</code> · <code>_qbPollMs</code> · grep <code>sample_interval_s</code> —— 轮询=1.5s（F7）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">已定位（双探针 + 二维复扫取证，非目视）：<b>后端窗锚的整秒截断与 1.5s 轮询/桶宽发生二拍混叠</b>。<code>build_grid</code> 用 <code>t1=int(now)</code> 取整秒；令 <code>A=int(now₀)</code>、<code>f=frac(now₀)</code>，第 k 拍 <code>t1=A+floor(f+1.5k)</code>，<code>first=floor((t1−span)/1.5)×1.5</code>。因此 Δfirst 不是单由 f 决定，而由 <code>(A mod 3, f)</code> 联合决定：<b>A%3=0 且 f&lt;0.5</b>，或 <b>A%3=1 且 f≥0.5</b> 时，窗起点 +3.0/0.0 交替（一拍 2 格、下一拍不动）；其余组合干净 +1.5。对 1m（span=60，<code>first=t1−60−(t1%1.5)</code>）与 5m（span=300）同构。首轮「f≥0.5 才二拍」被两个反例证伪：<code>A=1000002,f=0.7</code> 干净、<code>A=1000002,f=0.0</code> 反而二拍（另 <code>A=1000001,f=0.7</code> 也干净）。<br>前端 <code>_qbRollJudge</code> 的 rewin 是 <code>|dx0| &gt; step×2</code>，dx0=3.0 恰等于 3.0（边界）判非换档 → L0 放行，把 2 格用固定 <code>shiftMs</code> 滑完（2×速度窜动）；紧接的 0.0 拍 roll=false 无 L0（死拍）。合成「窜一下、停一拍」= 每两拍跳。F5 放宽 roll 门到 ≤2 格 + 补尾格修掉 G-B 左缺口，正是把原来的每拍硬跳变成现在这个更轻的二拍窜动，故频率减半但未消失。<br><b>已排除：</b>① 497↔498 翻动拍（1m 桶数恒 41、5m 恒 201）；② 数据值 / 尾段失真（真值未错）；③ 粒子 / fx（与 x 视口无关）；④ 24h 默认窗（桶宽 174s）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <ul>
+    <li><b>A · 后端去掉整秒截断（推荐，治本）</b>：<code>build_grid</code> raw 分支让 <code>t1</code> 保留浮点（或按 si 对齐），<code>first = floor(t0/si)×si</code> 直接对浮点 now 对齐，使 <code>Δfirst</code> 恒为 1 格。需确认不破坏 <code>t1</code> 在 meta / holding / 封口桶里的整秒假设（<code>_floor_buckets</code> 注释提到「整值宽归一 int」）—— 改动面在后端栅格单点及依赖它的电池，面较大。</li>
+    <li><b>B · 前端按格数放大滑动时长（治标）</b>：让 <code>shiftMs</code> 随 <code>|dx0|/step</code> 线性放大，消除 2×速度窜动。代价：死拍（0.0）仍在，二拍节奏未根治，只是每拍位移视觉变均匀；且与 I1「真值 ≤beat 落地」预算冲突，需重排时间线。</li>
+  </ul>
+  <p class="hint">守阵建议：若走 A，在 <code>test_traffic_grid_*.py</code> 加一条「1m/5m 任意 <code>(int(now₀) mod 3, frac(now₀))</code> 组合下 <code>Δfirst</code> 恒 = interval」的二维扫描用例，不能只扫 frac；e2e 帧探针的相位注入要同时钉死 <code>A mod 3</code>（推荐 <code>A=1000000,f=0.7</code> 与 <code>A=1000002,f=0.0</code> 两例）再断言 settled 视口。两条路都需先目视复验（§07）。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 09:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-17 09:50 — 入池评审修正：触发判据从单相位改为 <code>(int(now₀) mod 3, frac(now₀))</code> 联合；影响面补 5m；二维复扫与反例入 §02。</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-17-0936-bug-webui-traffic-1m-xaxis-two-beat-jitter.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
