@@ -963,12 +963,35 @@ class QbManager(
         增量同步(/sync/maindata)只取自上轮 rid 起的变化(未变化种子不出现在响应中),
         故 store 只更新变化的记录; 本轮变化集(state_changed/field_changed)供分组与
         事件分派把 O(N) 全量扫描降为 O(变化数)。
+
+        启动首轮(落库前 rounds_applied == 0)在 apply_sync 后先经 on_sync_line hook
+        提前发布一次基础视图(plan 26-11-18-0259), WebUI 首份数据不等整条管线; 其余
+        轮次零行为变化。
         """
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
+        # 启动首轮判据的 capture(落库前, plan 26-11-18-0259 D4): rounds_applied 纯内存计数
+        # (__init__ 置 0, _apply 每轮自增单点, 不落盘, reset_runtime 不清) —— 落库前 ==0
+        # 当且仅当本轮是本进程首个成功应用轮; 热重载 L2 / qB 重启补 / 重连全量等其它
+        # 全量轮都 >0, 零行为变化。不依赖种子数(0 种子库发布空代 = 现状行为无差异)。
+        rounds_before_apply = self.store.rounds_applied
         added, removed = self.store.apply_sync(self.api)
         # 搜索数据版本(plan 26-11-03-0120 S2): 增删种子或全量轮(tracker 重匹配)都算变化;
         # 每 tick 最多自增一次(按批合并, 不按种子数), 由下方统一裁决后自增。
         search_data_changed = bool(added or removed)
+        # 启动首轮提前发布基础视图(plan 26-11-18-0259 D3/D4): 首份数据不等整条管线 ——
+        # full_round / 归组 files 单发 / 冲突检查都在 need_validate 分支之后, 窗口期 WebUI
+        # 只有首请求抢先发布的空代可拿。走同一 on_sync_line hook(P2: 视图步不得直驱表现层)
+        # 落基础代: flat 全量 / singles 全量超集(归组前全体未归组, 第二跳收缩) / shows 按
+        # 名称解析 / groups 空(组键依赖文件表, 内容问题非结构问题); 管线结束的既有发布点
+        # 照常落补全代(归组登记 group_key_migrations -> full 理由触发)。force=False: 首个
+        # 主循环发布前不存在未被取走的版本, "已取走"门控恒可过(与既有收尾同一保守口径)。
+        # 提前发布是加速器不承载正确性: 失败记 WARNING 不打断首轮管线(否则 full_round/
+        # 归组整段丢失, 首批种子要等下次全量轮才补), 权威发布仍在管线结束的既有路径。
+        if rounds_before_apply == 0:
+            try:
+                self.host.run_sync_line(False)
+            except Exception as e:
+                logger.warning(f"启动首轮提前发布视图失败(管线结束的发布点照常兜底): {e}", exc_info=True)
         if self.store.need_validate:
             self._validate_torrent_schema(self.store.validate_sample)
             # fs.path_map 映射自检(非 fail-fast, 只记日志): 首轮全量同步后跑一次 ——

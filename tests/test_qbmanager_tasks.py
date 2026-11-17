@@ -17,7 +17,7 @@
 - test_create_torrent_tasks_with_rules: 匹配 tracker -> 创建 maintenance + 规则任务
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
-- test_p2a_sync_line_flush_propagates_to_host: _sync_line flush=True 经 host.run_sync_line; False 不调 (P2-a)
+- test_p2a_sync_line_flush_propagates_to_host: _sync_line flush=True 经 host.run_sync_line; False 不调 (P2-a); 启动首轮恰两次 [False, True](plan 26-11-18-0259 S1 提前发布)
 - test_w6_task_line_receives_dry_run: 守阵(W6)——任务线必须收到 dry_run 位置实参(缺参=TypeError 退避环)
 - test_w6_truth_pending_one_shot_no_extra_sync: 守阵(W6)——真值落地(flush 清空)后不得继续重试弧
 - test_w6_sync_line_contract: 守阵(W6)——同步线默认 flush/force 与 dry_run 传递契约
@@ -427,16 +427,22 @@ def test_tick_no_due_task_empty_queue():
 
 
 def test_p2a_sync_line_flush_propagates_to_host():
-    """_sync_line flush=True: 视图收尾钩子经 host.run_sync_line 执行; flush=False 不调"""
+    """_sync_line flush=True: 视图收尾钩子经 host.run_sync_line 执行; flush=False 不调
+
+    plan 26-11-18-0259 S1 起, 全新 manager 的首次 _sync_line 是启动首轮: apply_sync 落库后
+    _refresh_torrents 内先提前 fire 一次(force=False, 提前发布基础视图), 尾段再照常透传
+    force —— 恰两次 [False, True]。第二拍起(rounds_applied > 0)恢复单次尾段节奏。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         with mock.patch.object(mgr.host, "run_sync_line") as hook:
             mgr._sync_line(dry_run=True, flush=True, force=True)
-            hook.assert_called_once_with(True)
+            assert hook.call_args_list == [mock.call(False),
+                                           mock.call(True)], ("启动首轮: 提前发布 fire(False) + 收尾透传 fire(True) 恰两次")
         with mock.patch.object(mgr.host, "run_sync_line") as hook2:
             mgr._sync_line(dry_run=True, flush=False, force=False)
-            assert hook2.call_count == 0, "flush=False 不执行视图收尾钩子"
+            assert hook2.call_count == 0, "flush=False 不执行视图收尾钩子(且非启动轮无提前 fire)"
 
 
 def test_w6_task_line_receives_dry_run():
