@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="testing-baseline-parallel-drift">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="testing/baseline.md 并行口径仍写 -n 4,pytest.ini 已上调 -n 8">
 <meta name="issue-summary" content="memory-bank/testing/baseline.md:50 写「pytest.ini 的 addopts = -n 4」,pytest.ini:17 实为 -n 8(2026-10-08 上调);同款漂移也在 testing/run.md:33,文档与代码不一致。">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-0852-docs-testing-baseline-parallel-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 08:52</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">巡检 T8/S4(2026-11-17)</div></div>
 </div>
 
@@ -119,7 +119,12 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 08:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）。实际修法：按 §03 建议照办 ——
+      <code>baseline.md:50</code> 与 <code>run.md:33</code> 两处活文档行改写为 <code>addopts = -n 8</code>
+      并引 <code>pytest.ini:4</code> 上调注释依据；历史面（<code>run.md:42</code> 的 2026-09-23 末态、
+      <code>baselines/</code> 各切片）一律未动。验证：开工复验 grep <code>addopts = -n 4</code> 仅命中这两处活文档行，
+      修后复查两文件已无 <code>-n 4</code> 活口径残留、<code>pytest.ini:17</code> 对照基准未动。</li>
+</ul>
 </section>
 
 <footer>

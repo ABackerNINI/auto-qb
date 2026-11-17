@@ -47,7 +47,7 @@ Linux (WSL 沙箱) 未重测(仍是 1060 passed + 2 skipped)。
   曾收一笔**固定开销**(初始 写 20ms / 删 43ms, 三盘一致、与数据量无关; 一次全量建 577 个临时目录 ⇒ 约 26s)。
   **已由系统层排除项治好** —— 现 `mkdir` 0.13ms / 写 0.21ms / `remove` 0.16ms / `rmdir` 0.14ms(全部 <1ms)。
   ⇒ 这 3.8× 来自**环境**, 不是代码优化。
-- **并行**: 已是**默认**(`pytest.ini` 的 `addopts = -n 4`, dev 依赖 `pytest-xdist==3.8.0`);
+- **并行**: 已是**默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 -n 4 上调(2772 用例 43.8s → 26.6s, 依据见 `pytest.ini:4` 注释), dev 依赖 `pytest-xdist==3.8.0`);
   单文件排查用 `-n 0`。台账回传与覆盖率差异见
   [../pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md)。
 

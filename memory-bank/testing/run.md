@@ -30,7 +30,7 @@ commands run test.one -- -k skip                          # 按关键词
 
 ## 环境纪律
 
-- **并行是默认**(`pytest.ini` 的 `addopts = -n 4`, 需 dev 依赖 `pytest-xdist`): 全量带覆盖率
+- **并行是默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 -n 4 上调(依据见 `pytest.ini:4` 注释), 需 dev 依赖 `pytest-xdist`): 全量带覆盖率
   **7.6s**(串行 `-n 0` 是 21s)。**单文件排查用 `-n 0`** —— 并行会慢在 worker 启动上。
   sidefx 台账已用 `workeroutput` 回传汇总(收尾打「(4 个并行 worker 汇总) … 越界 0 条」),
   所以「越界 0」这行不会消失; 覆盖率分支 partial 与串行差 1(219 vs 218)。
