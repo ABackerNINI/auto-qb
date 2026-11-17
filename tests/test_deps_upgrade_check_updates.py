@@ -15,6 +15,9 @@
 - test_watch_entry_new_version_emits_trigger: 最新 tag 不在支持矩阵 -> 返回联合分析触发行 + 日期取到
 - test_pin_deps_single_source_failure_degrades: 单个 PyPI 源失败 -> 该行 [unreachable], 其余行照常计数不涨
 - test_pin_deps_counts_updates_and_delta: 正常路径 delta 分类 / 更新计数 / direct-joint-support 列
+- test_joint_display_names_from_watch_repo (issue 26-11-17-2339): 联合分析词形单点装配 —— 有 watch 的 joint dep 取 repo 名段权威词形, 无 watch 的保 id
+- test_joint_display_name_fallbacks: repo 缺失 / 无斜杠 / id 无 watch 项时回退 joint id, 不抛异常
+- test_build_report_joint_names_assembled_from_config: 联合分析文案的三依赖名从 deps.toml 装配, 输出不再含小写字面三连名
 """
 
 from __future__ import annotations
@@ -233,3 +236,85 @@ def test_pin_deps_counts_updates_and_delta(tmp_path, monkeypatch):
     assert " pre/tag diff " in bbbb_row
     assert bbbb_row.rstrip().endswith("| NEW vs matrix |")  # support 判定 (bbbb 非 direct/joint)
     assert " yes " in aaaa_row  # aaaa 是 direct + joint
+
+
+# ------------------------------------------- 联合分析词形装配 (issue 26-11-17-2339)
+
+
+def test_joint_display_names_from_watch_repo():
+    """联合分析词形单点装配: 有 watch 的 joint dep 取 repo 名段权威词形, 无 watch 的保 id。"""
+    mod = _mod()
+    cfg = {
+        "joint": {
+            "deps": ["qbittorrent", "libtorrent", "qbittorrent-api"]
+        },
+        "watch":
+            [
+                {
+                    "id": "qbittorrent",
+                    "repo": "qbittorrent/qBittorrent"
+                },
+                {
+                    "id": "libtorrent",
+                    "repo": "arvidn/libtorrent"
+                },
+            ],
+    }
+    assert mod.joint_display_names(cfg) == ["qBittorrent", "libtorrent", "qbittorrent-api"]
+
+
+def test_joint_display_name_fallbacks():
+    """repo 缺失 / 无斜杠 / id 无 watch 项时回退 joint id, 不抛异常。"""
+    mod = _mod()
+    cfg = {
+        "joint": {
+            "deps": ["solo", "bare", "missing"]
+        },
+        "watch":
+            [
+                {
+                    "id": "solo",
+                    "repo": "justname"
+                },  # 无斜杠: 名段取整串
+                {
+                    "id": "bare"
+                },  # repo 缺失: 回退 id
+                {
+                    "id": "other",
+                    "repo": "a/b"
+                },  # 与 joint dep 不同 id: 不命中
+            ],
+    }
+    assert mod.joint_display_names(cfg) == ["justname", "bare", "missing"]
+
+
+def test_build_report_joint_names_assembled_from_config(monkeypatch):
+    """联合分析文案的三依赖名从 deps.toml 装配(权威词形), 输出不再含小写字面三连名。"""
+    mod = _mod()
+    cfg = {
+        "joint": {
+            "deps": ["qbittorrent", "libtorrent", "qbittorrent-api"]
+        },
+        "watch":
+            [
+                {
+                    "id": "qbittorrent",
+                    "repo": "qbittorrent/qBittorrent"
+                },
+                {
+                    "id": "libtorrent",
+                    "repo": "arvidn/libtorrent"
+                },
+            ],
+        "paths": {
+            "lockfile": "uv.lock",
+            "pyproject": "pyproject.toml"
+        },
+    }
+    monkeypatch.setattr(mod, "check_watch_entry", lambda *a, **k: ([], []))
+    pin_line = "| aaaa | 1.0.0 | 1.0.1 | patch | 2026-01-02 | - | yes | NEW vs matrix |"
+    monkeypatch.setattr(mod, "check_pin_deps", lambda *a, **k: ([pin_line], 1))
+    text = mod.build_report(cfg, quick=False, timeout=1.0)
+    assert "Any update below requires JOINT analysis of all three special deps" in text  # 周边文案逐字不变
+    assert "(qBittorrent / libtorrent / qbittorrent-api): one upgrade changes the" in text
+    assert "(qbittorrent /" not in text  # 小写字面拼死形态不再出现

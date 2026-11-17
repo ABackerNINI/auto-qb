@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="check-updates-lowercase-dep-names">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="check_updates 联合分析文案含小写 qbittorrent 三依赖名">
 <meta name="issue-summary" content="联合分析输出按小写字面拼三依赖名,与项目权威词形大小写不一致,审计按 -i 口径白名单归类">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-2339-refactor-check-updates-lowercase-dep-names</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 23:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -117,7 +117,8 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）· 实际修法按 §03 建议落地：新增 <code>joint_display_names</code>，联合分析三依赖名改从 <code>project/deps.toml</code> 装配（有 watch 的 dep 取 repo 名段权威词形，无 watch 回退 joint id），输出词形 <code>qbittorrent</code> → <code>qBittorrent</code>；验证 <code>test.one</code> 两测试文件 28 passed（含 3 条新用例）</li>
+</ul>
 </section>
 
 <footer>

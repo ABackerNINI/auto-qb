@@ -319,6 +319,23 @@ def check_pin_deps(
 # ------------------------------------------------------------------- report
 
 
+def joint_display_names(cfg: dict[str, Any]) -> list[str]:
+    """Display word forms for the joint deps, assembled from deps.toml.
+
+    Single point for the authoritative word form (issue 26-11-17-2339):
+    a joint dep with a matching [[watch]] entry takes its repo name
+    segment (qbittorrent/qBittorrent -> qBittorrent); a dep without one
+    (pin-only, e.g. qbittorrent-api) keeps its joint id, which matches
+    the normalized PyPI/lockfile name. Output text must not hardcode the
+    lowercase literals.
+    """
+    repo_by_id = {
+        str(w.get("id")): str(w.get("repo", "")).rpartition("/")[2]
+        for w in cfg.get("watch", []) if w.get("id")
+    }
+    return [repo_by_id.get(d) or d for d in cfg.get("joint", {}).get("deps", [])]
+
+
 def build_report(cfg: dict[str, Any], quick: bool, timeout: float) -> str:
     joint = list(cfg.get("joint", {}).get("deps", []))
     support_map = {s["dep"]: s for s in cfg.get("support", [])}
@@ -361,8 +378,9 @@ def build_report(cfg: dict[str, Any], quick: bool, timeout: float) -> str:
     out.append("## Joint analysis triggers")
     out.append("")
     if joint_hits:
+        names = " / ".join(joint_display_names(cfg))
         out.append("Any update below requires JOINT analysis of all three special deps")
-        out.append("(qbittorrent / libtorrent / qbittorrent-api): one upgrade changes the")
+        out.append(f"({names}): one upgrade changes the")
         out.append("adaptation surface of the others. Runbook: project/impact-map.md, section 3.")
         out.append("")
         out.extend(joint_hits)
