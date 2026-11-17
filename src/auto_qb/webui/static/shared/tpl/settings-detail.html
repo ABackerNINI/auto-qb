@@ -316,7 +316,10 @@
                                三列重组(拍板4): 档位徽章 / 核实结论(徽章+来源·时间副行) / 在列(徽章+最近被见到副行);
                                挂载形态 = T1 实证拍板: 表头 <aq-table> grid 根(.group-head[data-table]) + 行为
                                同容器兄弟 div(.group-row[data-table] 同款 gridStyle), 值格为行直接子元素
-                               (顺序 = visibleHrDetailCols, 与几何单点 _gridTemplate 同源); 容器沿用
+                               (顺序 = visibleHrDetailCols, 与几何单点 _gridTemplate 同源); 值格渲染已注册化
+                               (26-11-17-0059 W2(4) E2): 每格经 hrCellOf -> DT_TABLE.CELLS 取描述符
+                               (root/tokens/act), 逐列载体单点在 hr_status.js HR_CELL_RENDERERS, 模板只剩
+                               通用壳(徽章 span / 裸文本 / hr-sub 副行 / act 按钮位四种段型); 容器沿用
                                .drawer-table 家族类(.mono-cell 派生样式的选择器锚)+ .group-table(flex 纵列+行距);
                                单元格一律不挂原生 title(hr-tooltip-overlap), 名称过长靠 .wrap 换行;
                                人话(lane_text/need_seed_text/verified_source_text)全由后端算好, 前端不重算 -->
@@ -341,18 +344,12 @@
                                    :class="{ missing: !e.active }" data-table="hrDetail"
                                    :style="gridStyle('hrDetail')">
                                 <template v-for="c in visibleHrDetailCols" :key="c.key">
-                                  <div v-if="c.key === 'lane'"><span class="hr-lane" :class="hrsLaneCls(e.lane)">{{ e.lane }} {{ e.lane_text }}</span></div>
-                                  <div v-else-if="c.key === 'name'" class="wrap">{{ e.name || "—" }}</div>
-                                  <div v-else-if="c.key === 'tid'" class="mono-cell">{{ e.tid }}</div>
-                                  <div v-else-if="c.key === 'uploaded_bytes'">{{ hrsSize(e.uploaded_bytes) }}</div>
-                                  <div v-else-if="c.key === 'downloaded_bytes'">{{ hrsSize(e.downloaded_bytes) }}</div>
-                                  <div v-else-if="c.key === 'ratio'">{{ hrsRatio(e.ratio) }}</div>
-                                  <div v-else-if="c.key === 'need_seed_seconds'">{{ hrsNeedSeed(e.need_seed_text) }}</div>
-                                  <div v-else-if="c.key === 'done_iso'" class="mono-cell">{{ hrsDone(e.done_iso) }}</div>
-                                  <div v-else-if="c.key === 'verified_ts'"><span class="hr-vsrc" :class="hrsSrcCls(e)">{{ hrsVerdictText(e) }}</span><span
-                                       class="hr-sub">{{ hrsVerdictSub(e) }}</span></div>
-                                  <div v-else-if="c.key === 'last_seen'"><span class="hr-pres" :class="hrsPresenceCls(e)">{{ hrsPresenceText(e) }}</span><span
-                                       class="hr-sub">{{ hrsPresenceSub(e) }}</span></div>
+                                  <div v-for="cell in [hrCellOf('hrDetail', c, e)]" :key="c.key" :class="cell.root">
+                                    <template v-for="(t, ti) in cell.tokens" :key="ti">
+                                      <span v-if="t.cls" :class="t.cls">{{ t.text }}</span>
+                                      <template v-else>{{ t.text }}</template>
+                                    </template>
+                                  </div>
                                 </template>
                               </div>
                             </div>
@@ -365,6 +362,9 @@
                                展开态是临时排障动作, 不进 localStorage 不持久化;
                                数据全来自 /api/hr/status 现有载荷(hrsKvRows 拼行), 无新请求无新定时器;
                                kv 表补列头「项/值」(E7: header:false 已删, k 列 locked 拆散 k/v 对不可表达);
+                               两表值格与表 1 同走 hrCellOf 注册化(W2(4) E2, 描述符单点 HR_CELL_RENDERERS);
+                               「确认空清单」按钮 = act 段型: 渲染器只置位(kv.act), 按钮本体仍在模板
+                               (site/confirming 绑定在模板作用域, 注册化不吞交互 —— E2 硬要求);
                                波次表同挂 .hr-detail-table 继承表1 徽章色义(计划: 阶段3 复用阶段2 骨架与徽章);
                                两表挂载形态同表1(T1 实证拍板, 见 aqb:hr-detail-table 段注);
                                波次表不接排序(行数 ≤4, 计划 26-10-02-1936 §3.4): 列定义无 sortable,
@@ -377,9 +377,12 @@
                               <div v-for="kv in hrsKvRows(s)" :key="kv.k" class="group-row"
                                    data-table="hrKv" :style="gridStyle('hrKv')">
                                 <template v-for="c in visibleHrKvCols" :key="c.key">
-                                  <div v-if="c.key === 'k'" class="kv-k">{{ kv.k }}</div>
-                                  <div v-else class="mono-cell" :class="kv.cls">{{ kv.v }}
-                                    <button v-if="kv.act" class="hb-btn ghost sm" :disabled="hrs.confirming"
+                                  <div v-for="cell in [hrCellOf('hrKv', c, kv)]" :key="c.key" :class="cell.root">
+                                    <template v-for="(t, ti) in cell.tokens" :key="ti">
+                                      <span v-if="t.cls" :class="t.cls">{{ t.text }}</span>
+                                      <template v-else>{{ t.text }}</template>
+                                    </template>
+                                    <button v-if="cell.act" class="hb-btn ghost sm" :disabled="hrs.confirming"
                                             @click="hrsConfirmEmpty(s.site)">确认空清单</button>
                                   </div>
                                 </template>
@@ -390,14 +393,12 @@
                               <div v-for="ls in s.lanes" :key="ls.lane" class="group-row"
                                    data-table="hrWave" :style="gridStyle('hrWave')">
                                 <template v-for="c in visibleHrWaveCols" :key="c.key">
-                                  <div v-if="c.key === 'lane'"><span class="hr-lane" :class="hrsLaneCls(ls.lane)">{{ ls.lane }} {{ ls.lane_text }}</span></div>
-                                  <div v-else-if="c.key === 'status'" class="mono-cell" :class="hrsLaneClass(ls)">{{ ls.status_text }}</div>
-                                  <div v-else-if="c.key === 'pages'">{{ ls.pages }}</div>
-                                  <div v-else-if="c.key === 'rows'">{{ ls.rows }}</div>
-                                  <div v-else-if="c.key === 'cutoff'">{{ hrsWaveCutoff(ls) }}</div>
-                                  <div v-else-if="c.key === 'fail_streak'">{{ ls.fail_streak }}</div>
-                                  <div v-else-if="c.key === 'count'">{{ hrsWaveCount(ls) }}</div>
-                                  <div v-else-if="c.key === 'detail'" class="mono-cell">{{ ls.detail || "—" }}</div>
+                                  <div v-for="cell in [hrCellOf('hrWave', c, ls)]" :key="c.key" :class="cell.root">
+                                    <template v-for="(t, ti) in cell.tokens" :key="ti">
+                                      <span v-if="t.cls" :class="t.cls">{{ t.text }}</span>
+                                      <template v-else>{{ t.text }}</template>
+                                    </template>
+                                  </div>
                                 </template>
                               </div>
                             </div>

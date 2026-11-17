@@ -21,13 +21,16 @@
  *   test_frontend_hr_status_fields_match_backend 闭集钉住, 不往里加新键), 方法前缀 hrsHist*。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
- * !表身份(P5, 计划 26-10-11-1722; 26-11-17-0059 W1 E6 并入 + W1(3) grid 迁移落地): 三张 HR 表的
- *   列定义单点在模块级 HR_TABLE_DEFS, 经 window.AQB_HR_TABLE_DEFS 并进 app.js 的 ALL_TABLE_DEFS
- *   (page 键 hrDetail/hrWave/hrKv) —— 几何/交互/持久化全量走主表同款链路: gridTemplate/列序/隐藏
- *   经 _gridTemplate/DT_TABLE.layout 单点, 表头四项交互由 <aq-table> grid 根自带, 列偏好落
- *   autoqb_cols_v5 新 page 子树(不升版本), HR 分组进列选择器 = 隐藏列恢复入口(E6; 旧口径
- *   「不进 TABLE_PAGES 防列选择器多分组」是零交互时代的理由, 交互化后作废: 那时右键隐藏
- *   不可逆才怕多分组)。详情表表头不再借 <aq-table> thead 模式(该模式已随本迁移退役)。
+ * !表身份(P5, 计划 26-10-11-1722; 26-11-17-0059 W1 E6 并入 + W1(3) grid 迁移落地; W2(2)(3)(4)):
+ *   三张 HR 表的列定义单点在模块级 HR_TABLE_DEFS, 经 window.AQB_HR_TABLE_DEFS 并进 app.js 的
+ *   ALL_TABLE_DEFS(page 键 hrDetail/hrWave/hrKv) —— 几何/交互/持久化全量走主表同款链路:
+ *   gridTemplate/列序/隐藏经 _gridTemplate/DT_TABLE.layout 单点, 表头四项交互由 <aq-table> grid
+ *   根自带, 列偏好落 autoqb_cols_v5 新 page 子树(不升版本, 读侧还原 = loadColState 全集遍历),
+ *   HR 分组进列选择器 = 隐藏列恢复入口(E6; 旧口径「不进 TABLE_PAGES 防列选择器多分组」是零交互
+ *   时代的理由, 交互化后作废: 那时右键隐藏不可逆才怕多分组)。详情表表头不再借 <aq-table> thead
+ *   模式(该模式已随本迁移退役)。渲染自查(W2(3))走 headDom: true 锚进根 updated 的
+ *   _assertLayouts(未展开 v-show 无盒 = 未挂载豁免, R4 口径); 值格渲染注册化(W2(4) E2)见
+ *   HR_CELL_RENDERERS / AQB_HR_CELLS_REGISTER / mixin 方法 hrCellOf。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 
@@ -132,6 +135,11 @@ const HR_TABLE_DEFS = {
     label: "HR 明细表", features: { sort: true },
     grid: "hrDetailGrid", cols: "visibleHrDetailCols", headRef: null, tableRef: null, window: null,
     stickyHead: false,
+    /* headDom(W2(3), 计划 26-11-17-0059): assertLayout 挂载锚 —— 表头/行同在根模板(设置页),
+     * 根 updated 后置队列盖得住, 但 aq-table 子组件 ref 不进根 $refs(headRef 保持 null),
+     * 故走 columns_grid._assertLayouts 的 headDom 分支: _headEl DOM 兜底取**首个有盒**表头
+     * (模态未展开 v-show display:none / details 收起 = 无盒 = 未挂载豁免, R4 口径), 不逐面扫桥。 */
+    headDom: true,
     sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
       { key: "lane", label: "档位", tpl: "84px", align: "left", sortable: true },
@@ -150,6 +158,7 @@ const HR_TABLE_DEFS = {
     label: "HR 波次表", features: {},
     grid: "hrWaveGrid", cols: "visibleHrWaveCols", headRef: null, tableRef: null, window: null,
     stickyHead: false,
+    headDom: true,  /* W2(3): 同 hrDetail(headDom 分支注释在彼处) */
     sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
       { key: "lane", label: "档位", tpl: "84px", align: "left" },
@@ -166,6 +175,7 @@ const HR_TABLE_DEFS = {
     label: "HR 诊断表", features: {},
     grid: "hrKvGrid", cols: "visibleHrKvCols", headRef: null, tableRef: null, window: null,
     stickyHead: false,
+    headDom: true,  /* W2(3): 同 hrDetail(headDom 分支注释在彼处) */
     sort: { dyn: true, defKey: "", defDir: -1 },
     columns: [
       { key: "k", label: "项", tpl: "minmax(104px, 0.8fr)", align: "left", locked: true },
@@ -175,6 +185,66 @@ const HR_TABLE_DEFS = {
 };
 /* 并入桥(app.js 的 ALL_TABLE_DEFS 消费; 头注与注册表段注有完整口径) */
 window.AQB_HR_TABLE_DEFS = HR_TABLE_DEFS;
+
+/* ---------------- 值格渲染器注册表(26-11-17-0059 W2(4) E2, dt_table 六口子全活) ----------------
+ * 三表手写值格 v-if 链(settings-detail.html W1(3) 迁 grid 后的 DOM 载体)收敛为**数据描述符**:
+ * 每列一个渲染器, 注册进 DT_TABLE.CELLS(registerCell, 名字 = "<tableId>.<列key>"), 模板经
+ * mixin 方法 hrCellOf(见 AQB_HR_STATUS.methods) -> DT_TABLE.cellOf 消费 —— 单元格渲染化后
+ * 「哪列渲染什么」单点在本表, 模板只剩一份通用壳(div + tokens 循环 + act 按钮)。
+ *
+ * 渲染器签名 (api, row) -> 描述符, 纯函数零状态:
+ *   root    值格根 div 的 class 串(""/"wrap"/"mono-cell"/"kv-k"/组合, 逐列 = W1(3) 迁移前的
+ *           DOM 载体, 保真基准 = 26-10-01-2216/26-10-02-1936 逐列清单)
+ *   tokens  格内容有序段: { cls, text } = 带 class 的 span(徽章 hr-lane/hr-vsrc/hr-pres +
+ *           副行 hr-sub), { text } 无 cls = 裸文本(与模板插值同形, 不多包 span)
+ *   act     该格挂「确认空清单」按钮位(hrKv 零行未确认行) —— 按钮本体仍是模板元素
+ *           (site/confirming 绑定在模板作用域), 注册化不吞交互(E2 硬要求)
+ * api = 根实例: 人话/配色全复用既有 hrs* 单点(hrsLaneCls/hrsVerdictText/hrsSize…), 渲染器
+ * 只做「列 -> 描述符」装配, 零语义复制。行对象字段消费与迁移前逐列一致(契约守阵
+ * test_frontend_hr_contract_keys_match_backend 的提取器同步覆盖本块)。
+ * !注册时机: hr_status.js 在四皮肤 manifest 里先于 dt_table.js 载入, 模块层 registerCell
+ *   不可达 —— 注册动作收进 AQB_HR_CELLS_REGISTER(), 由 app.js 装载序末位调用(与 mixin
+ *   注入同段); 本文件只定义, 不自注册。 */
+const HR_CELL_RENDERERS = {
+  /* -- hrDetail 十列(行 = EntryDetail e; 三列重组拍板 4: 档位徽章/核实结论/在列) -- */
+  "hrDetail.lane": (api, e) => ({ root: "", tokens: [
+    { cls: "hr-lane " + api.hrsLaneCls(e.lane), text: `${e.lane ?? ""} ${e.lane_text ?? ""}` }] }),
+  "hrDetail.name": (api, e) => ({ root: "wrap", tokens: [{ text: e.name || "—" }] }),
+  "hrDetail.tid": (api, e) => ({ root: "mono-cell", tokens: [{ text: e.tid ?? "" }] }),
+  "hrDetail.uploaded_bytes": (api, e) => ({ root: "", tokens: [{ text: api.hrsSize(e.uploaded_bytes) }] }),
+  "hrDetail.downloaded_bytes": (api, e) => ({ root: "", tokens: [{ text: api.hrsSize(e.downloaded_bytes) }] }),
+  "hrDetail.ratio": (api, e) => ({ root: "", tokens: [{ text: api.hrsRatio(e.ratio) }] }),
+  "hrDetail.need_seed_seconds": (api, e) => ({ root: "", tokens: [{ text: api.hrsNeedSeed(e.need_seed_text) }] }),
+  "hrDetail.done_iso": (api, e) => ({ root: "mono-cell", tokens: [{ text: api.hrsDone(e.done_iso) }] }),
+  "hrDetail.verified_ts": (api, e) => ({ root: "", tokens: [
+    { cls: ("hr-vsrc " + api.hrsSrcCls(e)).trim(), text: api.hrsVerdictText(e) },
+    { cls: "hr-sub", text: api.hrsVerdictSub(e) }] }),
+  "hrDetail.last_seen": (api, e) => ({ root: "", tokens: [
+    { cls: "hr-pres " + api.hrsPresenceCls(e), text: api.hrsPresenceText(e) },
+    { cls: "hr-sub", text: api.hrsPresenceSub(e) }] }),
+  /* -- hrWave 八列(行 = LaneStatus ls) -- */
+  "hrWave.lane": (api, ls) => ({ root: "", tokens: [
+    { cls: "hr-lane " + api.hrsLaneCls(ls.lane), text: `${ls.lane ?? ""} ${ls.lane_text ?? ""}` }] }),
+  "hrWave.status": (api, ls) => ({ root: ("mono-cell " + api.hrsLaneClass(ls)).trim(), tokens: [{ text: ls.status_text ?? "" }] }),
+  "hrWave.pages": (api, ls) => ({ root: "", tokens: [{ text: ls.pages }] }),
+  "hrWave.rows": (api, ls) => ({ root: "", tokens: [{ text: ls.rows }] }),
+  "hrWave.cutoff": (api, ls) => ({ root: "", tokens: [{ text: api.hrsWaveCutoff(ls) }] }),
+  "hrWave.fail_streak": (api, ls) => ({ root: "", tokens: [{ text: ls.fail_streak }] }),
+  "hrWave.count": (api, ls) => ({ root: "", tokens: [{ text: api.hrsWaveCount(ls) }] }),
+  "hrWave.detail": (api, ls) => ({ root: "mono-cell", tokens: [{ text: ls.detail || "—" }] }),
+  /* -- hrKv 两列(行 = hrsKvRows 拼行 kv; E7 k 列 locked 在列定义, 拆散 k/v 不可表达) -- */
+  "hrKv.k": (api, kv) => ({ root: "kv-k", tokens: [{ text: kv.k }] }),
+  "hrKv.v": (api, kv) => ({ root: ("mono-cell " + (kv.cls || "")).trim(), tokens: [{ text: kv.v ?? "" }], act: !!kv.act }),
+};
+/* 注册单点(fail-fast): DT_TABLE 不在场 = 装载序破坏, 立刻抛错而不是让三表渲染成空白
+ * (dt_table 注册表纪律: 查不到即报错, 不许「渲染空白」—— 注册侧同口径)。 */
+window.AQB_HR_CELLS_REGISTER = function () {
+  const DT = window.DT_TABLE;
+  if (!DT || typeof DT.registerCell !== "function") {
+    throw new Error("HR 值格渲染器注册失败: DT_TABLE 不在场(装载序: dt_table.js 必须先于 app.js)");
+  }
+  for (const name of Object.keys(HR_CELL_RENDERERS)) DT.registerCell(name, HR_CELL_RENDERERS[name]);
+};
 
 window.AQB_HR_STATUS = {
   data() {
@@ -348,6 +418,13 @@ window.AQB_HR_STATUS = {
         return rows.some((e) => e.local_present) ? "该档位暂无" : "该站点本地没有 HR 种子";
       }
       return rows.length ? "该档位暂无" : "该站点没有已删除的种子";
+    },
+    /* 值格消费口(W2(4) E2): settings-detail 模板通用壳经此走 DT_TABLE.cellOf 取列渲染器
+     * (名字 = "<tableId>.<列key>", 注册表 HR_CELL_RENDERERS / 注册点 app.js AQB_HR_CELLS_REGISTER)。
+     * 模板用单元素 v-for 绑定技巧(`v-for="cell in [hrCellOf(...)]"`, 本文件 hrsDetailOf 同款先例)
+     * 每格只求值一次并拿到整个描述符; cellOf 对未注册名抛错(fail-fast, 不许渲染空白)。 */
+    hrCellOf(tableId, col, row) {
+      return window.DT_TABLE.cellOf(tableId + "." + col.key)(this, row);
     },
     /* 档位徽章色义(§5.4): A=warn(考察中) / B=green(达标) / C=error(未达标) / D=blue(免罪);
      * 失踪行由 CSS tr.missing 统一换 --paused 描边弱化, 这里不管 */

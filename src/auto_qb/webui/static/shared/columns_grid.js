@@ -115,10 +115,16 @@ Object.assign(window.AQB_COLUMNS.methods, {
       if (!DT || typeof DT.assertLayout !== "function") return;
       for (const id of Object.keys(ALL_TABLE_DEFS)) {
         const def = ALL_TABLE_DEFS[id];
-        /* 抽屉桥面(headRef 恒 null)的挂载点在桥模板钩子, 不在此逐面扫 DOM */
-        if (!def || !def.headRef) continue;
-        const ref = this.$refs[def.headRef];
-        if (!(Array.isArray(ref) ? ref.length : ref)) continue;  /* 视图 v-if 未渲染 */
+        /* 抽屉桥面(headRef 恒 null)的挂载点在桥模板钩子, 不在此逐面扫 DOM —— HR 三表例外
+         * (def.headDom, 26-11-17-0059 W2(3)): 表头/行同在根模板(设置页), 本 updated 后置队列
+         * 盖得住; aq-table 子组件 ref 不进根 $refs(headRef 保持 null), 走 _headEl 的 DOM 兜底
+         * 取**首个有盒**表头 —— 模态未展开 v-show display:none / details 收起 = 无盒 = null =
+         * 未挂载豁免(R4 口径, 与内核「未挂载豁免」同形); 展开态则三处计数实查。 */
+        if (!def || (!def.headRef && !def.headDom)) continue;
+        if (def.headRef) {  /* headDom 面(HR 三表)headRef 恒 null, ref 路径不适用, 直落 _headEl 的 DOM 兜底 */
+          const ref = this.$refs[def.headRef];
+          if (!(Array.isArray(ref) ? ref.length : ref)) continue;  /* 视图 v-if 未渲染 */
+        }
         const headEl = this._headEl(id);
         if (!headEl) continue;
         const parent = headEl.parentElement;

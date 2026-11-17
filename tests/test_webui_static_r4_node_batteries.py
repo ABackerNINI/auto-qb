@@ -72,6 +72,28 @@
   抽屉 content-visibility:auto 未渲染行跳过(28px intrinsic 不得改坏 27px 真值); 第二根因同钉:
   _measureRowH 量齐后 _rowH 估算基准冻结(新量一行不连坐搬 pad 区上百行), 首访量齐那一拍与
   「存值非正」两支仍照常校准基准
+- test_r4_hr_cells_registry_restore_and_assert_anchor: 26-11-17-0059 W2(2)(3)(4) —— HR 三表
+  值格渲染注册化 + 还原链读/写两侧 + 列宽动作 + assert headDom 锚 node 电池(沙箱
+  dt_table.js -> hr_status.js -> [app.js 截断切片 + columns 域聚合文本] 同一次 eval,
+  columns 方法体裸名引用 app.js 列模型常量须同 eval; 装载序骨架与生产 manifest 同序):
+  1. 注册面(E2) AQB_HR_CELLS_REGISTER 真跑后 DT_TABLE.CELLS 名字集恰 20 且与列定义**双向
+  互对**(漏注册与列 key 漂移都红; 互对/计数两检查物理落位第 2 节块尾)+ 逐页计数
+  10/8/2/cellOf 取回/未注册名抛错, 注册前
+  CELLS 为空钉住注册点在 app.js 装载序末位(hr_status.js 模块层先于 dt_table.js 载入,
+  registerCell 不可达); 2. 保真锚 逐列渲染器输出对照迁移前模板 DOM 载体(hr-lane/hr-vsrc/
+  hr-pres 徽章色义 + hr-sub 副行两段/mono-cell 载体/数值列 hrsSize·hrsRatio 缺失回落
+  —/name wrap/kv-k/mono-cell+色档合并 root/kv act 置位 —— 按钮本体在模板, 注册化不吞交互);
+  3. 还原链读侧 v5 三表子树经 loadColState 读回(宽/序/隐, 序喂脏载荷钉重复 key 去重 +
+  非法 key 丢弃 + locked k 列还原侧忽略 + w 白名单 + 空存储 HR 页无播种), HR 三页在
+  ALL_TABLE_PAGES(16); 4. 静态锚 columns_grid._assertLayouts headDom 分支(HR 三表经枚举面
+  覆盖, 未展开 v-show 无盒 = 未挂载豁免 R4)/headDom: true 恰 3/settings-detail 三表
+  hrCellOf 消费口 + 逐列手写 v-if 链零残留/app.js 注册调用点在 HR mixin 之后/注册函数
+  fail-fast; 5. 写侧 round-trip persistPage 真跑三 HR 页(store 形态 {hidden,order,w} 与
+  内存意图一致 + loadColState 读回同值); 6. 列宽动作(stub ctx) fitColumnsToWindowAll/
+  resetAllColumnWidthsAll 波及 HR 三页且 colW[p]===null(回全自动不固化快照)+ fitAll
+  未展开态(_headEl 无盒)recomputeEffective 对三 HR 页 colWidths 零宽度条目(键置 {} 是
+  「立即回弹性模板」设计行为, 垃圾轨语义 = 无 px 条目)。红绿双验锚见函数 docstring。
+  无 node 静默跳过
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -2404,3 +2426,284 @@ def test_r4_dt_table_exception_list_geometry_guard():
     删豁免即红)。node 电池真跑(无 node 静默跳过)。"""
     report = _run_probe(_NODE_DT_EXC_LIST_PROBE, STATIC_ROOT)
     _assert_battery(report, "dt_table 例外清单守阵")
+
+
+# 26-11-17-0059 W2(2)(3)(4): HR 三表还原链 + 值格渲染注册化 + assert headDom 锚 ------------
+_NODE_HR_CELLS_RESTORE_PROBE = r"""
+const fs = require("fs");
+// 沙箱: window/localStorage/location 桩 + dt_table.js -> hr_status.js -> [app.js 截断切片 +
+// columns 域聚合文本] **并入同一次 eval**(与生产 manifest 同序骨架: dt_table 先于 app.js;
+// hr_status 先于 app.js 经桥并入全集; columns 方法体按裸名引用 app.js 列模型常量
+// (COLS_STORE_KEY/readColStateRaw), 生产里两段 <script> 共享同一全局词法作用域, 合并 eval
+// 与之同构 —— persistPage 真跑(round-trip)必须同 eval, 分开 eval 裸名不可达), 真跑注册/
+// 读侧还原/写侧 round-trip/列宽动作。
+global.window = {};
+global.location = { origin: "http://x" };
+let store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: (k) => { delete store[k]; },
+};
+global.Vue = { createApp: () => ({}) };
+const [dtPath, hrPath, headPath, colsPath, tplPath, gridPath, appPath] = process.argv.slice(1);
+eval(fs.readFileSync(dtPath, "utf8"));
+eval(fs.readFileSync(hrPath, "utf8"));
+eval(fs.readFileSync(headPath, "utf8") + "\n" + fs.readFileSync(colsPath, "utf8")
+  + "\n;globalThis.__X = { LC: loadColState, pages: ALL_TABLE_PAGES, cols: TABLE_COLUMNS, hidden: DEFAULT_HIDDEN_KEYS, COLM: window.AQB_COLUMNS.methods };");
+const LC = globalThis.__X.LC, PAGES = globalThis.__X.pages, COLS = globalThis.__X.cols;
+const DT = window.DT_TABLE;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// ---- 1. 注册面: 六口子(registerCell/cellOf/CELLS)全活, 名字集恰 20 ----------------
+const WANT = [
+  "hrDetail.lane", "hrDetail.name", "hrDetail.tid", "hrDetail.uploaded_bytes", "hrDetail.downloaded_bytes",
+  "hrDetail.ratio", "hrDetail.need_seed_seconds", "hrDetail.done_iso", "hrDetail.verified_ts", "hrDetail.last_seen",
+  "hrWave.lane", "hrWave.status", "hrWave.pages", "hrWave.rows", "hrWave.cutoff", "hrWave.fail_streak",
+  "hrWave.count", "hrWave.detail", "hrKv.k", "hrKv.v",
+];
+ok("注册前 CELLS 为空(注册点在 app.js, 不在 hr_status.js 模块层)", Object.keys(DT.CELLS).length === 0);
+window.AQB_HR_CELLS_REGISTER();
+ok("注册后 CELLS 名字集恰 20 且逐名对上(漂移/漏注册即红)",
+   Object.keys(DT.CELLS).length === 20 && WANT.every((n) => typeof DT.CELLS[n] === "function"));
+ok("cellOf 取回注册函数; 未注册名抛错(fail-fast, 不许渲染空白)",
+   typeof DT.cellOf("hrDetail.lane") === "function"
+   && (() => { try { DT.cellOf("nope.nada"); return false; } catch (e) { return true; } })());
+
+// ---- 2. 保真锚: 渲染器输出逐列 = 迁移前模板 DOM 载体(root/tokens/act) --------------
+const api = Object.assign({}, window.AQB_HR_STATUS.methods, {
+  fmtSize: (n) => "SZ" + n,
+  fmtTs: (ts) => (ts ? "T" + ts : ""),
+});
+const cell = (name, row) => DT.cellOf(name)(api, row);
+// hrDetail 三列重组(拍板 4): 档位徽章 / 核实结论(徽章+副行) / 在列(徽章+副行)
+const lane = cell("hrDetail.lane", { lane: "A", lane_text: "考察中" });
+ok("hrDetail.lane: 裸文本格(root 空串) + hr-lane 徽章段(色义 hrsLaneCls 复用)",
+   lane.root === "" && lane.tokens.length === 1
+   && lane.tokens[0].cls === "hr-lane hr-lane-a" && lane.tokens[0].text === "A 考察中");
+const nameC = cell("hrDetail.name", { name: "x" });
+const nameEmpty = cell("hrDetail.name", {});
+ok("hrDetail.name: root wrap + 缺失回落 —(与模板插值 e.name || 同形)",
+   nameC.root === "wrap" && nameC.tokens[0].text === "x"
+   && nameEmpty.root === "wrap" && nameEmpty.tokens[0].text === "—");
+ok("hrDetail.tid/done_iso: mono-cell 载体(完成时间取日期段)",
+   cell("hrDetail.tid", { tid: 7 }).root === "mono-cell"
+   && cell("hrDetail.done_iso", { done_iso: "2026-01-02T03:04:05Z" }).root === "mono-cell"
+   && cell("hrDetail.done_iso", { done_iso: "2026-01-02T03:04:05Z" }).tokens[0].text === "2026-01-02");
+const num = cell("hrDetail.uploaded_bytes", { uploaded_bytes: 1024 });
+const numNull = cell("hrDetail.uploaded_bytes", {});
+ok("数值列: fmtSize 复用 + null 回落 —(hrsSize 单点)", num.tokens[0].text === "SZ1024" && numNull.tokens[0].text === "—");
+ok("ratio: null 回落 — / 数值两位小数(hrsRatio 单点)",
+   cell("hrDetail.ratio", {}).tokens[0].text === "—"
+   && cell("hrDetail.ratio", { ratio: 1.234 }).tokens[0].text === "1.23");
+ok("need_seed_seconds: 人话复用 hrsNeedSeed(- 哨兵回落 —)",
+   cell("hrDetail.need_seed_seconds", { need_seed_text: "3 天" }).tokens[0].text === "3 天"
+   && cell("hrDetail.need_seed_seconds", { need_seed_text: "-" }).tokens[0].text === "—");
+const ver = cell("hrDetail.verified_ts", { verified_source: "satisfied", verified_source_text: "已达标", verified_ts: 1700000000 });
+ok("hrDetail.verified_ts(已核实): hr-vsrc+色档主层 + hr-sub 副行两段",
+   ver.root === "" && ver.tokens.length === 2
+   && ver.tokens[0].cls === "hr-vsrc hr-vsrc-b" && ver.tokens[0].text === "已核实"
+   && ver.tokens[1].cls === "hr-sub" && ver.tokens[1].text === "已达标 · T1700000000");
+const verMid = cell("hrDetail.verified_ts", { lane: "B", lane_text: "B 达标", active: true });
+const verNone = cell("hrDetail.verified_ts", {});
+ok("hrDetail.verified_ts(中间态/未核实): 色档与文案走 hrsSrcCls/hrsVerdictText 单点",
+   verMid.tokens[0].cls === "hr-vsrc hr-vsrc-d" && verMid.tokens[0].text === "在列·B 达标"
+   && verNone.tokens[0].cls === "hr-vsrc" && verNone.tokens[0].text === "未核实");
+const pres = cell("hrDetail.last_seen", { active: true, missing_streak: 2, last_seen: 1700000000 });
+const presOut = cell("hrDetail.last_seen", { verified_source: "absent" });
+ok("hrDetail.last_seen: hr-pres 色档主层 + 副行(观察期/最近被见到经 hrsPresenceSub)",
+   pres.tokens[0].cls === "hr-pres hr-pres-on" && pres.tokens[0].text === "在列"
+   && pres.tokens[1].text.indexOf("观察期 2") >= 0
+   && presOut.tokens[0].cls === "hr-pres hr-pres-out" && presOut.tokens[0].text === "已移出");
+// hrWave: 状态格 mono 载体 + 色档合并 root; 数值列裸文本
+ok("hrWave.status: mono-cell+色档合并 root(failed=error / count_match=false=warn)",
+   cell("hrWave.status", { status: "failed", status_text: "s" }).root === "mono-cell error"
+   && cell("hrWave.status", { count_match: false, status_text: "s" }).root === "mono-cell warn"
+   && cell("hrWave.status", { status_text: "s" }).root === "mono-cell");
+ok("hrWave.pages/detail: 裸文本与 mono-cell 载体(detail 缺省回落 —)",
+   cell("hrWave.pages", { pages: 3 }).tokens[0].text === 3
+   && cell("hrWave.detail", {}).root === "mono-cell" && cell("hrWave.detail", {}).tokens[0].text === "—");
+// hrKv: k/v 对 + act 按钮位(按钮本体在模板, E2 硬要求: 注册化不吞交互)
+const kvv = cell("hrKv.v", { v: "零行波 · 未确认", cls: "warn", act: 1 });
+const kvvPlain = cell("hrKv.v", { v: "x" });
+ok("hrKv.k: kv-k 载体; hrKv.v: mono-cell+kv.cls 合并 root + act 置位",
+   cell("hrKv.k", { k: "配额" }).root === "kv-k"
+   && kvv.root === "mono-cell warn" && kvv.act === true
+   && kvvPlain.root === "mono-cell" && !kvvPlain.act);
+// 双向互对(评审 minor 修复): 渲染器漏注册与列 key 漂移(改名/增删列)都红 —— 单向 WANT
+// 钉不住后者(列 key 改名全守阵照绿而运行时 cellOf 抛错在用户页爆), 集合相等才双向都盖住
+const fromCols = ["hrDetail", "hrWave", "hrKv"].flatMap((p) => COLS[p].map((c) => p + "." + c.key)).sort();
+const inCells = Object.keys(DT.CELLS).sort();
+ok("全部 20 渲染器均注册为函数(名字集与列定义双向互对: 漏注册/列 key 漂移都红)",
+   JSON.stringify(inCells) === JSON.stringify(fromCols));
+const byPage = (p) => Object.keys(DT.CELLS).filter((n) => n.indexOf(p + ".") === 0).length;
+ok("逐页渲染器计数与列定义对齐(hrDetail 10 / hrWave 8 / hrKv 2)",
+   byPage("hrDetail") === 10 && byPage("hrWave") === 8 && byPage("hrKv") === 2);
+
+// ---- 3. 还原链读侧: v5 三表子树 -> loadColState(全集遍历, HR 页随并入自动覆盖) ------
+ok("HR 三页在 ALL_TABLE_PAGES 全集(16 页)且列登记进 TABLE_COLUMNS(10/8/2)",
+   ["hrDetail", "hrWave", "hrKv"].every((p) => PAGES.includes(p)) && PAGES.length === 16
+   && COLS.hrDetail.length === 10 && COLS.hrWave.length === 8 && COLS.hrKv.length === 2);
+store = { autoqb_cols_v5: JSON.stringify({ v: 5, origin: "http://x", pages: {
+  hrDetail: { hidden: ["tid"], order: ["name", "tid", "lane", "tid", "ghost"], w: { tid: "150px", lane: "90px" } },
+  hrKv: { hidden: ["k"] },
+  hrWave: { hidden: ["pages"], w: { pages: "88px", bogus: "5px" } },
+} }) };
+let out = LC();
+ok("宽还原: HR 页意图宽度读回(固化轨首帧即正确)", out.w.hrDetail.tid === "150px" && out.w.hrDetail.lane === "90px");
+ok("序还原: colOrder.hrDetail 洗净读回(脏载荷: 重复 key 去重 + 非法 key ghost 丢弃)",
+   JSON.stringify(out.order.hrDetail) === JSON.stringify(["name", "tid", "lane"]));
+ok("隐还原: colHidden.hrDetail/hrWave 读回", (out.hidden.hrDetail || []).includes("tid") && (out.hidden.hrWave || []).includes("pages"));
+ok("locked k 列还原侧兜底: 写进存储也忽略(loadColState 既有守卫对 HR 页生效)", JSON.stringify(out.hidden.hrKv || []) === "[]");
+ok("w 白名单对 HR 页生效(非法 key/残留丢弃)", JSON.stringify(out.w.hrWave) === JSON.stringify({ pages: "88px" }));
+store = {};
+out = LC();
+ok("空存储: HR 页无 DEFAULT_HIDDEN_KEYS 交集 -> 不播种(零列态恢复入口 = 列选择器 E6)",
+   ["hrDetail", "hrWave", "hrKv"].every((p) => !(out.hidden[p] || []).length));
+
+// ---- 4. 静态锚: assert headDom 枚举 + 模板消费口 + 注册调用点 ---------------------
+const tpl = fs.readFileSync(tplPath, "utf8");
+const grid = fs.readFileSync(gridPath, "utf8");
+const appSrc = fs.readFileSync(appPath, "utf8");
+const hrSrc = fs.readFileSync(hrPath, "utf8");
+ok("columns_grid._assertLayouts 含 headDom 分支(HR 三表经枚举面覆盖, 桥面仍走钩子)",
+   grid.indexOf("(!def.headRef && !def.headDom)") >= 0);
+ok("hr_status.js headDom: true 恰 3 处(三表逐表声明)",
+   (hrSrc.match(/^    headDom: true,/gm) || []).length === 3);
+ok("settings-detail 三表各挂 hrCellOf 消费口(cellOf -> CELLS)",
+   ["hrDetail", "hrWave", "hrKv"].every((t) => tpl.indexOf("hrCellOf('" + t + "'") >= 0));
+ok("settings-detail HR 逐列手写 v-if 链零残留(注册化后模板只剩通用壳)",
+   !/v-if="c\.key ===/.test(tpl));
+ok("app.js 注册调用点在 AQB_HR_STATUS mixin 之后且未被注释(行首语句, 注释旁路即红)",
+   appSrc.indexOf("app.mixin(window.AQB_HR_STATUS);") >= 0
+   && /^window\.AQB_HR_CELLS_REGISTER\(\);/m.test(appSrc)
+   && appSrc.search(/^window\.AQB_HR_CELLS_REGISTER\(\);/m) > appSrc.indexOf("app.mixin(window.AQB_HR_STATUS);"));
+ok("hr_status.js 注册函数在盘且 fail-fast(DT_TABLE 缺席即抛)",
+   /window\.AQB_HR_CELLS_REGISTER = function/.test(hrSrc)
+   && hrSrc.indexOf("DT_TABLE 不在场") >= 0);
+
+// ---- 5. 写侧 round-trip(评审 major 修复): persistPage(唯一写入口)真跑三 HR 页 ------------
+// 载荷三键形态先断 store 侧(pages.<p> = {hidden,order,w} 与内存意图一致), 再喂回 loadColState
+// 断读回同值 —— 写侧形态破坏(键名漂移/漏 w 段)在回退时无守阵会静默红, 此节钉住。
+const CM = globalThis.__X.COLM;
+const INTENT = {
+  hrDetail: { hidden: ["tid"], order: ["name", "tid", "lane"], w: { name: "150px" } },
+  hrWave: { hidden: ["pages"], order: ["lane", "status"], w: { cutoff: "88px" } },
+  hrKv: { hidden: [], order: ["k", "v"], w: null },
+};
+for (const p of Object.keys(INTENT)) {
+  const it = INTENT[p];
+  store = {};
+  const ctx = Object.assign({}, CM, {
+    colHidden: { [p]: it.hidden }, colOrder: { [p]: it.order }, colW: { [p]: it.w },
+  });
+  CM.persistPage.call(ctx, p);
+  const raw = JSON.parse(store.autoqb_cols_v5);
+  ok("[" + p + "] persistPage 落盘 v5 形态: pages." + p + " = {hidden,order,w} 与内存意图一致",
+     raw && raw.v === 5 && raw.origin === "http://x"
+     && JSON.stringify(raw.pages[p]) === JSON.stringify({ hidden: it.hidden, order: it.order, w: it.w }));
+  const back = LC();
+  ok("[" + p + "] round-trip: loadColState 读回同值(hidden/order/w)",
+     JSON.stringify(back.hidden[p] || []) === JSON.stringify(it.hidden)
+     && JSON.stringify(back.order[p] || []) === JSON.stringify(it.order)
+     && JSON.stringify(back.w[p] || null) === JSON.stringify(it.w));
+}
+
+// ---- 6. 列宽动作波及 HR 面 + 未展开态零垃圾轨(评审 minor 修复, stub ctx) ----------------
+// stub 口径: persistPage 换记录器(只记页名), $nextTick 即时, _headEl 恒 null = 未展开 v-show
+// 无盒(R4 口径的沙箱模拟)。断三层: 动作波及三 HR 页 / colW[p] 回 null(全自动, 不固化快照) /
+// recomputeEffective 对无盒面零垃圾轨。垃圾轨语义 = colWidths[p] 无**宽度条目** —— 键本身会被
+// 置 {}(生产注释「立即回弹性模板」的设计行为, e2e 轮询 JSON.stringify(colWidths[p]||{}) 同口径),
+// 键在而条目空 = 无垃圾 px。
+{
+  const persisted = [];
+  const ctx = Object.assign({}, CM, {
+    colHidden: {}, colOrder: {},
+    colW: { hrDetail: { name: "150px" }, hrWave: { cutoff: "88px" }, hrKv: { v: "40px" } },
+    colWidths: {},
+    persistPage: (page) => persisted.push(page),
+    $nextTick: (fn) => fn(),
+    _headEl: () => null,
+  });
+  ctx.fitColumnsToWindowAll();
+  ok("fitColumnsToWindowAll 波及 HR 三页(persisted 含 hrDetail/hrWave/hrKv)",
+     ["hrDetail", "hrWave", "hrKv"].every((p) => persisted.includes(p)));
+  ok("fitAll 后 HR 三页 colW[p] === null(回全自动, 不固化窗口快照)",
+     ["hrDetail", "hrWave", "hrKv"].every((p) => ctx.colW[p] === null));
+  ok("fitAll 未展开态(_headEl 无盒)recomputeEffective 零垃圾轨: 三 HR 页 colWidths 无宽度条目",
+     ["hrDetail", "hrWave", "hrKv"].every((p) => Object.keys(ctx.colWidths[p] || {}).length === 0));
+  ctx.resetAllColumnWidthsAll();
+  ok("resetAllColumnWidthsAll 波及 HR 三页且 colW[p] === null(清意图宽度回全自动)",
+     ["hrDetail", "hrWave", "hrKv"].every((p) => ctx.colW[p] === null));
+}
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_r4_hr_cells_registry_restore_and_assert_anchor():
+    """26-11-17-0059 W2(2)(3)(4): HR 三表还原链读/写两侧 + 值格渲染注册化 + assert headDom 锚电池。
+
+    六段真跑(沙箱 = window/localStorage/location 桩 + dt_table.js -> hr_status.js -> [app.js
+    截断切片 + columns 域聚合文本] 并入同一次 eval —— columns 方法体按裸名引用 app.js 列模型
+    常量(COLS_STORE_KEY/readColStateRaw), 生产里两段 <script> 共享同一全局词法作用域, 合并
+    eval 与之同构; 装载序骨架与生产 manifest 同序):
+      1. 注册面(E2): AQB_HR_CELLS_REGISTER 真跑后 DT_TABLE.CELLS 名字集恰 20 且与列定义
+         **双向互对**(渲染器漏注册与列 key 漂移都红)+ 逐页计数 10/8/2(互对/计数两检查物理
+         落位第 2 节块尾), cellOf 取回函数且
+         未注册名抛错(fail-fast); 注册前 CELLS 为空 = 注册点确在 app.js(hr_status.js 模块层
+         不注册 —— 它先于 dt_table.js 载入, 模块层 registerCell 不可达)。
+      2. 保真锚(E2): 渲染器输出逐列对照迁移前模板 DOM 载体 —— hrDetail 三列重组(档位
+         hr-lane 徽章 / 核实结论 hr-vsrc+hr-sub 两段 / 在列 hr-pres+hr-sub 两段, 色义/人话全走
+         hrs* 单点)、mono-cell 载体(tid/done_iso)、数值列 hrsSize/hrsRatio 缺失回落 —、
+         name 列 wrap + — 回落、hrWave 状态格 mono-cell+色档合并 root、hrKv kv-k / mono-cell+
+         kv.cls 合并 root + act 置位(按钮本体在模板 —— E2 硬要求: 注册化不吞交互, 行为面由
+         e2e hr-history 兜)。
+      3. 还原链读侧(W2(2)): v5 三表子树经 loadColState 全集遍历读回(宽/序/隐三键, 序还原喂
+         脏载荷钉重复 key 去重 + 非法 key 丢弃 + locked k 列还原侧忽略 + w 白名单洗净对 HR 页
+         生效 + 空存储 HR 页无播种), HR 三页在 ALL_TABLE_PAGES(16)且列登记齐(10/8/2)。
+      4. 静态锚(W2(3)/W2(4)): columns_grid._assertLayouts 含 headDom 分支(HR 三表经枚举面
+         覆盖, 未展开 v-show 无盒 = 未挂载豁免 R4 口径; 桥面仍走钩子)+ hr_status.js
+         headDom: true 恰 3 + settings-detail 三表 hrCellOf 消费口 + 逐列手写 v-if 链零残留 +
+         app.js 注册调用点在 HR mixin 之后 + 注册函数 fail-fast 字面。
+      5. 写侧 round-trip(W2(2)): persistPage(唯一写入口)真跑三 HR 页 —— store 侧 pages.<p>
+         = {hidden,order,w} 三键形态与内存意图一致(v/origin 齐全), 喂回 loadColState 读回
+         同值(写侧键名漂移/漏段在回退时无守阵会静默红, 本节钉住)。
+      6. 列宽动作(W2(2), stub ctx: persistPage 记录器 / $nextTick 即时 / _headEl 恒 null =
+         未展开无盒沙箱模拟): fitColumnsToWindowAll/resetAllColumnWidthsAll 波及 HR 三页且
+         colW[p] === null(回全自动不固化窗口快照); fitAll 未展开态 recomputeEffective 对三
+         HR 页 colWidths **零宽度条目**(垃圾轨语义 = 无 px 条目; 键被置 {} 是生产「立即回
+         弹性模板」的设计行为, 与 e2e 轮询 JSON.stringify(colWidths[p]||{}) 同口径)。
+
+    红绿双验锚: 摘 app.js 注册调用 -> **仅第 4 节注册调用点锚红**(第 1/2 节测注册函数本体,
+    探针自调, 与调用点解耦; 生产运行时由 hrCellOf -> cellOf fail-fast 兜); 渲染器改名/漏注册
+    或列 key 漂移 -> 第 2 节尾双向互对红; 摘 headDom 分支或 headDom 声明 -> 第 4 节对应项红;
+    模板退回逐列 v-if 链 -> 第 4 节消费口/零残留两项红; persistPage 落盘形态破坏 -> 第 5 节红;
+    列宽动作旁路 HR 或对无盒面固化垃圾轨 -> 第 6 节红。无 node 静默跳过(与既有电池同口径)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    # app.js 截到 loadColState 结束(接线段不进沙箱; 注册调用点用原文静态钉, 不依赖切片)
+    head_path = os.path.join(tempfile.gettempdir(), f"aqb_app_head_hr_cells_{os.getpid()}.js")
+    src = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    marker = "const initialColState = loadColState();"
+    with open(head_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(src[:src.index(marker)])
+    report = _run_probe(
+        _NODE_HR_CELLS_RESTORE_PROBE,
+        os.path.join(shared, "dt_table.js"),
+        os.path.join(shared, "hr_status.js"),
+        head_path,
+        bundle_file("columns.js"),
+        os.path.join(shared, "tpl", "settings-detail.html"),
+        os.path.join(shared, "columns_grid.js"),
+        os.path.join(shared, "app.js"),
+    )
+    if report is not None:
+        assert report["total"] == 40, (
+            f"HR 注册/还原电池应有 40 项检查(实测 {report['total']}) —— "
+            "少项 = 检查被删或中途提前 return, 守阵会静默变弱"
+        )
+    _assert_battery(report, "HR 值格注册/还原链电池")

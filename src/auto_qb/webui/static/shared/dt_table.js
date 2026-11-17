@@ -28,9 +28,11 @@
  *   _gridTemplate / columns_computed.colAlignCss 内部委托); W2 起 assertLayout 常驻生产渲染
  *   自查 —— 挂载点实证选定: 主视图四面在根实例 updated()(lifecycle.js -> _assertLayouts,
  *   ref 在场才查, 零 document 扫描), 抽屉桥九变体面在桥模板 .group-table 的 @vue:mounted /
- *   @vue:updated 钩子(dtAssertLayout, 锚内配对, 零 document 扫描)。例外清单(D4): HR 三表
- *   (hrDetail/hrWave/hrKv)与 04 卡片形态面不接 —— 由 node 电池例外清单守阵钉住
- *   (test_r4_dt_table_exception_list_geometry_guard)。
+ *   @vue:updated 钩子(dtAssertLayout, 锚内配对, 零 document 扫描)。HR 三表(hrDetail/hrWave/
+ *   hrKv)26-11-17-0059 W1 E6 并入 ALL_TABLE_DEFS 后, W2(3) 起经 def.headDom 锚同走根 updated
+ *   自查(headRef 恒 null -> _headEl DOM 兜底取首个有盒表头; 未展开 v-show 无盒 = 未挂载豁免)。
+ *   例外清单(D4)现只剩 04 卡片形态面(drawerTrackerV04, 卡片行无列状计数语义)—— 由 node 电池
+ *   例外清单守阵钉住(test_r4_dt_table_exception_list_geometry_guard)。
  *
  * !本文件是纯函数层: 不持有状态、不碰 DOM(断言函数只读 DOM)、不引用 app.js 的常量
  *   (装载序: 本文件排在 app.js 之前, 模块级读不到那些 const; 需要列定义时由调用方传入)。

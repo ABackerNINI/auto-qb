@@ -944,6 +944,10 @@ app.mixin(window.AQB_DRAWER_TPL);  // 详情面板模板核心层(W7 恢复): �
 app.mixin(window.AQB_DIALOGS);
 app.mixin(window.AQB_QB_TRAFFIC);  // qB 口径流量图(P5a, plan 26-10-03-0946 §07): uPlot 双系列组件 + 弹层方法域
 app.mixin(window.AQB_HR_STATUS);
+/* HR 值格渲染器注册(26-11-17-0059 W2(4) E2): hr_status.js 在四皮肤 manifest 里先于 dt_table.js
+ * 载入, 模块层 registerCell 不可达 —— 注册动作收在装载序末位的本文件(DT_TABLE 恒已在),
+ * hr_status.js 侧只定义注册表 HR_CELL_RENDERERS 与注册函数(fail-fast, DT_TABLE 缺席即抛)。 */
+window.AQB_HR_CELLS_REGISTER();
 app.mixin(window.CONFIG_EDITOR);
 app.mixin(window.CONFIG_RULES);
 app.mixin(window.CONFIG_HUB);

@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_hr_detail_table_wiring: HR 表 1 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表 1 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表 1 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
-- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表 1 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定; 26-11-17-0059 W1(3)(4) 翻面: 迁 grid 链路 + 排序并入引擎 E8) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(26-10-29 修复 issue 26-10-29-1348: 列定义补齐 sortable: true —— HRS_SORT_VAL 十键全有访问器; markup 收敛到表壳组件 grid 根, 本守阵改钉 <aq-table table-id="hrDetail"> 接线 + :cols="visibleHrDetailCols" + dyn 排序键 dtSortCell('hrDetail') 绑定 + HR_TABLE_DEFS 注册表十列键 + grid sortable 类/箭头门控同源 col.sortable; thead 借壳形态与 hrsSetSort 专用三态机零残留)而表 2 波次表无 sortable; 三态状态机单点在 sort.js setSort dyn 分支(test_r4_sort_domain 钉), 行消费侧 hrsDetailRows 走 dtSortCell(E8: 逐站点记忆→表级, 拍板接受); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 成对(.hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 .wrap + .hr-full-modal 放开; th.sortable 箭头四条随 thead 退役, 表头样式归三皮肤 .h-cell 规则); 旧列辅助 hrsVerifiedText/hrsStatusText 与死件 hrsArrowHref 零残留
+- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表 1 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定; 26-11-17-0059 W1(3)(4) 翻面: 迁 grid 链路 + 排序并入引擎 E8) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(26-10-29 修复 issue 26-10-29-1348: 列定义补齐 sortable: true —— HRS_SORT_VAL 十键全有访问器; markup 收敛到表壳组件 grid 根, 本守阵改钉 <aq-table table-id="hrDetail"> 接线 + :cols="visibleHrDetailCols" + dyn 排序键 dtSortCell('hrDetail') 绑定 + HR_TABLE_DEFS 注册表十列键 + grid sortable 类/箭头门控同源 col.sortable; thead 借壳形态与 hrsSetSort 专用三态机零残留)而表 2 波次表无 sortable; 三态状态机单点在 sort.js setSort dyn 分支(test_r4_sort_domain 钉), 行消费侧 hrsDetailRows 走 dtSortCell(E8: 逐站点记忆→表级, 拍板接受); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行; 26-11-17-0059 W2(4) E2 二次翻面: 逐列 DOM 载体随值格渲染注册化从模板段搬进 hr_status.js HR_CELL_RENDERERS 描述符, 本守阵改钉注册表块载物(hr-vsrc/hr-pres 色义 + hrsVerdict*/hrsPresence* 主副层消费) + 模板消费口(hrCellOf/cell.root/cell.tokens 循环))与 CSS 成对(.hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 .wrap + .hr-full-modal 放开; th.sortable 箭头四条随 thead 退役, 表头样式归三皮肤 .h-cell 规则); 旧列辅助 hrsVerifiedText/hrsStatusText 与死件 hrsArrowHref 零残留
 - test_frontend_table_registry_single_point: 表注册表守阵(计划 26-10-11-1722 P0) —— app.js 必须有 `TABLE_DEFS` 且 `TABLE_PAGES` 由它派生(第二份表清单即红), 四张表(group/detail/torrent/show)的 `columns`/`headRef`/`tableRef` 必须指向既有单点且顺序 = 定义序(顺序漂移 = 列偏好按错表读), `columns.js`/`sort.js` 里四页字面量与 `viewMode` 分派零残留(复活即红 —— 那正是本单点要消灭的重复); 装载序前提(26-11-17-0059 W1(1)(2) E6 并入): hr_status.js 在四皮肤 manifest 里必须先于 app.js(window 桥 HR_DEFS_BRIDGE 模块级求值, 序错 = HR 三表从列模型全集静默掉队)
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 1. 六个组件都 app.component 注册 2. 表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 3. groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 4. 表壳单根(26-11-17-0059 W1(5) 翻面): P5 thead 借壳模式已随 HR 三表迁 grid 退役 —— mode="thead" 零残留、模板单 grid 根; 设置页 HR 三表各挂一座 <aq-table>(table-id=hrDetail/hrWave/hrKv), 段内联 `<th>` 零残留; 可排序性判据同源 col.sortable(sortable 类与箭头 v-if 由它驱动, issue 26-10-29-1348)
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
@@ -1003,7 +1003,9 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
       hrsCompareRows 用 node 真跑语义电池(空值恒末位两方向不反转 / 0 哨兵 / 档位 A<B<C<D 固定秩 /
       字符串·数值分型 / 同值稳定), 无 node 的机器静默跳过本项(不引入 pytest skip, 基线 0 skipped);
     3. 三列重组(§3.6 决策点 4): 模板新列结构(核实结论徽章 hr-vsrc + 副行 / 在列·失踪徽章
-      hr-pres + 副行)+ CSS 成对(.hr-sub 副行小字 / .hr-pres 徽章 / 名称列限宽钩子 +
+      hr-pres + 副行; 26-11-17-0059 W2(4) E2 翻面: 逐列 DOM 载体搬进 HR_CELL_RENDERERS
+      描述符, 钉法随迁 —— 注册表块钉载物, 模板段钉消费口)+ CSS 成对(.hr-sub 副行小字 /
+      .hr-pres 徽章 / 名称列限宽钩子 +
       .hr-full-modal 放开; 原 th.sortable 箭头四条随 thead 借壳退役删除 —— grid 表头箭头样式
       走三皮肤 .h-cell 规则(本守阵只钉 th 死代码零残留), 对齐右缘走 colAlignCss 注入; 箭头
       不占流(26-10-06-1009 §7 B1 拍板意图: 标题不随排序切换位移)由 shared/console_hub_panels.css
@@ -1117,16 +1119,30 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         assert report["failed"] == [], f"排序语义电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
     # 3. 三列重组: 新列结构 + 旧辅助零残留 + CSS 三处成对
+    #    26-11-17-0059 W2(4) E2 翻面: 值格渲染注册化后, 逐列 DOM 载体(徽章/副行)从表 1 模板段
+    #    搬进 hr_status.js 的 HR_CELL_RENDERERS 描述符(渲染器经 api 复用 hrs* 单点), 模板只剩
+    #    通用壳(hrCellOf 消费 + tokens 循环)。载体钉法随迁: 徽章色义与主/副层文案消费钉注册表块,
+    #    模板钉消费口 —— 两处各缺一件即红。
+    mcells = re.search(r"const HR_CELL_RENDERERS = \{(.*?)\n\};", js, re.S)
+    assert mcells, "hr_status.js 缺值格渲染器注册表 HR_CELL_RENDERERS(W2(4) E2 单点) —— 同步本守阵"
     for needle, what in (
-        ('class="hr-vsrc"', "核实结论徽章(沿用 hr-vsrc 色义)"),
-        ("hrsVerdictText(e)", "核实结论主层文案"),
-        ("hrsVerdictSub(e)", "核实结论副行(来源人话 · 时刻)"),
-        ('class="hr-pres"', "在列/退役徽章"),
-        ("hrsPresenceText(e)", "在列主层文案"),
-        ("hrsPresenceSub(e)", "在列副行(观察期 · 最近被见到)"),
-        ('class="hr-sub"', "副行小字"),
+        ("hr-vsrc ", "核实结论徽章(沿用 hr-vsrc 色义)"),
+        ("api.hrsVerdictText(e)", "核实结论主层文案"),
+        ("api.hrsVerdictSub(e)", "核实结论副行(来源人话 · 时刻)"),
+        ("hr-pres ", "在列/退役徽章"),
+        ("api.hrsPresenceText(e)", "在列主层文案"),
+        ("api.hrsPresenceSub(e)", "在列副行(观察期 · 最近被见到)"),
+        ('cls: "hr-sub"', "副行小字"),
+        ('"hrDetail.verified_ts":', "核实结论列渲染器在盘"),
+        ('"hrDetail.last_seen":', "在列列渲染器在盘"),
     ):
-        assert needle in frag, f"表 1 三列重组缺 {what}(应有 `{needle}`)"
+        assert needle in mcells.group(1), f"值格渲染器注册表缺 {what}(应有 `{needle}`)"
+    for needle, what in (
+        ("hrCellOf('hrDetail'", "表 1 值格消费口(cellOf -> CELLS, W2(4) E2)"),
+        (':class="cell.root"', "值格根 class 由渲染器描述符给(root 载体)"),
+        ('v-for="(t, ti) in cell.tokens"', "格内容段循环(徽章 span / 裸文本 / hr-sub 副行)"),
+    ):
+        assert needle in frag, f"表 1 模板缺 {what}(应有 `{needle}`)"
     # 4. 文案语义修正(2026-10-03 §8 B3/B4): 退役行不再借「失踪 N 波」, 终态在列行不再一律「未核实」
     #    (注: 「失踪行」是 CSS tr.missing 的既有叫法, 与徽章文案不是一回事 —— 只钉模板 literal)
     assert "失踪 ${" not in js, "退役行「失踪 N 波」文案残留(§8 B4: missing_streak 退役即清零, 显示恒 0 是语义错位)"
