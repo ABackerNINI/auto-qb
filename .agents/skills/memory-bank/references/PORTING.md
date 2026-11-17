@@ -40,7 +40,7 @@
 | 1 | memory-bank skill 目录 | `.agents/skills/memory-bank/` 整目录(`scripts/` 全带走)→ 目标项目同名路径或用户级 skills 目录 | 建并填 `<skill>/config/project.toml`(`[domains]` / `[siblings]`; 填法见「双场景指导·领域枚举对齐」) | `memory-bank/` 目录骨架(`tasks/` `active-context/` `plans/` `reports/` `issues/` `pitfalls/<类>/` `testing/baselines/` 等; 类枚举单点 `PITFALL_CLASSES`, 索引目录放 `_about.md` 三行头) + 手写 `memory-bank/README.md` 细路由 | `kb.time` 三行正常(UTC+8); `kb.check` 空库绿; `kb.new task` 建档成功(领域枚举/查重生效) |
 | 2 | commands 引擎 | `.agents/skills/commands/` 整目录 | 无引擎级配置; 各包配置见下行 | 无 | `commands list` 列得出包; `commands run kb.check` 经引擎跑通(`<skill-dir:NAME>` 占位符解析, 项目级 `.agents/skills/` 优先、用户级兜底) |
 | 3 | `.commands/` 包 | 按需拷 `my-commit-flow/` `test/` `kb/` `review/` 各包(`scripts/` 与模板一并); **test 包例外: 只取它的 `config.minimal.toml` 起步, 原包脚本深度项目绑定不移植**(见「双场景指导·与既有测试套共存」) | 每包照「模板清单」的 `config.minimal.toml` 复制 → 改名(`config.toml`; my-commit-flow 改名 `.my-commit-flow.toml`)→ 逐节填空 | review 包另建 `lane.toml`(只做存量评审才建, 见「双场景指导·存量评审 lane」) | 各包脚本 `--help`; 预检 `--dry-run`; 起步闸门手工跑一遍绿 |
-| 4 | sync 脚本 | 项目根 `scripts/sync_agent_skills.py` | 排除表与链接目标改成本项目值(本项目实例: `LINK_TARGETS = [.codebuddy/skills]` + `EXCLUDED = {autoclaw-design-capability}`); S9 批次后改走 `.agents/skills/.config/sync.toml`(口径见「配置落点与命名口径」, 落地前不创建) | 链接目标目录(本项目实例: `.codebuddy/skills/`) | 跑一遍后 `ls` 链接目标可见各 skill 链接 |
+| 4 | sync 脚本 | 项目根 `scripts/sync_agent_skills.py` | 排除表与链接目标改成本项目值(本项目实例: `.agents/skills/.config/sync.toml` 的 `[exclude] names` / `[link_targets] paths`, 2026-11-17 S9 已落地; 口径见「配置落点与命名口径」) | 链接目标目录(本项目实例: `.codebuddy/skills/`) | 跑一遍后 `ls` 链接目标可见各 skill 链接 |
 | 5 | KB 数据件骨架 | 按需拷 [templates/doc-forms.md](../templates/doc-forms.md) / [templates/collaboration.md](../templates/collaboration.md) / [templates/real-machine.md](../templates/real-machine.md)(既有骨架先例: [baseline.md](../templates/baseline.md)) | 无 | 复制到 `memory-bank/` 对应位置逐节填空(去向见「模板清单」); **不需要的件不复制**, SKILL.md 里引用它的段落一并摘除 | `check_doc_links.py --quiet` 绿(摘引用后无坏链) |
 | 6 | 本文件 PORTING | 随单位 1 自动带走 | 移植后按目标项目现状回写(依赖面清单漂移是本改造头号风险 R-4) | 无 | 无 |
 
@@ -59,7 +59,7 @@
 - **包面**: 跟包根先例 —— `.commands/my-commit-flow/.my-commit-flow.toml` 与 `.commands/review/lane.toml`
   (两者同构: 数据在包根文件, 脚本只读不写)。
 - **sync 脚本例外**: `.agents/skills/.config/sync.toml`(点前缀, 防被 skill 遍历误收)—— S9 批次落地;
-  本仓当前未创建, 本节只记口径。
+  本仓已创建(2026-11-17 S9), 即本仓生效配置。
 - **配置缺失回落语义**(D13): 校验类缺失 → 跳过对应校验 + **必打** `[KB-CONFIG]` 提示行(禁静默降级;
   机制单点 `_common.load_project_config`); 运行必需数据(如 lane 批次矩阵)缺失 → 引导性报错。
   细则以代码单点为准, 本文件不复制。
