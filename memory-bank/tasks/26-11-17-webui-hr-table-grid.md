@@ -54,6 +54,6 @@ HR 三表(hrDetail/hrWave/hrKv)怎么迁 aq-table grid 链路并拿到与主表�
 
 - 2026-11-18 00:37 W2②③④(d0621c4c): 持久化还原(v5 三表子树读侧还原矩阵手势级全绿; resetAll/fitAll 波及 HR 面); assertLayout HR 覆盖(columns_grid.js 修 headRef=null 分支半截缺陷, headDom 分支按首个有盒表头兜底, 未展开 v-show 未挂载豁免 R4); registerCell 注册化(20 渲染器经 AQB_HR_CELLS_REGISTER fail-fast 注册, 模板经 hrCellOf→DT_TABLE.cellOf 消费, 确认空清单按钮本体留模板, dt_table 六口子全活); 评审批次修 5(全守阵侧); 复评轮 3 零新增发现
 
-- 2026-11-17 W2 中场 T3 零改动核验轮: e2e 回归(hr-history 等)与渲染探查全绿, parity CASES 当时未增 HR 面(沙箱不加载 hr_status.js, 几何等价探针 13 张不含 HR, HR 等价性留 W3 parity e2e 真跑)
+- 2026-11-17 W2 中场 T3 零改动核验轮: e2e 回归(hr-history 等)与渲染探查全绿, parity CASES 当时未增 HR 面(沙箱不加载 hr_status.js, 几何等价探针 13 张不含 HR, HR 等价性留 W3 parity e2e 真跑); W1 判据 dry-run 冒烟已实跑(`commands run dev.run -- config.yml --dry-run` 26.3s): 配置加载/schema 迁移(v5→v8 内存生效)/全局任务创建启动链全正常, 连接 qBittorrent 127.0.0.1:16585 拒绝(本机 qB 未运行)主循环未起 —— 按预案冒烟止步连接 qB 不阻塞判据, 主程序启动/校验面无红
 
 - 2026-11-18 00:49 W3 收口(T6): parity 守阵 e2e/dt-table-layout-parity.spec.mjs 增 HR 三面(hrDetail 10/hrWave 8/hrKv 2 列; route 拦截喂 /api/hr/status 与 /api/hr/sites/*/entries 合成载荷 —— 桩只灌表3 history, 表1/2 真读磁盘未播种, 手法 variant-tables 家族同款; 双皮肤全绿); hr-history 回归全绿; 守阵/文档回写: hr_status.js 头注微调(parity 守阵事实补一行), memory-bank/architecture/webui.md D4 例外清单收缩为「仅 04 卡片」+ 守阵条补 HR 三面事实, 根 README HR 节补「列宽/列序/隐藏列与主表同款可调且刷新后保持」; 计划 26-11-17-0059 §10 增 R2 变更记录行(doc-updated 抬戳, doc-status 保持 Open —— 待用户终验点头才翻 Done, D5 同款); 基线切片落盘(见 kb.baseline); test_docs_forms MD_WHITELIST 豁免移除留待并行 clone 转换件入库(明确不做)。W3⑤ 用户终验(settings → HR 在线核实 → 三表逐一手测四项交互+刷新持久, 主表回归四面)待用户
