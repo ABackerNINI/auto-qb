@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-traffic-beat-fidelity">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-14-1313">
-<meta name="doc-updated" content="26-11-15-0432">
+<meta name="doc-updated" content="26-11-17-0758">
 <meta name="doc-refs" content="memory-bank/plans/26-11-12-1139-plan-webui-traffic-beat-motion.html, memory-bank/conventions/attachments/webui-traffic-beat.md, memory-bank/testing/baselines/26-11-15-0432-webui-traffic-beat-fidelity.md, memory-bank/tasks/26-11-15-webui-traffic-beat-fidelity.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>流量图节拍动效复刻矫正: 等级门/常驻菱形/栅格方波/活尾延伸/裁剪/显示口径</h1>
 <p class="lede">本篇只回答: 前序计划 26-11-12-1139 实施后用户报「模板效果没复刻出来」的五类观感缺陷(动效几乎不出现 / 缺常驻旋转菱形 / 0 流量零动效 / x 轴逐拍抖动 / 曲线不总落判定线)与两处配套口径(裁剪 / 面板显示)各自的真实根因是什么、怎么修。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-14-1313 · <b>doc-updated</b> 26-11-15-0432 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-14-1313 · <b>doc-updated</b> 26-11-17-0758 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户报障(26-11-14, 含二次补充: x 轴修正 / 裁剪 / 尾桶落线 / 采样显示) + 三轮帧采样实测取证(合成桩 2400+6011+6011 帧, 生产同构 payload 生成器) + grilling 三问拍板(AskUserQuestion 26-11-14) + 前序计划 26-11-12-1139 §04 模板对照
 </div>
 
@@ -243,6 +243,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-14-1313</span> 初版: 用户报障(26-11-14 两轮) + 三轮帧采样实测(2400+6011+6011 帧, 生产同构桩)闭环七项根因(G1-G7); 修复 F1-F6 六项; grilling 三问拍板 D1-D3 + 补充拍板 D4 + 流程拍板 D5(只建计划); 待决小项 P1-P3 给默认。</li>
+  <li><span class="tag">R1 · 26-11-17-0758</span> 指链收口(读侧根修计划 26-11-15-1104 八提交落地收口 Done): ① 本计划 F3 floor+1 的桶宽前提被其 F1 替换——桶宽规则改采样整倍且恒≤500 桶, floor+1 的 n 恒含进行中桶行为保留但「各 raw 窗恒整倍」不再成立(6h/12h/24h 非整倍桶数 {497,498} 相位翻动回野, 前端 rewin 判据已改窗起点+step 免疫); ② 本计划 F4 holding 语义保留(尾桶=进行中桶持末次观测速率 held, 停滞/断连不延伸不造数), 实现随其 F2/F3 重做——尾桶改走点位归属同一路径 _bucket_index(ts=now) 落格, 独立 holding 槽追加面退役, 并增有界空桶持有回填(held 覆盖有界漏采, 回填判据 held_backfill 与尾桶延伸 max_gap_s 同源); ③ 本计划 F6 meta 键 sample_interval_s 被其 F7 复用——_qbPollMs 改读该键, 轮询节奏=采样间隔全窗统一 1.5s, 「低频轮询=桶宽」正式反转; ④ codec 延伸窗口 gap ∈ (-DRIFT_TOL, bound] 是对本计划 F4/P1「now 严格超出链端」的字面扩窗——写侧负向漂移伪迹面, 诚实边界不动, 该计划 R7 已记双向指链。产出口径现行权威: memory-bank/conventions/attachments/webui-traffic-beat.md。状态仍 Done。</li>
 </ul>
 
 </div>

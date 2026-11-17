@@ -1,11 +1,11 @@
 # 26-11-15-webui-traffic-root-revamp — 流量图读侧根修与毫秒级响应: 栅格单几何化/桶宽对齐采样/增量缓存/补尾格/环境层解绑/轮询节奏统一
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-15
-**Updated:** 2026-11-15
-**Summary:** 流量图读侧根修与毫秒级响应: 栅格单几何化/桶宽对齐采样/增量缓存/补尾格/环境层解绑/轮询节奏统一
+**Updated:** 2026-11-17
+**Summary:** 流量图读侧根修与毫秒级响应收口 Done(26-11-17): S1-S5 八提交(ddc68c11..ea00c777), A1-A8 全绿(绿切片 26-11-17-0706), 指链双向(26-11-12-1139 R13 / 26-11-14-1313 R1), webui-traffic-beat.md 读侧根修收口节
 **Topics:** webui-traffic-root-revamp
-**Refs:** memory-bank/testing/baselines/26-11-17-0617-webui-traffic-root-revamp-s4.md, memory-bank/testing/baselines/26-11-17-0706-webui-traffic-root-revamp-s4-green.md
+**Refs:** memory-bank/testing/baselines/26-11-17-0617-webui-traffic-root-revamp-s4.md, memory-bank/testing/baselines/26-11-17-0706-webui-traffic-root-revamp-s4-green.md, memory-bank/pitfalls/testing/bench-assertion-calibration.md
 
 ## 本篇只回答
 
@@ -39,12 +39,19 @@ grilling 三轮七问拍板 D1-D7(全按推荐): D1 根修+读侧增量缓存一
 |---|---|---|
 | 取证 | 三轮取证闭环四症状+两根缺陷 | Done(26-11-15) |
 | grilling | 三轮七问拍板 D1-D7 | Done(26-11-15) |
-| 计划 | 26-11-15-1104 入库(Open) | Done(26-11-15) |
-| S1 | 后端栅格单几何化 | Open |
-| S2 | 读侧增量缓存 | Open |
-| S3 | 前端动效与轮询 | Open |
-| S4 | 回归与基线 | Open |
-| S5 | 回写收尾 | Open |
+| 计划 | 26-11-15-1104 入库(Open) | Done(26-11-15, 收口翻 Done 见 R3) |
+| S1 | 后端栅格单几何化 | Done(26-11-15~16, ddc68c11/fc97c4e4/969d5fcf) |
+| S2 | 读侧增量缓存 | Done(26-11-16~17, b501654e/457c51f1) |
+| S3 | 前端动效与轮询 | Done(26-11-17, abe58b8b/efc90ea5) |
+| S4 | 回归与基线 | Done(26-11-17, ea00c777; 双切片 0617 红快照/0706 绿片) |
+| S5 | 回写收尾 | Done(26-11-17) |
+
+## S5 收口结论(2026-11-17)
+
+- **收口事实**: S1-S4 八提交(ddc68c11 → fc97c4e4 → 969d5fcf → b501654e → 457c51f1 → abe58b8b → efc90ea5 → ea00c777)全部落地; A1-A8 全绿, 权威=绿切片 `testing/baselines/26-11-17-0706-webui-traffic-root-revamp-s4-green.md`(全量数字; e2e 数字与落地映射权威=红快照 `26-11-17-0617` 「本改动面」节; 引用走 kb.baseline, 此处不抄数字; 红快照两阻断——A4 bench cov 插桩红/覆盖率闸未达——已清偿); 计划 26-11-15-1104 翻 Done(§10 R3)。
+- **指链双向核对**: 本计划 §10 R3 ↔ 前序两计划互认——26-11-12-1139 §11 R13(记 F6 修正「零变化拍静默」/F7 反转「拍节奏锚轮询=桶宽」/F8 清偿其 R10 留痕①首轮 fallback 30s/新桶宽表作废「24h 2880 点恒瞬时」, 承袭面 I10/G5/I9/I7 不放松); 26-11-14-1313 §10 R1(记 F3 floor+1 桶宽前提被本计划 F1 替换/F4 holding 语义保留实现随 F2/F3 重做/F6 meta 键被 F7 复用/codec 延伸窗口 gap ∈ (-DRIFT_TOL, bound] 是对其 F4/P1「now 严格超出链端」的字面扩窗——写侧负向漂移伪迹面, 诚实边界不动, 本计划 R7 已记)。
+- **回写面**: `conventions/attachments/webui-traffic-beat.md` 新增「读侧根修收口」节(桶宽落位表/点位归属归桶/封口桶不可变/holding held+有界漏采/缓存架构 A4 数字/轮询节奏/冷开首拍/补尾格/rewin/环境层解绑)+ 旧条目四处作废修正; 新坑档 pitfalls/testing(基准电池标定环境与并行负载因子余量, T5/T8 同族两例)。
+- **踩坑记录**: 本轮收尾踩已记坑 `pitfalls/kb/wrap-did-test-numbers.md`(第 5 次, 档案正文路径)——收口结论节抄了全量数字, kb.check 判红; 已改「见 kb.baseline」引用措辞 + 坑档复发 +1。为什么没命中: kb.wrap 的内联禁令出现在收尾动作之后, 先手写结论节后跑 wrap, 引导到达时数字已落盘——修法已记进坑档(新建结论节写完立即 kb.check)。
 
 ## 进度日志
 
@@ -55,3 +62,5 @@ grilling 三轮七问拍板 D1-D7(全按推荐): D1 根修+读侧增量缓存一
 review: 提交前分批评审 3 轮(全能档只读子代理 × 3, 齐平和/远端同 tip 各轮自检过): 轮 1 五发现(2 major 桶数表互斥不自洽/dt 修正跳变空桶伪断线 + 1 minor 组图冷态口径 + 2 nit)全修; 轮 2 确认五条落实 + 新 1 minor(非整倍窗桶数相位翻动 × rewin 裸点数判据误判)修(F5 升格 rewin 判据改造 xs[0]+step 双覆盖); 轮 3 零 actionable 通过。全轮累计 检 6/6 · 修 6 · 入池 0 · blocker 0。
 
 - 2026-11-15 11:09 grilling 三轮七问拍板 D1-D7 全按推荐 + 三轮取证(仿真/基准/vendor)闭环四症状与两根缺陷(双几何/速率双轨) + 计划 26-11-15-1104 入库(Open, F1-F8/A1-A8/S1-S5 待显式开工) + 档案立档; 零代码改动
+
+- 2026-11-17 07:59 S5 回写收口: webui-traffic-beat.md 读侧根修收口节+旧口径四处作废修正; 前序两计划指链 R13/R1 落行(双向); 本计划 §10 R3+doc-status Done; 任务档案收口(状态表全 Done+收口结论/指链核对节); 新坑档立档(pitfalls/testing 基准电池标定环境与并行负载因子余量); 计划外漂移列清单交主会话(baseline.md -n 4 漂移等 7 条入池候选)

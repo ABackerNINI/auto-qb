@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `engine-pack-dir-injection.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `docker-id-truncation.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -14,6 +14,7 @@
 | [ast-migration-fidelity.md](ast-migration-fidelity.md) | 机械拆分/迁移文件时, **AST 只给结构, 内容必须从源行取** —— `ast.get_docstring` 返回的是**求值后**的字符串(转义已解开), 拿它写回会把 `\\p{L}` 吃成 `\p{L}`(内容被静默改写 + 触发 SyntaxWarning); 另一… | 拆分文件, 迁移脚本, 逐行搬移, ast.get_docstring, 求值串, 转义被吃, `\\p`, SyntaxWarning, 生成模块, 自我 import, 循环 import, 行守恒, 保真校验, 分批迁移, 批模式,… |
 | [base-schema-version-staleness.md](base-schema-version-staleness.md) | tests-real 各片基座(write_cfg/CONFIG_TEMPLATE)写死 `schema_version: <当时现行版>` 避免迁移改写 —— 产品 config schema 一 bump, 该字面量立即过期, 启动物化(materialize_schema_… | schema_version, 基座, 版本字串, 迁移改写, config.yml.v5.bak, 版本备份, CURRENT_VERSIONS, 启动物化, materialize_schema_migration, v5→v6, 版本… |
 | [baseline-merge-order.md](baseline-merge-order.md) | 基线切片的合流序漂移: 最新切片数字与当前树实测不符 | 基线, kb.baseline, 数字对不上, 最新切片, 合流, sync, 快进, 多clone, 扶正 |
+| [bench-assertion-calibration.md](bench-assertion-calibration.md) | 性能阈值断言在**两种非标定环境**下系统性假红 —— ①覆盖率插桩(pytest-cov 追踪)使冷路径膨胀 ~4.6x, ②xdist 并行负载未留余量使 p95 恰超线 0.7% —— 流量图 A4 基准同族两例(T5 tripwire 400ms / T8 冷态 1500… | 基准电池, bench, 阈值断言, tripwire, p95, 性能断言, 插桩, pytest-cov, 覆盖率膨胀, 并行, xdist, 负载因子, 标定环境, 冷态, 温态, 膨胀 |
 | [bg-process-cleanup.md](bg-process-cleanup.md) | 本工具环境里 `commands run dev.sim/dev.run` 这类长跑命令挂后台后, TaskStop / kill 只杀外层 (uv 或 commands 包装进程), 真正的 python 子进程继续持有 state.lock / 日志文件 / 端口 —— 复跑… | 后台进程, dev.run 停不下来, state.lock 删不掉, Device or resource busy, 端口占用, TaskStop, 杀进程, 孤儿进程 |
 | [browser-verify-iab.md](browser-verify-iab.md) | 本机没有 node 时 Playwright e2e 链路不可用, 可用 ZCode IAB 浏览器 + evaluate 替代 —— 但 evaluate 返回嵌套对象是序列化假象 `{}`。 | 浏览器验证, IAB, evaluate, 无 node, 冒烟跑不了, 序列化, 假空对象, cfgRaw, 绑定状态 |
 | [bulk-rename.md](bulk-rename.md) | 分批迁移类机械改名(W2 测试面 700+ 处)最易翻车的两处 —— ①正则替换串忘回填接收者, 整批替换全毁; ②名字按域分批 × 文件按域分批两个维度对不齐时, 该名字的替换规则不进脚本, 静默漏迁且**测试照样全绿**(旧名转发还在)。防御 = 捕获组回填 + 替换后畸形形… | 批量改名, 机械替换, re.subn, sed, 分批迁移, 迁移脚本, 旧名残留, 验收 grep, 漏迁, 接收者, 改名脚本, W3 删除波 |
@@ -33,4 +34,3 @@
 | [cross-thread-teardown-assert.md](cross-thread-teardown-assert.md) | starlette 1.6 把 SSE 的同步生成器包进 `iterate_in_threadpool`, 它跑在 anyio 工作线程里; 该线程帧里的最后一个引用(`item`/`func`/`args` 元组)是在 `call_soon_threadsafe` **之后**… | 跨线程终态断言, 断流退订, subscriber_count, anyio 工作线程, iterate_in_threadpool, 生成器 finally 退订, 单点采样, 竞态, 偶发红, 句柄堆叠, aclose 后仍订阅, gc… |
 | [dev-webui-config-regen-wipe.md](dev-webui-config-regen-wipe.md) | `commands run dev.webui` 每次启动都从 CONFIG_TMPL 无条件重生成派生配置(不 diff 不保留), 上一阶段经 PUT /api/config 落盘到派生配置的键(如 relocate.bt_backup)被静默冲掉, WEB 端口也重新 OS… | dev.webui, dev_webui, CONFIG_TMPL, 重生成配置, PUT 落盘被冲, 端口漂移, 端口重分配, WEB 端口, 多阶段真机, 派生配置 |
 | [docker-id-truncation.md](docker-id-truncation.md) | `docker images --format {{.ID}}` 与 `docker ps --format {{.Image}}`(镜像已无 tag 时)默认输出**截短 12 位** ID, 而 `docker container inspect --format {{.Im… | docker images ID, docker ps Image, 截短, 12 位, sha256, --no-trunc, 镜像比对, 活面, 悬空, 误列候选 |
-| [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |
