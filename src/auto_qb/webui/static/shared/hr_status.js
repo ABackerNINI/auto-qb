@@ -30,7 +30,9 @@
  *   时代的理由, 交互化后作废: 那时右键隐藏不可逆才怕多分组)。详情表表头不再借 <aq-table> thead
  *   模式(该模式已随本迁移退役)。渲染自查(W2(3))走 headDom: true 锚进根 updated 的
  *   _assertLayouts(未展开 v-show 无盒 = 未挂载豁免, R4 口径); 值格渲染注册化(W2(4) E2)见
- *   HR_CELL_RENDERERS / AQB_HR_CELLS_REGISTER / mixin 方法 hrCellOf。
+ *   HR_CELL_RENDERERS / AQB_HR_CELLS_REGISTER / mixin 方法 hrCellOf。几何面 W3(1) 起由 parity
+ *   守阵 e2e/dt-table-layout-parity.spec.mjs 增 HR 三面钉住单点输出(hrDetail 10 / hrWave 8 /
+ *   hrKv 2 列; route 拦截喂合成载荷)。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 

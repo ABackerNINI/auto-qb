@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-table-wiring">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-17-0059">
-<meta name="doc-updated" content="26-11-17-0118">
+<meta name="doc-updated" content="26-11-18-0049">
 <meta name="doc-refs" content="memory-bank/plans/26-11-10-0027-plan-dt-table-wiring.html, memory-bank/tasks/26-11-17-webui-hr-table-grid.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>HR 三表迁 aq-table grid 链路: 四项交互全量统一 + registerCell 接线(第二轮)</h1>
 <p class="lede">本篇只回答: HR 三表(hrDetail/hrWave/hrKv)从「零交互零持久化」死面迁入 aq-table grid 链路、四项交互(拖宽/拖序/右键隐藏/持久化)全量统一怎么接、怎么验、失控怎么停 —— 04 卡片不进本轮(已入池 issue 26-11-17-0038 待排期)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-17-0059 · <b>doc-updated</b> 26-11-17-0118 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-17-0059 · <b>doc-updated</b> 26-11-18-0049 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 前序计划 <a href="26-11-10-0027-plan-dt-table-wiring.html">26-11-10-0027</a> §06 D7(HR 三表第二轮立项) · 2026-11-17 会话 grilling 两轮 8 问拍板(E1-E8, 见 §06) · 只读探查事实清单(引文见 §02)
 </div>
 
@@ -166,6 +166,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-17-0059</span> 初版: 来源前序计划 26-11-10-0027 §06 D7(HR 三表第二轮立项, 方向 A 迁 aq-table grid 链路); 2026-11-17 会话 grilling 两轮 8 问, 用户逐项拍板 E1-E8(§06); 事实面由只读探查代理摸底(三表列集合与渲染形态/主表四项交互机制单点/守阵断言位置/数据链桩可验), 关键引文见 §02; 04 卡片出轮入池 issue 26-11-17-0038(待排期)。</li>
   <li><span class="tag">R1 · 26-11-17-0118</span> 评审轮1修复(1 major+2 minor 全修, 引文过检): F1 locked 拖序守卫属新增引擎行为明文化(§01 不变量收窄为「近零新增」+唯一例外, W2 判据补拖序守卫与主表回归, §07 增 R7) —— E7 拍板口径不变; F2 v-show 行号 :265/276 修正为 :279-280; F3 doc-refs 机器补链晚于建件抬戳, 随本笔消除</li>
+  <li><span class="tag">R2 · 26-11-18-0049</span> 实施推进(六步 T1-T6, 分笔提交): T1 注册面并入 ALL_TABLE_DEFS(58c22fc5) / T2 三表迁 aq-table grid + 排序并入 setSort + 排序守阵翻面 + thead 借壳退役(cc1bcc4f) / T3 零改动(e2e 44/0 + 渲染探查 21/21, parity CASES 当时未增 HR 面) / T4 拖序侧 locked 守卫(startColDrag/applyColOrder) + shell 解封(6f78ec08) / T5 持久化 + assertLayout headDom 覆盖 HR 面 + registerCell 接线(d0621c4c) / T6 W3 收口: parity e2e 增 HR 三面(hrDetail 10 / hrWave 8 / hrKv 2 列, route 拦截喂合成载荷, 双皮肤 22 passed) + hr-history 回归 4 passed + 守阵/文档回写(hr_status 头注微调 / architecture/webui.md D4 收缩 / README HR 节交互面)。W1-W2 各步完成事实如上; §04 W3⑤ 用户终验未做 —— <strong>待用户终验点头才翻 doc-status Done(D5 同款)</strong>。</li>
 </ul>
 
 </div>

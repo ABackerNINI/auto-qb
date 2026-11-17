@@ -30,9 +30,158 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 本守阵因此不再是「两处计算一致」的 parity 比对(几何只剩一处产出), 语义改为**钉住单点输出不变**:
  * 下面断言的轨道数 / 计数 / 对齐 / text-align 全部出自 DT_TABLE.layout 的生产输出,
  * 单点实现回归(轨道漂移 / 对齐漂移)即红。
+ *
+ * HR 三面纳入(计划 26-11-17-0059 W3(1)): hrDetail/hrWave/hrKv 已随该计划 W1(3) 迁 aq-table grid
+ * 链路(几何同走 DT_TABLE.layout 单点), W3(1) 起纳入本守阵 —— 与抽屉面同规格(轨道数/列头格数/
+ * 行子格数三处相等 + 列头与值格左缘对齐 + text-align 一致), 但导航与数据面不同:
+ *   · 导航: HR 三表在设置页 HR 分区的 .hr-full-modal 全屏覆盖层里(v-show 显隐, 不走抽屉),
+ *     hrWave/hrKv 还要展开「排障视图」<details> 才挂行;
+ *   · 数据: ui_harness 桩只灌表3 history, /api/hr/status 波次(lanes)与表1 entries 真读磁盘
+ *     未播种 —— 默认场景 HR 明细/波次表恒空态, 无行可钉。沿用 variant-tables 家族既有手法
+ *     page.route 拦截喂合成载荷(单站点, 规避桩默认双站点导致的行集重复); 合成行字段对齐
+ *     EntryDetail.to_dict + 路由层 mark_local_present 追加的 local_present(前端默认视图
+ *     只看 local_present=true, 缺它整表被筛空)。
+ *   · 期望列数 = hr_status.js HR_TABLE_DEFS 列定义(单点): hrDetail 10 / hrWave 8 / hrKv 2。
+ * 本文件既有用例不带 @fast(几何 parity 全量轮口径, 见 playwright.config.mjs 门禁分工),
+ * HR 三面沿用同口径不标 @fast。
  */
 
 const TAB_TEXT = { trackers: 'Tracker', peers: '用户', content: '内容' };
+
+/* ---------------- HR 三面(计划 26-11-17-0059 W3(1)) ----------------
+ * 期望列数 = hr_status.js HR_TABLE_DEFS 列定义(单点); openDiag = 行挂在「排障视图」
+ * <details> 内, 导航多一步点 summary。 */
+const HR_CASES = [
+  { tid: 'hrDetail', cols: 10, openDiag: false },
+  { tid: 'hrWave', cols: 8, openDiag: true },
+  { tid: 'hrKv', cols: 2, openDiag: true },
+];
+
+/* /api/hr/status 合成载荷: 单站点(HHan) + A/B/C 三档 lanes(hrWave 行集)。字段对齐
+ * SiteStatus.to_dict(人话字段后端算好口径), 缺省字段前端模板有兜底不空转。 */
+function hrStatusPayload() {
+  const now = Date.now() / 1000;
+  const lane = (l, extra) => ({
+    lane: l,
+    status: 'ok',
+    status_text: '本波有效',
+    lane_text: `${l} 考察中`,
+    wave_ts: now - 600,
+    pages: 3,
+    rows: 96,
+    cutoff_done: now - 300,
+    full_depth: true,
+    fail_streak: 0,
+    count_claim: 96,
+    count_match: true,
+    detail: '全深度翻完',
+    text: '',
+    ...extra,
+  });
+  return {
+    enabled: true,
+    note: 'parity e2e 合成载荷',
+    channel: {},
+    fetch_enabled: false,
+    worker_running: false,
+    poll_interval: 300,
+    sites: [
+      {
+        site: 'HHan',
+        enabled: true,
+        listing: 'list',
+        now,
+        channel_state: 'ok',
+        channel_text: '扩展已连接',
+        revision: 7,
+        file_path: '',
+        read_error: '',
+        fetched_at: now - 600,
+        healthy_ts: now - 600,
+        expires_at: now + 3600,
+        next_wave_at: now + 1800,
+        refresh_interval: 3600,
+        idle_mode: false,
+        stale: false,
+        fresh_text: '10m前',
+        releases_enabled: true,
+        zero_rows: false,
+        empty_confirmed: false,
+        count_attested_empty: false,
+        retention_text: '保留 30 天',
+        notes: '',
+        writer_instance: 'parity-stub',
+        writer_heartbeat: now,
+        index_total: 3,
+        index_active: 3,
+        lane_counts: { A: 1, B: 1, C: 1, D: 0 },
+        pending_infohash: 0,
+        backfill_ratio: 1,
+        managed: 3,
+        keys: 3,
+        downloaded: 3,
+        fails: 0,
+        verified: 2,
+        observing: 1,
+        quota: { day: 0, day_max: 0, left: 0, last_fetch_ts: 0, min_interval: 0, next_reset: 0, text: '额度充足' },
+        allow_window: '',
+        blocking: '',
+        lanes: [lane('A'), lane('B'), lane('C', { full_depth: false, count_claim: null, count_match: null, fail_streak: 1 })],
+        lanes_text: 'A/B/C',
+      },
+    ],
+  };
+}
+
+/* /api/hr/sites/<site>/entries 合成载荷: 行字段对齐 EntryDetail.to_dict(status.py 契约),
+ * 另带路由层 mark_local_present 追加的 local_present(默认视图只看 local_present=true,
+ * 缺它整表被筛空 —— routes/hr.py join 口径)。 */
+function hrEntriesPayload() {
+  const now = Date.now() / 1000;
+  const entries = [0, 1, 2].map((i) => ({
+    tid: 100 + i,
+    dl_id: i,
+    name: `parity 合成种子 ${i}`,
+    lane: ['A', 'B', 'C'][i],
+    lane_text: ['A 考察中', 'B 达标', 'C 未达标'][i],
+    uploaded_bytes: 1024 * (i + 1),
+    downloaded_bytes: 4096 * (i + 1),
+    ratio: 0.5 + i * 0.25,
+    need_seed_seconds: 86400 * (i + 1),
+    need_seed_text: ['1 天', '2 天', '3 天'][i],
+    infohash_v1: '',
+    infohash_v2: '',
+    verified_ts: i === 0 ? 0 : now - 7200,
+    verified_source: i === 0 ? '' : 'satisfied',
+    verified_source_text: i === 0 ? '未核实' : '已达标',
+    done_iso: '2026-01-02T03:04:05Z',
+    active: true,
+    missing_streak: 0,
+    first_seen: now - 86400,
+    last_seen: now - 3600,
+    local_present: true,
+  }));
+  return { entries, now, read_error: '' };
+}
+
+/* HR 三面共同导航: 设置页 hub → HR 在线核实 → 站点状态全屏弹层(手势链与 hr-history.spec
+ * openHrHistoryTable 同族; route 拦截须在 goto 前挂, 弹层打开即触发 /api/hr/status 首拉)。 */
+async function openHrModal(page, skin) {
+  await page.route('**/api/hr/status', (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(hrStatusPayload()) }));
+  await page.route('**/api/hr/sites/*/entries', (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(hrEntriesPayload()) }));
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+  await page.locator('nav.tabs-right button').click(); // 顶栏右侧「设置」(hr-history 同款手势)
+  await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
+  await page.locator('.hb-card', { hasText: 'HR 在线核实' }).click();
+  await page
+    .locator('.hb-blk-hd', { hasText: '站点状态' })
+    .locator('button[aria-expanded="false"]', { hasText: '展开' })
+    .click();
+  await expect(page.locator('.hr-full-modal')).toBeVisible({ timeout: 10_000 });
+}
 
 /* 已达标面: 页签 + 变体 id + 期望的表 id + 期望列数
  * (2026-10-14: 经典三张 drawerTracker/drawerPeer/drawerFile 的行用例随经典渲染链移除退役 ——
@@ -219,5 +368,50 @@ for (const skin of SKINS) {
       expect(probe.tglInName, '折叠钮在 name 格内(随缩进 = 层级, 治「展开按钮没有层级」)').toBe(true);
       expect(probe.badgeInName, '徽章在 name 格内(不占列, 治「操作按钮独立成列」)').toBe(true);
     });
+
+    /* HR 三面(W3(1), 26-11-17-0059): 与抽屉面同规格, 差异只在导航与数据喂法(见 HR_CASES 注)。
+     * 探针取头/行不用 data-dt-table-anchor(HR 表头/行是 .group-table 同容器兄弟, 非 Teleport
+     * 变体锚形态), 直接按 data-table 单站点查即唯一。 */
+    for (const c of HR_CASES) {
+      test(`HR ${c.tid} 三处计数相等且列头与值格同缘 (${skin})`, async ({ page }) => {
+        collectRuntimeErrors(page);
+        await openHrModal(page, skin);
+        if (c.openDiag) {
+          await page.locator('.hr-full-modal details.hrs-diag summary', { hasText: '排障视图' }).click();
+        }
+        const row = page.locator(`.hr-full-modal .group-row[data-table="${c.tid}"]`).first();
+        await expect(row, `HR ${c.tid} 行集不可见(载荷/导航断? 同步本 spec)`).toBeVisible({ timeout: 10_000 });
+
+        const probe = await page.evaluate((tid) => {
+          const head = document.querySelector('.hr-full-modal .group-head[data-table="' + tid + '"]');
+          const rowEl = document.querySelector('.hr-full-modal .group-row[data-table="' + tid + '"]');
+          if (!head || !rowEl) return null;
+          const cs = getComputedStyle(head);
+          const tracks = (cs.gridTemplateColumns || '').trim().split(/\s+/).filter(Boolean).length;
+          const headCells = head.querySelectorAll(':scope > .h-cell').length;
+          const cells = rowEl.children.length;
+          const hc = Array.from(head.querySelectorAll(':scope > .h-cell'));
+          const rc = Array.from(rowEl.children);
+          const n = Math.min(hc.length, rc.length);
+          const leftDiff = [];
+          const alignDiff = [];
+          for (let i = 0; i < n; i++) {
+            const d = Math.round(hc[i].getBoundingClientRect().left - rc[i].getBoundingClientRect().left);
+            if (Math.abs(d) > 1) leftDiff.push({ i, d });
+            const ha = getComputedStyle(hc[i]).textAlign;
+            const ra = getComputedStyle(rc[i]).textAlign;
+            if (ha !== ra) alignDiff.push({ i, ha, ra });
+          }
+          return { tracks, headCells, cells, leftDiff, alignDiff };
+        }, c.tid);
+
+        expect(probe, `未找到 HR ${c.tid} 的表头或行(表格面改名/未挂载? 同步本 spec)`).not.toBeNull();
+        expect(probe.tracks, '网格轨道数 == 列数').toBe(c.cols);
+        expect(probe.headCells, '列头格数 == 列数').toBe(c.cols);
+        expect(probe.cells, '数据行子格数 == 列数').toBe(c.cols);
+        expect(probe.leftDiff, '列头与值格左缘对齐(±1px)').toEqual([]);
+        expect(probe.alignDiff, '列头与值格 text-align 一致').toEqual([]);
+      });
+    }
   });
 }

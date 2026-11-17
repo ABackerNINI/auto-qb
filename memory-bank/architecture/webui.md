@@ -1,7 +1,7 @@
 # WEB UI 运行时
 
 > 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、组行 hash 引用式(聚合 + members hash 数组)、truth 通道、前端 ingestion 物化缝、version-reload 自愈、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、键位现场提示(按需显影/键帽/页签徽标/角标)、图形化配置编辑器骨架、配置备份 bundle 导出/导入(掩码不出机 + 勾选段应用 + 偏好键双清单)。
-> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 键位, 键帽, 键位现场提示, 显影, 常驻, kbd-reveal, kbd-persist, Backquote, kbShortcutDisplay, kbKeycapOf, kbKeysRev, aq-kbd, 配置编辑器, schema, writer, 配置备份, bundle, 导出配置, 导入配置, backup, 掩码, ui_prefs, PREF_KEYS
+> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, HR 三表, hrDetail, hrWave, hrKv, hr-full-modal, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 键位, 键帽, 键位现场提示, 显影, 常驻, kbd-reveal, kbd-persist, Backquote, kbShortcutDisplay, kbKeycapOf, kbKeysRev, aq-kbd, 配置编辑器, schema, writer, 配置备份, bundle, 导出配置, 导入配置, backup, 掩码, ui_prefs, PREF_KEYS
 
 ## 装配单点与启动 (webui/server/factory.py, webui/module.py)
 
@@ -42,8 +42,8 @@
 
 - **`DT_TABLE.layout()` 是全仓表格几何字符串(轨道串 / aligns)的单一生产者**(计划 plans/26-11-10-0027-plan-dt-table-wiring.html, 2026-11-10 接线): `columns_grid._gridTemplate` 与 `colAlignCss` **内部委托**该单点取轨道串与对齐, 旁路拼接已删; 调用方(主视图 computed + 抽屉桥)与 DOM 零改动, 全部表格面(含主列表、含 flux)同一链。新增/改表格几何逻辑只改 dt_table.layout 一处 —— **禁止再造平行计算**。
 - **`assertLayout()` 常驻生产渲染自查**(拍板 D3): 三处 O(1) 计数(grid 轨道数 / 列头格数 / 首行子格数), 不一致 `console.error`(含 tableId 与三方计数)**不打断渲染**(保守默认); 未挂载豁免。
-- **D4 例外清单(明文化)**: HR 三表(hrDetail / hrWave / hrKv, 无 tpl/align 字段)+ 04 卡片形态面不接几何单点; 守阵钉「清单之外零旁路」。HR 三表统一交互(拖宽/拖序/右键隐藏/持久化)为第二轮立项(拍板 D7, 方向迁 aq-table grid 链路), 届时补 tpl/align 字段后纳入同一单点。
-- 守阵: node 电池等价性探针(`tests/test_webui_static_r4_node_batteries.py::test_r4_dt_table_layout_geometry_equivalence`, 13 表 136 列 + colWidths 五类场景, 断言现役拼轨 ≡ DT_TABLE.layout 输出) + e2e `dt-table-layout-parity.spec.mjs`(语义 = **钉住单点输出不变**)与 `dt-table-face-bg.spec.mjs`。
+- **D4 例外清单(26-11-17-0059 第二轮后收缩)**: 现役例外只剩 **04 卡片形态面**(drawerTrackerV04, 非网格形态, 入池 issue 26-11-17-0038 待排期); 另有桥验证 fixture **drawerStubV0**(仅 `?dtstub` 查询参数注册, 生产零观感)是 `ASSERT_SKIP_FACES` 成员但不算现役面。HR 三表(hrDetail / hrWave / hrKv)已随计划 plans/26-11-17-0059-plan-hr-table-wiring.html 迁入 aq-table grid 链路(2026-11-17): 列定义补 tpl/align 并入 `ALL_TABLE_DEFS`(page 键 hrDetail/hrWave/hrKv, 几何走同一 `DT_TABLE.layout()` 单点), 四项交互(拖宽/拖序/右键隐藏/持久化)复用主表引擎单点, 状态落 `autoqb_cols_v5` 新 page 子树(不升版本); hrDetail 排序并入引擎 `setSort`(E8, 逐站点记忆→表级); hrKv k 列 locked(E7, 拆散 k/v 对不可表达 —— 隐藏侧引擎既有守卫, 拖序侧 W2 补 `startColDrag`/`applyColOrder` locked 检查, 主表 locked 列随之不可拖走); 值格渲染注册化(`registerCell` → `HR_CELL_RENDERERS`, 模板经 `cellOf` 消费, dt_table 六口子全活); `<aq-table>` 的 `mode="thead"` 借壳模式随迁移整体退役(hrDetail 是唯一消费方); settings 页 `.hr-full-modal` 的 v-show 未展开态走 assertLayout「未挂载豁免」口径(展开态经 `headDom: true` 锚覆盖)。
+- 守阵: node 电池等价性探针(`tests/test_webui_static_r4_node_batteries.py::test_r4_dt_table_layout_geometry_equivalence`, 13 表 136 列 + colWidths 五类场景, 断言现役拼轨 ≡ DT_TABLE.layout 输出; 13 表不含 HR —— 沙箱不加载 hr_status.js, HR 等价性由例外清单守阵静态形态钉 + parity e2e 真跑) + e2e `dt-table-layout-parity.spec.mjs`(语义 = **钉住单点输出不变**; 26-11-17-0059 W3① 起含 HR 三面 hrDetail 10 列 / hrWave 8 列 / hrKv 2 列, route 拦截喂合成载荷)与 `dt-table-face-bg.spec.mjs`。
 
 ## 部分组操作预警 (webui/static/shared/selection.js + delete_flow.js + drawer.js)
 
