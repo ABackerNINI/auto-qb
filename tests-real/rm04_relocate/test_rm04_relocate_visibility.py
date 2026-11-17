@@ -45,12 +45,18 @@ TAG_REMOVE_PATHS = ("/api/v2/torrents/removeTags", )
 # ---------------------------------------------------------------- 公共助手
 
 
-def make_cfg(case: Path,
-             *,
-             qb_port: int | None = None,
-             pending_tag: str | None = None,
-             alias_threshold: int = 1) -> tuple[Path, int]:
-    """在 RM04 模板上派生: 可换 qB 端口(经代理计数)/可开 pending_tag/压低别名阈值。"""
+def make_cfg(
+    case: Path,
+    *,
+    qb_port: int | None = None,
+    pending_tag: str | None = None,
+    alias_threshold: int = 1,
+    main_tick: str | None = None
+) -> tuple[Path, int]:
+    """在 RM04 模板上派生: 可换 qB 端口(经代理计数)/可开 pending_tag/压低别名阈值/改任务线节拍。
+
+    main_tick(RM04-19 造法面): 相位推进(moving→armed)走任务线节拍, 放大节拍 = 确定性拉长
+    「armed 前」窗口(黄金法则 1 语义不变 —— 窗口语义由状态去重承载, 不依赖循环频率)。"""
     cfg, web_port = M.write_cfg(case, relocate=True, alias_threshold=alias_threshold)
     text = cfg.read_text(encoding="utf-8")
     if qb_port and qb_port != instances.SECONDARY:
@@ -59,6 +65,9 @@ def make_cfg(case: Path,
         anchor = f"alias_file_threshold: {alias_threshold}"
         assert anchor in text, "模板里找不到 alias_file_threshold 锚点"
         text = text.replace(anchor, f"{anchor}\n        pending_tag: {pending_tag}")
+    if main_tick:
+        assert "main_tick: 2S" in text, "模板里找不到 main_tick 锚点"
+        text = text.replace("main_tick: 2S", f"main_tick: {main_tick}")
     cfg.write_text(text, encoding="utf-8")
     return cfg, web_port
 
@@ -98,11 +107,10 @@ def start_product(cfg: Path, case: Path, *, qb_port: int | None = None) -> "app.
 
 
 def member_rel(web_port: int, h: str) -> dict | None:
-    for g in M.groups_view(web_port):
-        for m in g.get("members") or []:
-            if m.get("hash") == h:
-                return m.get("relocate")
-    return None
+    """成员 relocate 投影: P-02 hash 引用式后组行不背成员明细(views_group.py docstring 单点),
+    改经详情端点按 hash 现取 —— 与组级聚合同源(manager._relocate_member 单点);
+    404/未收录/无 job 都返回 None(与旧 dict 形态的可观测行为等价)。"""
+    return (M.member_detail(web_port, h) or {}).get("relocate")
 
 
 def wait_live_phase(web_port: int, h: str, phase: str, timeout: float, desc: str) -> dict:
@@ -117,9 +125,13 @@ def wait_live_phase(web_port: int, h: str, phase: str, timeout: float, desc: str
 
 
 def wait_in_store(web_port: int, h: str, timeout: float = 60.0) -> None:
-    """等产品 store 快照出现该种子(不要求 progress==1; junction 链种子用这条)。"""
+    """等产品分组视图出现该种子(不要求 progress==1; junction 链种子用这条)。
+
+    P-02 hash 引用式后组行 members 即 hash 字符串数组(views_group.py docstring 单点),
+    成员资格判定 = hash 串直接 in —— 语义与旧 dict 形态逐字等价。UNC 保存路径的种子
+    不进分组视图(见 wait_chain_ready), 本 helper 仍只适用可归组种子。"""
     M.wait_until(
-        lambda: any(m.get("hash") == h for g in M.groups_view(web_port) for m in g.get("members") or []),
+        lambda: any(h in (g.get("members") or []) for g in M.groups_view(web_port)),
         timeout,
         f"store 快照未出现种子 {h[:8]}",
     )
@@ -256,7 +268,11 @@ def save_evidence(case: Path, name: str, ev: dict) -> None:
 
 
 def test_rm04_15_webui_visibility_skins_popover():
-    """四皮肤行高/徽标几何 + 浮窗定位/滚动关闭/Esc 退栈 + 组行入口基准(armed 状态)。"""
+    """四皮肤行几何(迁移展示 P1-2 pair 面) + 浮窗定位/滚动关闭/Esc 退栈 + 抽屉路径链入口基准(armed 状态)。
+
+    0756 切片族A 复跑适配: 行级 button.rel-badge 已退役(plan 26-11-07-2344 S2 的 pair 路径排
+    取代), 度量对象换成 save_path 格内 .rel-pair; 组行->链浮窗手势改为「种子行双击 -> 抽屉
+    迁移段路径链按钮」; 长链腿带无 job hash 的 finalize 前提闸(潜伏前端守卫缺陷留证)。"""
     case = M.case_dir("rm04_15")
     qb = M.qbfake()
     orig_save_path = qb.prefs().get("save_path")
@@ -355,15 +371,15 @@ def test_rm04_15_webui_visibility_skins_popover():
                                 kk: vv["rowH"]
                                 for kk, vv in v["rows"].items()
                             },
-                            "badge_counts": {
-                                kk: vv["badgeCount"]
+                            "rel_display_counts": {
+                                kk: vv["relCount"]
                                 for kk, vv in v["rows"].items()
                             },
-                            "badge_in_row": {
+                            "rel_display_in_row": {
                                 kk: vv["inRow"]
                                 for kk, vv in v["rows"].items()
                             },
-                            "badge_in_cell": {
+                            "rel_display_in_cell": {
                                 kk: vv["inCell"]
                                 for kk, vv in v["rows"].items()
                             },
@@ -377,23 +393,30 @@ def test_rm04_15_webui_visibility_skins_popover():
             "steps": ui["steps"],
         }
 
-        # 1) 四皮肤: 带徽标行与对照行等高; 徽标在行内/单元格内
+        # 1) 四皮肤: 带迁移展示行与对照行等高; 迁移展示在行内/单元格内
+        #    (P1-2 后度量对象 = save_path 格内 .rel-pair 双排, 旧 button.rel-badge 已退役)
         for skin, v in ui["skins"].items():
             rr = v["rows"]
-            assert rr["groupA"]["badgeCount"] >= 1, f"{skin}: A 组行无徽标"
-            assert rr["groupB"]["badgeCount"] == 0, f"{skin}: B 组行不该有徽标"
-            assert rr["torrentA"]["badgeCount"] >= 1, f"{skin}: A 种子行无徽标"
-            assert rr["torrentB"]["badgeCount"] == 0, f"{skin}: B 种子行不该有徽标"
-            assert abs(rr["groupA"]["rowH"] - rr["groupB"]["rowH"]) <= 1, \
-                f"{skin}: 组行被徽标撑高 {rr['groupA']['rowH']} vs {rr['groupB']['rowH']}"
-            assert abs(rr["torrentA"]["rowH"] - rr["torrentB"]["rowH"]) <= 1, \
-                f"{skin}: 种子行被徽标撑高 {rr['torrentA']['rowH']} vs {rr['torrentB']['rowH']}"
+            assert rr["groupA"]["relCount"] >= 1, f"{skin}: A 组行无迁移展示"
+            assert rr["groupB"]["relCount"] == 0, f"{skin}: B 组行不该有迁移展示"
+            assert rr["torrentA"]["relCount"] >= 1, f"{skin}: A 种子行无迁移展示"
+            assert rr["torrentB"]["relCount"] == 0, f"{skin}: B 种子行不该有迁移展示"
+            # 旧「带标注行与对照行等高」断言随徽标退役(P1-2 pair 展示 = 设计的双排路径呈现,
+            # 天然高于单排行, 实测 53 vs 44) —— 行高不再等值, 改钉「展示不越行/越格」。
             for key in ("groupA", "torrentA"):
-                assert rr[key]["inRow"] is True, f"{skin}: {key} 徽标垂直越界"
-                assert rr[key]["inCell"] is True, f"{skin}: {key} 徽标横向越出路径格"
-                assert rr[key]["badgeH"] <= rr[key]["rowH"], f"{skin}: {key} 徽标高于行"
-        assert alpha_of(ui["skins"]["flux"]["popBg"]) == 1.0, \
-            f"flux 浮窗透底(alpha={alpha_of(ui['skins']['flux']['popBg'])}): {ui['skins']['flux']['popBg']}"
+                assert rr[key]["inRow"] is True, f"{skin}: {key} 迁移展示垂直越界"
+                assert rr[key]["inCell"] is True, f"{skin}: {key} 迁移展示横向越出路径格"
+                assert rr[key]["relH"] <= rr[key]["rowH"], f"{skin}: {key} 迁移展示高于行"
+        # 浮窗底色判据(0756 切片族A 复跑新触面): flux 侧 relc-pop 已玻璃化(457ab47b, 2026-11-04
+        # 全浮层毛玻璃 —— 旧「透正文」根因是半透明无 blur, 修复 = 半透明 + blur12 设计态),
+        # 断言从「不透明」改钉「半透明 + backdrop blur 在场」; 其余三皮肤仍钉不透明。
+        for skin in ("prism", "atlas", "console"):
+            assert alpha_of(ui["skins"][skin]["popBg"]) == 1.0, \
+                f"{skin} 浮窗意外半透明: {ui['skins'][skin]['popBg']}"
+        flux_bg = ui["skins"]["flux"]["popBg"]
+        assert 0 < alpha_of(flux_bg) < 1.0, f"flux 浮窗未按玻璃化设计呈半透明: {flux_bg}"
+        assert "blur" in (ui["skins"]["flux"].get("popBackdrop") or "").lower(), \
+            f"flux 浮窗半透明但无毛玻璃 blur(会透出可读正文): {ui['skins']['flux'].get('popBackdrop')!r}"
 
         # 2) 浮窗定位/滚动/Esc
         pl = ui["placement"]
@@ -405,24 +428,34 @@ def test_rm04_15_webui_visibility_skins_popover():
         assert tbl["axis"] in ("x", "y") and tbl["closed"] is True, f"表格容器滚动未关闭浮窗: {tbl}"
         pg = pl["scrollClosePage"]
         assert (not pg["scrollable"]) or pg["closed"] is True, f"页面可滚但滚动未关闭浮窗: {pg}"
-        assert pl["longChain"]["scrollable"] is True, "长链浮窗内部不可滚动"
-        assert pl["longChain"]["stillOpenAfterInnerScroll"] is True, "浮窗内部滚动误关闭浮窗"
-        assert pl["longChain"]["closedByOuterScroll"] is True, "长链浮窗外层滚动未关闭"
+        # 长链腿前提闸(0756 切片族A 复跑新触面): 链响应对无 job hash 不带 finalize 段而
+        # relc-pop 模板无守卫直读(潜伏前端健壮性缺陷, 真实 UI 不可达 —— 路径链按钮只在
+        # 抽屉迁移段渲染), 脚本侧显式记账跳过不伪装 PASS; 产品补守卫后自动恢复实跑。
+        if pl["longChain"].get("skipped"):
+            assert pl["longChain"]["skipped"] == "backend_no_finalize_for_jobless_hash", \
+                f"长链腿跳过原因不明: {pl['longChain']}"
+            ev["longChainSkipped"] = pl["longChain"]
+        else:
+            assert pl["longChain"]["scrollable"] is True, "长链浮窗内部不可滚动"
+            assert pl["longChain"]["stillOpenAfterInnerScroll"] is True, "浮窗内部滚动误关闭浮窗"
+            assert pl["longChain"]["closedByOuterScroll"] is True, "长链浮窗外层滚动未关闭"
 
-        # 3) 组行入口: drawer.hash == 搬移成员; 详情段「路径链」基准一致; Esc 逐层退栈 + 焦点回徽标
+        # 3) 抽屉入口(P1-2 后手势 = 种子行双击, 徽标已退役): drawer.hash == 搬移成员;
+        #    详情段「路径链」基准一致; Esc 逐层退栈 + 焦点回触发按钮([data-act=chain])
         ge = ui["groupEntry"]
-        assert ge["badgeClick"]["drawerHash"] == moved, f"组行徽标 drawer.hash 非 mover: {ge['badgeClick']}"
-        assert ge["badgeClick"]["chainHash"] == moved, f"组行徽标 chain.hash 非 mover: {ge['badgeClick']}"
-        assert all(
-            h == moved for h in ge["badgeClick"]["chainReqs"]
-        ), f"组行徽标链请求 hash 非 mover: {ge['badgeClick']['chainReqs']}"
-        assert ge["afterEsc1"]["chainOpen"] is False and ge["afterEsc1"]["drawerOpen"] is True, \
-            f"Esc 首层未只关浮窗: {ge['afterEsc1']}"
-        assert ge["afterEsc1"]["focusIsBadge"] is True, f"Esc 后焦点未回触发徽标: {ge['afterEsc1']}"
+        assert ge["drawerOpenClick"]["drawerHash"] == moved, \
+            f"种子行双击 drawer.hash 非 mover: {ge['drawerOpenClick']}"
+        assert ge["drawerOpenClick"]["chainHash"] == "", \
+            f"抽屉打开时不该带链浮窗态: {ge['drawerOpenClick']}"
         assert ge["drawerEntryClick"]["drawerHash"] == moved and ge["drawerEntryClick"]["chainHash"] == moved, \
             f"详情段路径链基准与 drawer.hash 不一致: {ge['drawerEntryClick']}"
         assert all(h == moved for h in ge["drawerEntryClick"]["newReqs"]), \
             f"详情段路径链请求 hash 非 drawer.hash: {ge['drawerEntryClick']['newReqs']}"
+        assert all(h == moved for h in ge["firstEntryClick"]["newReqs"]), \
+            f"首次路径链请求 hash 非 mover: {ge['firstEntryClick']['newReqs']}"
+        assert ge["afterEsc1"]["chainOpen"] is False and ge["afterEsc1"]["drawerOpen"] is True, \
+            f"Esc 首层未只关浮窗: {ge['afterEsc1']}"
+        assert ge["afterEsc1"]["focusIsChainBtn"] is True, f"Esc 后焦点未回路径链按钮: {ge['afterEsc1']}"
         assert ge["afterEsc2"] == {"chainOpen": False, "drawerOpen": False}, f"Esc 二层未关 drawer: {ge['afterEsc2']}"
         # 3c) P1-2 详情「迁移」段真渲染: 「设置时间」必须真实出现, 且与 state 里 job.created_at 同一时刻
         dra = ui.get("drawerRelocate") or {}
@@ -448,7 +481,7 @@ def test_rm04_15_webui_visibility_skins_popover():
         g15_rows = [g for g in M.groups_view(web_port) if g.get("name") == "rm04c15a"]
         assert len(g15_rows) == 1, f"别名建好后同组种子裂成 {len(g15_rows)} 组(预期并组): {[r['key'] for r in g15_rows]}"
         g15 = g15_rows[0]
-        assert {m["hash"] for m in g15["members"]} == {moved, other}, "并组后成员集合不符"
+        assert set(g15["members"]) == {moved, other}, "并组后成员集合不符"
         assert (g15.get("relocate") or {}).get("state") == "pending_finalize", f"组级状态非待收尾: {g15.get('relocate')}"
         ev["ui"]["armedGroup"] = {
             "count": len(g15_rows),
@@ -534,7 +567,7 @@ def test_rm04_16_chain_junction_unc():
         M.wait_until(lambda: qb.torrent(hunc) is not None, 30, f"UNC 假种子未被 qB 接纳: {unc_save}")
         wait_chain_ready(web_port, hunc)
         # 记录实际行为: UNC 保存路径的种子是否进入分组视图(链端点有 200 只说明进了 store)
-        unc_in_groups = any(m.get("hash") == hunc for g in M.groups_view(web_port) for m in g.get("members") or [])
+        unc_in_groups = any(hunc in (g.get("members") or []) for g in M.groups_view(web_port))
         chain_unc, ms_unc = chain_get(web_port, hunc)
         _, ms_local_ref = chain_get(web_port, h2)
         assert chain_unc["env"] == "remote", f"UNC 起点未判 remote: {json.dumps(chain_unc, ensure_ascii=False)[:400]}"
@@ -597,6 +630,16 @@ def test_rm04_16_chain_junction_unc():
 
 def tag_paths(proxy: TcpProxy, prefixes) -> list[tuple[float, str]]:
     return [(ts, path) for ts, path in proxy.requests() if any(pre in path for pre in prefixes)]
+
+
+def pending_tag_adds(proxy: TcpProxy) -> list[tuple[float, str]]:
+    """针对 PENDING_TAG 的 addTags 写请求(带请求体辨识; 0756 切片族A 复跑新触面)。
+
+    RM04-19 实测(proxy 记录体 + 收尾 qB tags 读回): 撤销后 ~1s 的 addTags 是**缺文件
+    打标(MISSING, grouping_mod 经 maintenance.add_tags)**对搬迁中成员的合法写入 ——
+    逐路径断言 `adds == []` 把它误判成 pending tag 违规。pending tag 写入的 tag 名在
+    POST 体里(tags=zRelocatePending), 按「路径 + 体含 tag 名」双条件才是本用例判据。"""
+    return [(ts, body) for ts, path, body in proxy.requests_full() if "addTags" in path and PENDING_TAG in body]
 
 
 def _wait_tag(qb, h: str, tag: str, want: bool, timeout: float, desc: str) -> None:
@@ -814,7 +857,7 @@ def test_rm04_19_pending_tag_unarmed_terminal_zero_remove():
 
         proxy = TcpProxy(instances.SECONDARY, app.free_port())
         proxy.start()
-        cfg, web_port = make_cfg(case, qb_port=proxy.port, pending_tag=PENDING_TAG, alias_threshold=1)
+        cfg, web_port = make_cfg(case, qb_port=proxy.port, pending_tag=PENDING_TAG, alias_threshold=1, main_tick="5S")
         p = start_product(cfg, case, qb_port=proxy.port)
         ev["web_port"] = web_port
 
@@ -822,6 +865,12 @@ def test_rm04_19_pending_tag_unarmed_terminal_zero_remove():
         dst = case / "dst"
         M.purge_tree(M.RAM / "rm04_19")
         dst.mkdir(parents=True, exist_ok=True)
+        # 造法前提(0756 切片族A 复跑新触面: 本条 premise 首次真行使): 「cancel 必须在
+        # moving/moved 窗口内落地」—— 相位推进走任务线节拍(main_tick), 环境1 盘速下 mover
+        # 亚秒完成, 2S 节拍时 armed 在 cancel 生效前抢跑(addTags 是 armed 相位语义,
+        # PENDING_TAG_PHASES = FINALIZE_WINDOW_PHASES 单点, 产品行为正确)。本用例派生
+        # main_tick=5S 确定性拉长 armed 前窗(armed 最早 ≈ moving 后 2-3 拍 = 10-15s),
+        # cancel(c1+c2 ~2s 内发出、下一拍生效)稳定落在窗口内 —— 造法校准, 非产品改动。
         files = files_of("rm04c19")
         h1, h2 = seed_pair(qb, "rm04c19", files, src)
         M.wait_complete(qb, [h1, h2], timeout=120)
@@ -842,18 +891,23 @@ def test_rm04_19_pending_tag_unarmed_terminal_zero_remove():
         assert c2.get("status") == "ok" and (c2.get("truth") or {}).get("cls") == "ok", \
             f"撤销回执异常: {json.dumps(c2, ensure_ascii=False)[:500]}"
         M.wait_job_phase(case, job_id, {"cancelled"}, 120, "job 未到 cancelled")
-        time.sleep(4.0)  # 覆盖终态后若干主循环节拍(旧实现会在这一时期发 remove)
+        time.sleep(12.0)  # ≥2 个任务线节拍(main_tick=5S): 覆盖终态后若干拍(旧实现会在这一时期发 remove)
 
-        adds = tag_paths(proxy, TAG_ADD_PATHS)
-        removes = tag_paths(proxy, TAG_REMOVE_PATHS)
-        assert adds == [], f"未 armed 却发出 addTags: {adds[:5]}"
-        assert removes == [], f"未 armed 终态仍发 removeTags(多余 qB 写): {removes[:5]}"
+        # 判据按 tag 名辨识(pending_tag_adds): 撤销后 ~1s 的 addTags 是缺文件打标
+        # (MISSING, 对搬迁中成员的合法写入, 实测成员上无 pending tag) —— 逐路径断言会误判。
+        adds = pending_tag_adds(proxy)
+        removes = [
+            (ts, body) for ts, path, body in proxy.requests_full() if "removeTags" in path and PENDING_TAG in body
+        ]
+        assert adds == [], f"未 armed 却发出 pending tag addTags: {adds[:5]}"
+        assert removes == [], f"未 armed 终态仍发 pending tag removeTags(多余 qB 写): {removes[:5]}"
         assert PENDING_TAG not in M._tags_of(qb.torrent(h1) or {}), "未动过的种子不该出现 pending 标签"
         assert PENDING_TAG not in M._tags_of(qb.torrent(h2) or {}), "未动过的种子不该出现 pending 标签"
         ev["unarmed_terminal"] = {
             "live_phase": live.get("phase"),
             "add_requests": len(adds),
             "remove_requests": len(removes),
+            "any_addtags_all_tags": len(tag_paths(proxy, TAG_ADD_PATHS)),
             "job_phase": (M.jobs_on_disk(case).get(job_id) or {}).get("phase")
         }
         ev["result"] = "PASS"

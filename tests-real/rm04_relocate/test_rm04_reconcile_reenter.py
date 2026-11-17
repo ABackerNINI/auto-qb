@@ -17,7 +17,8 @@ job 记录 + job_from_dict 回读校验, 不手拼字符串)。
   写进 state.json relocate.jobs) -> B3 产品重启(旁路 runner)-> 启动对账重入两行(「启动对账重入
   (mover 已在 dst 且 dst 内容全量在位)」逐笔行 + 「启动对账 1 笔: 重入 1 / 保留 0」汇总行)->
   qB 侧自检 skipped(未解析文件级 symlink)不挡链且零 qb_side_check_failed -> job 落 armed 且
-  armed_at>0 -> B4 双实例优雅下线(wrapper 名册窄化开窗, 新 patch 行或在位健康 daemon 二者其一)
+  armed_at>0 -> B4 双实例优雅下线(开窗观测面双押: L1 obs owner 死证 + 窗内零 L2/L3 决策行 OR
+  wrapper 决策行 —— W2a L1 接管后 wrapper 决策行结构性不再出现, 0756 切片族D)
   -> daemon 改写非 mover fastresume(journal 账 + fastresume 字节双证, mover=already)-> B5 重启
   全员落位 dst(零 recheck 零异常态)-> B6 job done + 「收尾完成」+ src 链接删净 + 组键归一 dst
   -> B7 收尾零残留 + 环境还原。
@@ -98,6 +99,7 @@ fr_path_keys = W.fr_path_keys
 bt_backup_snapshot = W.bt_backup_snapshot
 wrapper_lines = W.wrapper_lines
 live_daemon_pid = W.live_daemon_pid
+window_regime_face = W.window_regime_face
 BT_BACKUP = W.BT_BACKUP
 
 
@@ -315,14 +317,21 @@ def test_rm04_21_reconcile_reenter_selfheal_e2e():
             "journal 相位未翻 rewritten"
         )
         wnew = wrapper_lines()[wl1:]
-        assert any("test_qb=0" in ln and "refused=True" in ln and "absent=True" in ln for ln in wnew), \
-            "wrapper 决策日志未见「测试 qB 全下线 => absent=True」开窗判定(名册窄化未生效?)"
+        # 开窗观测面双押(0756 切片族D): W2a L1 实例级证据开窗接管后 patched _proc_absent
+        # (仅 L2/L3)零调用, wrapper 决策行结构性不再出现 —— 改押 L1 证据面(obs owner 死证 +
+        # 窗内零 L2/L3 开窗决策行); wrapper 决策行腿保留为 L2/L3 退化层回退判据。自愈主链
+        # 语义(改写账/journal 相位)不变, 上面已逐项断言。
+        l1_face, obs_owner = window_regime_face(case, wnew)
         ev["B4_rewrite"] = {
             "rewrites": {
                 h[:8]: rws.get(h)
                 for h in (h1, h2)
             },
             "fr_keys_after": keys_after,
+            "window_regime": {
+                "l1_face": l1_face,
+                "obs_owner": obs_owner
+            },
             "wrapper_new_lines": wnew[-20:]
         }
         _flush(ev, case)

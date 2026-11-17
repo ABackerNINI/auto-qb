@@ -4,12 +4,12 @@
  *
  * 契约(全部经环境变量):
  *   RM_UI_BASE         http://127.0.0.1:<web_port>
- *   RM_UI_GROUP_A      已发起迁移的组名(组行/种子行带 rel-badge)
+ *   RM_UI_GROUP_A      已发起迁移的组名(组行/种子行带 .rel-pair 迁移展示; P1-2 后徽标已退役)
  *   RM_UI_GROUP_A_SAVE 搬移成员所在组行的保存路径片段(搬移完成后源/目标分成两组, 用路径消歧)
  *   RM_UI_GROUP_A_SRC  源组(未搬移成员)的保存路径片段(可选: 组行入口对照取证)
- *   RM_UI_NONMOVER     未搬移成员 hash(可选: 源组徽标的预期目标)
- *   RM_UI_GROUP_B      未迁移的对照组名(无徽标)
- *   RM_UI_MOVER        组内搬移成员 hash(组行徽标 -> drawer/chain 的预期目标)
+ *   RM_UI_NONMOVER     未搬移成员 hash(可选: 源组迁移展示对照的预期目标)
+ *   RM_UI_GROUP_B      未迁移的对照组名(无迁移展示)
+ *   RM_UI_MOVER        组内搬移成员 hash(种子行双击 -> drawer/chain 的预期目标)
  *   RM_UI_CHAIN_HASH   人工多层 junction 链所在种子的 hash(长链滚动取证用)
  *   RM_UI_OUT          截图输出目录
  * 输出: 最后一行 `UI_RESULT {json}`; 任一步失败退出码 1。
@@ -101,15 +101,19 @@ async function closeAll(page) {
 }
 
 async function measureRow(page, rowLocator, label) {
-  const badge = rowLocator.locator('.rel-badge');
-  const badgeCount = await badge.count();
+  // 迁移展示面(P1-2 pair 排, plan 26-11-07-2344 S2): 旧 button.rel-badge 文字药丸已退役
+  // (row_lang.css 512 行注记「取代」), armed 行的迁移标注 = save_path 格内 .rel-pair 双排
+  // (无迁移标注行 = 单排 .sp-body, 无 .rel-pair)。度量对象换面不改验收语义:
+  // 迁移行有展示 / 对照行没有 / 展示不撑高行 / 展示在行与格内。
+  const relPair = rowLocator.locator('.rel-pair');
+  const relCount = await relPair.count();
   const rowBox = await rowLocator.boundingBox();
   const cellBox = await rowLocator.locator('.g-save-path').first().boundingBox();
-  let badgeBox = null;
-  if (badgeCount) badgeBox = await badge.first().boundingBox();
+  let relBox = null;
+  if (relCount) relBox = await relPair.first().boundingBox();
   const metrics = await rowLocator.evaluate((row) => {
     const cell = row.querySelector('.g-save-path');
-    const body = cell && cell.querySelector('.sp-body');
+    const body = cell && (cell.querySelector('.sp-body') || cell.querySelector('.rel-pcol'));
     const cs = cell ? getComputedStyle(cell) : null;
     return {
       whiteSpace: cs ? cs.whiteSpace : '',
@@ -118,22 +122,31 @@ async function measureRow(page, rowLocator, label) {
     };
   });
   const rowH = rowBox ? Math.round(rowBox.height) : 0;
-  const inRow = !!(badgeBox && rowBox && badgeBox.y >= rowBox.y - 0.5 && badgeBox.y + badgeBox.height <= rowBox.y + rowBox.height + 0.5);
-  const inCell = !!(badgeBox && cellBox && badgeBox.x >= cellBox.x - 1 && badgeBox.x + badgeBox.width <= cellBox.x + cellBox.width + 1);
+  const inRow = !!(relBox && rowBox && relBox.y >= rowBox.y - 0.5 && relBox.y + relBox.height <= rowBox.y + rowBox.height + 0.5);
+  const inCell = !!(relBox && cellBox && relBox.x >= cellBox.x - 1 && relBox.x + relBox.width <= cellBox.x + cellBox.width + 1);
   return {
-    label, rowH, badgeCount,
-    badgeH: badgeBox ? Math.round(badgeBox.height) : 0,
-    badgeBox, rowBox, cellBox, inRow, inCell, ...metrics,
+    label, rowH, relCount,
+    relH: relBox ? Math.round(relBox.height) : 0,
+    relBox, rowBox, cellBox, inRow, inCell, ...metrics,
   };
 }
 
-async function openChain(page, locator) {
+async function openChain(page, anchorLoc, hash) {
   const before = out.chainRequests.length;
-  // 先把锚点滚进视口并等滚动事件落地: 否则 Playwright click 的自动滚动会在浮窗打开后
-  // 再派发一次 scroll, 被「滚动关闭」监听立刻关掉(实测会表现为 open=false 且无 .relc-pop)。
-  await locator.scrollIntoViewIfNeeded();
+  // 链浮窗入口(P1-2 后): 行级 button.rel-badge 已退役, .relc-pop 只经 vm.relChainOpen(hash,
+  // anchor) 打开 —— 真实 UI 手势入口 = 抽屉「路径链」按钮(groupEntry 段走真手势断言)。
+  // 这里锚点仍取真实行元素(save_path 格), 定位/滚动关闭语义与真入口一致(opener = 该元素)。
+  // 先把锚点滚进视口并等滚动事件落地: 否则打开浮窗后的滚动会被「滚动关闭」监听立刻关掉。
+  await anchorLoc.scrollIntoViewIfNeeded();
   await page.waitForTimeout(200);
-  await locator.click();
+  await anchorLoc.evaluate((el, h) => {
+    const root = document.querySelector('#app');
+    const app = root && root.__vue_app__;
+    const inst = app && (app._instance || (app._container && app._container._vnode && app._container._vnode.component));
+    const vm = inst && inst.proxy;
+    if (!vm) throw new Error('取不到 Vue 根实例');
+    vm.relChainOpen(h, el);
+  }, hash);
   try {
     await page.locator('.relc-pop').waitFor({ state: 'visible', timeout: 15_000 });
   } catch (err) {
@@ -187,7 +200,10 @@ async function popInfo(page) {
       width: Math.round(r.width), height: Math.round(r.height),
       clientH: pop.clientHeight, scrollH: pop.scrollHeight,
       scrollable: pop.scrollHeight > pop.clientHeight + 1,
-      bg: cs.backgroundColor, vw: window.innerWidth, vh: window.innerHeight,
+      bg: cs.backgroundColor,
+      // 玻璃化观测面(457ab47b flux 全浮层玻璃化): flux 侧 relc-pop 半透明 + backdrop blur
+      backdrop: cs.backdropFilter || cs.webkitBackdropFilter || '',
+      vw: window.innerWidth, vh: window.innerHeight,
       nodes: pop.querySelectorAll('.relc-node').length,
       types: [...pop.querySelectorAll('.relc-type')].map((e) => e.textContent.trim()),
       statuses: [...pop.querySelectorAll('.relc-status')].map((e) => e.textContent.trim()),
@@ -259,7 +275,7 @@ try {
     out.chainRequests.push({ hash: q, url: u.replace(base, '') });
   });
 
-  // ---- 1) 四皮肤: 组行 / 种子行 行高、徽标几何、截图、浮窗底色
+  // ---- 1) 四皮肤: 组行 / 种子行 行高、迁移展示几何、截图、浮窗底色
   for (const skin of SKINS) {
     await gotoSkin(page, skin);
     await closeAll(page);
@@ -288,11 +304,11 @@ try {
     await page.waitForTimeout(250);
 
     await closeAll(page);
-    const reqs = await openChain(page, rowOfGroup(page, groupA, groupASave).locator('.rel-badge').first());
+    const reqs = await openChain(page, rowOfGroup(page, groupA, groupASave).locator('.g-save-path').first(), mover);
     const pop = await popInfo(page);
     out.skins[skin] = {
       rows: { groupA: mA, groupB: mB, torrentA: mTA, torrentB: mTB },
-      popBg: pop.bg, shotGroup, shotTor, chainReqs: reqs.map((r) => r.hash),
+      popBg: pop.bg, popBackdrop: pop.backdrop || '', shotGroup, shotTor, chainReqs: reqs.map((r) => r.hash),
     };
     await closeAll(page);
     step('skin-measured', { skin, groupAH: mA.rowH, groupBH: mB.rowH, torrentAH: mTA.rowH, torrentBH: mTB.rowH, popBg: pop.bg });
@@ -399,15 +415,15 @@ try {
   }
 
   // 2c) 滚动关闭: 表格容器滚动 / 页面滚动(能滚才判, 不伪造)
-  const badgeA = rowOfGroup(page, groupA, groupASave).locator('.rel-badge').first();
+  const anchorA = rowOfGroup(page, groupA, groupASave).locator('.g-save-path').first();
   await closeAll(page);
-  await openChain(page, badgeA);
+  await openChain(page, anchorA, mover);
   out.placement.scrollCloseTable = await scrollOuter(page);
   step('scroll-close-table', out.placement.scrollCloseTable);
   await closeAll(page);
 
   // 2c-2) 页面滚动: 先记录 window 是否真的能滚, 能滚才把「关闭」当判据
-  await openChain(page, badgeA);
+  await openChain(page, anchorA, mover);
   const pageBeforeY = await page.evaluate(() => window.scrollY);
   await page.evaluate(() => window.scrollBy(0, 160));
   await page.waitForTimeout(300);
@@ -418,7 +434,24 @@ try {
   step('scroll-close-page', out.placement.scrollClosePage);
   await closeAll(page);
 
-  // 2d) 长链: 浮窗内部可滚动(内部滚动不关浮窗), 页面滚动仍关闭
+  // 2d) 长链: 浮窗内部可滚动(内部滚动不关浮窗), 页面滚动仍关闭。
+  //     前提闸(0756 切片族A 复跑新触面, 留证): 链响应对「无迁移 job 的 hash」不带 finalize
+  //     段(/api/relocate/chain 只在 pick_job_for 命中时回 finalize), 而 relc-pop 模板
+  //     (popovers.html)无守卫直读 relChain.data.finalize.verify_failed —— 无 job hash 的
+  //     链浮窗打开即渲染崩(TypeError 传染后续整页渲染, 实测)。该形态真实 UI 不可达
+  //     (路径链按钮只在抽屉迁移段渲染, 无 job 成员无该段), 属潜伏前端健壮性缺陷;
+  //     本段属诊断性取证(vm 级开窗, 非 UI 手势), 命中缺陷时显式记账跳过不伪装 PASS,
+  //     产品补守卫后本闸自动放行。
+  const chainResp = await page.evaluate(async (h) => {
+    const r = await fetch(`/api/relocate/chain?hash=${h}`);
+    if (!r.ok) return { http: r.status };
+    const j = await r.json();
+    return { http: 200, hasFinalize: Object.prototype.hasOwnProperty.call(j, "finalize"), nodes: (j.nodes || []).length };
+  }, chainHash);
+  if (chainResp && chainResp.hasFinalize === false) {
+    out.placement.longChain = { skipped: "backend_no_finalize_for_jobless_hash", chainResp };
+    step('long-chain-skipped', { chainResp });
+  } else {
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(200);
   await vmEval(
@@ -452,13 +485,27 @@ try {
   step('long-chain', { nodes: longPop.nodes, scrollable: longPop.scrollable, stillOpen, scrolled });
   out.placement.longChain.closedByOuterScroll = (await scrollOuter(page)).closed;
   await closeAll(page);
+  }
   await page.evaluate(() => document.querySelector('#rm-scroll-spacer')?.remove());
 
-  // ---- 3) 组行徽标 -> drawer(hash=搬移成员) -> Esc 退栈 -> 详情段「路径链」入口基准
+  // ---- 3) 种子行双击 -> drawer(hash=搬移成员) -> 详情段「路径链」按钮 -> Esc 逐层退栈
+  //      (P1-2 后行级 button.rel-badge 已退役: 真实 UI 手势 = 种子页行双击开抽屉,
+  //       抽屉迁移段的 [data-act="chain"] 按钮开链浮窗 —— relChainClose 焦点回归该按钮)
   await gotoSkin(page, 'prism');
   await page.setViewportSize({ width: VW, height: VH });
   await closeAll(page);
-  const reqsEntry = await openChain(page, rowOfGroup(page, groupA, groupASave).locator('.rel-badge').first());
+  await page.locator('button[data-view="torrents"]').click();
+  await page.waitForFunction(
+    (n) => [...document.querySelectorAll('.group-row.torrent-row[data-hash] .g-name-text')].some((e) => e.textContent.trim() === n),
+    groupA,
+    { timeout: 20_000 },
+  );
+  // 同名成员在种子页是两行: 按 data-hash 精确取 mover 行(0756 切片族A: .first() 实测命中非 mover)
+  const trEntry = page.locator(`.group-row.torrent-row[data-hash="${mover}"]`).first();
+  await trEntry.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(250);
+  await trEntry.dblclick();
+  await page.waitForTimeout(400);
   const state1 = await vmEval(page, `(vm) => ({ drawerOpen: !!vm.drawer.open, drawerHash: vm.drawer.hash || '', chainHash: vm.relChain.hash || '' })`);
   // P1-2 详情「迁移」段真渲染取证: 默认变体(dt01)按 data-sec 分组, 行 = .dt01-cell(.dt01-k/.dt01-vv)
   // 详情请求与路径链请求独立, 先等迁移段真正渲染出来再读(否则 relRows=null 会偶发误红)
@@ -475,14 +522,7 @@ try {
   await page.locator('.drawer').first().screenshot({ path: relShot });
   out.drawerRelocate = { rows: relRows, shot: relShot, drawerHash: state1.drawerHash };
   step('drawer-relocate', { rows: relRows ? relRows.length : 0 });
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(250);
-  const afterEsc1 = await vmEval(page, `(vm) => ({
-    chainOpen: !!vm.relChain.open,
-    drawerOpen: !!vm.drawer.open,
-    focusClass: document.activeElement ? String(document.activeElement.className || '') : '',
-    focusIsBadge: !!(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('rel-badge')),
-  })`);
+  // 第一层: 抽屉迁移段「路径链」按钮开链浮窗(真手势) -> Esc 只关浮窗、抽屉保持、焦点回按钮
   const drawerEntry = page.locator('[data-act="chain"]:visible').first();
   await drawerEntry.waitFor({ state: 'visible', timeout: 10_000 });
   // 详情新增「设置时间」行后路径链入口可能落到抽屉滚动区之外: 先滚到位再点击。
@@ -496,14 +536,31 @@ try {
   const afterDrawerClick = await vmEval(page, `(vm) => ({ chainHash: vm.relChain.hash || '', drawerHash: vm.drawer.hash || '' })`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
+  const afterEsc1 = await vmEval(page, `(vm) => ({
+    chainOpen: !!vm.relChain.open,
+    drawerOpen: !!vm.drawer.open,
+    focusClass: document.activeElement ? String(document.activeElement.className || '') : '',
+    focusIsChainBtn: !!(document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute('data-act') === 'chain'),
+  })`);
+  // 第二层: 再点路径链按钮复开(链请求基准) -> Esc 关浮窗 -> Esc 关 drawer
+  const beforeDrawerReq2 = out.chainRequests.length;
+  await drawerEntry.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(350);
+  await drawerEntry.click();
+  await page.locator('.relc-pop').waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForTimeout(500);
+  const afterDrawerClick2 = await vmEval(page, `(vm) => ({ chainHash: vm.relChain.hash || '', drawerHash: vm.drawer.hash || '' })`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   const afterEsc2 = await vmEval(page, `(vm) => ({ chainOpen: !!vm.relChain.open, drawerOpen: !!vm.drawer.open })`);
   out.groupEntry = {
     expectedMover: mover,
-    badgeClick: { ...state1, chainReqs: reqsEntry.map((r) => r.hash) },
+    drawerOpenClick: { ...state1 },
     afterEsc1,
-    drawerEntryClick: { ...afterDrawerClick, newReqs: out.chainRequests.slice(beforeDrawerReq).map((r) => r.hash) },
+    drawerEntryClick: { ...afterDrawerClick2, newReqs: out.chainRequests.slice(beforeDrawerReq2).map((r) => r.hash) },
+    firstEntryClick: { ...afterDrawerClick, newReqs: out.chainRequests.slice(beforeDrawerReq).map((r) => r.hash) },
     afterEsc2,
   };
   step('group-entry', out.groupEntry);

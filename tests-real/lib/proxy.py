@@ -25,12 +25,11 @@ _HOST_RE = re.compile(rb"(?i)(Host:)[^\r\n]*")
 
 class TcpProxy:
     """单线程 accept + 每连接双线程 relay 的本机代理。收尾必须 stop()。"""
-
     def __init__(self, target_port: int, port: int, host: str = "127.0.0.1"):
         self.host = host
         self.port = port
         self.target = ("127.0.0.1", target_port)
-        self._events: list[dict] = []          # {"ts", "kind": req|probe, "path"?}
+        self._events: list[dict] = []  # {"ts", "kind": req|probe, "path"?}
         self._ev_lock = threading.Lock()
         self._conns: list[tuple[socket.socket, socket.socket]] = []
         self._conn_lock = threading.Lock()
@@ -102,7 +101,7 @@ class TcpProxy:
                 except OSError:
                     pass
                 continue
-            threading.Thread(target=self._handle, args=(c,), daemon=True).start()
+            threading.Thread(target=self._handle, args=(c, ), daemon=True).start()
 
     def _handle(self, c: socket.socket) -> None:
         s = socket.socket()
@@ -159,7 +158,18 @@ class TcpProxy:
                     return
                 rest += chunk
             with self._ev_lock:
-                self._events.append({"ts": time.time(), "kind": "req", "path": path})
+                self._events.append(
+                    {
+                        "ts": time.time(),
+                        "kind": "req",
+                        "path": path,
+                        # POST 体截取(写面观测用: addTags/removeTags 的 tag 名在体里, 路径不含)
+                        # —— latin1 保真字节, 只作子串匹配, 不作展示; 体可达 64KiB 级, 截 4KiB:
+                        # hashes 参数在前 tags 在后, 21 颗种子(hash 数组 ~840B)已超 512B,
+                        # 批量片(RM04-24)的 pending_tag 判据会漏拍假绿(评审 R10 nit 实证)
+                        "body": rest[:clen].decode("latin1", "replace")[:4096] if clen else "",
+                    }
+                )
             host_new = f"{self.target[0]}:{self.target[1]}".encode()
             head, n = _HOST_RE.subn(rb"\1 " + host_new, head, count=1)
             if n == 0:  # 无 Host 头(HTTP/1.0)则补一个
@@ -198,6 +208,10 @@ class TcpProxy:
 
     def requests(self) -> list[tuple[float, str]]:
         return [(e["ts"], e.get("path", "")) for e in self.events() if e["kind"] == "req"]
+
+    def requests_full(self) -> list[tuple[float, str, str]]:
+        """(ts, path, body) 三元组: 需要辨识写请求载荷(如 addTags 的 tag 名)的观测面用"""
+        return [(e["ts"], e.get("path", ""), e.get("body", "")) for e in self.events() if e["kind"] == "req"]
 
     def sync_times(self) -> list[float]:
         """sync/maindata 请求时间戳序列(同步线节拍观测用)"""

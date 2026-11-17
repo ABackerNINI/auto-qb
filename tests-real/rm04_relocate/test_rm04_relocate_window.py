@@ -8,10 +8,11 @@ memory-bank/testing/real-baselines/26-11-10-0435-real-relocate-rlfn-e2e.md 的 1
 
 ## 测试计划(每个测试函数一条)
 - test_rm04_20_rlfn_symlink_window_e2e: A1 双实例在线自检 -> A2 产品实例(relocate on + bt_backup
-  查表) -> A3 两颗共享文件假种子归同组 -> A4 整组迁移发起(形态 file_links) -> A5 qB 侧自检
+  查表) -> A3 两颗共享文件假种子归同组 -> A3.5 升档负向腿(dst 预置同名真实文件 => 预检闸
+  target_conflict 拒 + 零发起 + 预置文件零触碰) -> A4 整组迁移发起(形态 file_links) -> A5 qB 侧自检
   skipped 且零 qb_side_check_failed -> A6 armed -> A7 armed 现场(src symlink + 非 mover
-  fastresume 未触碰) -> A8 双实例优雅下线 + wrapper 名册窄化开窗(新 patch 行或在位健康 patched
-  watcher 二者其一) -> A9 daemon 改写非 mover
+  fastresume 未触碰) -> A8 双实例优雅下线 + 开窗观测面双押(L1 obs owner 死证 + 窗内零 L2/L3
+  决策行 OR wrapper 决策行; 0756 切片族D) -> A9 daemon 改写非 mover
   fastresume(journal 账 + fastresume 字节双证) -> A10 重启全员落位 dst(零 recheck 零异常态)
   -> A11 job done + 删链门删净 -> A12 组不裂(组键整体迁移) -> A13 收尾零残留 + 环境还原。
 
@@ -47,7 +48,11 @@ SRC; A10 出现 recheck/error/missing 或未全员落位 dst —— 其中 reche
 零 error/missing / save_path 等值断言兜底; A11 job 非 done 或 src 链接残留;
 A12 组裂(两颗不同组); A13 有残留或环境未还原。
 
-升档(规程 §08): L2(脚本自动断言, A1-A13 全链)。L3 负向对照未加, 原因: D 级 NEGATIVE 要求 qB
+升档(规程 §08): **L3(2026-11-17 片A-fix 轮升档, 0756 切片 §05 待改造清单第 5 项落地)**:
+A3.5 负向腿 = dst 预置同名真实文件 => 预检闸 target_conflict 拒(relocate_plan.py 目标同名冲突
+逐文件判定)+ 零发起 + 预置文件零触碰 —— 修复前必红形态(mover 撞 need_full_check 进度清零)
+确定性可构造, 不依赖旧评估否掉的 (size,mtime) 双不符亚秒竞态形态(该评估针对的是自检 NEGATIVE
+面, 与本负向腿的预检闸面不同; 旧评估文字保留如下留痕)。旧评估: D 级 NEGATIVE 要求 qB
 列目录条目 (size, mtime) 与 dst stat 和源侧链接 lstat **双双不符** —— qB 5.2.3 Windows 对本
 拓扑只产出两种可判定条目: junction/硬链接 = 目标侧真实元数据(恒 POSITIVE); 文件级 symlink =
 链接对象自身元数据(与源侧 lstat 恒相等, 恒 skipped)。无合法产品流可确定性造出「双不符」; 唯一
@@ -302,6 +307,52 @@ def live_daemon_pid(case: Path) -> int | None:
     return int((rj.read_daemon_state(data_dir, key) or {}).get("pid") or 0) or None
 
 
+def l1_window_evidence(case: Path, port: int) -> dict | None:
+    """W2a L1 实例级证据开窗的观测面取证(计划 26-11-10-0318 D2 拍板; 开窗双押断言的 L1 腿)。
+
+    L1 证据面 = 观测账(obs-<instance_key>.json)含 owner 记录 —— owner 是 daemon 对「绑本实例
+    host:port 的 qB」的身份建档, qB 下线后记录按规格**保留**(它就是死证, 只有复活/换身才覆盖);
+    读面走产品 read_obs 单点(schema/判型自证, 半残记录不冒充证据)。pid 存活面顺带记进返回值
+    供核死证(不作为证据门: qb_down rc=0 已证端口释放)。返回 None = 观测账缺失/半残/无 owner。
+
+    背景(0756 切片族D): wrapper 旁路只作用于 L2/L3 全机口径层(_proc_absent 两调用点);
+    L1 路径(_observe_poll → _l1_window_open)不经 _proc_absent 且无稳定期 —— wrapper 环境下 L1
+    证据链齐时窗先于 30s 稳定窗开启, wrapper 决策行(test_qb=0…absent=True)结构性不再出现,
+    开窗断言改双押(L1 obs 证据面 OR wrapper 决策行, 后者为 L2/L3 退化层回退判据)。
+    """
+    data_dir = str(case / "data")
+    key = rj.instance_key("127.0.0.1", port)
+    try:
+        obs = rj.read_obs(data_dir, key)
+    except Exception:  # noqa: BLE001 - 读面异常按证据面不成立处置(断言报错里带 wrapper 行兜底信息)
+        return None
+    if not obs or not isinstance(obs.get("owner"), dict):
+        return None
+    owner = dict(obs["owner"])
+    owner["pid_alive"] = _pid_alive(int(owner.get("pid") or 0))
+    owner["obs_file"] = Path(rj.obs_path(data_dir, key)).name
+    return owner
+
+
+def window_regime_face(case: Path, wnew: list[str]) -> tuple[bool, dict | None]:
+    """开窗观测面双押判定(0756 切片族D 修法单点, RM04-20 A9 / RM04-21 B4 共用)。
+
+    返回 (face_ok, obs_owner): face_ok = L1 证据面(obs owner 死证在 + 窗内零 L2/L3 开窗决策行)
+    **或** wrapper 决策行腿(test_qb=0 + refused=True + absent=True, L2/L3 退化层回退判据)。
+    窗内「在场轮询行」(absent=False)是 L1 接管后的常态残留, 不算 L2/L3 开窗 —— 判据只认
+    absent=True 的开窗决策行, 免得 qb_down 竞态窗内的最后一拍在场行误判。"""
+    l2l3_opened = any("instance_scoped" in ln and "absent=True" in ln for ln in wnew)
+    obs_owner = l1_window_evidence(case, instances.SECONDARY)
+    legacy_face = any("test_qb=0" in ln and "refused=True" in ln and "absent=True" in ln for ln in wnew)
+    l1_face = (obs_owner is not None) and not l2l3_opened
+    assert l1_face or legacy_face, (
+        "开窗观测面双押均不成立: L1 证据面(obs owner 记录=" + ("有" if obs_owner else "缺") + ", 窗内 L2/L3 开窗决策行=" +
+        ("有" if l2l3_opened else "无") + ")与 wrapper 决策行都缺失 "
+        "—— W2a L1 接管后决策行结构性不再出现, obs 也缺则疑真回归:\n" + "\n".join(wnew[-20:])
+    )
+    return l1_face, obs_owner
+
+
 def _flush(ev: dict, case: Path) -> None:
     """证据落盘(gitignored .work, 与 visibility 片同落点): 全量断言现场 + 产品日志副本。"""
     ev["ts"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -325,7 +376,7 @@ def _require_r_topology() -> None:
 
 
 def test_rm04_20_rlfn_symlink_window_e2e():
-    """[RM04-20] 整组迁移 file_links+symlink 全链真机闭环(13 断言 A1-A13, 断言明细见模块 docstring)
+    """[RM04-20] 整组迁移 file_links+symlink 全链真机闭环(A1-A13 + A3.5 升档负向腿, 断言明细见模块 docstring)
 
     前置: R: 在 + 双实例在线 + 副实例无 real-fake 残留; wrapper 收编入库版在位; 副实例 BT_backup
           可定位(env_registry EXE 派生)。
@@ -401,6 +452,38 @@ def test_rm04_20_rlfn_symlink_window_e2e():
         assert tuple(sorted(kfiles)) == (FILE_NAME, ), f"组键文件列表不符: {kfiles}"
         ev["A3_group_before"] = {"key": g["key"], "members": [h1, h2]}
         _flush(ev, case)
+
+        # ---- A3.5 升档负向腿(L2→L3, 0756 切片 §05 承诺): dst 预置同名真实文件 =>
+        # 预检闸逐文件判定命中(relocate_plan.py「目标同名冲突」段) => 回执 blocked
+        # (gate=target_conflict)+ 零发起(无「迁移发起」行)+ dst 预置文件零触碰 ——
+        # 修复前必红形态实证(mover 撞 need_full_check 进度清零的那类事故被闸在门外)。
+        # 位置约束: 必须在 wait_store_progress 之后(否则先撞 GATE_INCOMPLETE, 拒因不符)。
+        dst.mkdir(parents=True, exist_ok=True)
+        planted = dst / FILE_NAME
+        planted.write_bytes(b"N" * FILE_SIZE)
+        started_n = M.count_anchor(case, "迁移发起")
+        neg = M.cmd_post_and_wait(
+            web_port, f"/api/torrents/{h1}/location", {
+                "location": str(dst),
+                "confirm": True
+            }, timeout=60
+        )
+        neg_items = ((neg or {}).get("truth") or {}).get("results") or []
+        neg_blocked = [it for it in neg_items if it.get("cls") == "blocked"]
+        assert neg_blocked, \
+            f"dst 预置同名真实文件未被拒(预检闸 target_conflict 未生效): {json.dumps(neg_items, ensure_ascii=False)[:600]}"
+        neg_reasons = neg_blocked[0].get("reasons") or []
+        assert any(r.get("gate") == "target_conflict" for r in neg_reasons), \
+            f"拒绝闸门非 target_conflict(拒因不达负向腿语义): {json.dumps(neg_reasons, ensure_ascii=False)[:400]}"
+        assert M.count_anchor(case, "迁移发起") == started_n, "预检拒单仍产生「迁移发起」日志(零发起被破坏)"
+        assert planted.is_file() and planted.read_bytes() == b"N" * FILE_SIZE, "dst 预置文件被触碰(拒单仍有副作用)"
+        ev["A3_5_target_conflict_rejected"] = {
+            "reasons": neg_reasons,
+            "planted_size": FILE_SIZE,
+            "gates": [r.get("gate") for r in neg_reasons]
+        }
+        _flush(ev, case)
+        planted.unlink()  # 负向腿清场: 主链 A4 在干净 dst 上走
 
         # ---- A4 整组迁移发起(origin=web 语义): 回执 started + 迁移发起(形态 file_links)
         result = M.cmd_post_and_wait(
@@ -487,14 +570,20 @@ def test_rm04_20_rlfn_symlink_window_e2e():
             "journal 相位未翻 rewritten"
         )
         wnew = wrapper_lines()[wl1:]
-        assert any("test_qb=0" in ln and "refused=True" in ln and "absent=True" in ln for ln in wnew), \
-            "wrapper 决策日志未见「测试 qB 全下线 => absent=True」开窗判定(名册窄化未生效?)"
+        # 开窗观测面双押(0756 切片族D): W2a L1 实例级证据开窗接管后 wrapper 决策行结构性
+        # 不再出现, 改押 L1 证据面(obs owner 死证 + 窗内零 L2/L3 开窗决策行); wrapper 决策行
+        # 腿保留为 L2/L3 退化层回退判据(环境回退仍可验, 判据不丢)。
+        l1_face, obs_owner = window_regime_face(case, wnew)
         ev["A9_rewrite"] = {
             "rewrites": {
                 h[:8]: rws.get(h)
                 for h in (h1, h2)
             },
             "fr_keys_after": keys_after,
+            "window_regime": {
+                "l1_face": l1_face,
+                "obs_owner": obs_owner
+            },
             "wrapper_new_lines": wnew[-20:]
         }
         _flush(ev, case)

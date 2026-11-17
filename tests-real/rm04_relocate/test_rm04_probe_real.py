@@ -1,5 +1,6 @@
 """[RM04-11] 同机强探测 E1 真机正向: 真写目标盘通过 + qB 探针零残留(产品 run_probe 直连 56590)
 [RM04-12] E1 指纹缓存: 首探真执行并落缓存 / 同指纹命中零探测 / 改 port 指纹失效重探
+          (R1#42 起指纹 HMAC 加盐, 测试先 probe_salt_ensure 钉盐再算键)
 [RM04-13] D 级列目录闭证: 56590 默认保存路径(R: 不存在)getDirectoryContent 不可判定 + C: 目录正向对照
 
 计划 26-11-04-0055 §04 P6(真机与收尾)。本文件补两条真机事实:
@@ -123,11 +124,17 @@ def test_rm04_11_probe_real_write_and_cleanup(secondary, workdir):
 
 
 def test_rm04_12_probe_fingerprint_cache_and_reprobe(secondary, workdir):
-    """指纹缓存: 首探真跑并落 state / 同指纹再调零探测 / 改 port 指纹变更后重探。"""
+    """指纹缓存: 首探真跑并落 state / 同指纹再调零探测 / 改 port 指纹变更后重探。
+
+    R1#42 指纹加盐(0756 切片族B): 产品指纹 = HMAC-SHA256(key=盐, msg="host|port|username|
+    secret")[:16], 盐由 probe_salt_ensure 随 state 生成(relocate_probe.probe_fingerprint 单点)
+    —— 测试与 _ensure_probe 同写路径先钉盐再算键, 与 state 落盘的带盐键同源(无盐缺省形态
+    与带盐缓存结构性永不命中, 是产品防爆破的有意行为, 不是缺陷)。"""
     ctx, client = _ctx(instances.SECONDARY)
     module = RelocateModule(ctx)
-    conf_secondary = probe_fingerprint(_qb_conf(instances.SECONDARY))
-    conf_primary = probe_fingerprint(_qb_conf(instances.PRIMARY))
+    salt = module.probe_salt_ensure()  # 写路径单点(与 _ensure_probe 同源): 先钉盐, 后算键
+    conf_secondary = probe_fingerprint(_qb_conf(instances.SECONDARY), salt)
+    conf_primary = probe_fingerprint(_qb_conf(instances.PRIMARY), salt)
     assert conf_secondary != conf_primary, "改 port 后指纹必须变化"
 
     src = workdir / "src"
@@ -179,6 +186,7 @@ def test_rm04_12_probe_fingerprint_cache_and_reprobe(secondary, workdir):
         {
             "fingerprint_56590": conf_secondary,
             "fingerprint_56589": conf_primary,
+            "probe_salt_present": bool(salt),
             "first_wall_s": first_wall,
             "cache_hit_wall_s": second_wall,
             "reprobe_wall_s": third_wall,
@@ -188,7 +196,13 @@ def test_rm04_12_probe_fingerprint_cache_and_reprobe(secondary, workdir):
 
 
 def test_rm04_13_directory_content_default_save_path(secondary, workdir):
-    """报告 §7.4 待实测闭合: 56590 默认保存路径(R: 不存在)列目录 → 不可判定; C: 目录降级链对照。
+    """报告 §7.4 待实测闭合: 副实例默认保存路径列目录 → 不可判定(D 级闭证) + C: 目录降级链对照。
+
+    环境前提(0756 切片族C 条件化): D 级闭证腿要求「副实例默认 save_path 所在盘不可列」,
+    该拓扑按环境2(C盘机, R: 不存在)钉死; 环境1(D盘机) R: 在场且可列, 产品对存在的目录判
+    positive/D 是正确行为 —— 前提不成立时显式 skip 并标注, 不伪装 PASS(切环境单跑不可选:
+    环境2 是另一台物理机, 本工作区 QBT_REAL_ENV=2 无实例可达)。正向对照腿(D 级单腿
+    positive + 路径级证据)与前提无耦合, 作为同用例一部分随前提腿一并跑/skip。
 
     对照腿断言「产品最终判 positive」; D 级单腿(Issue 26-11-04-0504 修复后)同样应达 D:
     此前 qbittorrent-api 返回的 UserList 容器(DirectoryContentList)被误判形态异常而恒降级,
@@ -196,14 +210,20 @@ def test_rm04_13_directory_content_default_save_path(secondary, workdir):
     ctx, client = _ctx(instances.SECONDARY)
     prefs = secondary.prefs()
     default_save_path = str(prefs.get("save_path") or "")
-    assert default_save_path, "56590 默认 save_path 为空, 无法闭证"
+    assert default_save_path, "副实例默认 save_path 为空, 无法闭证"
 
-    # 端点原始行为: 不存在/不可见路径应抛 404(与报告 §8.1 C: 正向对照互为印证)
+    # 端点原始行为: 不存在/不可见路径应抛 404(与报告 §8.1 C: 正向对照互为印证);
+    # 该探测同时是前提闸 —— 可列(无异常) = 环境1 拓扑, D 级闭证腿不可跑 => 显式 skip
     raw_error = ""
     try:
         client.app_get_directory_content(directory_path=default_save_path, with_metadata="true")
     except Exception as exc:  # noqa: BLE001 - 这里要的就是异常本身
         raw_error = f"{type(exc).__name__}: {exc}"
+    if not raw_error:
+        pytest.skip(
+            f"前提不成立: 副实例默认 save_path={default_save_path} 当前环境可列(环境1 D盘机 R: 在场, "
+            "产品判 positive 是正确行为) —— D 级闭证腿按环境2(C盘机 R: 不存在)钉死, 显式 skip 不伪装 PASS"
+        )
 
     ev_default = path_evidence(ctx, default_save_path, default_save_path, visibility_only=True)
     assert ev_default.status == UNAVAILABLE, f"默认路径意外可判: {ev_default}"

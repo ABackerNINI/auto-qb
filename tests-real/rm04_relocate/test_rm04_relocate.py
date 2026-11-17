@@ -44,7 +44,7 @@ from typing import Callable
 
 import pytest
 
-from lib import app, instances, small_target, torrent
+from lib import app, guard, instances, small_target, torrent
 from lib.bencode import encode
 from lib.net import local_host
 
@@ -264,6 +264,7 @@ config:
     relocate:
         enabled: {relocate}
         alias_file_threshold: {alias_threshold}
+        bt_backup: "{bt_backup}"
     web:
         enabled: true
         host: 127.0.0.1
@@ -282,7 +283,13 @@ def write_cfg(case: Path,
     """生成临时配置(schema_version: 8, 直连副实例(SECONDARY), WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
 
     product data_dir 指用例临时目录: journal/spec/pid/state 随目录清理, 不碰仓库根 auto-qb-data/。
+    relocate.bt_backup 必带(0756 切片族A 复跑新触面): v8 起收编为单实例标量(计划 26-11-11-0259 S1),
+    部署维闸门在 relocate_execute fail-fast(留空 = 「迁移预检拒绝」, schema/groups.py 明载)——
+    缺它全部发起腿先撞 gate=bt_backup, 到不了 space/qb_temp 等业务闸门。路径由 env_registry EXE
+    派生(副实例 portable profile, 与 window 测试同款单点, 不手抄)。
     返回 (配置路径, web端口)。"""
+    bt_backup = Path(guard.EXE[instances.SECONDARY]).parent / "profile" / "qBittorrent" / "data" / "BT_backup"
+    assert bt_backup.is_dir(), f"副实例 BT_backup 不在(EXE 派生路径失效?): {bt_backup}"
     cfg = case / "config.yml"
     web_port = app.free_port()
     cfg.write_text(
@@ -292,6 +299,7 @@ def write_cfg(case: Path,
             cross_group="true" if cross_group else "false",
             relocate="true" if relocate else "false",
             alias_threshold=alias_threshold,
+            bt_backup=bt_backup.as_posix(),
             web_port=web_port,
             fake_host=FAKE_TRACKER_HOST,
         ),
@@ -302,6 +310,8 @@ def write_cfg(case: Path,
         raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
     if "schema_version: 8" not in text:
         raise AssertionError(f"配置缺 schema_version: 8(会触发迁移改写), 拒跑: {cfg}")
+    if relocate and bt_backup.as_posix() not in text:
+        raise AssertionError(f"relocate=true 却缺 bt_backup 键(部署闸会 fail-fast), 拒跑: {cfg}")
     return cfg, web_port
 
 
@@ -427,7 +437,9 @@ def groups_view(web_port: int) -> list[dict]:
 
 
 def group_row(groups: list[dict], h: str) -> dict | None:
-    hits = [g for g in groups if any(m["hash"] == h for m in g["members"])]
+    """P-02 二期 hash 引用式后组行 members 即 hash 字符串数组(views_group.py docstring 单点,
+    成员明细不随组行回传): 成员资格判定 = hash 串直接 in, 不再逐成员 dict 取 m["hash"]。"""
+    hits = [g for g in groups if h in g["members"]]
     return hits[0] if hits else None
 
 
@@ -437,11 +449,26 @@ def decode_key(encoded: str) -> tuple:
     return arr[0], tuple(arr[1])
 
 
+def member_detail(web_port: int, h: str) -> dict | None:
+    """单成员产品快照明细(GET /api/torrents/{hash})。
+
+    P-02 hash 引用式后组行 members 只回 hash 串, 逐成员明细(progress/relocate 等)改经
+    详情端点按 hash 现取: require_torrent 读 manager.store(context.py 单点), 与组视图
+    同一产品快照 —— 404 = 快照尚无该种子, 返回 None(调用方按未收录处置)。异常折 None
+    前先留痕(类型+摘要进 stderr): 形态漂移(TypeError/KeyError)与连接抖动/404 若同桶
+    无痕, 消费方超时红时无法区分「未就绪」与「响应形状变了」(评审 R11 nit)。"""
+    try:
+        return web_req(web_port, "GET", f"/api/torrents/{h}")["torrent"]
+    except Exception as e:  # noqa: BLE001 - 404/连接抖动都算快照未收录
+        print(f"[member_detail] {h} -> {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+        return None
+
+
 def wait_group(web_port: int, h: str, members: set[str], timeout: float, desc: str) -> dict:
     """等 h 归进恰含 members 的组, 返回组行(供 key 解码断言)。"""
     def probe():
         g = group_row(groups_view(web_port), h)
-        if g and {m["hash"] for m in g["members"]} == members:
+        if g and set(g["members"]) == members:
             return g
         return None
 
@@ -452,13 +479,15 @@ def wait_store_progress(web_port: int, ihs: list[str], timeout: float = 40.0) ->
     """等产品 store 快照反映种子校验完成(progress==1.0)。
 
     relocate 闸门读的是**产品快照**的 progress, 与 qB 实际进度有 1-2 个同步拍滞后
-    (实测: qB 侧已 1.0 而命令立刻下发 → 被 GATE_INCOMPLETE 拒)。组视图随进度变化
-    置脏重建, 视图反映 1.0 ⇒ store 已 1.0, 且 store 只会单向前进, 无回退竞态。"""
+    (实测: qB 侧已 1.0 而命令立刻下发 → 被 GATE_INCOMPLETE 拒)。P-02 hash 引用式后
+    组行不背成员明细, 逐成员 progress 改经 member_detail(详情端点 = manager.store 单源,
+    与组视图同快照)现取: 明细反映 1.0 ⇒ store 已 1.0, 且 store 只会单向前进, 无回退竞态。"""
     def probe():
-        rows = {m["hash"]: m for g in groups_view(web_port) for m in g["members"]}
-        if all(rows.get(h, {}).get("progress") == 1.0 for h in ihs):
-            return True
-        return None
+        for h in ihs:
+            det = member_detail(web_port, h)
+            if det is None or det.get("progress") != 1.0:
+                return None
+        return True
 
     wait_until(probe, timeout, f"产品快照未反映种子完成: {[h[:8] for h in ihs]}")
 
@@ -558,7 +587,7 @@ def test_rm04_01_group_key_same_and_contrast():
         g = wait_group(web_port, ha, {ha, hb}, 25, "A/B(同名同表)未归同组")
         # 对照红验: 异文件列表必须不同组 —— 否则主断言恒绿(计划 §03 失败判据)
         gc = wait_group(web_port, hc, {hc}, 15, "C(异文件列表)未独立成组")
-        assert hc not in {m["hash"] for m in g["members"]}, \
+        assert hc not in g["members"], \
             f"对照失效: C 也归进了 A/B 的组, 归组 key 的文件列表维度丢失: {g['key']}"
         kpath, kfiles = decode_key(g["key"])
         assert norm(kpath) == norm(savepath), f"组键首元不是规范化 save_path: {kpath}"
@@ -777,7 +806,7 @@ def test_rm04_04_cross_group_conflict_and_missing_exempt():
 
 
 def test_rm04_05_same_volume_relocate_dir_alias():
-    """[RM04-05] 跨盘移动主链(同卷口径): C:→C: relocate → 目录别名 + 穿透 + journal phase=done
+    """[RM04-05] 跨盘移动主链(RAM 探测落点 -> case 目录): 目录别名 + 穿透 + journal phase=done
                   + GATE_SPACE 拒绝负向对照(L3)
 
     前置: relocate.enabled=true + alias_file_threshold: 1; 两枚带数据多文件假种子(子目录
@@ -896,8 +925,12 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         #      (ACT_DONE_EXTERNAL 的「已被外部完成」判据: 全员 save_path==dst + 链接在 + qB 在)
         qb.set_location(h2, str(dst))
         wait_until(lambda: norm((qb.torrent(h2) or {}).get("save_path")) == norm(dst), 30, "成员2 的 qB setLocation 未生效")
-        job = wait_job_phase(case, job_id, {"done"}, 90, "job 未推进到 done(reason=external 预期)")
-        assert job.get("reason") == "external", f"job done 但 reason={job.get('reason')}: {job}"
+        # 终态 reason 判据变(S1a 单活任务模型 + S3 生命周期账统一, 1fad4fce): qB 原生跟进
+        # 完成成员2 后, 收尾链不再以「已被外部完成(reason=external)」旁路, 而是走统一收尾 ——
+        # 核验通过 + 删链门依赖清零(全员 save_path==dst)后在线删别名, done(reason=finalized)
+        # (relocate_units REASON_* 注册表现值: external 码已退役, 0756 切片族A 复跑首次真行使)。
+        job = wait_job_phase(case, job_id, {"done"}, 90, "job 未推进到 done(reason=finalized 预期)")
+        assert job.get("reason") == "finalized", f"job done 但 reason={job.get('reason')}: {job}"
         jr = journal_of(case, job_id)
         assert jr and jr.get("phase") == "done", f"journal 未落 phase=done: {jr}"
 
@@ -1211,7 +1244,7 @@ def test_rm04_08_save_path_change_regroup():
         # ---- 重归组: 新键建立(路径=moved, 成员不丢), 旧键消失
         def new_group():
             g = group_row(groups_view(web_port), h1)
-            if g and {m["hash"] for m in g["members"]} == {h1, h2} and g["key"] != old_key:
+            if g and set(g["members"]) == {h1, h2} and g["key"] != old_key:
                 return g
             return None
 
@@ -1419,14 +1452,7 @@ def test_rm04_10_qbtemp_narrow_foreign_allowed_own_blocked():
         assert wait_group(web_port, h2, {h2}, 25, "G2 未独立成组")
         assert wait_group(web_port, h3, {h3}, 25, "G3 未独立成组")
         wait_store_progress(web_port, [h1, h3])
-        wait_until(
-            lambda: next(
-                (
-                    m.get("progress") for m in (group_row(groups_view(web_port), h2) or {}).get("members", [])
-                    if m.get("hash") == h2
-                ), None
-            ) == 0, 20, "G2 未以 progress=0 进入产品快照"
-        )
+        wait_until(lambda: (member_detail(web_port, h2) or {}).get("progress") == 0, 20, "G2 未以 progress=0 进入产品快照")
 
         # ---- 负向1: 组内 .!qB(已完成 G3) → qb_temp 硬拦, 零副作用
         before = count_anchor(case, "迁移发起")
@@ -1606,10 +1632,11 @@ def test_rm04_14_webui_confirm_loop_ui():
     """[RM04-14] Web UI 整组迁移 confirm 回路真机化: 浏览器点击 -> 确认框 7 要素 ->
                  带 confirm=true 重发 -> dst 落地 + job/journal done; 取消路径原框带路径重开且零副作用
 
-    前置: relocate.enabled=true + alias_file_threshold: 8(默认); A/B 各 2 枚带数据多文件假种子
-          (9 个子目录文件 = 9MiB, 同文件列表同内容异 piece_len) 落 RAM(R: 缺席退 .work/rm04/ram/);
-          内容根 save_path/<name> 目录专属 ⇒ 多成员 + 文件数 ≥ 阈值 ⇒ FORM_DIR_ALIAS + needs_confirm。
-          dst_a/dst_b 预建且与 src 同卷; 同卷证明解锁同 RM04-05(qB 副实例 save_path 临时改指 C: 现存目录)。
+          前置: relocate.enabled=true + alias_file_threshold: 8(默认); A/B 各 2 枚带数据多文件假种子
+                (9 个子目录文件 = 9MiB, 同文件列表同内容异 piece_len) 落 RAM(R: 缺席退 .work/rm04/ram/);
+                内容根 save_path/<name> 目录专属 ⇒ 多成员 + 文件数 ≥ 阈值 ⇒ FORM_DIR_ALIAS + needs_confirm。
+                dst_a/dst_b 预建; 同卷断言按环境拓扑自适应(环境1 src=R: dst=D: 跨卷, 环境2 同卷),
+                同卷证明解锁同 RM04-05(qB 副实例 save_path 临时改指现存目录, 测毕还原)。
     动作: tests-real/lib/relocate_confirm_ui.mjs(Node + playwright) 真点 Web UI:
           B 组「右键组行 -> 设定位置 -> 填 dst -> 设定位置」走取消; A 组同手势走确认。
     副作用: A 组真实搬迁(qB 真移 9MiB; src 内容根成 junction); B 组零副作用(仅一次被拦截的首投)。
@@ -1723,9 +1750,17 @@ def test_rm04_14_webui_confirm_loop_ui():
         job_id = item.get("job_id")
         assert job_id, f"started 项缺 job_id: {json.dumps(item, ensure_ascii=False)[:500]}"
         assert item.get("form") == "dir_alias", f"实际形态不是目录别名: {item.get('form')}"
-        assert item.get("same_volume") is True, f"同卷证明未通过: {item.get('same_volume')}"
-        assert "源与目标同卷" in " | ".join(item.get("notes") or []), \
-            f"同卷 note 缺失: {item.get('notes')}"
+        # 同卷断言按环境拓扑自适应(0756 切片族A 复跑新触面): src 落点随 RAM 探测(环境1 =
+        # R: 内存盘, 环境2 退 .work 真写盘), dst 在 case 目录 —— 两环境是否同卷不同, 断言钉
+        # 「回执 same_volume 与真实拓扑一致 + 对应 note 在场」, 不钉具体值(环境2 时代钉 True
+        # 的写法在环境1 跨卷拓扑下恒假; 产品对跨卷报 False 是 P3 判据的正确输出)。
+        expect_same_volume = bool(RAM.anchor) and RAM.anchor == case.anchor
+        assert item.get("same_volume") is expect_same_volume, \
+            (f"同卷证明与真实拓扑不符: same_volume={item.get('same_volume')} 期望 "
+             f"{expect_same_volume}(src 卷={RAM.anchor or '相对'} dst 卷={case.anchor})")
+        note_hit = "源与目标同卷" if expect_same_volume else "源与目标跨卷"
+        assert note_hit in " | ".join(item.get("notes") or []), \
+            f"同卷/跨卷 note 缺失(期望 {note_hit}): {item.get('notes')}"
         assert "已执行" in "".join(conf.get("toasts") or []), "确认后未出现「已执行」成功提示"
         ev.update({"job_id": job_id, "started_item": item})
 
@@ -1767,13 +1802,15 @@ def test_rm04_14_webui_confirm_loop_ui():
         ev["log_anchors"] = {"迁移发起": count_anchor(case, "迁移发起"), "已武装收尾": count_anchor(case, "已武装收尾")}
 
         # ---- 收口: 未移动成员经 qB 原生 setLocation 跟进 -> job/journal phase=done
+        #      (终态 reason 判据变同 RM04-05: S1a/S3 统一收尾后 done(reason=finalized),
+        #       external 码退役 —— qB 原生跟进的成员由收尾链核验后在线删别名)
         qb.set_location(other, str(dst_a))
         wait_until(
             lambda: all(norm((qb.torrent(h) or {}).get("save_path")) == norm(dst_a) for h in (h1a, h2a)), 60,
             "成员 save_path 未全部变 dst"
         )
-        job = wait_job_phase(case, job_id, {"done"}, 120, "job 未推进到 done(reason=external 预期)")
-        assert job.get("reason") == "external", f"job done 但 reason={job.get('reason')}: {job}"
+        job = wait_job_phase(case, job_id, {"done"}, 120, "job 未推进到 done(reason=finalized 预期)")
+        assert job.get("reason") == "finalized", f"job done 但 reason={job.get('reason')}: {job}"
         jr = journal_of(case, job_id)
         assert jr and jr.get("phase") == "done", f"journal 未落 phase=done: {jr}"
         ev.update({"job": job, "journal_phase": jr.get("phase"), "result": "PASS"})
