@@ -112,7 +112,17 @@
 #                       # 挂载点存在性/可写探测, 同步, 关键路径(其后才是 full_round:970 与 added 管线)
 # qbmanager.py:851  on_sync_line -> flush_views          # 主循环 flush 的含数据代在 _refresh_torrents 返回之后
 #                                                     # (首个请求若晚于 apply_sync 可在管线中段拿到数据, 机制见 plan 26-11-18-0259 §02.2)
-# 注: 探测内部超时常量未逐一定位(file_access 模块); 真机慢样本待 S0 取证回填。</code></pre>
+# 注: 探测内部超时常量未逐一定位(file_access 模块); 真机慢样本待 S0 取证回填。
+#
+# ---- S0 真机取证回填(2026-11-18 04:45, 计划 26-11-18-0259 S0, 修复前基线 011e1aeb, 环境2 副实例 56590) ----
+# 自检段耗时基线: 真机轨 Windows 宿主直跑形态 fs.path_map 空(校验要求 to 为 / 开头容器挂载点,
+#   本地恒等映射不合法) ⇒ MappedFileAccess._table 空, file_access.py:380 短路 return ⇒
+#   path_map_selfcheck 整段 no-op ≈ 0ms(首轮 [WEB up → 检测到新增种子 210 个] 窗 0.489s 内
+#   apply_sync + full_round 210 次 tracker 单发占主体, 自检无可测残差)。
+# 基线口径 = 本地板 + 空映射 = 0; 探测段(挂载点 isdir + mkdir/rmdir 可写探测)只在使用
+#   fs.path_map 的容器形态存在; 网络挂载(NAS/SMB)秒级超时放大面真机轨(本地盘)不可复现 ——
+#   仍按本件 §03 影响面口径: 异常态放大器, 挂载异常时才显形。
+# 证据单点: memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md §04</code></pre>
 </section>
 
 <section id="s3">
@@ -156,6 +166,7 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 02:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-18 04:57 — S0 真机取证回填基线数字（计划 26-11-18-0259 S0，修复前基线 011e1aeb）：自检段 <strong>no-op ≈ 0ms</strong>（真机轨 Windows 宿主形态 fs.path_map 空 ⇒ file_access.py:380 短路；首轮 [WEB up → 检测到新增种子] 窗 0.489s 内自检无可测残差）；网络挂载放大面真机轨不可复现，维持 §03「异常态放大器」口径。状态维持 <strong>Open</strong>。证据：testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>

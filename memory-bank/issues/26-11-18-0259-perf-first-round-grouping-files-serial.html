@@ -114,7 +114,21 @@
 #    源码 data = {"hash": torrent_hash}, 实测 inspect 取证 2026-11-18) —— 210 种子 = 210 次 HTTP 往返
 # 4. 均在主循环线程 _refresh_torrents(qbmanager.py:939)内串行, 主循环 flush 的含数据代被挡在整条管线之后
 #    (qbmanager.py:851→:853; 请求线程触发的提前发布只能拿到落库前的空代, 机制见 plan 26-11-18-0259 §02.2)
-# 5. 单次往返估 10-30ms(本机 qB) → 210 次 ≈ 2-6s; 真机数字待 S0 取证回填</code></pre>
+# 5. 单次往返估 10-30ms(本机 qB) → 210 次 ≈ 2-6s; 真机数字待 S0 取证回填
+#
+# ---- S0 真机取证回填(2026-11-18 04:45, 计划 26-11-18-0259 S0, 修复前基线 011e1aeb, 环境2 副实例 56590) ----
+# 库形态: 210 枚 real-fake 假种子(256K, 独立目录, 死端口 announce 命中 trackers 段 —— 否则 added
+#   种子匹配不到 tracker conf 会被 qbmanager added 循环跳过, 归组相位整段不跑); 全部 stalledUP。
+# files 单发次数: 210 次(与种子数相等, 全部在主循环线程首轮管线内串行) —— 与本件机制断言一致。
+# 管线内段总耗时(起点 = 产品日志锚点「检测到新增种子 210 个」, 终点 = HTTP 观测的 gen2 发布,
+#   轮询粒度 ±interval): 0.596s(run1) / 0.506s(run2) / 0.734s(竞态探测轮, 30ms 高频轮询负载)
+#   —— 该窗含 files 单发 210 次 + post 冲突检查 + flush 发布, files 段占主体。
+# 微基准(已落盘 .work/s0boot/microbench-*.log; 产品同款 qbittorrentapi 客户端 keep-alive,
+#   对同一实例串行): files × 210 = 0.445s(2.12ms/次) —— 与日志窗吻合(0.45s + post/flush ≈
+#   0.5-0.7s); 对照: tests-real/lib/qb._call 无连接复用口径 × 210 = 3.660s(17.43ms/次) ——
+#   每次新建 TCP 是连接开销上限, 与本件「单次 10-30ms」估值同口径; 产品 requests 客户端
+#   连接复用后单次 ~2.1ms。
+# 证据单点: memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md §04</code></pre>
 </section>
 
 <section id="s3">
@@ -159,6 +173,7 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 02:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-18 04:57 — S0 真机取证回填基线数字（计划 26-11-18-0259 S0，修复前基线 011e1aeb）：files 单发 <strong>210 次</strong>；管线内段总耗时（起点日志锚点，终点 HTTP 观测 ±轮询粒度）= <strong>0.596s / 0.506s / 0.734s</strong>（两轮重启 + 竞态探测轮）；产品同款客户端微基准 files×210 = <strong>0.445s（2.12ms/次）</strong>，无连接复用口径 ×210 = 3.660s（17.43ms/次，连接开销上限）。状态维持 <strong>Open</strong>。证据：testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
