@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-11-17
-**Updated:** 2026-11-17
+**Updated:** 2026-11-18
 **Summary:** 自制 skill 轨道可移植性改造
 **Topics:** memory-bank-skill-portability
-**Refs:** memory-bank/plans/26-11-17-0010-plan-skill-portability.html, memory-bank/reports/26-11-17-0010-report-skill-portability.html
+**Refs:** memory-bank/plans/26-11-17-0010-plan-skill-portability.html, memory-bank/reports/26-11-17-0010-report-skill-portability.html, memory-bank/testing/baselines/26-11-18-0041-memory-bank-skill-portability.md
 
 ## 本篇只回答
 
@@ -130,3 +130,5 @@
 - **grep 复验(操作性代码零命中达成)**: 分词 grep(-i, auto-qb/auto_qb/qBittorrent/qbittorrent/gitee)对 .agents/skills + .commands + scripts 全量 695 处逐文件分类: C1 配置/数据面(task id 运行面/项目配置/项目数据件)283, C2 历史文档/PORTING/references 38, C3 provenance 注释/docstring 21, C4 守阵合成夹具/钉值 105, C5 项目专属不移植件/平台 API 词汇(PORTING/双场景指导明示声明同源)76, C6 根 scripts/ 项目运行时(非移植单位)172 —— **操作性代码命中 0**(批9b 前 4 处: nav×2/tag_release/check_updates 全部外置归零; 四个文件的余量命中均为注释/docstring, 计划字面词形大小写敏感下 nav_server 的 Gitee 注释等不构成「qBittorrent」形态命中)。**边界留痕**: `check_updates.py:365` 联合分析输出文案含小写 `qbittorrent` 三依赖名 —— 按计划 S11 字面词形(大小写敏感)不命中; -i 口径下归类「依赖面声明/特性词汇」白名单(与 SKILL.md「三特殊依赖联合分析」特性描述同源, 权威数据在 project/deps.toml 数据件), 外置需改输出装配逻辑(超出批9b 四处范围), 留痕供复核。
 - **S11 终态**: 验收五条(报告 §5)全过 —— ①拷目录+填配置+0 行代码 diff 过; ②grep 白名单审计操作性代码零命中过(批9b 后); ③kb.check 空库首跑绿+删配置态宽容回落过; ④runbook 照做可复现过(①联验); ⑤my-commit-flow 自带测试 Linux 绿过(Windows 半条场地声明留痕, 见上轮)。S11 翻 **Done**。
 - **批9b 评审修正(1 major 必修, 收集面分层)**: 基线切片首版(0653)的增量分解有误 —— 把 release 包 TagMessageTest 3 例计入了 test.full 增量, 静态按用例函数推 +17 与 test.full 实测增量 +14 矛盾。根因 = **收集面分层**: tests/ 收集面(test.full 消费)与 .commands 包收集面(test.pkg 消费)各自独立计数, test_release_pkg 在 test.full 收集面恒为 0 项。实证: 节点级收集清单 diff(stash 态 HEAD 6291 项 → 当前 6305 项, 净 +14, 零删除项; TagMessageTest 不在 test.full 清单)+ 逐文件收集计数(13/24/35/4/13)。处置: ①test.full 与 test.pkg 双面重跑实测(test.full 数字与上轮一致; test.pkg 较收口轮 +3 = TagMessageTest 3 例在其收集面在场); ②0653 切片未提交即废, 按「写完不改」口径删除重切为 26-11-17-0719(增量分解按面分摊 tests/ 面 14 + 包面 3, 与两轮实测严格对账; test_memory_bank_cli 净 +1 —— 既有「本仓 project.toml 成态」用例系加断言改造不计增量, 修正评审「净 +1」判定与首版「+2」的双重偏差); ③全部新守阵收集面自检通过: 14 项在 tests/ 面 node diff 逐条在列, TagMessageTest 3 例经 test.pkg 实测在场 —— 无「测量后扩写」(deps 4 例首版测量前已写, 评审的疑似不成立)。数字与分解单点 = 基线切片 26-11-17-0719。
+
+- 2026-11-18 00:39 S1-S11 全波次实施+分批评审闭环入库: 配置化/摘链恒绿/glob 化/轨道 runbook/lane 外置/PORTING 全配/sync 配置化/收口五条验收; 合流适配修绿上游 Windows 盲区 3 红; 收尾观察 5 件建档; 全链线性推送 Gitee
