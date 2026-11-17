@@ -1742,9 +1742,11 @@ def test_frontend_qb_beat_kernel_battery():
         and "a.dxMin0 != null ? a.dxMin0 : a.dx0" in frame_blk.group(1), \
         "L0 每帧按真实毫秒推进: dx = (1 - easeOut(clock/shiftMs)) * dx0 归零式(F5: min 锚按 dxMin0" \
         " 计 padPrev 偏移/max 锚按 dxMax/提交守卫双侧 —— 评审轮1 finding1/2)"
-    # issue 26-11-17-0936 12:35 根因纠正: 末帧 rem 极小令 x.min 落在刻度整数边界前一丁点,
-    # uPlot splits 首刻位低一格单帧回跳。帧循环必须把 rem 低于阈值的残差精确钳零, 且 dx/min/max
-    # 三个方向都用钳零后的 r 派生(只钳 dx 会让 min/max 仍带残差 = 回跳源没根除)。
+    # issue 26-11-17-0936 12:35 根因纠正 + 第五次取证上调阈值: 末帧 rem 极小令 x.min 落在
+    # 刻度整数边界前一丁点, uPlot splits 首刻位低一格单帧回跳。帧循环必须把 rem 低于阈值的
+    # 残差精确钳零, 且 dx/min/max 三个方向都用钳零后的 r 派生(只钳 dx 会让 min/max 仍带残差)。
+    # 真机捕获 clock=425 rem=1.71e-4 越过旧阈值 1e-4 未钳零, 残差 0.011px 却令整条网格线跳
+    # 一格 —— 阈值上调 1e-3 覆盖末段两帧(4.05e-4/1.71e-4)提前钳零, 几何偏差 <0.01px。
     fb2 = frame_blk.group(1)
     assert "const r = rem < _QB_FX_L0_SNAP_REM ? 0 : rem;" in fb2 \
         and "const dx = r * a.dx0;" in fb2 \
@@ -1752,8 +1754,9 @@ def test_frontend_qb_beat_kernel_battery():
         and "const dxMax = r * (a.dxN != null ? a.dxN : a.dx0);" in fb2, \
         "L0 末帧 ulp 吸附: rem < _QB_FX_L0_SNAP_REM 须精确钳零, 且 dx/dxMin/dxMax 三个方向" \
         " 全部用钳零后的 r 派生(issue 26-11-17-0936; 否则残差视口令 splits 首刻位单帧回跳)"
-    assert "const _QB_FX_L0_SNAP_REM = 1e-4;" in js, \
-        "L0 末帧 ulp 吸附阈值常量 _QB_FX_L0_SNAP_REM 缺位(须为模块级单点)"
+    assert "const _QB_FX_L0_SNAP_REM = 1e-3;" in js, \
+        "L0 末帧 ulp 吸附阈值常量 _QB_FX_L0_SNAP_REM 缺位或未按第五次取证上调到 1e-3" \
+        "(1e-4 不足: 真机 rem=1.71e-4 帧未钳零令 splits 首刻位单帧换格)"
     for name, blk in (("_qbBeatStart", start_blk.group(1)), ("_qbBeatFrame", frame_blk.group(1))):
         assert 'u.setScale("y", { min: 0, max: yMax });' in blk or 'u.setScale("y", { min: 0, max: a.yMax });' in blk, \
             f"{name} 缺 y 钉成对(x 提交不配 y 钉 = 动画期纵轴按偏置可视窗重推, I4 纵轴瞬时定档被破)"
