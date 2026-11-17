@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 链浮窗: 无 job hash 时 /api/relocate/chain 缺 finalize 段 + popovers 无守卫直读致渲染 TypeError · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-chain-finalize-popovers">
+<meta name="issue-stamp" content="26-11-18-0315">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-chain-finalize-popovers">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate 链浮窗: 无 job hash 时 /api/relocate/chain 缺 finalize 段 + popovers 无守卫直读致渲染 TypeError">
+<meta name="issue-summary" content="对无迁移 job 的 hash, /api/relocate/chain 不回 finalize 段, popovers.html 无守卫直读 relChain.data.finalize.verify_failed 抛 TypeError 传染整页渲染; 真实 UI 不可达(入口只在抽屉迁移段), 测试 vm 级诊断开窗触发">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>relocate 链浮窗: 无 job hash 时 /api/relocate/chain 缺 finalize 段 + popovers 无守卫直读致渲染 TypeError</h1>
+<p class="lede">对无迁移 job 的 hash, /api/relocate/chain 不回 finalize 段, popovers.html 无守卫直读 relChain.data.finalize.verify_failed 抛 TypeError 传染整页渲染; 真实 UI 不可达(入口只在抽屉迁移段), 测试 vm 级诊断开窗触发</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-18-0315-bug-relocate-chain-finalize-popovers</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:15</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>RM04-15 2d 长链腿真机用例的 vm 级诊断性开窗触发(片A-fix 轮, 2026-11-17~18; 切片 §3.3 留证):
+  测试脚本对无迁移 job 的 hash 调 <code>vm.relChainOpen(...)</code> 诊断开窗 → 链浮窗渲染即抛
+  TypeError 且传染后续整页渲染。真实 UI 不可达: 路径链按钮只在抽屉迁移段渲染, 生产用户碰不到 ——
+  纯健壮性缺陷(数据形状假设未守卫), 与平台/配置无关。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 证据 1: 后端只在 pick_job_for 命中时挂 finalize 段(relocate_chain.py, 取证 2026-11-18 03:15)
+result["finalize"] = relocate_chain.finalize_face(job, data_dir, host, port)
+
+# 证据 2: 前端无守卫直读(shared/tpl/popovers.html:310, 取证 2026-11-18 03:15)
+&lt;div v-if="relChain.data.finalize.verify_failed" class="relc-note"&gt;
+
+# 证据 3: 真机留证(片A-fix 切片 26-11-18-0240 §3.3; rm04_15 evidence longChainSkipped)
+脚本前提闸探测 finalize 缺席 → 显式记账跳过长链腿(longChainSkipped), 不伪装 PASS
+证据文件: tests-real/.work/rm04-sliceA-fix/ (rm04_15 evidence json)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>对<b>无迁移 job</b> 的 hash 打开链浮窗(后端不挂 finalize 段)即必现; 有 job 时正常</td></tr>
+    <tr><td>影响范围</td><td>relocate 链浮窗(relc-pop); TypeError 传染后续整页渲染。真实 UI 入口只在抽屉迁移段(此时必有 job), 生产用户不可达; 测试 vm 级诊断开窗可达</td></tr>
+    <tr><td>严重度</td><td>低(真实 UI 不可达; 属数据形状假设未守卫的健壮性缺陷)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul class="todo">
+    <li>后端挂载点: <code>src/auto_qb/webui/server/routes/relocate_chain.py:116</code>(取证 2026-11-18 03:15)· <code>result["finalize"] = relocate_chain.finalize_face(...)</code> · grep <code>finalize_face</code> —— 仅 pick_job_for 命中分支挂载</li>
+    <li>前端直读点: <code>src/auto_qb/webui/static/shared/tpl/popovers.html:310/:313/:319</code>(取证 2026-11-18 03:15)· <code>relChain.data.finalize.verify_failed / chain_deps / members_gone</code> 三处同款 v-if 直读(tests/test_webui_relocate_chain.py:770-772 亦枚举三处) · grep <code>relChain.data.finalize</code></li>
+    <li>真机留证: <code>tests-real/rm04_relocate/test_rm04_relocate_visibility.py</code> RM04-15 长链腿前提闸 · grep <code>longChainSkipped</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查(已排除: 用户误操作路径 —— 真实 UI 入口只在抽屉迁移段渲染, 此时 pick_job_for 必命中; 缺陷面仅数据形状假设未守卫, 与探测/迁移状态机无关)</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>两个方向(二选一或双做): ①前端守卫 —— popovers.html <b>三处</b> <code>v-if</code>(:310
+  verify_failed / :313 chain_deps / :319 members_gone, 评审 R13 实证)加 finalize 存在性守卫
+  <code>relChain.data.finalize &amp;&amp; ...</code>(或后端对无 job
+  hash 回空 finalize 对象, 契约显式化); ②后端契约 —— 无 job 时也回 <code>finalize</code> 段
+  (空 face), 让「段缺 = 无 job」不再是隐式语义。代价都小; 修后 RM04-15 长链腿前提闸自动恢复实跑
+  (切片 §3.3 承诺的恢复路径)。方向裁决留认领时定。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-18 03:15 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-18-0315-bug-relocate-chain-finalize-popovers.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
