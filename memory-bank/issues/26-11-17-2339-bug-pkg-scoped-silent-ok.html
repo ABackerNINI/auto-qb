@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>test.pkg.scoped 零包时静默报 ok 不实跑 · bug · 计划外问题</title>
+<meta name="issue-slug" content="pkg-scoped-silent-ok">
+<meta name="issue-stamp" content="26-11-17-2339">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="pkg-scoped-silent-ok">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="test.pkg.scoped 零包时静默报 ok 不实跑">
+<meta name="issue-summary" content="零包路径静默 rc 0,引擎报 [ok] (0.0s),与实跑成功不可区分,反馈语义误导(批6 脏树场景实测)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>test.pkg.scoped 零包时静默报 ok 不实跑</h1>
+<p class="lede">零包路径静默 rc 0,引擎报 [ok] (0.0s),与实跑成功不可区分,反馈语义误导(批6 脏树场景实测)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-2339-bug-pkg-scoped-silent-ok</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 23:39</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>skill 可移植性改造批6 收尾时发现：<code>test.pkg.scoped</code> wrapper 在受影响包集合为空时不跑 pytest, 直接返回 rc 0, commands 引擎输出 <code>[ok] (0.0s)</code> —— 与「实跑并通过」在输出上不可区分, 反馈语义误导。批6 场景里工作树有未提交改动时也出现过跳过实跑但报 ok, 当时疑似「按已提交 diff 判定受影响包」（根因未查实, 见 §05）。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>取证 2026-11-17 23:39, HEAD <code>eff52f0a</code>：</p>
+<pre><code>$ commands run test.pkg.scoped        # 裸调(零包), 实测:
+[ok] test.pkg.scoped (0.0s)           # 未跑 pytest, rc=0
+
+$ grep -n "if not pkgs" .commands/test/scripts/pkg_scoped.py
+48:    if not pkgs:
+49:        return 0</code></pre>
+  <p>注（入池者注, 非工具输出）: 49 行裸 <code>return 0</code> —— 零包静默 rc 0, 无提示行。</p>
+  <p>机制面事实: wrapper 本身无任何 git 调用, 只消费 argv（闸门经 <code>&lt;changed:...&gt;</code> 喂参）; 闸门侧 changed 清单来自 <code>git status --porcelain -uall</code>（staged+unstaged, <code>gate.py:61-62</code>）—— 该口径包含工作树未提交改动。批6 观察到的「脏树仍跳过」具体走的是哪条路径未查实。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>wrapper 收到零包 argv（裸调, 或闸门 <code>&lt;changed:...&gt;</code> 展开无匹配时）</td></tr>
+    <tr><td>影响范围</td><td>提交闸门的测试收窄反馈: 「跳过」与「实跑通过」输出相同, 人读反馈失真</td></tr>
+    <tr><td>严重度</td><td>低-中（不漏真实闸门 —— 闸门无匹配本应整条跳过; 害处是反馈语义误导）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>.commands/test/scripts/pkg_scoped.py:48-49</code>（取证 2026-11-17 23:39, HEAD eff52f0a）· 符号 <code>main</code> · grep <code>if not pkgs</code></li>
+    <li><code>.commands/my-commit-flow/scripts/gate.py:61-62</code> · 符号 <code>changed_files</code> 调用处 · grep <code>staged + unstaged</code></li>
+    <li>task 定义: <code>.commands/test/config.toml</code> <code>[tasks."test.pkg.scoped"]</code>（note 明言「0 包 → 静默 rc 0(闸门展开本应跳过, 兜底)」—— 设计如此, 但反馈面失真）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查（已排除: wrapper 自身按已提交 diff 判定 —— pkg_scoped.py 无 git 调用, 只消费闸门喂参; 闸门 changed 口径含未提交改动）。批6 实际触发路径待查。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向: 零包路径至少打一行「0 包, 跳过实跑」类提示, 与实跑通过在输出上可区分; 是否收紧触发条件待查后定。待定。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>2026-11-17 23:39（入池前, HEAD <code>eff52f0a</code>）: 仍复现 —— 裸调实测 <code>[ok] test.pkg.scoped (0.0s)</code> rc 0 未跑 pytest, 见 §02。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-17-2339-bug-pkg-scoped-silent-ok.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
