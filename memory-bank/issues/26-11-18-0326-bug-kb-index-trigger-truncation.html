@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>pitfalls 索引生成行触发列截断, 触发行尾部关键词系统性不可达 · bug · 计划外问题</title>
+<meta name="issue-slug" content="kb-index-trigger-truncation">
+<meta name="issue-stamp" content="26-11-18-0326">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="kb-index-trigger-truncation">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="pitfalls 索引生成行触发列截断, 触发行尾部关键词系统性不可达">
+<meta name="issue-summary" content="kb.index 索引生成行整行约 240 字符处截断(触发列止于半词), 触发行过长的文件尾部关键词进不了生成索引(实测连续 4 词全库零命中), 索引路由面静默缩水, 只剩 grep 全文兜底">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>pitfalls 索引生成行触发列截断, 触发行尾部关键词系统性不可达</h1>
+<p class="lede">kb.index 索引生成行整行约 240 字符处截断(触发列止于半词), 触发行过长的文件尾部关键词进不了生成索引(实测连续 4 词全库零命中), 索引路由面静默缩水, 只剩 grep 全文兜底</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-18-0326-bug-kb-index-trigger-truncation</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:26</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-18 认领修复 issue 26-11-18-0210(sync_agent_skills 路径断言 Windows 盲区)的收尾评审中, 给 <code>memory-bank/pitfalls/backend/platform-fs.md</code> 新增坑档条目时按惯例把新节关键词追加进该文件三行头的「触发」行, 重跑 <code>commands run kb.index</code> 后发现: 追加的关键词在全部生成索引 <code>_index*.md</code> 里零命中 —— 触发行过长的文件, 其尾部关键词进不了生成索引。纯机械追加/前置两种写法各实测一轮, 均由只读评审子代理抓出(追加→零命中; 前置→挤出既有尾部词的零和回退), 属索引生成器层面的机制缺口, 与单条坑档的写法无关。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>取证 2026-11-18 03:26, <code>memory-bank/pitfalls/backend/_index-1.md:38</code> 的 platform-fs 生成行, 下为<strong>入池前 HEAD 形态</strong>(追加/前置实验的对照基线; 止点「行尾, C…」对现库已漂移, 现行形态见 §04 锚点):</p>
+<pre><code>| [platform-fs.md](platform-fs.md) | Windows / Linux 差异、长路径、… | 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, C… |</code></pre>
+  <p>两条实测(2026-11-18, 只读评审子代理逐词核对全库 <code>_index*.md</code>): ① 源文件触发行尾部追加 <code>isabs, os.path.isabs, ntpath.isabs, 绝对路径, 根锚定, 盘符补全, pathlib, is_absolute</code> 并重跑 kb.index → 生成索引与改动前逐字节相同, <code>grep -rn isabs memory-bank/pitfalls/*/</code> 仅命中源文件本体, 连本批之前就存在的尾部词(如「异常类型分流」)也从未进过生成行; ② 把新词前置到行首(纯追加不删旧词)重跑 → <code>盘满 / WinError 10054 / proactor / asyncio</code> 四个既有词在全库 <code>_index*.md</code> 零命中(HEAD 时它们经该行可达) —— 截断预算零和, 前挤必后掉。等位调整(剔除有替代路由面的低区分度词)后 5 个新词 + 4 个回退词全部回到生成行内。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>任一坑档文件生成行整行长度超过生成器截断预算(实测约 240 字符处截断, 触发列止于半词)即触发, 与内容无关; 长触发行文件(platform-fs 等平台类)首当其冲</td></tr>
+    <tr><td>影响范围</td><td>仅索引路由面: 超预算的尾部关键词按「先读索引定位」纪律路由不到, 只剩 <code>grep -rn</code> 全文兜底(检索纪律的第三层); 不损坑档正文与数据; 被截断发生在生成器, 手改 _index 无效(kb.index 会重生成)</td></tr>
+    <tr><td>严重度</td><td>中(路由静默缩水不报错, 违反「禁静默降级」同族的可见性预期; 但 grep 兜底可用, 不损事实源)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>memory-bank/pitfalls/backend/_index-1.md:38</code>(取证 2026-11-18 03:26)· <strong>等位调整后现状</strong>(轮 6 形态): 生成行 platform-fs 触发列止于「批处理, .…」· grep 关键词 <code>platform-fs</code></li>
+    <li>生成器: memory-bank skill 的 <code>kb.index</code> task(scripts 在 <code>.agents/skills/memory-bank/scripts/</code>, skill 代码禁读 —— 认领后须用户授权或由用户自行排障)· grep 关键词 <code>触发列截断</code> / <code>_index</code> 分卷</li>
+    <li>实证坑档: <code>memory-bank/pitfalls/backend/platform-fs.md</code> 三行头「触发」行</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查 —— 生成行触发列存在固定截断预算(实测整行约 239 字符处截断, 截断点含半词)。预算值/截断策略写在哪一版生成器逻辑里未查(skill 代码禁读, 未经授权未读); 已排除: 源文件三行头写法问题(两种追加/前置写法均复现, 与写法无关)、kb.index 未重跑(重跑后生成物与 HEAD 逐字节相同, 是确定性截断不是缓存)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>两条候选方向（未实施）：① 生成器侧 —— 触发列超预算时不静默半词截断: 要么全量保留(与 8000 字符卷 cap 的判定联动, 超长行单独处理), 要么截断时打可见警告行提示「尾部词不可达, 请精简触发行」; ② 约定侧 —— 在 doc-forms/kb-structure 约定里明示「触发行前 ~240 字符才进索引」, 并给 <code>kb.new pitfall</code>/收尾 DoD 加超长提示。①治本②治标, 可并行; 取向取决于生成器截断是有意设计(压卷 cap)还是无预算意识的副作用, 认领时先读生成器定夺。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-18 03:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-18-0326-bug-kb-index-trigger-truncation.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

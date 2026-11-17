@@ -38,6 +38,7 @@ S9, 点前缀目录 `.config/` 防被 skill 遍历/链接当成 skill): 配置�
 from __future__ import annotations
 
 import argparse
+import ntpath
 import os
 import stat
 import subprocess
@@ -120,7 +121,12 @@ def resolve_sync_config() -> tuple[set[str], list[Path], list[str]]:
         hints.append("提示: [link_targets] paths 缺失/形态不对, 回落内置默认挂载目标")
         targets = _default_targets()
     else:
-        targets = [Path(p) if os.path.isabs(p) else REPO_ROOT / p for p in paths]
+        # 绝对路径原样采用, 判定必须平台/版本稳定: os.path.isabs 在 Windows 3.13 起
+        # 不再把根锚定的 '/x' 视为绝对 (历史语义 True), 会走 REPO_ROOT / p 分支且 pathlib
+        # 保留左操作数盘符 (-> C:/x) 静默改写配置意图。盘符/UNC 交 ntpath.isabs (语义
+        # 稳定), 根锚定 '/x' 与 '\x' 交纯字符串判定 p[:1] (3.13+ ntpath 对反斜杠根锚定
+        # 同样 False) —— Linux 与 Windows 行为一致。
+        targets = [Path(p) if ntpath.isabs(p) or p[:1] in ("/", "\\") else REPO_ROOT / p for p in paths]
     return excluded, targets, hints
 
 

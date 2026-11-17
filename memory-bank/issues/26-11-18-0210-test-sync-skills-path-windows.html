@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="sync-skills-path-windows">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_sync_agent_skills_config 路径断言 Windows 盘符补全盲区">
 <meta name="issue-summary" content="test_config_can_add_and_remove_entries 断言绝对 POSIX 路径 Path 保持 /abs/... 形态, Windows 上 Path 解析补全盘符 C:/abs/... 恒红">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0210-test-sync-skills-path-windows</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 02:10</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -144,11 +144,13 @@ E         At index 1 diff: WindowsPath('C:/abs/nowhere/skills') != WindowsPath('
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 02:10 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-18（Windows 10.0.26300, Python 3.13.15）仍复现 —— <code>tests/test_sync_agent_skills_config.py::test_config_can_add_and_remove_entries</code> 单跑 1 failed；解释器实测 <code>ntpath.isabs('/abs/nowhere/skills') == False</code>（3.13 语义变更坐实, 原 §03「3.12 未实测」的悬置已由修法绕开: 判定不再依赖 <code>os.path.isabs</code> 任何版本的语义）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法: 取 §06 方向②生产侧钉语义 —— <code>scripts/sync_agent_skills.py</code> <code>resolve_sync_config</code> 的绝对判定改为 <code>ntpath.isabs(p) or p[:1] in ("/", "\\")</code>: 盘符/UNC 交 <code>ntpath.isabs</code>（3.13 变更未波及）, 正/反斜杠根锚定交纯字符串判定 <code>p[:1]</code>（与解释器版本无关）—— 修复不依赖 3.13 前/后的 isabs 任何历史语义, Linux 与 Windows 行为一致, 相对路径分支零行为变化。与建议修法②的偏差: 机制用 <code>ntpath.isabs + p[:1]</code> 而非「POSIX/Windows 双 path 模块」组合 —— 首版 <code>posixpath.isabs or ntpath.isabs</code> 经评审轮 1 指出反斜杠根锚定 <code>\x</code> 形态仍是版本盲区（3.13+ <code>ntpath.isabs('\\x')</code> 亦 False）, 改为纯字符串兜底后四类绝对形态（POSIX 根锚定/盘符/UNC/反斜杠根锚定）全覆盖且版本稳定。</p>
+  <p>验证方式与测试数字（2026-11-18 Windows 实测）: 形态核对脚本 8 类输入（相对/盘符相对/四类绝对）解析结果逐项符合预期（BAD 0）; <code>tests/test_sync_agent_skills_config.py</code> 11 passed; <code>test.quick</code> 6456 passed, 2 skipped（修复前 1 failed, 6455 passed, 2 skipped）。评审: 两轮只读子代理评审, 1 条 minor（反斜杠盲区）当场修, 轮 2 零 actionable。</p>
 </section>
 
 <footer>

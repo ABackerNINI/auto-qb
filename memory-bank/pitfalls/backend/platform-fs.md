@@ -1,7 +1,7 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid, 目录 nlink, st_nlink, 进程表, tasklist, 平台分派, FileNotFoundError, NotADirectoryError, ENOTDIR, 异常类型分流
+> 触发: isabs, ntpath.isabs, 绝对路径, 盘符补全, pathlib, 锁文件, 长路径, 稀疏文件, 删不掉, 磁盘空间, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, .cmd, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid, 目录 nlink, st_nlink, 进程表, tasklist, 平台分派, FileNotFoundError, NotADirectoryError, ENOTDIR, 异常类型分流
 
 ### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
 
@@ -136,5 +136,18 @@ NTFS 稀疏文件条目(只有 `FSCTL_SET_SPARSE` → `SetEndOfFile` 才是稀�
   **同型不可辨**。对照: `os.makedirs` 不吃这套映射, 父路径是文件抛 `FileExistsError`
   (WinError 183), 别拿一个 API 的实测外推另一个。
 - **处置**: 降级语义与可区分形态用例见 [attachments/platform-fs-long-evidence.md](attachments/platform-fs-long-evidence.md)。
+
+### Python 3.13 起 Windows 侧 `os.path.isabs('/x')` 返回 False(根锚定形态不再算绝对)
+
+- **触发**: 用 `os.path.isabs`(Windows 上即 `ntpath.isabs`)判定配置里的路径要不要原样采用还是拼上仓库根
+  (2026-11-18 issue 26-11-18-0210: `scripts/sync_agent_skills.py` 的 link_targets 判定在 Windows 3.13 上把
+  `/abs/nowhere/skills` 走了 `REPO_ROOT / p` 分支, 测试断言「绝对路径原样采用」恒红)。
+- **判别**: Python 3.13 起 `ntpath.isabs('/x')` 由历史语义 True 改为 **False**(根锚定无盘符不再算绝对);
+  3.12 及以前为 True —— 同一份配置跨解释器版本解析结果不同。且走拼接分支时
+  `PureWindowsPath('C:/repo') / '/abs'` 保留左操作数盘符 → `C:/abs`, 静默改写配置意图。
+  `Path('/x').is_absolute()` 在 Windows 3.13+ 同样 False, 不能拿来替代。
+- **处置**: 跨平台钉「绝对形态原样采用」不要依赖 `os.path.isabs` 的平台/版本语义: 盘符/UNC 交
+  `ntpath.isabs`(本次变更未波及, 语义稳定), 根锚定 `/x`、`\x` 交纯字符串判定 `p[:1] in ("/", "\\")`
+  (与解释器版本无关); 实测核对面: 8 类形态(相对/盘符相对/POSIX 根锚定/反斜杠根锚定/盘符正反斜杠/UNC 两种写法)。
 
 **Refs:** memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md
