@@ -629,6 +629,13 @@ function _qbFxCurve(ease) {
  * 省掉每帧全量路径重建的帧成本, 见 §09「逐帧性能」与 I9 R8 复核)。量不到绘图宽(首绘前)按 0
  * 处理 = 瞬时, 宁可不动画不可错动画。 */
 const _QB_FX_CELL_MIN_PX = 0.75;
+/* L0 末帧视口吸附阈值(rem 剩余比例): easeOut 三次曲线在 p→1 时 rem=(1-p)^3 缓慢趋零,
+ * 末帧常落在 1e-5 量级 —— dx=rem×dx0 令 x.min=xs[pad]-dx 停在刻度整数边界前一丁点
+ * (如 120.9999788 而非 121.0)。uPlot time splits 按该残差视口取整, 首刻位低一格
+ * (125→124), 下一帧收敛帧精确 121.0 又恢复 —— 单帧刻位/网格线回跳(issue 26-11-17-0936
+ * 12:35 根因纠正)。rem 低于此阈值时 dx 已亚毫秒级(1e-4×dx0 ≤ 4.5e-4s, 视口 <0.01px),
+ * 肉眼与 splits 均不可辨, 直接钳零让视口精确吸附目标锚点。 */
+const _QB_FX_L0_SNAP_REM = 1e-4;
 /* 拍内单帧 dt 上限(ms): 掉帧/长停顿吞进一帧不跳变过半拍(隐藏暂停另有 document.hidden 判定,
  * 时钟在隐藏期根本不累计 —— 见 _qbBeatFrame)。 */
 const _QB_FX_FRAME_MAX_DT_MS = 100;
@@ -2986,14 +2993,17 @@ window.AQB_QB_TRAFFIC = {
       // 偏置, p→1 时 dx→0(数据/锚/tooltip 全程真值, 只动视口 —— I4/I8)
       if (a.needsShift) {
         const rem = 1 - _qbFxEaseOut(a.clock / tl.shiftMs);
-        const dx = rem * a.dx0;
+        // 末帧 ulp 吸附: rem 逼近 0 时把 dx 精确钳零, 让视口精确落回真窗锚点, 避免残差视口
+        // 令 uPlot splits 首刻位低一格的单帧回跳(issue 26-11-17-0936; 阈值见 _QB_FX_L0_SNAP_REM)
+        const r = rem < _QB_FX_L0_SNAP_REM ? 0 : rem;
+        const dx = r * a.dx0;
         // F5: 末端位移 dxN 与首端分离(翻动拍一 dxN=0: max 恒驻真窗末点, 只 min 滑一格;
         // 翻动拍二 dx0=0: min 恒驻真窗起点, 只 max 滑一格); dxMax 缺参回落 dx0(旧 anim 形态/
         // 预览 anim 无 dxN —— 整格滚动两端位移恒相等)。min 侧总位移 dxMin0 = dx0 +
         // padPrev·step(评审轮1 finding2: 非摆回遗留补点随滑动按比例退役, 滑动终点恰落真窗
         // 起点 —— 收敛帧摘补点零跳变)。
-        const dxMin = rem * (a.dxMin0 != null ? a.dxMin0 : a.dx0);
-        const dxMax = rem * (a.dxN != null ? a.dxN : a.dx0);
+        const dxMin = r * (a.dxMin0 != null ? a.dxMin0 : a.dx0);
+        const dxMax = r * (a.dxN != null ? a.dxN : a.dx0);
         if (dx !== a.lastDx || dxMax !== a.lastDxMax) {
           a.lastDx = dx;
           a.lastDxMax = dxMax;

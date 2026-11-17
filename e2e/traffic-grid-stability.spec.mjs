@@ -263,3 +263,79 @@ test.describe('R1 处置 · hour 段窗(3天档)栅格语义: floor+1 形状 + �
     });
   }
 });
+
+/* ============================================================================ */
+/* A4-b(issue 26-11-17-0936 12:35 根因纠正): 每拍 +1 桶真实几何下 x 轴首刻位逐帧单调不减。
+ *
+ * 为什么 A4 本体没抓到: A4 用每拍 +30 桶(整窗)压缩桩, dx0=30 格走 rewin 瞬时落地、根本
+ * 不播 L0, 从不进入末帧 ulp 区。生产每拍 +1 桶(轮询=桶宽=1.5s)播 L0, 末帧 rem=(1-p)^3
+ * 逼近 0 时 x.min 落在刻度整数边界前一丁点(120.9999788 而非 121.0), uPlot time splits
+ * 据该残差把首刻位低一格(125->124), 下一帧收敛帧精确 121.0 又恢复 —— 单帧刻位/网格线
+ * 回跳。本用例用真实每拍 +1 桶几何逐帧采 _splits[0], 钉死单调不减, 堵住 A4 的 L0 盲区。
+ * ============================================================================ */
+test.describe('A4-b 每拍 +1 桶真实几何 · L0 末帧刻位不回跳(issue 26-11-17-0936)', () => {
+  installRuntimeErrorGuard(test);
+
+  const N1 = 41;   // 1m 窗 60/1.5 = 40 整桶 + 1 进行中桶
+  test('[chromium] L0 逐帧 x 首刻位单调不减(末帧 ulp 回跳不回潮) @fast', async ({ page }) => {
+    test.setTimeout(90_000);
+    const b0 = Math.floor(Date.now() / 1000 / 1.5) * 1.5 - (N1 - 1) * 1.5;
+    let calls = 0;
+    await stubFlags(page);
+    await page.route('**/api/traffic/qb/torrent/*', (route) => {
+      const base = b0 + (calls++) * 1.5;   // 每拍 +1 桶(生产真实: 轮询=桶宽=1.5s)
+      const points = new Array(N1).fill(null).map((_, i) => ({ t: base + i * 1.5, dl: 2000, up: 1000 }));
+      return route.fulfill({ json: {
+        points, totals: points.map((p) => ({ ...p })), limits: [],
+        meta: { window: '1m', interval_s: 1.5, sample_interval_s: 1.5, source: 'qb', stale: false,
+          server_started_at: base - 3600 },
+      } });
+    });
+    await openApp(page, SKINS[0]);
+    await page.click('nav.tabs [data-view="torrents"]');
+    await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+    await page.dblclick('.torrent-row >> nth=0', { force: true });
+    const drawer = page.locator('.drawer-dock > .drawer');
+    await expect(drawer).toBeVisible({ timeout: 5_000 });
+    await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
+    await drawer.locator('.hist-summary .qb-tabs button', { hasText: '1分' }).click();
+    await expect.poll(() => readInst(page, 'vm.qbTorrentWindow'), { timeout: 15_000 }).toBe('1m');
+    await drawer.locator('.drawer-tabs button', { hasText: /^常规 / }).click();
+    await drawer.locator('.drawer-tabs button', { hasText: /^流量 / }).click();
+    await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => readInst(page, 'vm._qbPollMs("torrent")'), { timeout: 15_000 }).toBeLessThanOrEqual(2100);
+
+    /* 逐帧采 _splits[0](只读运行态回填值, 见 pitfalls/uplot-axes-splits-generator)。满 8 拍收口。 */
+    await page.evaluate(`(() => {
+      const vm = ${INST};
+      window.__a4b = { frames: [], lastXs0: null, done: false };
+      const tick = () => {
+        const s = window.__a4b;
+        if (s.done) return;
+        const u = vm && vm._qbCharts && vm._qbCharts.torrent;
+        if (u && u.data && u.data.length && u.axes && u.axes[0]) {
+          const st = u._qbBeat;
+          const sp = u.axes[0]._splits;
+          if (sp && sp.length && st && st.xs0 != null) {
+            s.frames.push({ sp0: sp[0], xs0: st.xs0, vMin: u.scales.x.min, vMax: u.scales.x.max });
+            if (s.xs0s === undefined) s.xs0s = new Set();
+            s.xs0s.add(st.xs0);
+            if (s.xs0s.size >= 9) s.done = true;
+          }
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    })()`);
+    await expect.poll(() => readInst(page, 'window.__a4b.done'), { timeout: 45_000 }).toBe(true);
+    const frames = await page.evaluate(() => window.__a4b.frames);
+    expect(frames.length, '采样窗应覆盖多帧(L0 逐帧面非空)').toBeGreaterThan(20);
+
+    /* 本体 1: 首刻位逐帧单调不减 —— 末帧 ulp 残差会让 sp0 低一格后下一帧恢复, 即回潮 */
+    for (let i = 1; i < frames.length; i++) {
+      expect(frames[i].sp0, `第 ${i} 帧首刻位 ${frames[i].sp0} 不得小于前帧 ${frames[i - 1].sp0}`
+        + '(L0 末帧残差令 splits 首刻位回跳 = issue 26-11-17-0936 根因回潮)')
+        .toBeGreaterThanOrEqual(frames[i - 1].sp0);
+    }
+  });
+});
