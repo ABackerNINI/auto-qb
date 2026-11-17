@@ -21,6 +21,8 @@
 - test_w6_apply_new_config_restart_gate: 守阵(W6)——R 级闸返回需重启段且日志保留提示
 - test_w6_apply_new_config_unclaimed_fallback: 守阵(W6)——未认领段兜底: WARNING + rebuild_runtime 相位 + 回执条目契约
 - test_w6_tick_contract: 守阵(W6)——_tick 双线合轮实参契约(sync flush=False / task force 直传)
+- test_w6_reload_precedes_start_all_wiring: 守阵(issue 26-11-17-0214)——state 加载必须挂 start_all 之前 + 物化紧随加载
+- test_w6_startup_state_write_survives_run: 守阵(issue 26-11-17-0214)——start_all 阶段 state 写点活过 run() 启动序列并落盘
 """
 
 import json
@@ -576,3 +578,47 @@ def test_w6_tick_contract():
         mgr._tick(True, force=True)
         assert mgr._sync_line.call_args_list == [mock.call(True, flush=False)], "_tick 合轮必须压 flush(视图只重建一次)"
         assert mgr._task_line.call_args_list == [mock.call(True, force=True)], "_tick 必须把 force 直传任务线"
+
+
+def test_w6_reload_precedes_start_all_wiring():
+    """接线守阵(issue 26-11-17-0214): state 加载必须挂在 start_all 之前, 物化紧随加载
+
+    _reload_state 把 ctx.state.data 整体替换 —— 挪回 start_all 之后(回归摆位)会把模块
+    启动期写点(迁移盖章/对账回写/prune 滚出)静默丢弃, 周期刷盘随后把磁盘旧版写回;
+    物化必须在加载之后(物化在加载后, 持锁判据, 与 test_rule_engine 的接线守阵同锚)。
+    """
+    import inspect
+
+    src = inspect.getsource(QbManager.run)
+    i_reload = src.find("self._reload_state()")
+    i_mat = src.find("materialize_migration")
+    i_start = src.find("self.host.start_all(dry_run)")
+    assert i_reload >= 0 and i_start > i_reload, "state 加载必须在 start_all 之前(启动期写点不被整体替换丢弃)"
+    assert i_mat > i_reload, "物化必须在加载之后(加载才有迁移描述/挂起载荷)"
+
+
+def test_w6_startup_state_write_survives_run():
+    """行为守阵(issue 26-11-17-0214): start_all 阶段的 state 写点必须活过 run() 启动序列
+
+    红验摆位: 桩 start_all 写 ctx.state.data(模拟模块启动期写点), run() 优雅退出落盘后
+    盘面必须带该写点 —— 加载若挂在 start_all 之后, 整体替换把它丢弃, 盘面即回旧版。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        started = []
+
+        def fake_start_all(dry_run):
+            mgr.ctx.state.data["startup_probe"] = "kept"  # 模块启动期写点(迁移盖章/对账/prune 同位)
+            started.append(dry_run)
+
+        mgr.host.start_all = fake_start_all
+        mgr.connect = mock.Mock(return_value=True)
+        stop = threading.Event()
+        stop.set()  # 主循环首轮即停, 只考启动序列
+        mgr.run(dry_run=False, stop_event=stop)
+        assert started == [False], "桩 start_all 必须被 run() 调用且收到 dry_run"
+        with open(state_file, encoding="utf-8") as f:
+            disk = json.load(f)
+        assert disk.get("startup_probe") == "kept", \
+            "启动期 state 写点必须落盘(reload 挪后=写点被整体替换丢弃的回归)"

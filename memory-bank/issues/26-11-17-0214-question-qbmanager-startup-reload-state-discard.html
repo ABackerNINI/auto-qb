@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-17-0214">
 <meta name="issue-type" content="question">
 <meta name="doc-topic" content="relocate-refactor">
-<meta name="doc-refs" content="memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/tasks/26-11-15-backend-relocate-refactor.md">
+<meta name="doc-refs" content="memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/tasks/26-11-15-backend-relocate-refactor.md, memory-bank/tasks/26-11-18-backend-qbmanager-startup-reload-discard.md, memory-bank/pitfalls/backend/startup-state-write-reload-discard.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qbmanager.run() _reload_state 在 start_all 之后整体重读磁盘, 任何模块启动期写 state.data 被静默丢弃">
 <meta name="issue-summary" content="内核启动序列通用隐患: start_all 先跑, _reload_state 随后整体替换 ctx.state.data, 模块启动期写点(迁移盖章/对账回写/prune滚出)全部丢失; relocate 侧 cd786499 已写穿规避, 通用面待裁决(reload 挪前 vs 显式接管协议)+坑档">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-0214-question-qbmanager-startup-reload-state-discard</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 02:14</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -157,11 +157,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 02:14 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-18 仍复现(代码锚点逐一核实) —— <code>qbmanager.py</code> 启动序列 <code>start_all</code> 先跑、<code>_reload_state()</code> 在 connect 循环之后整体替换; 且方向 A 的前置置疑已排除: <code>_reload_state</code> = 磁盘 <code>load()</code> + 两个 bind(绑到构造期已有的 <code>ctx.store</code>), <b>零连接依赖</b>, 「必须在 connect 之后」是历史摆位不是真约束(模块化前的平铺版里加载本就紧贴主循环开跑前, <code>start_all</code> 是后来插到连接之前的)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>(方向 A, 2026-11-18 用户拍板): <code>run()</code> 内 <code>self._reload_state()</code> + <code>ctx.state.materialize_migration(dry_run)</code> + <code>next_flush_at</code> 起点整体挪到 <code>host.start_all(dry_run)</code> 之前(try 内, 物化紧随加载的既有判据不变); <code>start_all</code> 失败路径不回滚物化(迁移/恢复写回幂等, 下次启动重放同链)。连带收益: WebUI 随 start_all 启动, 连接重试窗口内经 WebUI 的 state 写点不再被丢弃。relocate 接管面写穿(relocate_mod.py <code>_load_jobs</code> 尾部 save)按建议修法保留为「接管即持久」语义面(过渡形态, 注释已改口); 坑档 <code>pitfalls/backend/startup-state-write-reload-discard.md</code> 沉淀(含新模块接入动作面)。</p>
+  <p><b>验证方式</b>: 双守阵红绿 —— <code>test_w6_reload_precedes_start_all_wiring</code>(顺序接线) + <code>test_w6_startup_state_write_survives_run</code>(行为: 桩 start_all 写 state, run() 优雅退出后盘面必须带该写点); 红验在回归摆位下两条全红(行为条失败信息精确复刻本 issue 症状: 盘面回旧版)。受影响四面定向回归 104 passed(qbmanager_w6/loop/rule_engine/relocate_migration)。全量数字见 <code>commands run kb.baseline</code> 最新切片。</p>
 </section>
 
 <footer>

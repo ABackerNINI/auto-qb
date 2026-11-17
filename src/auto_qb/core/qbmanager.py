@@ -436,7 +436,8 @@ class QbManager(
         """state 加载 + 字段变化基线挂接(计划 26-09-27-1438) + 过渡态计数挂接(条目4)
 
         __init__ 与 run() 双入口同口径: run() 时再次加载覆盖, 字段变化基线与过渡态计数
-        随整体替换重新挂接。
+        随整体替换重新挂接。run() 内的调用点必须在 start_all 之前(issue 26-11-17-0214):
+        start_all 是模块启动期写 state 的发生地, 调用晚于它 = 写点被这里的整体替换丢弃。
         """
         self.state = self.ctx.state.load()
         self.ctx.state.bind_field_snapshots(self.store)
@@ -521,6 +522,22 @@ class QbManager(
         # 在连接成功后手工调用, 入队时点前移到启动 —— 队列在首个任务线才被 drain, 行为等价)。
         lifecycle_ready = False  # 启动期完成闸: 只有 start_all 正常返回才允许退出落盘
         try:
+            # state 加载 + 挂起写物化必须在 start_all 之前(issue 26-11-17-0214): start_all
+            # 是模块启动期写点(迁移器盖章/启动对账回写/prune 滚出...)的发生地, _reload_state
+            # 把 ctx.state.data 整体替换 —— 写点若发生在它之前会被静默丢弃, 周期刷盘随后把
+            # 磁盘旧版原样写回(真机实证: relocate.model_version 永不落盘)。reload 只依赖
+            # 磁盘与 ctx.store(构造期已有), 与 qB 连接无关 —— 历史上挂在 connect 循环之后
+            # 纯属「主循环开跑前加载」的摆位; 模块化(start_all 插到连接之前)后摆位成了
+            # 丢弃窗口。WebUI 随 start_all 启动: 连接重试窗口内经 WebUI 的 state 写点同受益。
+            self._reload_state()
+            # 启动挂起写物化(计划 26-09-26-0506 / issue 26-11-07-0527): schema 迁移与损坏恢复
+            # 写回都在这里落盘 —— 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据);
+            # __init__ 的早期加载只做内存迁移/挂起恢复写回, 未持锁一律不写盘。
+            # 随 reload 同迁(issue 26-11-17-0214): 物化紧随加载不变; start_all 失败的退出
+            # 路径不回滚物化 —— 迁移/恢复写回幂等(黄金法则 1), 下次启动重放同链。
+            self.ctx.state.materialize_migration(dry_run)
+            # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
+            self.ctx.state.next_flush_at = self._clock.now() + max(self.config.state_save_interval, 0.0)
             self.host.start_all(dry_run)
             lifecycle_ready = True  # 失败启动不落空态 state.json(见 finally 的闸门)
             main_tick = self.config.main_tick
@@ -544,13 +561,8 @@ class QbManager(
                 if not retry_warned:
                     logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
                     retry_warned = True
-            self._reload_state()  # state 被整体替换, 字段变化基线重新挂接
-            # 启动挂起写物化(计划 26-09-26-0506 / issue 26-11-07-0527): schema 迁移与损坏恢复
-            # 写回都在这里落盘 —— 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据);
-            # __init__ 的早期加载只做内存迁移/挂起恢复写回, 未持锁一律不写盘。
-            self.ctx.state.materialize_migration(dry_run)
-            # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
-            self.ctx.state.next_flush_at = self._clock.now() + max(self.config.state_save_interval, 0.0)
+            # (state 加载/物化/周期落盘起点已挪到 start_all 之前 —— issue 26-11-17-0214:
+            #  启动期模块写点必须落在 reload 之后才不被整体替换丢弃)
             self.host.get("rules").load_rules()
 
             try:

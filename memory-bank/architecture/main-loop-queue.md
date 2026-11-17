@@ -7,7 +7,7 @@
 
 `run()` 的节拍骨架:
 
-- **启动**: `materialize_schema_migration`(配置 schema 启动物化, 磁盘落后才写; dry-run 只探测) → `host.start_all(dry_run)`(模块 start 按装配序: web 服务器/HR 端点/全局任务自注册; 移入 try 后启动期致命错误也走 finally → stop_all + 释放锁) → 首连(非托管失败抛 `QbConnectError` 干净退出; 托管 `--tray` 按 tick 重试) → `ctx.state.load()` + state 迁移物化 → 规则加载。
+- **启动**: `materialize_schema_migration`(配置 schema 启动物化, 磁盘落后才写; dry-run 只探测) → `ctx.state.load()` + state 迁移物化 + 周期落盘起点(**必须在 `start_all` 之前**, issue 26-11-17-0214: reload 整体替换语义下, 启动期模块写点落在它之后才不被丢弃; reload 零连接依赖) → `host.start_all(dry_run)`(模块 start 按装配序: web 服务器/HR 端点/全局任务自注册; 移入 try 后启动期致命错误也走 finally → stop_all + 释放锁) → 首连(非托管失败抛 `QbConnectError` 干净退出; 托管 `--tray` 按 tick 重试) → 规则加载。
 - **每轮**(while True, 各线可独立到期):
   - **命令线** `host.run_command_line()`: 消费 Web 命令 + 在途汇报确认; 有命令且非 dry-run 时本轮强制补一次同步。
   - **同步线** `_sync_line`(间隔 `sync_interval` 默认 1.5s; 快档 > 任务档时钳制到 main_tick): 只 `_refresh_torrents` 刷快照 + 视图发布, 不跑任务。

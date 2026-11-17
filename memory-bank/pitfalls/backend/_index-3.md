@@ -1,7 +1,7 @@
 # backend — 后端 / qB / 平台 · 卷 3/3
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `schema-stamp-writeback.md` … `windows-relocate-traps.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `schema-stamp-writeback.md` … `windows-relocate-traps.md`(共 18 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -10,6 +10,7 @@
 |---|---|---|
 | [schema-stamp-writeback.md](schema-stamp-writeback.md) | 带 schema 版本链的写回(writer)若「校验走迁移后的临时副本、落盘写原始提交树 + 新版章」, | schema 迁移, 版本链, 写回, writer, 盖章, schema_version, WebUI 保存, read_tree, |
 | [sentinel-epoch-arith.md](sentinel-epoch-arith.md) | 哨兵值泄漏进算术比较: 「0 = 无位置概念」被当成 epoch 0, 覆盖判据静默恒通过 | cutoff_done, 哨兵, 0 = 没有位置概念, 位置证明, 覆盖判据, 减法, 比较, epoch 0, 恒通过, 退化, 永续放行, 缺席证明, 观察期, HR 管束 |
+| [startup-state-write-reload-discard.md](startup-state-write-reload-discard.md) | `QbManager.run()` 的启动序列里, `_reload_state()` 把 `ctx.state.data` 从磁盘**整体替换**(非合并)。模块启动期(`host.start_all` 阶段)写 state 的突变 —— 迁移器盖章/启动对账回写/prune 滚出这类「接管面」—— 若发生在 reload 之前会被那次替换静默丢弃, 周期刷盘随后把磁盘旧版原样写回; 症状是「启动期写入看似已持久, 盘面却停在旧账, 直到首个运行期写点才收敛」。修法 = 加载/物化/落盘起点整体挪到 `start_all` **之前**(issue 26-11-17-0214); reload 只依赖磁盘与 `ctx.store`(构造期已有), 与 qB 连接无关, 「必须在 connect 之后」从来不是真约束。 | 启动期, start_all, 模块 start, 写 state, reload, _reload_state, 整体替换, 丢弃, 落盘, model_version, 盖章, 对账, prune, 启动序列, 摆位 |
 | [suppress-request-vs-live-flag.md](suppress-request-vs-live-flag.md) | EventBus suppress 曾把「重放保护请求」与「事件分派相位的抑制」混在一个 `_suppressed` 字段上 —— 注释宣称"窗口只盖两个事件相位", 实现却在置位点到下轮轮首之间吞掉一切 emit, 连续两次 L2 重建时第二次的 queue_rebuilt 静默丢失(issue 26-10-01-0750)。教训: 状态字段一符两义时注释只能描述其中一个语义, 判别与修复都以实现为准, 然后拆字段。 | 改 EventBus, 改 suppress, 抑制窗口, 重建窗口内 emit, 相位丢失, 事件被吞, queue_rebuilt, 重放保护, 一符两义, 注释与实现不符, set_suppressed, take_suppressed |
 | [task-interval-tick-quantization.md](task-interval-tick-quantization.md) | TaskQueue 周期任务的两条同族陷阱。①**节拍量化**: 到期判据只在主循环 tick 边界评估(next_run 只能被 tick「看见」), 真实节奏 = ceil(max(interval, main_tick)/main_tick)×main_tick —— 3s 任务在 main_tick=2s 下实际 4s 一轮。任何按「配置 interval == 数据落盘节奏」设计的消费侧粒度(读侧栅格桶宽/窗口切分/滑窗长度)都会系统性走空。②**积压饿死**(2026-10-16 实证): 队列是**作业面**(受 max_tasks_per_tick 限流), 低间隔周期任务与大批立即到期任务同队时会被按 next_run 的严格升序挡在门外 —— 重启/热重载补建数百个立即到期任务, 1.5s 采样在排水窗内**一次都轮不到**(实测 7/7 复现 37~55s 静默, 丢约 36 轮), 且静默会被读侧摊配**伪装成正常速率平线**(无告警无 stale 标记)。 | 周期采样任务, 按配置间隔推算数据粒度, 读侧栅格/桶宽, 伪断线, 图上有规律缺口, 行距比配置间隔大, 采样节奏不对齐, 采样被饿死, 重启后静默, 队列积压, 补建任务, max_tasks_per_tick, 周期任务轮不到, 假平线 |
 | [traffic-agg-reseal.md](traffic-agg-reseal.md) | 小时/日/月聚合行的封口有两条非显然约束 —— ①已封口的桶**仍会**收到迟到信用(长空闲 z 游程 | 逐级聚合无有效覆盖, cov_s 只留残余, 同 epoch 重封, 替换丢覆盖, 覆盖率偏小, agg 停写, 全系列小时行不落盘, 一个系列坏全批不写, 每轮 flush 复现, pending.pop, ZRUN_FLUSH_S, 延迟封口, 长空闲游程, 重封, 亚秒残余 |
