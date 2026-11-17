@@ -47,28 +47,21 @@ from _common import (  # noqa: E402
 # 所以选择「一处只回答一件事」: 主索引给路由, 卷内给定位。
 INDEX_BUDGET = CAP_POLICY["index-auto"]
 
+# 行内截断已**退役** (2026-11-18, issue 26-11-18-0326): 「一句话/触发词」曾按 (140, 120) 截断 ——
+# 那时分卷机制还不存在(2026-11-05 B4 才落地), 截断是单文件时代的唯一体积手段。分卷落地后它成了
+# 冗余, 却仍在**静默**吃路由面: 触发行过长的文件, 尾部关键词进不了生成索引且无任何信号
+# (「禁静默降级」同族; issue 实测: 追加尾部词全库 _index 零命中, 前置新词还会把既有尾部词挤出
+# —— 截断预算零和; 复验时全库 120 个坑档触发行**全部**超限, 「请精简」对存量不可行)。
+# 退役后体积约束回归分卷 cap 单点(`INDEX_BUDGET`), 实测代价(对照 base 011e1aeb, 按索引文件数
+# 含路由页): 全库索引 ~109K → ~156K 字符, backend 3→4 / ops 1→3 / testing 6→9 / web-ui 6→9
+# (kb 维持 2 卷页), 各卷仍在预算内;
+# 单行极端超长走既有的「退回单页让 doc.caps 照实报债」路径, 不静默。
+# WARN: 别条件反射给行内加回截断 —— 路由可达性是索引的存在理由, 体积由分卷吸收。
+
 
 def _cell(text: str) -> str:
     """表格单元: 转义 `|`, 空值给占位符。"""
     return text.replace("|", "\\|") if text else "—"
-
-
-# 索引行里「一句话 / 触发词」的截断长度 —— 同款病 (历史上多个生成器各截各的, 现仅存本生成器):
-# 摘要与触发词**只增不减**, 整条打进索引后索引大小由「元数据写得多长」决定, 而不是由「有几个主题」。
-# 2026-10-11 实测: `pitfalls/web-ui/_index.md` 55 个主题 ⇒ 25,940 撞 `index-auto` cap (25,200),
-# 其中摘要总长 14,868(均值 270!) / 触发词总长 7,378(均值 134) —— 主题数远没到上限, 是元数据顶爆。
-# 截断到 (140, 120) 后 15,647(余量 9,553, 还够 ~20 个新主题); 摘要/触发词全文点开主题文件就有,
-# 无信息损失。**触发词也截**是无奈: 它同样是索引行的大头(均值 134), 只截摘要的话余量不够。
-# WARN: 别条件反射抬 cap: 先量「去掉两列后占 cap 多少」 —— 那才是条目数本身能否容纳的判据。
-SUMMARY_MAX = 140
-TRIGGER_MAX = 120
-
-
-def _clip(text: str, limit: int) -> str:
-    """截断到 `limit` 字符, 超长加省略号(中文一字一字符, 与 cap 口径一致)。"""
-    if limit and len(text) > limit:
-        return text[:limit].rstrip() + "…"
-    return text
 
 
 TOPIC_TABLE = ["", "## 主题", "", "| 主题 | 一句话 | 触发词 |", "|---|---|---|"]
@@ -104,18 +97,16 @@ def _class_rows(directory: Path) -> list[str]:
         meta = read_meta(sub / ABOUT_NAME)
         lines.append(
             f"| [{sub.name}]({rel_link(directory, sub / INDEX_NAME)}) "
-            f"| {_cell(_clip(meta.summary or '', SUMMARY_MAX))} "
-            f"| {_cell(_clip(meta.triggers or '', TRIGGER_MAX))} |"
+            f"| {_cell(meta.summary or '')} "
+            f"| {_cell(meta.triggers or '')} |"
         )
     return lines
 
 
 def _topic_row(path: Path) -> str:
     meta = read_meta(path)
-    return (
-        f"| [{path.name}]({path.name}) | {_cell(_clip(meta.summary or '', SUMMARY_MAX))} "
-        f"| {_cell(_clip(meta.triggers or '', TRIGGER_MAX))} |"
-    )
+    return (f"| [{path.name}]({path.name}) | {_cell(meta.summary or '')} "
+            f"| {_cell(meta.triggers or '')} |")
 
 
 def _title(directory: Path) -> str:

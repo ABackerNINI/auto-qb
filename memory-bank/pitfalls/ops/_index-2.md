@@ -1,0 +1,20 @@
+# ops — 生产文件与环境 · 卷 2/2
+
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
+> 本卷主题: `session-program-blacklist.md` … `zcode-linux-argv0-sys-executable.md`(共 10 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
+
+## 主题
+
+| 主题 | 一句话 | 触发词 |
+|---|---|---|
+| [session-program-blacklist.md](session-program-blacklist.md) | 本工具的**命令安全策略**把某些系统程序列入 Program Blacklist (实测 `schtasks.exe`)。从 Bash / PowerShell 工具起的**任何**进程链一旦碰到它, 整条调用失败, 且第一层报错是 `PermissionError: [WinError 5] 拒绝访问。` 落在 `subprocess` 的 `CreateProcess` 上 —— 看着像权限/文件系统问题, 真判据是 stderr 末段那条 `PROGRAM BLOCKED BY SECURITY POLICY ... This block cannot be approved or bypassed from the current command`。⇒ 依赖该程序的动作(计划任务注册、`schtasks` 查询、任何以它为前置的真机冒烟)**在本会话内不可完成**, 这不是代码 bug。处置 = 降级冒烟 + 明确报告缺口, **绝不换壳重试**(消息本身明令禁止)。 | 计划任务, schtasks, 真机冒烟, 命令被拦, Program Blacklist, 程序黑名单, 命令安全策略, PermissionError, WinError 5, 拒绝访问, CreateProcess, 沙箱, 系统命令不可用, 自启注册, installer 验收, launchctl, systemctl, 换壳重试 |
+| [shell-env.md](shell-env.md) | 本工具的终端是**长驻会话**(环境变量跨命令保留) —— 为拿到机器级 PATH 里的工具而反复执行 `$env:PATH = $env:PATH + ';' + 机器PATH` 会把它撑到 240+ 项, **子进程的环境块被截断** ⇒ `cmd.exe` 里连 `python` 都报「不是内部或外部命令」, 而 `where.exe python` 仍找得到; 症状看着像「命令引擎坏了」。判据: ①裸名解析不到时先数 PATH 项数 ②拼之前先按项去重 ③本项目自己的命令一律走 `commands run <task>`。 | PATH, 环境变量, python 不是内部或外部命令, not recognized, node 找不到, 命令引擎, kb.check 失败, 子进程环境块, 长驻终端, 沙箱, commands 装了没用, wrapper 不识别, ~/bin, install_wrapper, Git Bash 与 PowerShell 判据相反 |
+| [ship-commit-timeout.md](ship-commit-timeout.md) | ship.commit 大批撞引擎 600s 超时: 提交落库后被杀在推送段 | ship.commit 超时, 卡住的命令, 提交被杀, 推送未完成, 补推前先补验 |
+| [stale-commit-msg-draft-gate-prerun.md](stale-commit-msg-draft-gate-prerun.md) | `.git/COMMIT_MSG_AI.txt` 是提交脚本「提交后自动删除」的草稿件 —— 上一笔提交后残留(跨会话/跨 clone 同步后遗留)时, `commands run ship.gate` 预跑不再走「略过消息依赖闸门」路径, 而是拿**陈旧草稿的 `Review:` trailer**(旧批的行数/基哈希)对账**当前待提交批**, 报 `评审留痕: Review: 声明 N 行 ≠ 实算 M 行` —— 看起来像本批漏评/错报, 实为残留文件假红。 | ship.gate 预跑, review.trace 假红, 声明 行 实算 行 不匹配, COMMIT_MSG_AI.txt 残留, 消息依赖闸门, when_message, 闸门预跑红, 评审留痕, 提交草稿残留 |
+| [taskkill-image-name-ban.md](taskkill-image-name-ban.md) | taskkill 任何形态一律禁止 —— 本机生产 qB(26586)与测试实例同名映像 qbittorrent.exe, /IM 按映像名全杀 = 静默误杀生产(2026-11-05 E1.6 实际发生); bash 裸跑还有 MSYS 路径改写假失败层诱人换 python subprocess 绕过 | taskkill, 杀进程, IM, 映像名, 误杀生产, MSYS 路径改写, Stop-Process, real.down, qbittorrent.exe, 强杀 |
+| [uv-trampoline-broken.md](uv-trampoline-broken.md) | `.venv/Scripts/` 下的工具入口 exe(pytest.exe / yapf.exe 等)是 uv 的 trampoline 薄壳, 一旦壳与目标 venv 的相对位置/路径解析对不上就整体失效: 直接跑 `<tool>.exe` 报 `uv trampoline failed to canonicalize script path`, 而 `uv sync`(含 `commands run env.sync`)**不会重建这些壳** —— 不自愈。解法是删掉失效的 exe 让 uv sync 按 `--reinstall-package` 重装该包, 或改走 `uv run python -m <module>` 等价入口。 | uv trampoline, canonicalize, pytest.exe, yapf.exe, .venv/Scripts, 打不开工具, env.sync 不自愈, uv sync --reinstall-package |
+| [venv-trampoline-clone-copy.md](venv-trampoline-clone-copy.md) | clone 连 .venv 复制致 uv trampoline 内嵌路径失效, env.sync 假自愈 | uv trampoline failed to canonicalize script path,uv run pytest 报错,console script 起不来,uv sync 后仍坏,uv run python 却正常 |
+| [vnu-gate-bootstrap.md](vnu-gate-bootstrap.md) | check_html --vnu 首跑自举: GitHub 直连被墙且本机无 java | vnu, check_html, vnu.jar, java 不可用, SSL CERTIFICATE_VERIFY_FAILED, release-assets 超时, HTML 规范级检查 |
+| [wsl-mutation-memory.md](wsl-mutation-memory.md) | 12 GiB 的 WSL VM 里, 中池变异目标的并发上限由**单 worker RSS**(实测 5.2–5.8 GB)决定, 不是由 8 核决定 —— `--children 2` 合计就顶穿 11.68 GiB, 三轮都死在第 80/1804 条; 另外 2026-11-02 04:29 版 `.wslconfig` 缺 `vmIdleTimeout` 时, 单客户端在 **91±1 秒**被回收(rc=1、无 stderr、distro 仍 Running、VM 内核未重启), 显式写 `vmIdleTimeout=600000` 后同一形态活 651 s、真实任务 624 s 跑完。长跑仍必须保持一个客户端全程连着。 | WSL, 变异测试, mutmut, 内存, OOM, 并发, children, RSS, setsid, nohup, distro, 失联, 常驻会话, vmIdleTimeout, 91秒回收, 客户端被切 |
+| [zcode-linux-argv0-sys-executable.md](zcode-linux-argv0-sys-executable.md) | ZCode Linux 宿主 argv[0] 污染致 sys.executable 虚假, commands 引擎任务全炸 | commands 引擎任务失败, AppImage not found, sync 失败, sys.executable, 第三环境, 新机器搭建, Non-ASCII character SyntaxError, wrapper list rc=1 |

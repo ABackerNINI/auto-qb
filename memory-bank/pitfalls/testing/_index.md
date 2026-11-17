@@ -12,8 +12,11 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `docker-id-truncation.md` | 26 |
-| [2](_index-2.md) | `engine-pack-dir-injection.md` … `heredoc-cjk-punct-js-syntax.md` | 26 |
-| [3](_index-3.md) | `hot-reload-mock-sections.md` … `perf-measurement.md` | 26 |
-| [4](_index-4.md) | `plan-docstring-section-boundary.md` … `single-file-coverage-gate.md` | 26 |
-| [5](_index-5.md) | `single-file-xdist-hang.md` … `xdist-worker-global-snapshot.md` | 24 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `commands-wrapper-from-python.md` | 16 |
+| [2](_index-2.md) | `config-validation-test-input.md` … `fake-server-reuse-bind.md` | 16 |
+| [3](_index-3.md) | `fakeclock-migration-missed-forms.md` … `harness-is-stub-server.md` | 16 |
+| [4](_index-4.md) | `harness-save-flow.md` … `mutants-mirror-dirty-worktree.md` | 16 |
+| [5](_index-5.md) | `mutants-shared-mirror.md` … `playwright-teardown.md` | 16 |
+| [6](_index-6.md) | `poll-last-round-race.md` … `sandbox-tempfile-cwd-fallback.md` | 16 |
+| [7](_index-7.md) | `sandbox-tool-cache.md` … `test-lock-path-injection.md` | 16 |
+| [8](_index-8.md) | `test-plan-docstring-sections.md` … `xdist-worker-global-snapshot.md` | 16 |

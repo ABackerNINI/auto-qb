@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-18-0326">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="kb-index-trigger-truncation">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-18-memory-bank-index-truncation.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="pitfalls 索引生成行触发列截断, 触发行尾部关键词系统性不可达">
 <meta name="issue-summary" content="kb.index 索引生成行整行约 240 字符处截断(触发列止于半词), 触发行过长的文件尾部关键词进不了生成索引(实测连续 4 词全库零命中), 索引路由面静默缩水, 只剩 grep 全文兜底">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0326-bug-kb-index-trigger-truncation</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:26</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -129,7 +129,7 @@
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
-  <div class="callout">待查 —— 生成行触发列存在固定截断预算(实测整行约 239 字符处截断, 截断点含半词)。预算值/截断策略写在哪一版生成器逻辑里未查(skill 代码禁读, 未经授权未读); 已排除: 源文件三行头写法问题(两种追加/前置写法均复现, 与写法无关)、kb.index 未重跑(重跑后生成物与 HEAD 逐字节相同, 是确定性截断不是缓存)。</div>
+  <div class="callout">已查明 (2026-11-18 认领修复时): 截断单点在生成器 <code>gen_kb_index.py</code> 的 <code>TRIGGER_MAX = 120</code>(摘要 <code>SUMMARY_MAX = 140</code>), <code>_clip()</code> 超长静默截断加省略号 —— issue 实测的「整行约 239 字符截断」即触发列 120 字符截断在整行上的体现。截断本身是**有意设计**(2026-10-11 单文件时代元数据顶爆 cap 的体积手段), 但 2026-11-05 分卷机制落地后它已是冗余, 缺陷在「静默吃路由面」: 复验查明全库 120 个坑档触发行(共 370 个)**全部**超限, 尾部关键词系统性不可达。已排除: 源文件写法问题、kb.index 未重跑(入池时的两条排除维持成立)。</div>
 </section>
 
 <section id="s6">
@@ -141,11 +141,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 03:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-18 认领时仍复现 —— <code>platform-fs.md</code> 源触发行 406 字符, 生成行触发列止于「批处理, .…」(120 字符处)。且量级比入池时认知更广: 全库 120 个坑档触发行(共 370 个)**全部**超限, 尾部关键词不可达是全库系统性现状, 不是个别长行。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong> (2026-11-18): 走建议①的「全量保留」支 —— <code>gen_kb_index.py</code> 退役行内截断(删 <code>SUMMARY_MAX</code>/<code>TRIGGER_MAX</code>/<code>_clip</code>), 摘要与触发词全量进索引, 体积约束回归分卷 cap 单点(<code>INDEX_BUDGET</code> = 8000, 生成器确定性分卷自适配)。取向判据: 截断是分卷机制(2026-11-05 B4)落地前的单文件体积手段, 落地后已冗余; 复验查明 120 个触发行全部超限, 「截断+可见警告」路线的警告对存量是每轮 120 条的恒久噪音, 「请精简」不可行 —— 全量保留后没有内容被丢, 连告警机器都不需要。建议②落为约定回写: doc-forms.md「索引与检索」明示「触发行全量进索引, 不存在暗预算」; kb.new 不加超长提示(没有上限)。</p>
+  <p><strong>验证方式与实测数字</strong>: ① issue §02 实证词逐词 grep 全库 <code>_index*.md</code>: isabs / 绝对路径 / 盘符补全 / 盘满 / WinError 10054 / proactor / asyncio / 异常类型分流 / OEM 码页 / tasklist 全部 ≥1 命中, 阴性对照词(库内不存在的「允许复用」)0 命中; ② <code>gen_kb_index.py --check</code> 自证一致; ③ 守卫 <code>test.quick</code> 6456 passed + 2 skipped。体积代价实测(对照 base 011e1aeb, 按索引文件数含路由页): 全库索引 ~109K → ~156K 字符, backend 3→4 / ops 1→3 / testing 6→9 / web-ui 6→9(kb 维持 2 卷页), 各卷仍 ≤ 8000 字符。</p>
 </section>
 
 <footer>

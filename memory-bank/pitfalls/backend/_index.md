@@ -12,5 +12,6 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `alias-links.md` … `platform-fs.md` | 28 |
-| [2](_index-2.md) | `prefix-rewrite-nested-root.md` … `windows-relocate-traps.md` | 27 |
+| [1](_index-1.md) | `alias-links.md` … `gate-order-reachability.md` | 19 |
+| [2](_index-2.md) | `gtm-total-baseline.md` … `ruamel-roundtrip-mask-pitfalls.md` | 19 |
+| [3](_index-3.md) | `schema-stamp-writeback.md` … `windows-relocate-traps.md` | 17 |

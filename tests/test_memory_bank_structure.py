@@ -21,6 +21,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 知识库目录化守卫 (检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 进程内 import):
 
 - test_kb_index_is_regenerated / test_kb_index_and_files_are_bijective: 索引 == 生成结果; 索引与目录双向一致
+- test_kb_index_triggers_fully_indexed: 触发行全量进索引 —— 每个主题/类条目的「触发」全文逐字在生成索引页里, 防行内截断回归 (issue 26-11-18-0326, 2026-11-18)
 - test_kb_no_orphan_index_dirs: 顶层索引都被 README 引用
 - test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 (结构); 尺寸与条数是**债务**, 不判红
 - test_kb_debt_count_excludes_min_size_hints: CLI 汇总行的「cap 债务 N 项」只数带 `DEBT_MARK` 的行, 「文件过小」提示不计入
@@ -88,6 +89,10 @@ from kb_test_support import (
     _kb_checker,
 )
 
+sys.path.insert(0, str(SKILL_SCRIPTS))
+
+from _common import ABOUT_NAME, iter_indexed_dirs, iter_topic_files, read_meta  # noqa: E402
+
 
 def test_session_protocol_is_exposed_in_always_on_entries() -> None:
     assert SKILL.exists(), "缺少 skill 载体 .agents/skills/memory-bank/SKILL.md (会话协议将无法被触发)"
@@ -115,6 +120,32 @@ def test_kb_index_and_files_are_bijective() -> None:
     """索引 ↔ 目录内容双向一致: 有文件没登记、登记了没文件, 都红。"""
     problems = _kb_checker().check_bijection(ROOT, MB)
     assert not problems, "\n".join(problems)
+
+
+def test_kb_index_triggers_fully_indexed() -> None:
+    """触发行全量进索引 (2026-11-18 退役行内截断, issue 26-11-18-0326): 每个主题/类条目的
+    「触发」全文都能在生成索引页里逐字找到 —— 防行内截断回归 (回归形态 = 生成列以「…」收尾,
+    尾部关键词静默路由不到)。
+
+    两条渲染路径都断言: 主题行 + 目录自身 `_about` 的 header 行进**本目录**页;
+    子目录 `_about` 经 `_class_rows` 进**父目录**类表 —— 只查子目录自己的页会漏报
+    「只把截断加回类表」的回归形态 (评审轮 2 发现)。只对磁盘生成物断言, 生成器 ↔ 磁盘
+    一致性由 test_kb_index_is_regenerated 另行保证; 转义口径与生成器 `_cell` 一致 (`|` → `\\|`)。
+    """
+    for directory in iter_indexed_dirs(MB):
+        pages = "\n".join(p.read_text(encoding="utf-8") for p in sorted(directory.glob("_index*.md")))
+        sources = [*iter_topic_files(directory), directory / ABOUT_NAME]
+        # 类表路径: 子目录 _about 的触发词在**父目录**的类表行, 按父页面断言
+        sources += [d / ABOUT_NAME for d in sorted(directory.iterdir()) if d.is_dir() and (d / ABOUT_NAME).is_file()]
+        for source in sources:
+            triggers = read_meta(source).triggers or ""
+            if not triggers:
+                continue
+            escaped = triggers.replace("|", "\\|")
+            assert escaped in pages, (
+                f"{source.relative_to(ROOT)} 的触发词未全量进生成索引 (行内截断回归?): "
+                f"在 {directory.name}/ 的 _index* 里找不到「{escaped}」"
+            )
 
 
 def test_kb_no_orphan_index_dirs() -> None:
