@@ -11,6 +11,7 @@
 - test_v4_seam_short_gap_two_paths_agree_no_spike: (issue 26-10-16-0954 守阵; F2)短缝接收桶 rate = step/实测对跨; 磁盘与活尾两路径同几何同值; 近洞 60s 缝仍不放大; 缝内栅格桶仍 null
 - test_v4_seam_spread_midrun_seam_then_step_uniform: (评审轮1 #1 回归守阵)缝在等值游程中段 + 后接台阶 —— cov = 逐对「对跨 - 未观测秒」合计使 span > cov 恒有效(不依赖 marked 存活), 台阶均摊平线不出单桶尖峰(误接 131 B/s 可判红)
 - test_v4_seam_covered_span_mark_two_paths_agree: (残余边界修复轮; F2)覆盖连续且带块界真空标记的缝 —— 两路径同判同值; F2 下锚点 r 槽与首枚 z 槽同桶(份额与锚点差分合并, ±1 样本份额级, R2 口径); 守恒按 round 取整容差
+- test_v4_seam_marked_r_run_drops_delta: (P2 提取件半分支守阵, 26-11-18-0037 评审 #10)r 形等值游程(非 z 签名)+ n 断连标记 + 台阶 —— all(z) 不成立且 marked 存活 -> 差分 None 断链, 接收桶速率 None 非 0 线(诚实丢字节)
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -393,3 +394,19 @@ def test_v4_seam_spread_midrun_seam_then_step_uniform():
     dl_sum = sum(p.dl_rate * p.w for p in spread)
     up_sum = sum(p.up_rate * p.w for p in spread)
     assert abs(dl_sum - 203) <= sum(p.w for p in spread) / 2 and abs(up_sum - 101) <= sum(p.w for p in spread) / 2
+
+
+def test_v4_seam_marked_r_run_drops_delta():
+    """(P2 提取件半分支守阵, 26-11-18-0037 评审 #10)r 形等值游程(非 z 签名)+ n 断连标记
+    + 台阶: 摊配判定 all(z) 不成立且 marked 存活 -> 差分 None 断链(诚实丢字节), 接收桶
+    速率 None 非 0 线, totals 快照仍真值 —— 提取件 marked 半分支(返回 None 支)钉面"""
+    blk = V4Block(
+        1000, 2, 100, 50, (V4Sample(0, 0, 100, 50), V4Sample(0, 0, 100, 50), V4NullRun(2), V4Sample(0, 0, 200, 100))
+    )
+    g = WindowGrid("5m", 900, 2000, 2, "raw", tuple(range(900, 2000, 2)))
+    points = v4_series_points((blk, ), g)
+    assert any(
+        p.t == 1008 and p.dl_rate is None and p.up_rate is None and p.dl_total == 200 and p.up_total == 100
+        for p in points
+    )
+    assert any(p.t == 1004 and p.dl_rate is None and p.dl_total is None for p in points)  # n 标记 present

@@ -574,6 +574,52 @@ def _v4_null_lo(grid: "WindowGrid") -> float:
     return grid.t0 - grid.interval - _V4_SEAM_LOOKBACK_S
 
 
+def _seam_spread_delta(
+    d: int,
+    step: int,
+    span_ms: int,
+    cov_ms: int,
+    dur_ms: int,
+    dt_s: float,
+    marked: bool,
+    run_list: list,
+    run_prefix: int,
+    bucket_add,
+) -> Optional[int]:
+    """接缝摊配判定与份额分配单点(P2 原样提取, 26-11-18-0037 阶段 1): 原 _V4SeriesFold.fold
+    内嵌摊配块逐字平移, 行为零改动(存量接缝电池钉住) —— fold 与新样本分组装配
+    (traffic_group_assembly)共用同一实现, 摊配口径不得分叉。
+
+    d = 方向(0=dl / 1=up); step = 本槽台阶差分(bytes); span_ms = 变化点跨度(游程锚到
+    本槽); cov_ms = 覆盖毫秒合计(含 run_prefix 与本对); dur_ms = 本槽差分对跨;
+    dt_s = 本槽声称覆盖; marked = 断连标记存活; run_list = 等值游程项 (键, 覆盖毫秒,
+    是否 z 槽, 槽 ts) —— 键语义由调用方定(旧面 = 桶键, 新装配 = 组标识);
+    run_prefix = 已裁剪游程项覆盖毫秒合计(全量路径恒 0); bucket_add(键, 向, 份额) =
+    份额入桶回调。返回本槽差分(None = 断链/不摊配)。
+    """
+    if (
+        cov_ms > 0 and dur_ms > 0 and
+        (marked or span_ms > cov_ms or span_ms > max(2 * int(round(dt_s * 1000)), _V4_SEAM_SPREAD_MIN_S * 1000)) and
+        all(z for _, _, z, _ in run_list)
+    ):
+        # 接缝摊配(P2 承袭): 未覆盖秒不归因 -> 基准先按覆盖份额缩放
+        # (span <= cov 时逐字 == step); 份额按累计比例取整, 余额归接收桶
+        # (前缀覆盖毫秒 = 已裁剪游程项的合计, 计入累计但不再入桶 —— 其桶
+        #  在裁剪地平线下, 永不进响应栅格)
+        step_w = step if span_ms <= cov_ms else step * cov_ms // span_ms
+        acc = 0
+        cum = run_prefix
+        for k, dd, _, _ts in run_list:
+            cum += dd
+            target = step_w * cum // cov_ms
+            share = target - acc
+            acc = target
+            if share:
+                bucket_add(k, d, share)
+        return step_w - acc
+    return None if marked else step
+
+
 class _V4SeriesFold:
     """v4_series_points 的折叠状态机(F4-2, 计划 26-11-15-1104 S2-2): 归桶/差分/摊配语义
     的唯一实现, 两种驱动方式共用同一槽循环 —— 全量(一次喂全部块组, v4_series_points 包装)
@@ -812,29 +858,9 @@ class _V4SeriesFold:
                         step = cur - value
                         span_ms = int(round((s.ts - run[1]) * 1000))
                         cov_ms = run_prefix + sum(dd for _, dd, _, _ in run_list) + cov_ms_pair
-                        if (
-                            cov_ms > 0 and dur_ms > 0 and (
-                                marked or span_ms > cov_ms or
-                                span_ms > max(2 * int(round(s.dt_s * 1000)), _V4_SEAM_SPREAD_MIN_S * 1000)
-                            ) and all(z for _, _, z, _ in run_list)
-                        ):
-                            # 接缝摊配(P2 承袭): 未覆盖秒不归因 -> 基准先按覆盖份额缩放
-                            # (span <= cov 时逐字 == step); 份额按累计比例取整, 余额归接收桶
-                            # (前缀覆盖毫秒 = 已裁剪游程项的合计, 计入累计但不再入桶 —— 其桶
-                            #  在裁剪地平线下, 永不进响应栅格)
-                            step_w = step if span_ms <= cov_ms else step * cov_ms // span_ms
-                            acc = 0
-                            cum = run_prefix
-                            for k, dd, _, _ts in run_list:
-                                cum += dd
-                                target = step_w * cum // cov_ms
-                                share = target - acc
-                                acc = target
-                                if share:
-                                    bucket_add(k, d, share)
-                            delta = step_w - acc
-                        else:
-                            delta = None if marked else step
+                        delta = _seam_spread_delta(
+                            d, step, span_ms, cov_ms, dur_ms, s.dt_s, marked, run_list, run_prefix, bucket_add
+                        )
                         run[0], run[1], run[2], run[3] = cur, s.ts, [], 0
                     if delta is not None and cov_ms_pair > 0:
                         # 速率面入账(端点归属): 覆盖时长为 0(同刻病理槽序)不归因不造分母
