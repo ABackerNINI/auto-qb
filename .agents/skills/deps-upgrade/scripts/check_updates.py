@@ -379,7 +379,7 @@ def build_report(cfg: dict[str, Any], quick: bool, timeout: float) -> str:
     out.append("")
     if joint_hits:
         names = " / ".join(joint_display_names(cfg))
-        out.append("Any update below requires JOINT analysis of all three special deps")
+        out.append(f"Any update below requires JOINT analysis of all {len(joint)} special deps")
         out.append(f"({names}): one upgrade changes the")
         out.append("adaptation surface of the others. Runbook: project/impact-map.md, section 3.")
         out.append("")

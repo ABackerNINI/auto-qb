@@ -238,12 +238,13 @@ ROUTE_ID_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?")
 
 
 def _require_route_id(route: str) -> None:
-    """smoke 入口的 route 白名单格式校验(issue 26-11-17-2339 拍板: 格式校验, 不走 _guard_snap_path)。
+    """route 白名单格式校验(issue 26-11-17-2339 拍板: 格式校验, 不走 _guard_snap_path)。
 
     route 原样拼进 route-{route}.json / -findings / -notes(cleanup unlink)与快照子目录
     _smoke-{route}(cleanup rmtree)等删除路径, 含 `..`/路径分隔符/其它非常规字符的值会把
     删除面带出 lane 目录 —— 从严白名单拒收: 字母或数字开头结尾, 中间仅字母/数字/-/_
-    (与 lane.toml [[route]] id 实际取值形态同域)。
+    (与 lane.toml [[route]] id 实际取值形态同域)。挂全部消费 --route 的子命令入口
+    (claim/start/verify/batch/done/smoke), 各自做任何 IO 之前先校验。
     """
     if not ROUTE_ID_RE.fullmatch(route):
         _die(
@@ -656,6 +657,7 @@ def cmd_manifest(args: argparse.Namespace) -> int:
 
 
 def cmd_claim(args: argparse.Namespace) -> int:
+    _require_route_id(args.route)
     root = _resolve_root(args.root)
     cfg = _load_lane_config(need_matrix=True)
     manifest = _load_manifest(root, cfg)
@@ -783,6 +785,7 @@ def _print_triplet(root: Path, data: dict, manifest: dict, batch: dict | None) -
 
 
 def cmd_start(args: argparse.Namespace) -> int:
+    _require_route_id(args.route)
     root = _resolve_root(args.root)
     cfg = _load_lane_config()
     manifest = _load_manifest(root, cfg)
@@ -830,6 +833,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
+    _require_route_id(args.route)
     root = _resolve_root(args.root)
     cfg = _load_lane_config()
     manifest = _load_manifest(root, cfg)
@@ -870,6 +874,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_batch(args: argparse.Namespace) -> int:
+    _require_route_id(args.route)
     root = _resolve_root(args.root)
     cfg = _load_lane_config()
     data = _load_route(root, cfg, args.route)
@@ -895,6 +900,7 @@ def cmd_batch(args: argparse.Namespace) -> int:
 
 
 def cmd_done(args: argparse.Namespace) -> int:
+    _require_route_id(args.route)
     root = _resolve_root(args.root)
     cfg = _load_lane_config()
     data = _load_route(root, cfg, args.route)

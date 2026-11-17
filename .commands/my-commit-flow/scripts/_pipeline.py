@@ -605,7 +605,9 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
       展开失败 rc 记 -2(不是 git 的码, 避免与真实 rc 混淆), 超时记 -1。
     - manual: 非自动闸门的展开命令(不执行; 调用方决定要不要提示 —— 本仓库配置里没有这类)。
     - ran: 真正执行过的命令条数。
-    - `<each:>` / `<changed:>` 无匹配文件 → **按设计静默跳过**(它们只盯本次改动)。
+    - `<each:>` / `<changed:>` 无匹配文件 → 按设计跳过(它们只盯本次改动, 不改 rc / 跳过语义),
+      但打一行可区分提示, 不再静默 —— 与 pkg_scoped 零包兜底提示行同口径
+      (issue 26-11-17-2339 同族: 跳过是设计, 静默不是)。
     - `<changed:>` 长命令被分片时, 每条子命令是**独立 job**(同上限、同 timeout, 顺序为文件序):
       失败定位与取 failures[0] 的语义不变, 只是 ran 计的是分片条数。
       声明 `shard = false` 的聚合语义闸门**不分片**: 单条超限直接走展开失败(rc=-2 STOP),
@@ -633,6 +635,9 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
                 failures.append((note, cmd, -2, 0.0, str(exc)))
                 continue
             if skip:
+                # 零匹配整条跳过仍是设计行为(rc / 跳过语义不动), 但要看得见 —— 不然「没改动」
+                # 与「闸门静默没跑」分不开(与 pkg_scoped 零包兜底提示行同口径)。
+                print(f"[闸门] {note} 跳过: {skip}")
                 continue
             if not gate.get("auto", False):
                 manual.extend(cmds)

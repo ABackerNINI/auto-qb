@@ -9,7 +9,7 @@
 <meta name="issue-stamp" content="26-11-17-2339">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="review-lane-smoke-route-guard">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/issues/26-11-18-0611-chore-doc-refs-empty-unclaimed-reminder.html">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Done">
 <meta name="issue-title" content="review_lane smoke 清理路径未过 _guard_snap_path 守卫">
@@ -151,6 +151,7 @@ $ sed -n '922p;936p' .commands/review/scripts/review_lane.py   # cmd_smoke 内
   <ul>
     <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-18 — 状态 Open → Done（kb.status）；修法: smoke 入口对 route 做白名单格式校验（不走 _guard_snap_path）</li>
+    <li>2026-11-18 — 追加修复: 格式校验从 smoke 扩到全部消费 <code>--route</code> 的子命令（claim/start/verify/batch/done），各自入口在任何 IO 之前先过 <code>_require_route_id</code>；lane.toml 实际 route id R1-R5 同域放行不受影响</li>
 </ul>
   <h3>复验</h3>
   <p>2026-11-17 23:39（入池前, HEAD <code>eff52f0a</code>）: 仍复现 —— <code>cmd_smoke</code> 拼路径与 rmtree 未过守卫, grep 证据见 §02。</p>

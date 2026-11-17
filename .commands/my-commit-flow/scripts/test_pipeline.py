@@ -22,7 +22,8 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
                                + 长度守卫(<changed:> 超预算分片不丢件 / 分片后仍超限 ExpandError /
                                  shard=false 聚合闸门不分片, 超限 STOP)
 - RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
-                               展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废) /
+                               展开失败不降级 / 无匹配跳过打可区分提示行(rc/跳过语义不变,
+                               issue 26-11-17-2339 同族) /
                                并发执行(方案 B): 失败按提交序确定 / ran 计数 / 展开失败排在执行失败前 /
                                分片执行不截断(参数全到) / 长度守卫失败 rc=-2 不降级 /
                                聚合闸门 shard=false 在 100+ 文件时单条 STOP
@@ -50,6 +51,8 @@ from __future__ import annotations
 
 import ast
 import builtins
+import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -312,10 +315,28 @@ class RunGatesTest(unittest.TestCase):
         self.assertEqual(failures[0][2], -2)  # 展开失败: 不是 git 的码, 但必须停
         self.assertEqual(manual, [])  # 不降级成打印
 
-    def test_no_match_skip_is_silent(self) -> None:
-        gate = {"match": [""], "run": ["python <each:src/**/*.py> --help"], "auto": True, "note": "t"}
-        failures, _, ran = _pipeline.run_gates([gate], ctx(self.root, ["docs/a.md"]))
-        self.assertEqual((failures, ran), ([], 0))  # 按设计跳过, 连 WARN 都没有
+    def test_no_match_skip_prints_hint_but_stays_skip(self) -> None:
+        # 零匹配整条跳过仍是设计行为(rc / 跳过语义不动), 但打一行可区分提示, 不再静默
+        # (issue 26-11-17-2339 同族: 提示行含门名与「无匹配文件: <占位符>」要点)。
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            gate = {"match": [""], "run": ["python <each:src/**/*.py> --help"], "auto": True, "note": "t"}
+            failures, _, ran = _pipeline.run_gates([gate], ctx(self.root, ["docs/a.md"]))
+        self.assertEqual((failures, ran), ([], 0))  # 跳过语义不变: 不算失败, 也不计 ran
+        out = buf.getvalue()
+        self.assertIn("[闸门] t 跳过", out)
+        self.assertIn("无匹配文件", out)
+        self.assertIn("<each:src/**/*.py>", out)
+
+    def test_changed_no_match_hint_includes_expression(self) -> None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            gate = {"match": [""], "run": ["python p.py --files <changed:docs/**>"], "auto": True, "note": "g2"}
+            failures, _, ran = _pipeline.run_gates([gate], ctx(self.root, ["src/a.py"]))
+        self.assertEqual((failures, ran), ([], 0))
+        out = buf.getvalue()
+        self.assertIn("[闸门] g2 跳过", out)
+        self.assertIn("<changed:docs/**>", out)
 
     def test_gates_for_empty_match_hits_everything(self) -> None:
         gates = [{"match": [""], "run": ["x"], "auto": True}]

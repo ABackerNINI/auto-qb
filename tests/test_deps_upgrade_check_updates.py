@@ -17,7 +17,8 @@
 - test_pin_deps_counts_updates_and_delta: 正常路径 delta 分类 / 更新计数 / direct-joint-support 列
 - test_joint_display_names_from_watch_repo (issue 26-11-17-2339): 联合分析词形单点装配 —— 有 watch 的 joint dep 取 repo 名段权威词形, 无 watch 的保 id
 - test_joint_display_name_fallbacks: repo 缺失 / 无斜杠 / id 无 watch 项时回退 joint id, 不抛异常
-- test_build_report_joint_names_assembled_from_config: 联合分析文案的三依赖名从 deps.toml 装配, 输出不再含小写字面三连名
+- test_build_report_joint_names_assembled_from_config: 联合分析文案的三依赖名与数量词
+  (all {len(joint)} special deps)从 deps.toml 装配, 输出不再含小写字面三连名或写死的 "three"
 """
 
 from __future__ import annotations
@@ -315,6 +316,25 @@ def test_build_report_joint_names_assembled_from_config(monkeypatch):
     pin_line = "| aaaa | 1.0.0 | 1.0.1 | patch | 2026-01-02 | - | yes | NEW vs matrix |"
     monkeypatch.setattr(mod, "check_pin_deps", lambda *a, **k: ([pin_line], 1))
     text = mod.build_report(cfg, quick=False, timeout=1.0)
-    assert "Any update below requires JOINT analysis of all three special deps" in text  # 周边文案逐字不变
+    expected = f"Any update below requires JOINT analysis of all {len(cfg['joint']['deps'])} special deps"
+    assert expected in text  # 数量词从 [joint] deps 装配, 不再写死 "three"
     assert "(qBittorrent / libtorrent / qbittorrent-api): one upgrade changes the" in text
-    assert "(qbittorrent /" not in text  # 小写字面拼死形态不再出现
+    assert "(qbittorrent /" not in text  # 小写字面拼接形态不再出现
+
+    # 数量词跟随 [joint] deps 实际条数(2 条时不得残留写死的 "three")
+    cfg2 = {
+        "joint": {
+            "deps": ["qbittorrent", "libtorrent"]
+        },
+        "watch": [{
+            "id": "qbittorrent",
+            "repo": "qbittorrent/qBittorrent"
+        }, ],
+        "paths": {
+            "lockfile": "uv.lock",
+            "pyproject": "pyproject.toml"
+        },
+    }
+    text2 = mod.build_report(cfg2, quick=False, timeout=1.0)
+    assert f"JOINT analysis of all {len(cfg2['joint']['deps'])} special deps" in text2
+    assert "all three special deps" not in text2
