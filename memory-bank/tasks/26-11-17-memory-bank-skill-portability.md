@@ -1,9 +1,9 @@
 # 26-11-17-memory-bank-skill-portability — 自制 skill 轨道可移植性改造
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-17
 **Updated:** 2026-11-18
-**Summary:** 自制 skill 轨道可移植性改造
+**Summary:** 自制 skill 轨道可移植性改造: 三波次 S1-S11 全部实施+分批评审闭环入库 —— 配置化/摘链恒绿/fnmatch 化/模板骨架/轨道 runbook/lane 外置/每 skill PORTING/sync 配置化/收口五条验收; 配套合流适配与 5 件观察建档
 **Topics:** memory-bank-skill-portability
 **Refs:** memory-bank/plans/26-11-17-0010-plan-skill-portability.html, memory-bank/reports/26-11-17-0010-report-skill-portability.html, memory-bank/testing/baselines/26-11-18-0041-memory-bank-skill-portability.md
 
