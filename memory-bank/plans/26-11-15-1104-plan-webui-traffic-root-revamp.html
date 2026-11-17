@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="webui-traffic-root-revamp">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-15-1104">
-<meta name="doc-updated" content="26-11-17-0758">
-<meta name="doc-refs" content="">
+<meta name="doc-updated" content="26-11-18-0100">
+<meta name="doc-refs" content="memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>流量图读侧根修与毫秒级响应: 栅格单几何化/桶宽对齐采样/增量缓存/补尾格/环境层解绑/轮询节奏统一</h1>
 <p class="lede">本篇只回答: 流量图复测报障的四症状(x 轴抖动 / 曲线不总落检查线 / 粒子时有时无 / 每拍尾段失真)与打开停滞 ~10s, 加上用户三项新要求(桶宽对齐采样 / 长窗 ≤500 桶 / 毫秒级响应), 怎么一次修到位——结论是根修(raw 段窗栅格单几何化 + 读侧增量缓存), 不再打补丁。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-15-1104 · <b>doc-updated</b> 26-11-17-0758 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-15-1104 · <b>doc-updated</b> 26-11-18-0100 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户复测报障(26-11-15, 四症状 + 打开停滞) + 三项新要求(桶宽对齐采样 / 长窗 ≤500 桶 / 毫秒级响应) + 本轮只读取证(代码静态验证 / uPlot vendor 对照 / 生产同构仿真与基准实测) + grilling 三轮七问拍板 D1-D7 + 前序计划 <a href="26-11-12-1139-plan-webui-traffic-beat-motion.html">26-11-12-1139</a> / <a href="26-11-14-1313-plan-webui-traffic-beat-fidelity.html">26-11-14-1313</a>
 </div>
 
@@ -174,6 +174,7 @@
   <li><span class="tag">R1 · 26-11-15-1127</span> 评审轮1 五发现(2 major/1 minor/2 nit)全修: 桶数表 6h/12h/24h 改 497-498 随相位(floor+1 非整倍窗, 原单值互斥不自洽) + 补 dt 修正跳变分析(F2 有界空桶持有回填定案 + S1b 仿真流含漂移/跳变 + R8 风险行) + A4 组图冷态口径补明(温态 p95 是组图硬线) + G-A 数字口径修正(100000 B/s, 稀释 39-50%/逐拍摆幅 22%) + §02 的 26-11-14-1313 F1/F4 裸引补前缀消撞名</li>
   <li><span class="tag">R2 · 26-11-15-1139</span> 评审轮2 新增 1 minor 全修: 非整倍窗(6h/12h/24h)桶数相位翻动 497-498 会被前端 rewin 裸点数判据(st.n !== n)周期性误判成跨窗瞬跳(默认窗 24h 在内, A2 原只钉 1m/5m 测不到)—— F5 升格「补尾格+rewin 判据改造」(点数比较改 xs[0]+step, 补点/翻动双覆盖, 桶边保持 floor 对齐) + R5 双来源改写 + S3 电池三钉 + A2 帧采样扩 24h 窗; 轮1 五发现经轮2 逐条确认已落实零回退</li>
   <li><span class="tag">R3 · 26-11-17-0758</span> 收口 Done: S1-S5 全部落地, 八提交 ddc68c11(T1/F1 桶宽=采样整倍恒≤500 桶, S1a)→fc97c4e4(T2/F2 点位归属归桶+桶速率一次算定, S1b-①)→969d5fcf(T3/F3 holding 新几何+有界空桶持有回填, S1b 收口)→b501654e(T4/F4① V4DayCache 增量解析 61x, S2-①)→457c51f1(T5/F4②③ 桶值 LRU 128+组图 Σ, S2-②)→abe58b8b(T6/F5 判定帧补尾格+rewin 判据改窗起点口径, S3-①)→efc90ea5(T7/F6/F7/F8 环境层解绑+轮询节奏=采样间隔全窗统一+冷开首拍立即, S3-②)→ea00c777(T8/S4 收口: 覆盖率补真测试 17 条+bench 标定环境 skip)。A1-A8 全绿(全量数字权威=绿切片 26-11-17-0706; e2e 数字与 A1-A8 落地映射权威=红快照 26-11-17-0617 「本改动面」节; 实测数字引用走 kb.baseline, 此处不抄数字; 红快照两阻断已清偿)。评审留痕: 每批只读子代理评审零未修 blocker(T1 轮2/修4 · T2 轮3/修10 · T3 轮2/修6 · T4 轮1/修0 · T5 轮2/修8+闸门期轮4 组图空闲 tripwire 400→600ms · T6 轮4/修8 · T7 轮2/修6 · T8 轮3/修6, 合计修 48)。S5 回写: conventions/attachments/webui-traffic-beat.md 读侧根修收口节 + 前序两计划双向指链(26-11-12-1139 R13 / 26-11-14-1313 R1, R7 处置闭环) + 任务档案收口 + 新坑档(pitfalls/testing, 基准电池标定环境与并行负载因子余量)。接缝终审由主会话另派。</li>
+  <li><span class="tag">R4 · 26-11-18-0100</span> 被 26-11-18-0037(流量图采样步进+SSE 改造)部分取代: raw 段窗改样本分组点列, 本计划 F1/F2/F4-2/F3 的 raw 桶面(挂钟归桶几何/桶值缓存/持有语义)退役; 槽位数学/差分链/接缝摊配/窗首种子/增量游标模式保留复用; 认领链回链, 状态仍 Done</li>
 </ul>
 
 </div>

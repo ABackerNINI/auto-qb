@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量图采样步进显示与SSE推送改造: 消灭尾端持有失真, 管线延迟毫秒级</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="traffic-stepwise-display">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-18-0037">
+<meta name="doc-updated" content="26-11-18-0037">
+<meta name="doc-refs" content="memory-bank/plans/26-11-15-1104-plan-webui-traffic-root-revamp.html, memory-bank/plans/26-11-14-1313-plan-webui-traffic-beat-fidelity.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: traffic-stepwise-display</div>
+<h1>流量图采样步进显示与SSE推送改造: 消灭尾端持有失真, 管线延迟毫秒级</h1>
+<p class="lede">本篇只回答: 流量图 raw 段窗(1m-24h)的显示语义如何从「挂钟桶 + 轮询 + 持有延伸」彻底改造为「样本步进 + SSE 推送」, 使尾端不再失真、样本落地到渲染的管线延迟毫秒级。契约、传输、前端三层一并重定义, 不做打补丁式修补; agg 段窗(3d+)与存储面不在改造范围。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-18-0037 · <b>doc-updated</b> 26-11-18-0037 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话(26-11-17/18): 用户报「尾端一段数据偶尔平直、下一拍变斜线」→ 根因分析 → 9 项拍板 + 7 项工程默认确认 → 本计划 · 相关: 取代 26-11-15-1104 的 raw 栅格面, 承接 26-11-14-1313 F4 的动机(终点贴线)但换实现
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景</h3>
+<p>用户观察: 流量图尾端一段数据偶尔平直, 下一拍移动到倒数第二段后变为斜线。根因(分析见 §02): 尾桶在首样本落地前被「持有克隆」填值——显示的不是测量值, 是上一桶的复制。这背后是三重语义分裂: 桶栅格锚挂钟、数据按采样节拍到达、前端按轮询节拍刷新, 三台时钟各自漂移, 只能靠持有面把裂缝糊住。</p>
+<h3>验收口径(做到什么程度算成)</h3>
+<ol>
+  <li><b>尾端无失真</b>: 画面上任何时刻的尾点都来自真实样本; 读侧响应里不存在「未落样本却有值」的点。持有克隆面在 raw 段窗不复存在。</li>
+  <li><b>管线毫秒级</b>: 正常状况(回环访问、主循环无卡顿)下, 样本落地→浏览器渲染 &lt;10ms; 步进节奏抖动 = 主循环节拍抖动(ms 级)。远程访问 = RTT + 毫秒级, 文档如实标注。</li>
+  <li><b>全步进</b>: x 轴/曲线/判定线/当前速率读数四者一体钉在最后一个样本上; 图上「现在」= 最后一次测量; 两样本之间整幅静止。</li>
+  <li><b>停流可见</b>: 采样链停滞 → 尾点旁徽标「滞后 Ns」; 断连 → 「已断连」。冻结与无数据在画面上可区分。</li>
+  <li><b>硬切</b>: 旧挂钟桶语义不保留, 不加配置键, 双语义并存面为零。</li>
+</ol>
+<h3>设计底线/不变量</h3>
+<ul>
+  <li><b>存储面不动</b>: v4 天文件(样本槽)/agg.dat 的读写格式与游标缓存模式不变——存储单元本来就是样本, 桶化只是读侧表现层, 换表现层不动地基。</li>
+  <li><b>黄金法则不破</b>: 单一写线程(事件发布点只挂在主循环线程采样 handler); 事件队列满丢弃靠序号断档检测兜底重拉; 新常量(对账周期/静默阈值/点数上限)为模块常量非配置键, 不进 validate_config。</li>
+  <li><b>字节守恒</b>: 差分链/totals 面语义不变——漏采区间字节含在后继样本快照差分里, 分组只是重新划界, 不造字节不丢字节。</li>
+  <li><b>agg 段窗(3d+)零改动</b>: hour/day/month 行、pending_agg 活尾、组图 agg 合流全部原样。</li>
+  <li><b>红线文件不动</b>: <code>config.yml</code> / <code>auto-qb-data/</code> 照旧禁改; 采样分辨率旋钮(si = multiplier × main_tick, 生产 1×1.5s)不在本次范围。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>链路现状</h3>
+<p>采样器(<code>src/auto_qb/core/modules/traffic_sample_blocks.py</code>)按 si=multiplier×main_tick(生产 1×1.5s)产 r/z/n 样本槽写入 v4 天文件 → 读侧 <code>src/auto_qb/webui/server/traffic_qb.py</code> raw 段窗把样本归到<b>挂钟桶栅格</b>(桶宽 = si 整倍加宽, ≤500 桶)并对链端做<b>活尾延伸</b>(holding 槽) → 前端 <code>src/auto_qb/webui/static/shared/qb_traffic_chart.js</code>(3572 行)按采样间隔<b>轮询</b>全量响应 + L0 滚动/L1 收敛动画。</p>
+<h3>痛点 1: 尾端失真本体 = 持有克隆面</h3>
+<ul>
+  <li><code>src/auto_qb/core/traffic_store_codec.py:339</code> <code>v4_live_tail_slots</code>: 链端有速率且间隙有界时在 ts=now 追加 holding 槽(is_hold=True, obs=末槽原值)。</li>
+  <li><code>src/auto_qb/core/traffic_grid.py:737-764</code>: holding 槽归桶走点位归属同一路径但<b>不进差分面</b>(0 delta / 0 覆盖), 只置桶 is_hold 旗。</li>
+  <li><code>src/auto_qb/core/traffic_grid.py:919-930</code> emit 合并序: is_hold 桶速率 = <code>held</code> = 上一非持有观测桶的速率 → <b>尾桶值 ≡ 倒数第二桶值 → 严格平直</b>。</li>
+  <li>下一拍真实样本落入该桶(<code>traffic_grid.py:796</code> is_hold 旗翻假)→ 速率改写为桶内差分均值 → 与上一桶不同 → 斜线。用户看到的「平直→斜线」即此改写瞬间。</li>
+  <li>触发窗口 = 桶界跨越后到首样本落地前(≤si, 相位漂移决定出现频率); 前端轮询(~1.5s)扫过该窗口时必现。</li>
+</ul>
+<h3>痛点 2: 三台时钟的语义分裂</h3>
+<ul>
+  <li>桶栅格锚挂钟 epoch(<code>traffic_grid.py</code> build_grid); 样本按主循环节拍落地(相位漂移 + dt 修正); 前端按自设定时器轮询(<code>qb_traffic_chart.js:1950-1955</code> _qbPollMs = meta.sample_interval_s)。</li>
+  <li>判定线 = uPlot bbox 右缘(<code>qb_traffic_chart.js:2669</code>), 与数据节奏无关; e2e 反向钉死此契约(<code>e2e/traffic-fx-frames.spec.mjs:952-956</code>「活跃态曲线墨达判定线; 停滞态判定线右侧零墨」)。</li>
+</ul>
+<h3>痛点 3: 轮询架构的延迟天花板</h3>
+<p>检出延迟 0~si(样本落在两次轮询之间要等下一轮), 抖动同量级; 与用户要求的毫秒级差两个数量级。收紧轮询只能逼近、不能消除量化, 且空转请求随频率线性增长。</p>
+<h3>可复用的既有基建</h3>
+<ul>
+  <li><b>SSE 全套纪律</b>: <code>src/auto_qb/webui/runtime_stream.py</code> StreamMixin(subscribe/unsubscribe/事件队列), <code>src/auto_qb/webui/server/routes/events.py</code>(POST 票据换 EventSource ?ticket= 的鉴权形态、心跳保活、X-Accel-Buffering: no、满额 503 退轮询), 前端 EventSource 消费面成熟(<code>static/shared/commands.js:289</code>)。设计纪律「只推信号与小真值, 绝不推全量状态」。</li>
+  <li><b>活尾快照发布模式(S6)</b>: 采样 handler 每轮把未落盘状态发布为不可变快照供 Web 线程读——跨线程发布点已存在, 事件源挂同一节拍即可。</li>
+  <li><b>F5 补点/滚动机制</b>: <code>qb_traffic_chart.js</code> _qbRollJudge(:679-699)/_qbPadTailColumns(:719-737) 的整格滚动动画与补点记账与数据源解耦, 可原样适配事件驱动。</li>
+</ul>
+<h3>沉没成本(显式确认)</h3>
+<p>plan 26-11-15-1104 刚落地的 raw 栅格面大部分被本改造取代: F2 点位归属归桶、F4-2 桶值单调缓存(V4SeriesBucketCache)、T2/T3 封口定影判定、F3 持有语义、F1 挂钟桶宽加宽——全部随桶面退役。<b>保留复用</b>: 样本槽位数学(v4_block_slots)、差分链/字节守恒、接缝摊配(P2)、D3 窗首种子、null 标记语义、S6 活尾快照发布、_V4BucketDayCursor 增量游标模式(改造为分组点列游标)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>三层一并重定义, 一次硬切: <b>①读侧契约</b>(挂钟桶 → 样本分组点列)、<b>②传输面</b>(轮询 → SSE 专用通道)、<b>③前端</b>(轮询判定帧 → 事件驱动判定帧)。三层同仓同发, 无兼容轨。</p>
+<h3>① 读侧契约(拍板 D2/D6/D9)</h3>
+<table>
+  <tr><th>项</th><th>新契约</th></tr>
+  <tr><td>points 形态</td><td>样本分组点列: 每点必带 <code>t</code>(真实样本 ts / 组末样本 ts), <code>{t, dl, up}</code>; 缺口 = 显式空值点 <code>{t, dl:null, up:null}</code>(n 游程/过界间隙折叠一点, t=floor(ts))。旧「null 无 t 的定长桶数组」废除。</td></tr>
+  <tr><td>分组口径</td><td>k 的选取以「组点数 + 空值点数 ≤ 500」为准: 初值 = max(1, ceil(窗内预期样本数 / 500)), 窗内有缺口标记时上调直至预算达标; k 上限 = 窗内样本数, 缺口标记数 ≥ 500 时预算数学上不可达——按 k 上限交付并如实标注超预算, 缺口显式空值语义不弃(诚实优先于预算), 终止行为有定义。k=1 逐样本(1m/5m), k&gt;1 组内均值 = Σdelta / Σdt(与现行桶均值同口径, 锚换样本索引); x = 组末样本 ts。1m(40 样本)k=1; 30m(1200)k=3; 24h(57600)k=116(组点 497, 余 3 格让位缺口标记, 超限再上调 k)。组点与空值点共用 MAX_RAW_POINTS=500 预算; 变长 = 相位 ±1 + 缺口标记数。</td></tr>
+  <tr><td>尾组</td><td>进行中组 t = 最新样本 ts, 值 = 组内已落样本的真实均值——<b>恒有真值, 无克隆</b>; 每 tick 随样本更新。</td></tr>
+  <tr><td>meta</td><td>现六键(window/interval_s/sample_interval_s/source/stale/server_started_at)全保留; 新增 <code>schema=2</code> 与 <code>stride=k</code>。interval_s 语义转为组距标称(= k×si)。</td></tr>
+  <tr><td>totals / limits</td><td>形状不变: totals = 组粒度快照差分和({up, dl}|null); limits 事件 [[ts, up, down],…] 原样。</td></tr>
+  <tr><td>组端点</td><td>成员同 tick 采样天然对齐, 逐成员分组点列同构, Σ 现算口径不变; null 面由成员观测面裁决(承袭)。</td></tr>
+</table>
+<h3>② 传输面(拍板 D7/D8)</h3>
+<table>
+  <tr><th>项</th><th>设计</th></tr>
+  <tr><td>通道</td><td>专用 SSE 端点 <code>GET /api/traffic/qb/stream?scope=global|torrent:&lt;hash&gt;|group:&lt;key&gt;&amp;ticket=…</code>: 复用 StreamMixin 订阅队列/心跳/SSE 帧格式, per-scope 过滤在订阅时定死; 不扩全局 /api/events 枢纽(E1)。</td></tr>
+  <tr><td>事件源</td><td>采样 handler 每轮(主循环线程)随活尾快照发布点派发 per-scope 增量: 本 tick 新样本/更新的尾组点。载荷 = 小真值({seq, scope, points:[…]})—— k=1 每 tick 1 新点, k&gt;1 每 tick 尾组更新点 + 组闭合时新组点。全局 scope 每 tick 1 事件, 几十字节。</td></tr>
+  <tr><td>序号与对账</td><td>事件带单调 seq; 前端断档/静默(>3×si)→ 立即全量 GET 重拉; 另加低频 GET 对账(30s)校准缓冲(E4)。</td></tr>
+  <tr><td>降级</td><td>票据满额 503 / 重连失败 → 退回 GET 轮询兜底(同一契约, 延迟退化为轮询级), 沿用既有 SSE 满额兜底形态(E7)。</td></tr>
+  <tr><td>生命周期</td><td>图表抽屉/页签打开即连、关即断; 登出清场挂既有 _qbTeardown 面。</td></tr>
+</table>
+<h3>③ 前端(拍板 D1/D3/D4/D5 + E1/E3)</h3>
+<ul>
+  <li><b>判定帧节拍源</b>: 「轮询落袋」→「SSE 事件到达」; L0 滚动动画/L1 双轨收敛保留, F5 补点机制原样适配(补点 = 上一拍首点真值)。</li>
+  <li><b>窗口锚定</b>: 响应窗口右沿锚末样本 → 判定线(bbox 右缘)天然落在曲线上, 终点贴线<b>零依赖持有面</b>; FX 锚(DOM 菱形/judgeFlash/扫描束钉 L+W)语义零改动。</li>
+  <li><b>停流/断连徽标</b>: 尾点旁 DOM 常驻层内联小字: 冻结 = 「滞后 Ns」(末样本 ts vs 墙钟, 静默 &gt;3×si 起显), 断连 = 「已断连」(显式空值点/重拉失败)。数据信号已有, 只加样式。</li>
+  <li><b>契约适配</b>: _qbPointsToData 改点列直读(每点带 t, 等距内插/外推机器退役); _qbSeamHint/_qbGapZone/_qbChainBounds 改按显式空值点判读; _qbBucketTs 用真值 t。</li>
+  <li><b>节拍公式保留</b>: _qbBeatMs(0.4×period 夹取 [320,1000])等时间线常量不动, period 仍取 si。</li>
+</ul>
+<aside class="aside">代价与收益的一句话: 持有面(F4/F3)、空桶回填(F2/R8)、桶值缓存(F4-2)、归桶几何(F2/F1)在 raw 段窗整体退役——它们存在的唯一理由(把采样数据糊进挂钟桶并垫住判定线)随「轴钉样本」消失。</aside>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>阶段</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>0 设计钉面</b></td><td>本计划 §03 契约表定稿即单点; 定常量: MAX_RAW_POINTS=500(组点+空值点共用预算) / 对账 30s / 静默 3×si; 事件载荷形状冻结。</td><td>§03 无 OPEN 项; 常量表进计划; 无待拍板残留(§05)。</td></tr>
+  <tr><td><b>1 后端读侧</b></td><td>新「样本分组装配」纯函数(v4 slots → 分组点列; 复用槽位数学/差分链/接缝摊配/窗首种子/null 标记); <code>traffic_qb.py</code> 三端点 raw 装配替换(build_grid/F2 归桶/F4-2 桶缓存/F3 持有退役); meta 加 schema/stride; 增量游标改造(_V4BucketDayCursor → 分组游标); 组端点同改。</td><td>新电池绿: 分组口径逐位用例(短窗 k=1 逐样本/长窗均值/尾组恒真值)、字节守恒对账(分组前后 totals 总量恒等)、缺口显式空值、含空值点总点数 ≤500(预算可达情形; 不可达角缺口标记数 ≥500 按 §03 k 上限交付并标注超预算)、组端点 Σ; 旧 hold/A5/桶缓存电池改写为新语义守阵; <code>commands run test.full</code> 绿。</td></tr>
+  <tr><td><b>2 传输面</b></td><td>采样 handler 发布点(主循环线程, 随活尾快照同节拍); StreamMixin per-scope 订阅扩展; <code>/api/traffic/qb/stream</code> 端点(票据/心跳/退订/X-Accel-Buffering); seq 单调; 队列满丢弃+断档语义。</td><td>端点电池绿: 订阅/退订成对、心跳间隔、票据满额 503、载荷形状、序号连续性、多订阅隔离; 发布路径主循环侧单测(注入时钟); 既有 /api/events 端点回归绿。</td></tr>
+  <tr><td><b>3 前端</b></td><td>契约适配(_qbPointsToData/缺口/悬停/汇总); 订阅生命周期(开连/关断/登出清场); 判定帧事件驱动; 窗口右沿锚末样本; 停流/断连徽标; 降级 GET 轮询路径; node 电池与 e2e 改写。</td><td>node 电池全绿(beat kernel/wiring/anchor/scan/yaxis 按新契约改写); e2e 全绿(A5 改写: 冻结期终点=末样本不动; 新增: 事件到达→渲染延迟断言、徽标可见性、降级路径); <code>commands run dev.run -- config.yml --dry-run</code> 真机冒烟。</td></tr>
+  <tr><td><b>4 收尾</b></td><td>code-review skill 批次评审; 全量测试 + 基线切片(<code>kb.new baseline</code>); memory-bank 回写(pitfalls: 挂钟桶 vs 样本锚定的语义教训、持有面教训; 架构文档 WEBUI 面同步); 根 README 如涉及。</td><td>评审零 actionable; 基线切片入档; 回写完成; 提交走 ship(用户显式触发)。</td></tr>
+</table>
+<div class="aside">部署纪律: 阶段 1-3 属一次硬切, 后端与前端必须同提交交付(旧前端读不懂新契约, 反之亦然); 阶段间可分支推进、合并时整体落地。</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板——grilling 已收敛, 全部结论在 §06(用户拍板 D1-D9, 工程默认 E1-E7 已确认)。实施期如出现新分叉, 按 scope-guard 纪律先回本计划补拍板再动代码。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>全步进: 轴/曲线/判定线/读数一体钉最后样本, 图上「现在」=最后测量</td><td>26-11-18</td></tr>
+  <tr><td>D2</td><td>读侧契约深改: raw 段窗 points = 样本分组点列, 持有面/回填/桶缓存 raw 桶面退役, 存储不动; 接受推翻 26-11-15-1104 raw 栅格面的沉没成本</td><td>26-11-18</td></tr>
+  <tr><td>D3</td><td>停滞/断连: 冻结语义成立, 必须可见地说明(≠ 无数据)</td><td>26-11-18</td></tr>
+  <tr><td>D4</td><td>范围锁定 raw 段窗(1m-24h), agg 段窗(3d+)不动</td><td>26-11-18</td></tr>
+  <tr><td>D5</td><td>硬切不加配置键, 旧挂钟语义不保留</td><td>26-11-18</td></tr>
+  <tr><td>D6</td><td>raw points 契约破坏性重定义; meta 六键保留+新增 schema/stride; totals/limits 形状不动</td><td>26-11-18</td></tr>
+  <tr><td>D7</td><td>传输改 SSE 推送(毫秒级管线); 轮询路线否决</td><td>26-11-18</td></tr>
+  <tr><td>D8</td><td>步进节奏 si=1.5s 保持; 分辨率=main_tick 旋钮不在本次范围</td><td>26-11-18</td></tr>
+  <tr><td>D9</td><td>事件带单调序号, 断档/静默立即重拉 + 低频 GET 对账兜底(~30s)</td><td>26-11-18</td></tr>
+  <tr><td>E1</td><td>SSE 走专用通道(per-scope 订阅生命周期), 不扩全局 /api/events 枢纽; 复用票据/心跳/退订纪律</td><td>26-11-18</td></tr>
+  <tr><td>E2</td><td>L0 滚动/L1 收敛保留, 节拍源改事件到达; F5 补点机制原样适配</td><td>26-11-18</td></tr>
+  <tr><td>E3</td><td>缺口表达 = 每点必带 t + 显式空值点; 前端缺口 machinery 按空值点判读</td><td>26-11-18</td></tr>
+  <tr><td>E4</td><td>对账周期 30s、静默阈值 3×si: 模块常量, 可调不加配置键</td><td>26-11-18</td></tr>
+  <tr><td>E5</td><td>测试面随契约重写: 后端 hold/A5/桶缓存电池、前端 node 电池、e2e(A5 改「冻结期终点=末样本不动」)同步改写; 新增测试同步 docstring 测试计划</td><td>26-11-18</td></tr>
+  <tr><td>E6</td><td>组图 Σ: 成员同 tick 采样天然对齐, 分组点列逐成员同构, 组端点契约同改</td><td>26-11-18</td></tr>
+  <tr><td>E7</td><td>流不可用降级: 票据满额 503/重连失败 → GET 轮询兜底(同契约, 轮询级延迟)</td><td>26-11-18</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>前端重写面大(3572 行 chart + 6384 行 node 电池)</td><td>阶段 3</td><td>分期表逐电池改写, 每电池改完即跑, 禁一次性大爆炸提交; 节拍源替换与契约适配分两个子波。</td></tr>
+  <tr><td>R2</td><td>事件源跨线程(主循环 → Web)</td><td>阶段 2</td><td>沿用活尾快照发布模式(不可变快照 + 队列), 不引入绕开单写线程的并发代码(黄金法则 5); 队列满丢旧事件靠 seq 断档重拉兜底。</td></tr>
+  <tr><td>R3</td><td>事件负载失控</td><td>torrent/group scope 活跃成员多</td><td>载荷 = scope 聚合显示点(组内已聚合), 绝不 per-torrent 逐成员推; 每 tick 每 scope 恰 1 帧。</td></tr>
+  <tr><td>R4</td><td>硬切无配置回退, 部署窗口前后端错位</td><td>合并/发版</td><td>后端+前端同提交; 阶段 3 验收含真机冒烟; 回滚走 git 版本。</td></tr>
+  <tr><td>R5</td><td>远程访问下毫秒级不可保证(RTT 主导)</td><td>验收口径争议</td><td>验收口径钉「回环毫秒级; 远程 = RTT + 毫秒级」并写入文档; 不为远程做补偿协议。</td></tr>
+  <tr><td>R6</td><td>26-11-15-1104 守阵改写遗漏, 旧语义残留断言假红</td><td>阶段 1/3 测试改写</td><td>改写清单以探查报告钉面清单为准(hold 系/A5/桶缓存/beat kernel); 改完 <code>grep</code> 复查零旧语义残留(同 st.n!==n 静态钉先例)。</td></tr>
+  <tr><td>R7</td><td>主循环卡顿 → 事件静默被误读为故障</td><td>运行期</td><td>静默 >3×si → 徽标「滞后 Ns」(诚实等待); 恢复后 seq 续上自动消徽标; 过界(停滞)与断连走两条不同文案(§01 验收 4)。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-18-0037</span> 初版。来源: grilling 会话(26-11-17/18)。要点: 用户报尾端失真 → 根因=持有克隆面+三台时钟分裂 → 拍板 D1-D9/E1-E7 → 契约(样本分组点列)/传输(SSE 专用通道)/前端(事件驱动判定帧)三层硬切方案, 分四阶段实施。</li>
+</ul>
+
+</div>
+</body>
+</html>
