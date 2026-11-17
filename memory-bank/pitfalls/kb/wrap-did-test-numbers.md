@@ -1,6 +1,6 @@
 # kb.wrap --did 与档案正文不能带裸测试数字
 
-> 摘要: `commands run kb.wrap --did "..."` 的一句话会同时写进切片 R 行(`**R1(日期):**` 前缀)与档案进度日志行, 两处都不匹配「带日期前缀的行」豁免; 句里带 `213 passed` 这类裸数字会被 kb.check 的 check_wording 判红(判据族 B, 只拦新增)。2026-10-17 当天两个会话各踩一次, 2026-10-22 再犯(--did 路径); 2026-11-05 第 4 次走的是**另一条路径** —— 档案收尾段直接抄数字(SKILL.md DoD 第 4 条「写进本次结论」歧义措辞所致, 当轮已修); 2026-11-17 第 5 次同走档案正文路径(收口结论节抄数字), 且同轮再次实证「判红行指存量件」形态。另: 判红时打印的违规行取自**全量命中的扫描序末 N 条**, 常指向无关的存量件 —— 定位新增必须做 HEAD/工作区 `--list-numbers` 清单 diff。
+> 摘要: `commands run kb.wrap --did "..."` 的一句话会同时写进切片 R 行(`**R1(日期):**` 前缀)与档案进度日志行, 两处都不匹配「带日期前缀的行」豁免; 句里带 `213 passed` 这类裸数字会被 kb.check 的 check_wording 判红(判据族 B, 只拦新增)。2026-10-17 当天两个会话各踩一次, 2026-10-22 再犯(--did 路径); 2026-11-05 第 4 次走的是**另一条路径** —— 档案收尾段直接抄数字(SKILL.md DoD 第 4 条「写进本次结论」歧义措辞所致, 当轮已修); 2026-11-17 第 5 次同走档案正文路径(收口结论节抄数字), 且同轮再次实证「判红行指存量件」形态。另: 2026-11-17 前, 判红时打印的违规行取自全量命中的扫描序末 N 条, 常指向无关的存量件; 守阵已改(issue 26-11-17-0852, 超线时对 HEAD 清单现算 diff 报真新增), 「判红位置可能指向存量件」节的判别法降级为备用。
 > 触发: kb.wrap, --did, 裸测试数字, check_wording 判红, R 行不写数字, 收尾回写, 手抄数字判红位置, 末 N 条, 存量还是新增, 清单 diff 定位, 误判入池
 
 **Refs:** memory-bank/tasks/26-10-17-webui-traffic-source-fixes.md
@@ -15,9 +15,9 @@
 ### 判红位置可能指向**存量**件, 不能照着它找
 
 - **触发**: 2026-10-22 14:37, `test_number_guard_is_green_on_current_kb` 报「手抄测试数字 395 处 > 冻结常数 394」, 紧接着打印的违规行是 `activeContext/26-10-22-0102-test-midnight-window-jitter.md:6` —— 一个**本轮没碰过**的存量切片。据此入池 issue 后核对才发现是误判。
-- **根因**: `check_wording.collect_violations` 在超额度时只打印 `num_hits[-over:]`(**扫描序末 N 条**), 目的是"别刷屏", 但这 N 条是**全量命中的末尾**, 与"新增"无关 —— 新增的可能排在扫描序中间(本例真正新增的 `26-10-20-2233` 就排在 `26-10-22-0102` 之前)。按路径排序 `activeContext` 先于 `tasks`, 于是"末条"常落在 activeContext 里, 看起来特别像新件。
+- **根因**: `check_wording.collect_violations` 在超额度时只打印 `num_hits[-over:]`(**扫描序末 N 条**), 目的是"别刷屏", 但这 N 条是**全量命中的末尾**, 与"新增"无关 —— 新增的可能排在扫描序中间(本例真正新增的 `26-10-20-2233` 就排在 `26-10-22-0102` 之前)。扫描序是 `SCAN_DIRS = ("tasks", "active-context")`: tasks 段在前、active-context 段在后, 各段内按路径排序 (本节原句误记为「按路径排序 `activeContext` 先于 `tasks`」, 2026-11-17 随守阵修复一并改正), 于是"末条"常落在 active-context 段尾, 看起来特别像新件。
 - **判别**: 不要信报的那一行, 直接做两份清单 diff —— `python .agents/skills/memory-bank/scripts/check_wording.py --list-numbers > now.txt`, 再 `git archive HEAD memory-bank | tar -x -C /tmp/headmb` 后用 `--root /tmp/headmb --mb-dir /tmp/headmb/memory-bank --list-numbers > head.txt`, `diff head.txt now.txt` 即为**本轮真正新增**的那几条(顺带给出总账: HEAD 数应等于 394)。
-- **处置**: 只改 diff 出来的新增行; 存量命中在冻结额度内属债务, 按范围守恒本轮不动。**入池前必须先做这个 diff**, 否则会把存量债务误记成本轮问题。
+- **处置**: 只改 diff 出来的新增行; 存量命中在冻结额度内属债务, 按范围守恒本轮不动。**入池前必须先做这个 diff**, 否则会把存量债务误记成本轮问题。(2026-11-17 守阵已改: 超线时守阵自己现算 HEAD 清单 diff 报真新增行, issue 26-11-17-0852; 本节判别法降级为备用 —— git 不可用的 fallback 输出仍会带末 N 条样本, 文案已明写「样本非新增定位」。)
 
 ### 档案收尾段直接抄数字(SKILL.md DoD 歧义措辞所致, 非 --did 路径)
 

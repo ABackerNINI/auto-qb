@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="kb-check-wording-tail-mislead">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="check_wording 族 B 超线报「扫描序末 N 条」而非真新增行,误导排查">
 <meta name="issue-summary" content="check_wording.py:185 族 B 超线把扫描序末 N 条标成「手抄测试数字新增 N 处」报出,但新增行可能排在扫描序中间,报出的常是存量件(坑档已记 2 次误导向复发);改进=报真 diff。">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-0852-bug-kb-check-wording-tail-mislead</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 08:52</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">kb</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">踩坑 T9(2026-11-17)</div></div>
 </div>
@@ -157,11 +157,14 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 08:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-17 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-17 (HEAD a124636b) 仍复现 —— <code>collect_violations</code> 超线块仍是 <code>num_hits[-over:]</code> 扫描序末 N 条, 锚点全部命中; 当轮认领修复。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong> (主案目标「报真 diff」达成, 实现改道为<strong>运行时现算</strong>, 不落盘快照): 超线时对 HEAD 同面清单现算 diff —— 每个扫描面一次 <code>git archive HEAD</code>(内存 tar 展开, 豁免口径与工作区同一函数), 键 = (路径, 分类, 行文) <strong>多重集</strong>配对, 行号漂移不参与; 基线里配不上的命中即真新增, 按扫描序报出。快照案的「同源校验防漂移」在现算下不存在, 故不建快照生成物 (改道原因: 坑档判别法已实证 git archive 路径可行, 现算零漂移面且少一个生成物/命令)。git 不可用 (非 git 环境 / <code>--root</code> 指向归档展开目录) 退回旧末 N 条启发式, 文案明写「样本非新增定位」(最小案的文案要求并入 fallback); 溢出但 diff 无新增 (上轮判红未清就入库) 有专门文案指路 <code>--count-numbers</code> 重算冻结常数。</p>
+  <p><strong>验证方式与实测数字</strong>: ①<code>test.one -k number_guard</code> 7 passed (新增 4 用例: 真新增定位不取末 N 条 / 同文行多重集配对 / 无 git 无子进程短路 / collect_violations 接线必报真新增——评审 minor 补); ②真机两分支: 强制溢出+无工作区新增 → 「对 HEAD 清单 diff 无新增」文案 (394 命中全配平); 造临时切片 1 条真新增 → 报出行 = 该临时件 (基线 393 全配平); ③kb.check 全绿。</p>
+  <p><strong>坑档回写</strong>: <code>pitfalls/kb/wrap-did-test-numbers.md</code>「判红位置可能指向存量件」节根因句已按扫描序实况改正 (原句误记「按路径排序 activeContext 先于 tasks」, 实况是 <code>SCAN_DIRS</code> tasks 段在前), 判别法标降级备用。</p>
 </section>
 
 <footer>

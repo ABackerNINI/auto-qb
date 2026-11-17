@@ -32,6 +32,12 @@
     豁免 3   行内 `<!-- wording:allow -->` 标记
     存量冻结 已有违规**冻结为债务**: 数目不得增加 (`frozen_counts`), 只拦**新增**手抄 ——
              与 cap 债务制 (2026-09-30) 同构: 存量是历史记录, 一行不改, 只保证不再恶化。
+    报错定位 (2026-11-17, issue 26-11-17-0852): 超线时对 HEAD 同面清单**现算 diff** 报真新增行
+             (git archive 一次拿全, 键 = 路径+分类+行文, 行号漂移不参与匹配) —— 不再拿扫描序
+             末 N 条顶「新增」名义 (新增件可能排在扫描序中间, 报出的常是存量件, 坑档
+             `pitfalls/kb/wrap-did-test-numbers.md` 记过 2 次误导向)。git 不可用 (--root 指向
+             临时展开目录 / 非 git 环境) 才退回末 N 条启发式, 文案明写「样本非新增定位」;
+             坑档判别法 (HEAD/工作区 --list-numbers 清单 diff) 降级为备用。
     ! 已知边界 日期豁免**只认首行**: 多行流水条目的**续行**不以日期开头, 照常入判 (见
              `pitfalls/kb/scripts.md`) —— 处置 = 续行回避禁写形态 (写数字改「见 kb.baseline」)。
 
@@ -47,8 +53,12 @@
 from __future__ import annotations
 
 import argparse
+import io
 import re
+import subprocess
 import sys
+import tarfile
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -130,6 +140,92 @@ def _read(path: Path) -> str:
     return path.read_bytes().decode("utf-8", errors="replace")
 
 
+def _format_number_hit(hit: tuple[str, int, str, str]) -> str:
+    """结构化命中 (rel, 行号, 分类, 行) -> 可打印行 (展示格式单点)。"""
+    rel, lineno, kind, line = hit
+    return f"{rel}:{lineno}: [{kind}] {line[:140]}"
+
+
+def _scan_number_hits(root: Path, mb: Path) -> list[tuple[str, int, str, str]]:
+    """工作区扫描面的结构化命中 (rel, 行号, 分类, 行 strip) —— 展示与 HEAD diff 的同一来源。"""
+    out: list[tuple[str, int, str, str]] = []
+    for sub in SCAN_DIRS:
+        directory = mb / sub
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.md")):
+            if path.name.startswith("_"):
+                continue
+            rel = rel_posix(path, root)
+            for lineno, kind, line in scan_text_numbers(_read(path)):
+                out.append((rel, lineno, kind, line))
+    return out
+
+
+def _head_hit_counter(root: Path, mb: Path) -> Counter | None:
+    """HEAD 里同一扫描面的命中多重集 (键 = (rel, 分类, 行 strip); 行号漂移不参与匹配)。
+
+    每个扫描面一次 `git archive HEAD` 拿全 (逐文件 `git show` 会把几百个文件放大成几百次
+    子进程), 内存 tar 展开, 豁免口径与工作区同一函数 (`scan_text_numbers`)。
+    归档**只取两个扫描面**: baselines 等数字事实源里的同文行会污染多重集, 把真新增错配成存量。
+    某面归档失败 (该面 HEAD 里不存在) 视为空基线 —— 整面新建时其全部命中本就是真新增;
+    全部失败 (非 git 环境 / 无 HEAD) 或 mb 不在 root 下 -> None (调用方退回扫描序启发式)。
+    """
+    try:
+        mb_rel = mb.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return None
+    # 先做无子进程的短路: 非 git 环境 (tmp 夹具 / --root 指向归档展开目录) 直接放弃现算。
+    if not (root / ".git").exists():
+        return None
+    blobs: list[bytes] = []
+    for sub in SCAN_DIRS:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", str(root), "archive", "HEAD", "--", f"{mb_rel}/{sub}"],
+                capture_output=True,
+                timeout=120,
+            )
+            proc.check_returncode()
+        except (OSError, subprocess.SubprocessError):
+            continue
+        blobs.append(proc.stdout)
+    if not blobs:
+        return None
+    counter: Counter = Counter()
+    for blob in blobs:
+        try:
+            with tarfile.open(fileobj=io.BytesIO(blob)) as tar:
+                for member in tar:
+                    if not member.isfile() or not member.name.endswith(".md"):
+                        continue
+                    if Path(member.name).name.startswith("_"):
+                        continue
+                    f = tar.extractfile(member)
+                    if f is None:
+                        continue
+                    text = f.read().decode("utf-8", errors="replace")
+                    for _lineno, kind, line in scan_text_numbers(text):
+                        counter[(member.name, kind, line)] += 1
+        except tarfile.TarError:
+            return None
+    return counter
+
+
+def _diff_new_number_hits(hits: list[tuple[str, int, str, str]],
+                          head_counter: Counter) -> list[tuple[str, int, str, str]]:
+    """工作区命中对 HEAD 基线多重集做差 -> 真新增 (基线里配不上的命中, 保持扫描序)。"""
+    remaining = Counter(head_counter)
+    new: list[tuple[str, int, str, str]] = []
+    for rel, lineno, kind, line in hits:
+        key = (rel, kind, line)
+        if remaining[key] > 0:
+            remaining[key] -= 1
+        else:
+            new.append((rel, lineno, kind, line))
+    return new
+
+
 def scan_text(text: str) -> list[tuple[int, str, str]]:
     """正文 → [(行号, 分类, 原文行)]。
 
@@ -163,7 +259,7 @@ def collect_violations(root: Path, mb: Path) -> list[str]:
     (改了下次重跑又回来) —— 源头 (档案 / 切片) 已被扫到, 报两处只是重复信号。
     """
     problems: list[str] = []
-    num_hits: list[str] = []
+    num_hits: list[tuple[str, int, str, str]] = []
     for sub in SCAN_DIRS:
         directory = mb / sub
         if not directory.is_dir():
@@ -176,17 +272,36 @@ def collect_violations(root: Path, mb: Path) -> list[str]:
             for lineno, kind, line in scan_text(text):
                 problems.append(f"{rel}:{lineno}: [{kind}] {line[:140]}")
             for lineno, kind, line in scan_text_numbers(text):
-                num_hits.append(f"{rel}:{lineno}: [{kind}] {line[:140]}")
-    # 族 B 债务制: 存量冻结 (≤ FROZEN), 只拦**新增**的手抄。
-    # 报**新增**的那几条 (取扫描序末 N 条 —— 按路径排序, 新增件通常排在末尾), 不刷全部存量:
-    # 存量 394 条全打会把提交闸门刷屏, 而清理会话要全量用 `--count-numbers` / `--list-numbers` 现取。
-    if len(num_hits) > FROZEN_TEST_NUM_COUNT:
-        over = len(num_hits) - FROZEN_TEST_NUM_COUNT
-        problems.extend(num_hits[-over:])
-        problems.append(
-            f"(手抄测试数字新增 {over} 处 —— 数字只写 testing/baselines/ 切片, 正文改「见 kb.baseline」; "
-            f"存量已冻结 {FROZEN_TEST_NUM_COUNT} 处, 全量清单 `--list-numbers`)"
-        )
+                num_hits.append((rel, lineno, kind, line))
+    # 族 B 债务制: 存量冻结 (不超过 FROZEN_TEST_NUM_COUNT), 只拦**新增**的手抄; 全量清单
+    # (清理会话) 用 `--count-numbers` / `--list-numbers` 现取。新增的**定位**对 HEAD 同面清单
+    # 现算 diff 报真新增行 —— 不取扫描序末 N 条 (那与「新增」无关, 新增件排在扫描序中间时
+    # 必然报出存量件, issue 26-11-17-0852, 坑档记过 2 次误导向)。git 不可用才退回末 N 条,
+    # 文案明写「样本非新增定位」。
+    over = len(num_hits) - FROZEN_TEST_NUM_COUNT
+    if over > 0:
+        head_counter = _head_hit_counter(root, mb)
+        if head_counter is None:
+            problems.extend(_format_number_hit(h) for h in num_hits[-over:])
+            problems.append(
+                f"(手抄测试数字新增 {over} 处 —— 数字只写 testing/baselines/ 切片, 正文改「见 kb.baseline」; "
+                f"上面 {over} 行只是扫描序末 {over} 条样本, **不是**新增定位 (git 不可用, 真新增用 --list-numbers "
+                f"清单对 HEAD diff, 见坑档 pitfalls/kb/wrap-did-test-numbers.md); 存量已冻结 {FROZEN_TEST_NUM_COUNT} 处)"
+            )
+        else:
+            new_hits = _diff_new_number_hits(num_hits, head_counter)
+            if new_hits:
+                problems.extend(_format_number_hit(h) for h in new_hits)
+                problems.append(
+                    f"(手抄测试数字新增 {len(new_hits)} 处 (上列即真新增, 对 HEAD 清单 diff 现算) —— "
+                    f"数字只写 testing/baselines/ 切片, 正文改「见 kb.baseline」; "
+                    f"存量已冻结 {FROZEN_TEST_NUM_COUNT} 处, 全量清单 `--list-numbers`)"
+                )
+            else:
+                problems.append(
+                    f"(手抄测试数字超出冻结 {over} 处, 但对 HEAD 清单 diff 无新增 —— 超出部分已在 HEAD 里"
+                    f"(上轮判红未清就入库了?); 清理后用 `--count-numbers` 现算并下调 FROZEN_TEST_NUM_COUNT)"
+                )
     return problems
 
 
@@ -197,18 +312,7 @@ def count_test_numbers(root: Path, mb: Path) -> int:
 
 def list_test_numbers(root: Path, mb: Path) -> list[str]:
     """族 B 全量命中行 —— 供 `--list-numbers` (清理会话) 与 `--count-numbers` 共用。"""
-    hits: list[str] = []
-    for sub in SCAN_DIRS:
-        directory = mb / sub
-        if not directory.is_dir():
-            continue
-        for path in sorted(directory.glob("*.md")):
-            if path.name.startswith("_"):
-                continue
-            rel = rel_posix(path, root)
-            for lineno, kind, line in scan_text_numbers(_read(path)):
-                hits.append(f"{rel}:{lineno}: [{kind}] {line[:140]}")
-    return hits
+    return [_format_number_hit(h) for h in _scan_number_hits(root, mb)]
 
 
 # --------------------------------------------------------------------------- CLI

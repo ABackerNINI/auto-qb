@@ -65,6 +65,10 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 - test_number_guard_exempts_dated_code_and_reports_only_overflow: 判据族 B 裸数字判红; 日期/代码/豁免标记不报; 存量冻结只报溢出
 - test_number_guard_is_green_on_current_kb: 当前 KB 裸数字未超冻结常数 (存量冻结; 超出 = 本轮新增手抄)
 - test_number_guard_dated_exemption_does_not_cover_continuation_lines: 已知边界 —— 日期豁免只认首行, 续行照常入判
+- test_number_guard_diff_reports_true_new_lines_not_tail_sample: 超线报真新增 (对 HEAD 基线多重集做差), 不拿扫描序末 N 条顶「新增」名义 (issue 26-11-17-0852)
+- test_number_guard_diff_matches_by_multiset_not_set: 同文行按出现次数配对, 只超出条数算新增
+- test_number_guard_head_baseline_absent_without_git_dir: 非 git 环境无子进程短路 (返回 None 退回扫描序启发式)
+- test_number_guard_collect_reports_true_new_with_head_baseline: 接线 —— collect_violations 有 HEAD 基线时报真新增而非末 N 条 (monkeypatch 基线, 不起子进程)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
 
@@ -102,6 +106,8 @@ from __future__ import annotations
 import re
 
 import sys
+
+from collections import Counter
 
 from pathlib import Path
 
@@ -759,6 +765,93 @@ def test_number_guard_dated_exemption_does_not_cover_continuation_lines(tmp_path
     hits = wording.list_test_numbers(tmp_path, mb)
 
     assert len(hits) == 1, f"续行里的裸数字应入判 (首行已豁免): {hits}"
+
+
+def test_number_guard_diff_reports_true_new_lines_not_tail_sample() -> None:
+    """真新增定位 (issue 26-11-17-0852): 超线时对 HEAD 基线做差, 报真新增而非扫描序末 N 条。
+
+    构造: HEAD 基线 2 条存量命中 (都在 active-context 段), 工作区新增 1 条且排在**扫描序开头**
+    (SCAN_DIRS tasks 段在前、active-context 段在后) —— 旧实现报末 N 条 (active-context 段尾的
+    存量行) 必然误导排障; 现实现按 (路径, 分类, 行文) 多重集配对, 行号漂移不参与。
+    """
+    wording = _wording()
+    hits = [
+        ("memory-bank/tasks/a.md", 3, "裸 passed 数字", "本轮新增 6226 passed"),
+        ("memory-bank/active-context/z.md", 6, "裸 passed 数字", "存量行 2772 passed"),
+        ("memory-bank/active-context/z.md", 9, "裸 passed 数字", "另一条存量 2772 passed"),
+    ]
+    head = Counter(
+        {
+            ("memory-bank/active-context/z.md", "裸 passed 数字", "存量行 2772 passed"): 1,
+            ("memory-bank/active-context/z.md", "裸 passed 数字", "另一条存量 2772 passed"): 1,
+        }
+    )
+
+    new = wording._diff_new_number_hits(hits, head)
+
+    assert len(new) == 1, f"应只报 1 条真新增: {new}"
+    assert new[0][0] == "memory-bank/tasks/a.md", f"必须报 tasks 段的新行, 不是 active-context 段的存量: {new}"
+
+
+def test_number_guard_diff_matches_by_multiset_not_set() -> None:
+    """多重集配对: 同文行 HEAD 1 条 / 工作区 2 条 -> 只超出那条算新增 (集合配对会把两条全判存量)。"""
+    wording = _wording()
+    hits = [
+        ("memory-bank/tasks/a.md", 1, "裸 passed 数字", "2772 passed"),
+        ("memory-bank/tasks/a.md", 7, "裸 passed 数字", "2772 passed"),
+    ]
+    head = Counter({("memory-bank/tasks/a.md", "裸 passed 数字", "2772 passed"): 1})
+
+    new = wording._diff_new_number_hits(hits, head)
+
+    assert len(new) == 1 and new[0][1] == 7, f"同文行按出现次数配对, 只超出那条算新增: {new}"
+
+
+def test_number_guard_head_baseline_absent_without_git_dir(tmp_path: Path) -> None:
+    """HEAD 基线现算的无子进程短路: 非 git 环境 (无 .git) 直接返回 None, 不起 git 子进程。
+
+    本项目测试禁止起子进程 —— 短路必须在任何 `git archive` 之前 (fallback 启发式由
+    test_number_guard_exempts_dated_code_and_reports_only_overflow 在同款无 git 夹具上覆盖)。
+    """
+    wording = _wording()
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    assert wording._head_hit_counter(tmp_path, mb) is None
+
+
+def test_number_guard_collect_reports_true_new_with_head_baseline(tmp_path: Path, monkeypatch) -> None:
+    """接线测试 (评审 minor): collect_violations 的「有 HEAD 基线」分支必须报真新增而非末 N 条。
+
+    monkeypatch `_head_hit_counter` 返回固定基线 (不起 git 子进程); 基线配平 active-context 段
+    的 2 条存量, 新增行落在扫描序**开头** (tasks 段) —— 旧末 N 条实现会报 active-context 存量行。
+    """
+    wording = _wording()
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    (mb / "active-context").mkdir(parents=True)
+    (mb / "tasks" / "a.md").write_text("- 本轮新增 6226 passed\n", encoding="utf-8")
+    (mb / "active-context" / "z.md").write_text("- 存量行 2772 passed\n- 另一条存量 2772 passed\n", encoding="utf-8")
+    head = Counter(
+        {
+            # 键第三元 = scan_text_numbers 返回的 line.strip() —— 保留列表前缀「- 」
+            ("memory-bank/active-context/z.md", "裸 passed 数字", "- 存量行 2772 passed"):
+                1,
+            ("memory-bank/active-context/z.md", "裸 passed 数字", "- 另一条存量 2772 passed"):
+                1,
+        }
+    )
+    monkeypatch.setattr(wording, "_head_hit_counter", lambda root_arg, mb_arg: head)
+    original = wording.FROZEN_TEST_NUM_COUNT
+    try:
+        wording.FROZEN_TEST_NUM_COUNT = 2
+        problems = wording.collect_violations(tmp_path, mb)
+    finally:
+        wording.FROZEN_TEST_NUM_COUNT = original
+
+    bare = [p for p in problems if "裸" in p]
+    assert len(bare) == 1 and "tasks/a.md" in bare[0], f"必须报 tasks 段真新增, 不是 active-context 存量: {problems}"
+    assert any("新增 1 处" in p and "HEAD" in p for p in problems), f"总述应标明 diff 现算来源: {problems}"
 
 
 def test_number_guard_is_green_on_current_kb() -> None:
