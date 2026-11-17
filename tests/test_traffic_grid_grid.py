@@ -6,6 +6,7 @@
 - test_build_grid_unaligned_t0_extra_bucket: t0 未对齐栅格时窗首桶提前(floor), 桶数仍 481(floor+1 与相位无关, 180 | 86400 整倍)
 - test_build_grid_fractional_interval_kept_not_ceiled: 小数采样间隔桶宽保持采样整倍不取整(1.5s -> 1.5s 桶宽 41 桶; 旧 ceil 口径反转, F1 双几何实证)
 - test_build_grid_raw_bucket_cap_high_frequency_sampling: (26-11-15-1104 F1)raw 桶数上限 500 —— 1.5s 采样: 1m -> 1.5s 桶 41 / 5m -> 1.5s 桶 201 / 30m -> 4.5s 桶 401 / 3h -> 22.5s 桶 481 / 6h -> 43.5s 桶与 12h -> 87s 桶与 24h -> 174s 桶各 497-498 随相位(span/B 非整倍, floor+1), 上限恒 <= 500
+- test_build_grid_raw_anchor_float_phase_invariant: (issue 26-11-17-0936 治本守阵)raw 窗 t1 保留浮点挂钟 + first 按 interval 网格双向校正对齐 —— 1m/5m 任意 (A mod3, frac) 每拍恰 +interval, 30m 每 3 拍恰 +4.5 且不再出现 0/+4.5 二拍聚簇
 - test_build_grid_bucket_cap_exact_500_divisor: (D7/A6 边角)span 恰 500 x si 整数倍的采样(旧分母 501)分母 -1 预留进行中桶位后逐相位 <= 500
 - test_build_grid_bucket_cap_exact_500_divisor 相位扫扩满一整桶宽(评审 #4), n 两形态集合 {494,495}/{496,497}/{376} 逐值钉
 - test_build_grid_nonpositive_interval_fails_fast: (黄金法则 4)非正 si fail-fast raise(来源链纯 config 派生, 校验单点在 validate_config)
@@ -259,6 +260,45 @@ def test_build_grid_raw_bucket_cap_high_frequency_sampling():
         g = build_grid(name, NOW, 1.5)
         assert g.interval == iv and len(g.buckets) in (497, 498), name  # 非整倍窗: 相位波动幅度 1
         assert len(g.buckets) <= MAX_RAW_BUCKETS  # 上限恒 <= 500
+
+
+def test_build_grid_raw_anchor_float_phase_invariant():
+    """(issue 26-11-17-0936 治本守阵)旧 t1=int(now) 整秒截断与 si=1.5s 轮询混叠: 1m/5m
+    窗起点按 (int(now₀) mod3, frac) 出 +3.0/0.0 二拍, 30m 出 0/+4.5 的 2~3 拍聚簇。
+    治本后 t1 直接取浮点挂钟、_floor_anchor 按 interval 网格双向校正 —— 逐拍真算:
+    1m/5m 任意相位 first 每拍恰 +interval; 30m 每 3 拍恰 +4.5(0/0/4.5 均匀轮转),
+    且不再出现旧机制的 +4.5/0/+4.5 二拍交替。整点输入语义不变(t1 == now 数值)。"""
+    si = 1.5
+    for window, span in (("1m", 60), ("5m", 300)):
+        interval = build_grid(window, 1_000_000.0, si).interval
+        for base in range(1_000_000, 1_000_006):  # mod3 全覆盖(含旧别名正反相位)
+            for frac in (0.0, 0.4, 0.5, 0.7, 0.9):
+                grids = [build_grid(window, base + frac + si * k, si) for k in range(7)]
+                for k, g in enumerate(grids):
+                    assert g.t1 == base + frac + si * k  # 不再整秒截断
+                    assert len(g.buckets) == span // interval + 1
+                    assert g.first <= g.t0 < g.first + g.interval
+                    assert g.last <= g.t1 < g.last + g.interval
+                deltas = [round(grids[k].first - grids[k - 1].first, 6) for k in range(1, 7)]
+                assert deltas == [interval] * 6, (window, base, frac, deltas)
+
+    window = "30m"
+    interval = build_grid(window, 1_000_000.0, si).interval
+    assert interval == 4.5
+    for base in range(1_000_000, 1_000_009):  # mod9 全覆盖(含旧 2~3 拍聚簇相位)
+        for frac in (0.0, 0.7):
+            grids = [build_grid(window, base + frac + si * k, si) for k in range(10)]
+            for g in grids:
+                assert len(g.buckets) == 401
+                assert g.last <= g.t1 < g.last + g.interval
+            deltas = [round(grids[k].first - grids[k - 1].first, 6) for k in range(1, 10)]
+            assert all(d in (0.0, interval) for d in deltas), (base, frac, deltas)
+            for start in range(0, 7):  # 任意连续 3 拍 = 1 格, 均匀无聚簇
+                assert round(sum(deltas[start:start + 3]), 6) == interval, (base, frac, start, deltas)
+            assert not any(  # 旧二拍交替的判别式: +格 / 0 / +格
+                deltas[i] == interval and deltas[i + 1] == 0.0 and deltas[i + 2] == interval
+                for i in range(len(deltas) - 2)
+            ), (base, frac, deltas)
 
 
 def test_build_grid_raw_bucket_cap_default_sampling_widens():
@@ -725,16 +765,18 @@ def test_v4_hold_slot_totals_chain_untouched():
 
 
 def test_v4_hold_slot_z_run_tail_zero_line():
-    """(F4, F2 改判)z 游程链端延伸: 尾桶 0 线非 null(空闲观测持有 —— 「最新已知状态
-    仍有效」), totals 快照照记; 不延伸时尾桶保持 null(末槽 @120 恰落窗界被 ts >= t1 过滤)"""
+    """(F4, F2 改判; 26-11-17 治本改判)z 游程链端延伸: 尾桶 0 线非 null(空闲观测持有 ——
+    「最新已知状态仍有效」), totals 快照照记; 不延伸时尾桶保持 null(末槽 @120 早于浮点
+    t1=+150.5, 但无 holding 槽落到进行中桶 [150,180))。治本前 t1=int(now) 会把
+    now=+120.5 截成 +120 而滤掉末槽, 那是整秒截断的副作用而非 F4 诚实边界。"""
     start = 1_800_000_000
     run = LiveTailRun(kind="z", start=start + 60.0, last_seen=start + 120.0, dl_total=9, up_total=8, samples=4)
     tail = LiveTail(False, False, None, 30, 0.0, (), run)
-    now = start + 120.5  # 链端 = last_seen = +120, t1 = int(now) = +120, gap 0.5 <= 缺省上界 60
+    now = start + 150.5  # 链端 @120, gap 30.5 <= 缺省上界 60; holding 槽落进行中桶 [150,180)
     grid = build_grid("5m", now, 30.0)
-    assert grid.last == start + 120  # 尾桶 = 进行中桶 [120, 150)
+    assert grid.t1 == now and grid.last == start + 150
     pts_old = v4_series_points((), grid, tail_slots=v4_live_tail_slots(tail))
-    assert grid.last not in v4_grid_obs(pts_old, grid)  # 不延伸: 尾桶 null(末槽 @120 >= t1 被滤)
+    assert grid.last not in v4_grid_obs(pts_old, grid)  # 不延伸: 进行中桶无槽 -> null
     pts = v4_series_points((), grid, tail_slots=v4_live_tail_slots(tail, now=now))
     o = v4_grid_obs(pts, grid)[grid.last]
     assert (o.dl_rate, o.up_rate) == (0, 0)  # 0 线非 null(持有 z 末速率 0)
@@ -761,8 +803,8 @@ def test_v4_hold_slot_merge_with_real_sample_deholds():
     first = V4Slot(ts=start + 88.5, dt_s=1.0, obs=(100, 50, 1000, 500), is_zero=False)
     real = V4Slot(ts=start + 90.5, dt_s=2.0, obs=(100, 50, 1600, 800), is_zero=False)
     hold = V4Slot(ts=start + 91.3, dt_s=0.8, obs=(100, 50, 1600, 800), is_zero=False, is_hold=True)
-    grid = build_grid("1m", start + 91.4, 2.0)  # 桶宽 2s, t1 = start+91, 尾桶 = start+90
-    assert grid.t1 == start + 91 and grid.last == start + 90
+    grid = build_grid("1m", start + 91.4, 2.0)  # 桶宽 2s, t1 = 浮点 now=start+91.4, 尾桶 = start+90
+    assert grid.t1 == start + 91.4 and grid.last == start + 90
     pts = v4_series_points((), grid, tail_slots=(first, real, hold))
     assert [p.t for p in pts] == [start + 88, start + 90]
     merged = pts[-1]

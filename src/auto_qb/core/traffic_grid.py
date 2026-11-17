@@ -131,8 +131,8 @@ class WindowGrid:
     """
 
     name: str  # WINDOW_SPECS 键(1m-all)
-    t0: int  # 窗口起点(含), epoch 秒
-    t1: int  # 窗口终点(不含), epoch 秒
+    t0: float  # 窗口起点(含), epoch 秒(与浮点挂钟同源, 不再整秒截断)
+    t1: float  # 窗口终点(不含), epoch 秒(同上; 整点输入时数值仍为整数)
     interval: float  # 桶宽秒(raw = 采样间隔整倍, 可为 1.5/4.5/22.5/43.5/87/174 等半秒值(26-11-15-1104 F1), 30d = 3600, 6mo/1y = 86400, all = 标称月长; 整值宽归一 int)
     segment: str  # 消费段: "raw" | "hour" | "day" | "month"
     buckets: tuple  # Tuple[int, ...] 桶起点序列(升序)
@@ -146,21 +146,40 @@ class WindowGrid:
         return self.buckets[-1]
 
 
-def _floor_buckets(t0: int, t1: int, interval: float) -> tuple:
+def _floor_anchor(t: float, interval: float) -> float:
+    """浮点时刻向下对齐到 interval 网格(issue 26-11-17-0936 治本单点): math.floor(t/interval)
+    起步后双向校正到「first <= t < first+interval」, 桶键恒以 first + i×interval 同式派生
+    (与 _bucket_index 同一浮点路径, 非整倍宽下不差 1 ulp)。直接对浮点 now 对齐, 不再经
+    int(now) 整秒截断 —— 后者与 1.5s 轮询/桶宽 floor 对齐混叠出 +3.0/0.0 二拍抖动。"""
+    i = math.floor(float(t) / float(interval))
+    first = i * interval
+    while first > t:
+        i -= 1
+        first = i * interval
+    while first + interval <= t:
+        i += 1
+        first = i * interval
+    return first
+
+
+def _floor_buckets(t0: float, t1: float, interval: float) -> tuple:
     """等宽桶序列单点(issue 26-10-11-0207 R07 立, 计划 26-11-14-1313 F3 反转桶数口径):
-    起点向下取整对齐(epoch 恒正) + floor+1 桶数 + 生成。build_grid 的 raw 与 hour 两分支
+    起点向下取整对齐 + floor+1 桶数 + 生成。build_grid 的 raw 与 hour 两分支
     共用(除桶宽计算外逐字同构); day 分支桶键是本地日界, 不走此处。
 
-    桶数 n = (t1 - first) // interval + 1(恒含进行中桶)—— 反转 26-10-11-0207 R07 的 ceil
-    拍板(计划 26-11-14-1313 F3/D3 方波实证): t1 = int(now) 整秒截断 + 首桶 floor 对齐 ->
-    t1 - first 一半时间恰落桶边界(整秒 mod 整桶宽), ceil 下 n 在 k/k+1 方波随轮询相位翻转
-    (跨度 58s<->60s 实证) -> 前端 rewin(n 变判跨窗换档)瞬时跳窗 + uPlot split 集每拍重推。
-    W 恰为 interval 整倍时 n 恒 k+1 与相位无关(生产默认采样面各 raw 窗恒整倍); span 非整倍
-    时 n 仍随相位在 k+1/k+2 波动(幅度 1, si=7/3h 窗实测: r=5 时 n=1543 其余 1544)。
-    尾桶恒为「进行中桶」(floor(t1/interval) 对齐); 代价: t1 恰落桶边界时尾桶是刚开启的
-    空桶(单桶 null, 视觉无感)。"""
-    first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正; 半秒宽下 first 为 x.0/x.5 浮点)
-    n = int((t1 - first) // interval) + 1  # floor+1: 恒含进行中桶(26-11-14-1313 F3, 反转 R07 ceil; float 宽整值化)
+    桶数 n = floor((t1-first)/interval)+1(恒含进行中桶)—— 反转 R07 ceil 方波的历史判据仍
+    成立; 输入 t0/t1 现为浮点挂钟(26-11-17-0936 治本): first 按 _floor_anchor 对同一
+    interval 网格对齐并双向校正,n 由浮点跨度现算再双向校正到 last <= t1 < next。
+    span 为 interval 整倍时 n 恒 k+1 与相位无关(生产默认采样面 1m/5m/30m/3h 全整倍);
+    非整倍窗 n 在 k+1/k+2 两形态随相位波动(幅度 1, 6h/12h/24h @1.5s 实测 497-498)。
+    尾桶恒为「进行中桶」(包含浮点 t1); t1 恰落桶边界时尾桶是刚开启的空桶(单桶 null,
+    视觉无感)。"""
+    first = _floor_anchor(t0, interval)
+    n = int(math.floor((float(t1) - first) / float(interval))) + 1
+    while n > 1 and first + (n - 1) * interval > t1:
+        n -= 1
+    while first + n * interval <= t1:
+        n += 1
     return tuple(first + i * interval for i in range(n))
 
 
@@ -191,17 +210,21 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         interval = si * math.ceil(span / ((MAX_RAW_BUCKETS - 1) * si))
         if interval.is_integer():
             interval = int(interval)
-        t1 = int(now)
+        # 治本(issue 26-11-17-0936): t1 保留浮点挂钟, 不再 int(now) 整秒截断 —— 轮询
+        # 周期 = si 时截断令 Δt1 在 +1/+2 间交替, floor 对齐后窗起点出现 2 拍
+        # (1m/5m, +3.0/0.0)与 2~3 拍(30m, 0/+4.5)聚簇; 直接对浮点 now 走同一
+        # interval 网格, Δfirst 恒为 0 或 1 格且无相位别名。整点输入语义不变。
+        t1 = float(now)
         t0 = t1 - span
         buckets = _floor_buckets(t0, t1, interval)
     elif segment == "day":
         interval = DAY_SECONDS
-        t1 = int(now)
+        t1 = int(now)  # 非 raw 段保持原整秒边界(t1-1 日期口径不变)
         t0 = t1 - span
         buckets = tuple(v4_date_str_epoch(d) for d in sorted(v4_window_dates(t0, t1 - 1)))
     else:  # hour
         interval = HOUR_SECONDS
-        t1 = int(now)
+        t1 = int(now)  # 同上(小时桶远大于轮询, 无整秒混叠面)
         t0 = t1 - span
         buckets = _floor_buckets(t0, t1, interval)
     return WindowGrid(window, t0, t1, interval, segment, buckets)
@@ -216,7 +239,7 @@ def build_month_grid(month_epochs: tuple, now: float) -> WindowGrid:
     在 points[].t(前端按真值落点)。
     """
     month_epochs = tuple(month_epochs)  # 迭代器入参防御(下面 min/max 两次消费)
-    t1 = int(now)
+    t1 = int(now)  # 非 raw 段保持原整秒边界
     if not month_epochs:
         return WindowGrid("all", t1, t1, MONTH_NOMINAL_S, "month", ())
     lo, hi = min(month_epochs), max(month_epochs)
