@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="create-issue-pycache-residue">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="create-issue skill scripts 残留已退役源的 .pyc">
 <meta name="issue-summary" content="源 .py 已退役删除,__pycache__ 里 _common/gen_issues_index 的 .pyc 仍在本地(gitignore 已覆盖,仅磁盘残留)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-2339-chore-create-issue-pycache-residue</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 23:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -116,7 +116,8 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）：删前核对目录仅含 4 个 .pyc（_common / gen_issues_index × 两版 Python）且源 .py 确不存在，整目录删除，删后确认消失；gitignore 已覆盖，零 git 改动</li>
+</ul>
 </section>
 
 <footer>

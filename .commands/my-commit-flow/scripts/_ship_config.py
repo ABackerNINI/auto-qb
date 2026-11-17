@@ -13,7 +13,7 @@
 用法:
     cfg, src = load_config()                 # 缺配置抛 ConfigMissing(带引导文案)
     path = init_config(root)                 # 生成初稿(按仓库特征猜, 需人工确认)
-    python <包>/scripts/preflight.py --init | --show-config
+    python <包>/scripts/_pipeline.py --init | --show-config
 """
 
 from __future__ import annotations
@@ -108,8 +108,8 @@ class ConfigMissing(RuntimeError):
             f"[STOP] 缺少外置配置: {root / CONFIG_NAME}\n"
             "本包不在代码里内置项目配置(红线文件 / 闸门命令 …), 必须逐仓库显式声明。\n"
             "生成初稿后**人工确认**再继续:\n"
-            f"    python {SCRIPTS_DIR / 'preflight.py'} --init\n"
-            f"    python {SCRIPTS_DIR / 'preflight.py'} --show-config   # 看生效值与来源"
+            f"    python {SCRIPTS_DIR / '_pipeline.py'} --init\n"
+            f"    python {SCRIPTS_DIR / '_pipeline.py'} --show-config   # 看生效值与来源"
         )
 
 
@@ -379,7 +379,7 @@ def render_template(root: Path) -> str:
 
     out = [
         "# 提交流水线配置 —— **初稿**(脚本按仓库特征生成, 未经确认)",
-        "# 逐项确认/修改后把 confirmed 改成 true; 看生效值: preflight.py --show-config",
+        "# 逐项确认/修改后把 confirmed 改成 true; 看生效值: _pipeline.py --show-config",
         "",
         "confirmed = false",
         "",

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="ship-config-missing-preflight-hint">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="ConfigMissing 引导文案指向已退役的 preflight.py">
 <meta name="issue-summary" content="ConfigMissing 停手文案引导用户跑 preflight.py --init/--show-config,该脚本已随 v2 退役,实际入口是 _pipeline.py">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-2339-docs-ship-config-missing-preflight-hint</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 23:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,8 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 23:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → Done（kb.status）：取证现行入口为 _pipeline.py --init / --show-config（_pipeline.py:727-728），ConfigMissing 文案（_ship_config.py:111-112）与初稿尾注（:382）、模块 docstring（:16）、.my-commit-flow.toml 头注两行同步改指 _pipeline.py；test.pkg.scoped 定向 230 passed</li>
+</ul>
 </section>
 
 <footer>

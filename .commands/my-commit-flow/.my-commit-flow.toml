@@ -1,5 +1,5 @@
-# 提交流水线配置(my-commit-flow) —— 已逐项人工确认(初稿由 preflight.py --init 生成)
-# 生效值与来源: python <skill-dir>/scripts/preflight.py --show-config
+# 提交流水线配置(my-commit-flow) —— 已逐项人工确认(初稿由 _pipeline.py --init 生成)
+# 生效值与来源: python <skill-dir>/scripts/_pipeline.py --show-config
 
 confirmed = true
 
