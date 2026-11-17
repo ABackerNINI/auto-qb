@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>流量图 1m/5m 窗 x 轴每两拍跳一下: 后端 int(now) 整秒截断撞 1.5s 轮询 → 窗起点 +3.0/0.0 交替 · bug · 计划外问题</title>
+<title>流量图 1m/5m/30m 窗 x 轴抖动: 后端 int(now) 整秒截断撞 1.5s 轮询 → 桶格步进不均（1m/5m 二拍窜动，30m 轻二拍） · bug · 计划外问题</title>
 <meta name="issue-slug" content="webui-traffic-1m-xaxis-two-beat-jitter">
 <meta name="issue-stamp" content="26-11-17-0936">
 <meta name="issue-type" content="bug">
@@ -12,8 +12,8 @@
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
-<meta name="issue-title" content="流量图 1m/5m 窗 x 轴每两拍跳一下: 后端 int(now) 整秒截断撞 1.5s 轮询 → 窗起点 +3.0/0.0 交替">
-<meta name="issue-summary" content="1m/5m 窗桶宽=采样间隔=轮询=1.5s; build_grid 用 t1=int(now) 整秒截断; Δfirst 由 (int(now0) mod 3, frac(now0)) 联合决定: A mod3=0 且 frac&lt;0.5, 或 A mod3=1 且 frac≥0.5 时窗起点每拍 +3.0(2格)/0.0 交替, 其余组合干净 +1.5; 前端 L0 把 2 格用固定 shiftMs 滑完(2 倍速度窜动)+ 死拍无 L0, 合成『每两拍跳一下』。">
+<meta name="issue-title" content="流量图 1m/5m/30m 窗 x 轴抖动: 后端 int(now) 整秒截断撞 1.5s 轮询 → 桶格步进不均（1m/5m 二拍窜动，30m 轻二拍）">
+<meta name="issue-summary" content="1m/5m 窗桶宽=轮询=采样=1.5s，30m 桶宽=4.5s；build_grid 用 t1=int(now) 整秒截断，轮询每 1.5s 落袋，Δt1 按相位在 +1/+2 交替。1m/5m 由 (int(now₀) mod3, frac) 联合判据产生 +3.0(2格)/0.0 二拍窜动；30m 由 (int(now₀) mod9, frac) 产生 0/+4.5(1格) 的 2~3 拍不均步进（部分组合连出 0/+4.5 二拍），每次只 1 格且 cellPx≈2px，故更轻。前端 L0 固定 shiftMs 只播有位移拍，死拍无 L0。">
 <style>
   :root {
     --bg: #10151a;
@@ -85,8 +85,8 @@
 <div class="sheet">
 
 <div class="kicker">计划外问题（未修）· bug</div>
-<h1>流量图 1m/5m 窗 x 轴每两拍跳一下: 后端 int(now) 整秒截断撞 1.5s 轮询 → 窗起点 +3.0/0.0 交替</h1>
-<p class="lede">1m/5m 窗桶宽=采样间隔=轮询=1.5s; build_grid 用 t1=int(now) 整秒截断; Δfirst 由 (int(now₀) mod 3, frac(now₀)) 联合决定: A mod3=0 且 frac&lt;0.5, 或 A mod3=1 且 frac≥0.5 时窗起点每拍 +3.0(2格)/0.0 交替, 其余组合干净 +1.5; 前端 L0 把 2 格用固定 shiftMs 滑完(2 倍速度窜动)+ 死拍无 L0, 合成『每两拍跳一下』。</p>
+<h1>流量图 1m/5m/30m 窗 x 轴抖动: 后端 int(now) 整秒截断撞 1.5s 轮询 → 桶格步进不均（1m/5m 二拍窜动，30m 轻二拍）</h1>
+<p class="lede">1m/5m 桶宽=轮询=采样=1.5s，30m 桶宽=4.5s；build_grid 用 t1=int(now) 整秒截断，Δt1 按相位在 +1/+2 交替。1m/5m 由 (int(now₀) mod3, frac) 联合判据产生 +3.0(2格)/0.0 二拍窜动；30m 由 (int(now₀) mod9, frac) 产生 0/+4.5(1格) 的 2~3 拍不均步进（部分组合连出 0/+4.5 二拍），每次只 1 格且 cellPx≈2px，故更轻。前端 L0 固定 shiftMs 只播有位移拍，死拍无 L0。</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-0936-bug-webui-traffic-1m-xaxis-two-beat-jitter</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 09:36</div></div>
@@ -98,7 +98,7 @@
 
 <section id="s1">
   <h2><span class="no">§01</span>现象与发现场景</h2>
-  <p>用户复测反馈「流量图 x 轴跳动依然没有彻底解决：<b>之前每拍跳一下，现在每两拍跳一下</b>」。按 1m 窗深挖：该窗桶宽=采样间隔=轮询周期=1.5s、桶数恒 41（没有非整倍窗的 497↔498 翻动拍，排除先前复刻的 R5 根因）；同采样间隔下 5m 窗桶宽也恰为 1.5s、桶数恒 201，命中同一机制。首轮只扫 <code>frac(now)</code> 得出「≥0.5 才二拍」，复评二维复扫发现该判据不成立：<code>frac=0.7</code> 也可能干净（<code>int(now₀)=1000002</code>, mod3=0），<code>frac=0.0</code> 也可能二拍（同样 mod3=0）。真正的判据是 <code>(int(now₀) mod 3, frac(now₀))</code> 联合决定，详见 §02。</p>
+  <p>用户复测反馈「流量图 x 轴跳动依然没有彻底解决：<b>之前每拍跳一下，现在每两拍跳一下</b>」。按 1m 窗深挖：该窗桶宽=采样间隔=轮询周期=1.5s、桶数恒 41（没有非整倍窗的 497↔498 翻动拍，排除先前复刻的 R5 根因）；同采样间隔下 5m 窗桶宽也恰为 1.5s、桶数恒 201，命中同一机制。用户随后补报「30m 视图也有轻微抖动，没有 1m 剧烈，也是两拍抖动一次」；真算确认 30m 桶宽 4.5s、桶数恒 401，同源但只走 0/+4.5s（1 格），故更轻。首轮只扫 <code>frac(now)</code> 得出「≥0.5 才二拍」，复评二维复扫发现该判据不成立：<code>frac=0.7</code> 也可能干净（<code>int(now₀)=1000002</code>, mod3=0），<code>frac=0.0</code> 也可能二拍（同样 mod3=0）。1m/5m 的真正判据是 <code>(int(now₀) mod 3, frac(now₀))</code>，30m 走 <code>(int(now₀) mod 9, frac(now₀))</code>，详见 §02。</p>
   <p>取证方式：Python 直接调 <code>build_grid</code> 扫相位 + Node 加载真 <code>qb_traffic_chart.js</code> 把生成的 xs 喂给 <code>_qbRollJudge</code>/<code>_qbPadTailColumns</code> 并模拟收敛帧 <code>dropPad</code>，测 settled 视口。<b>未做浏览器目视复现</b>（见 §07 复验 TODO）。</p>
 </section>
 
@@ -120,6 +120,14 @@ A=int(now0) | A%3 | frac | first 逐拍位移（k=1..6）
 # 首轮「只看 frac≥0.5」被两个反例证伪，故上表替换原单维相位表。
 # 5m 同构: build_grid('5m',1000000.7,1.5).interval=1.5, n=201，同一 A/frac 组合步长同为 +3.0/0.0。
 
+# 30m 同源轻量化: build_grid('30m', now, 1.5).interval=4.5, n=401；first 按 t1%9 跳 0 或 +4.5
+A=int(now0) | A%9 | frac | first 逐拍位移（k=1..12，单位 s，step=4.5 → +4.5 即 1 格）
+ 1000010    |  2  | 0.0  | 0 4.5 0 0 4.5 0 0 4.5 0 0 4.5 0
+ 1000011    |  3  | 0.0  | 0 4.5 0 4.5 0 0 0 4.5 0 4.5 0 0   ← 连出 0/+4.5 二拍
+ 1000012    |  4  | 0.7  | 4.5 0 4.5 0 0 0 4.5 0 4.5 0 0 0   ← 连出 +4.5/0 二拍
+ 1000012    |  4  | 0.0  | 4.5 0 0 4.5 0 0 4.5 0 0 4.5 0 0
+# 每 6 拍 t1 前进 9s、恰两次 +4.5，平均仍 1.5s/拍；不均来自相位聚簇，不是漏数据。
+
 # 逐拍明细，A=1000000(mod3=1), frac=0.7：Δt1=+2/+1 交替 → first +3.0/0.0
   k=0 now=1000000.70 t1=1000000 first=999939.0 n=41
   k=1 now=1000002.20 t1=1000002 first=999942.0 n=41  dFirst=+3.0
@@ -135,16 +143,30 @@ A=int(now0) | A%3 | frac | first 逐拍位移（k=1..6）
   dx0=3.0 roll=true  settledView=[999942.0,1000002.0] d=+3.0     ← 2 格高速滑动
   dx0=0.0 roll=false settledView=[999942.0,1000002.0] d=+0.0     ← 死拍，无 L0
   dx0=3.0 roll=true  settledView=[999945.0,1000005.0] d=+3.0
-  dx0=0.0 roll=false settledView=[999945.0,1000005.0] d=+0.0</code></pre>
+  dx0=0.0 roll=false settledView=[999945.0,1000005.0] d=+0.0
+
+# 30m Node 真函数 settled 探针（800px / 401 点 → cellPx≈2px ≥ 0.75，L0 真播而非 instant）
+=== A%9=3 frac=0.0（连续 0/+4.5 二拍） ===
+  k=3  dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+  k=4  dx0=4.5 cells=1 roll=true  shift=true  dMin=+4.5
+  k=5  dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+  k=6  dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+  k=7  dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+  k=8  dx0=4.5 cells=1 roll=true  shift=true  dMin=+4.5
+  k=9  dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+  k=10 dx0=4.5 cells=1 roll=true  shift=true  dMin=+4.5
+  k=11 dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+  k=12 dx0=0.0 cells=0 roll=false shift=false dMin=+0.0
+# 只有 1 格位移、无 2×速度窜动，且死拍无 L0 —— 与 1m 的 2 格固定时长滑动相比观感轻得多。</code></pre>
 </section>
 
 <section id="s3">
   <h2><span class="no">§03</span>影响面</h2>
   <table>
     <tr><th>维度</th><th>结论</th></tr>
-    <tr><td>触发条件</td><td>桶宽=轮询=采样=1.5s 的窗（1m：n=41；5m：n=201）+ <code>(int(now₀) mod 3, frac(now₀))</code> 联合判据：<code>A%3=0 且 frac&lt;0.5</code> 或 <code>A%3=1 且 frac≥0.5</code>。config 现值 <code>qb_traffic.sample_interval: 1.5S</code>（<code>config.yml:544</code>）。30m 起 interval≥4.5s，首桶数拍内不动或稀疏跨格，非本次 +3.0/0.0 二拍形态；默认 24h 窗桶宽 174s，不受影响 —— 此前 24h 取证测不到。</td></tr>
-    <tr><td>影响范围</td><td>只影响 x 轴视口平移节奏（观感），不影响桶值 / tooltip 真值 / 悬停读数。三挂点（全局/分组/种子）共用同一前端逻辑，理论上同样命中；1m/5m 窗在满足上述联合判据时必现。</td></tr>
-    <tr><td>严重度</td><td><b>低—中</b> —— 无数据错误、无内容错位，纯视觉窜动；但正是用户复测反复报的「x 轴跳动未根治」，属上一次根修（计划 26-11-15-1104）的残留观感问题。</td></tr>
+    <tr><td>触发条件</td><td><b>1.5s 桶宽窗</b>（1m n=41 / 5m n=201）+ <code>(int(now₀) mod 3, frac(now₀))</code>：<code>A%3=0 且 frac&lt;0.5</code> 或 <code>A%3=1 且 frac≥0.5</code> → +3.0(2格)/0.0 二拍；<b>30m 桶宽 4.5s / n=401</b> + <code>(int(now₀) mod 9, frac(now₀))</code> → 0/+4.5(1格) 的 2~3 拍不均（部分组合连出二拍交替）。config 现值 <code>qb_traffic.sample_interval: 1.5S</code>（<code>config.yml:544</code>）。3h 起 interval≥22.5s，首桶数拍内不动，不形成可见二拍；默认 24h 桶宽 174s 不受影响 —— 此前 24h 取证测不到。</td></tr>
+    <tr><td>影响范围</td><td>只影响 x 轴视口平移节奏（观感），不影响桶值 / tooltip 真值 / 悬停读数。三挂点（全局/分组/种子）共用同一前端逻辑，理论上同样命中；1m/5m 满足上述联合判据时必现，30m 在同一轮询混叠下呈更轻的 1 格不均步进。</td></tr>
+    <tr><td>严重度</td><td><b>低—中</b> —— 无数据错误、无内容错位，纯视觉窜动；1m/5m 为 2 格固定时长窜动（较重），30m 为 1 格不均 + 死拍（较轻）；但都是用户复测反复报的「x 轴跳动未根治」，属上一次根修（计划 26-11-15-1104）的残留观感问题。</td></tr>
   </table>
 </section>
 
@@ -154,17 +176,18 @@ A=int(now0) | A%3 | frac | first 逐拍位移（k=1..6）
   <ul>
     <li><code>src/auto_qb/core/traffic_grid.py:194</code>（取证 2026-11-17 09:2x）· <code>build_grid</code> raw 分支 · grep <code>t1 = int(now)</code> —— 整秒截断源头</li>
     <li><code>src/auto_qb/core/traffic_grid.py:162-164</code> · <code>_floor_buckets</code> · grep <code>first = t0 - (t0 % interval)</code> —— 把 Δt1 的 +2/+1 映射成 +3.0/0.0</li>
-    <li><code>src/auto_qb/core/traffic_grid.py:191</code> · 桶宽 <code>interval = si × ceil(...)</code> · grep <code>MAX_RAW_BUCKETS</code> —— 1m→1.5s</li>
+    <li><code>src/auto_qb/core/traffic_grid.py:191</code> · 桶宽 <code>interval = si × ceil(...)</code> · grep <code>MAX_RAW_BUCKETS</code> —— 1m/5m→1.5s，30m→4.5s / n=401</li>
     <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:665-671</code> · <code>_qbRollJudge</code> · grep <code>Math.abs(dx0) &gt; step * 2</code> —— dx0=2×step 恰在边界判非 rewin，放行 L0</li>
     <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:587-603</code> · <code>_qbBeatTimeline</code> · grep <code>shiftMs</code> —— 滑动时长与格数无关，2 格用 1 格时间滑完 = 2×速度</li>
     <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:1926</code> · <code>_qbPollMs</code> · grep <code>sample_interval_s</code> —— 轮询=1.5s（F7）</li>
+    <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:715-720</code> · <code>_qbFxShiftGate</code> · grep <code>_QB_FX_CELL_MIN_PX</code> —— 30m 401 点 / 800px≈2px≥0.75，有位移拍 L0 真播而非 instant</li>
   </ul>
 </section>
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">已定位（双探针 + 二维复扫取证，非目视）：<b>后端窗锚的整秒截断与 1.5s 轮询/桶宽发生二拍混叠</b>。<code>build_grid</code> 用 <code>t1=int(now)</code> 取整秒；令 <code>A=int(now₀)</code>、<code>f=frac(now₀)</code>，第 k 拍 <code>t1=A+floor(f+1.5k)</code>，<code>first=floor((t1−span)/1.5)×1.5</code>。因此 Δfirst 不是单由 f 决定，而由 <code>(A mod 3, f)</code> 联合决定：<b>A%3=0 且 f&lt;0.5</b>，或 <b>A%3=1 且 f≥0.5</b> 时，窗起点 +3.0/0.0 交替（一拍 2 格、下一拍不动）；其余组合干净 +1.5。对 1m（span=60，<code>first=t1−60−(t1%1.5)</code>）与 5m（span=300）同构。首轮「f≥0.5 才二拍」被两个反例证伪：<code>A=1000002,f=0.7</code> 干净、<code>A=1000002,f=0.0</code> 反而二拍（另 <code>A=1000001,f=0.7</code> 也干净）。<br>前端 <code>_qbRollJudge</code> 的 rewin 是 <code>|dx0| &gt; step×2</code>，dx0=3.0 恰等于 3.0（边界）判非换档 → L0 放行，把 2 格用固定 <code>shiftMs</code> 滑完（2×速度窜动）；紧接的 0.0 拍 roll=false 无 L0（死拍）。合成「窜一下、停一拍」= 每两拍跳。F5 放宽 roll 门到 ≤2 格 + 补尾格修掉 G-B 左缺口，正是把原来的每拍硬跳变成现在这个更轻的二拍窜动，故频率减半但未消失。<br><b>已排除：</b>① 497↔498 翻动拍（1m 桶数恒 41、5m 恒 201）；② 数据值 / 尾段失真（真值未错）；③ 粒子 / fx（与 x 视口无关）；④ 24h 默认窗（桶宽 174s）。</div>
+  <div class="callout">已定位（双探针 + 二维复扫取证，非目视）：<b>后端窗锚的整秒截断与 1.5s 轮询/桶宽发生二拍混叠</b>。<code>build_grid</code> 用 <code>t1=int(now)</code> 取整秒；令 <code>A=int(now₀)</code>、<code>f=frac(now₀)</code>，第 k 拍 <code>t1=A+floor(f+1.5k)</code>，<code>first=floor((t1−span)/1.5)×1.5</code>。因此 Δfirst 不是单由 f 决定，而由 <code>(A mod 3, f)</code> 联合决定：<b>A%3=0 且 f&lt;0.5</b>，或 <b>A%3=1 且 f≥0.5</b> 时，窗起点 +3.0/0.0 交替（一拍 2 格、下一拍不动）；其余组合干净 +1.5。对 1m（span=60，<code>first=t1−60−(t1%1.5)</code>）与 5m（span=300）同构。首轮「f≥0.5 才二拍」被两个反例证伪：<code>A=1000002,f=0.7</code> 干净、<code>A=1000002,f=0.0</code> 反而二拍（另 <code>A=1000001,f=0.7</code> 也干净）。<br>前端 <code>_qbRollJudge</code> 的 rewin 是 <code>|dx0| &gt; step×2</code>，dx0=3.0 恰等于 3.0（边界）判非换档 → L0 放行，把 2 格用固定 <code>shiftMs</code> 滑完（2×速度窜动）；紧接的 0.0 拍 roll=false 无 L0（死拍）。合成「窜一下、停一拍」= 每两拍跳。F5 放宽 roll 门到 ≤2 格 + 补尾格修掉 G-B 左缺口，正是把原来的每拍硬跳变成现在这个更轻的二拍窜动，故频率减半但未消失。<br><b>30m 同源但更轻</b>：<code>interval=4.5s</code>（3×si），<code>t1</code> 整数仍每拍 +1/+2，但 <code>first=floor(t1/4.5)×4.5−1800</code> 按 <code>A mod 9</code> 只跳 0 或 +4.5（1 格）；每 6 拍 <code>t1</code> 走 9s、恰两次 +4.5，平均节奏仍对，分配却成 0/+4.5/0/0 或 0/+4.5/0/+4.5/0/0 等簇，部分 <code>(A mod9, frac)</code> 连出 0/+4.5 二拍交替。前端 <code>step=4.5</code>，<code>dx0</code> 只有 0 或 1 格，<code>roll/shift</code> 只在有位移拍真播、死拍无 L0；单格不超速且 <code>cellPx≈2px</code>，观感比 1m/5m 的 2 格固定时长窜动轻得多。<br><b>已排除：</b>① 497↔498 翻动拍（1m 桶数恒 41、5m 恒 201、30m 恒 401）；② 数据值 / 尾段失真（真值未错）；③ 粒子 / fx（与 x 视口无关）；④ 24h 默认窗（桶宽 174s）。</div>
 </section>
 
 <section id="s6">
@@ -174,7 +197,7 @@ A=int(now0) | A%3 | frac | first 逐拍位移（k=1..6）
     <li><b>A · 后端去掉整秒截断（推荐，治本）</b>：<code>build_grid</code> raw 分支让 <code>t1</code> 保留浮点（或按 si 对齐），<code>first = floor(t0/si)×si</code> 直接对浮点 now 对齐，使 <code>Δfirst</code> 恒为 1 格。需确认不破坏 <code>t1</code> 在 meta / holding / 封口桶里的整秒假设（<code>_floor_buckets</code> 注释提到「整值宽归一 int」）—— 改动面在后端栅格单点及依赖它的电池，面较大。</li>
     <li><b>B · 前端按格数放大滑动时长（治标）</b>：让 <code>shiftMs</code> 随 <code>|dx0|/step</code> 线性放大，消除 2×速度窜动。代价：死拍（0.0）仍在，二拍节奏未根治，只是每拍位移视觉变均匀；且与 I1「真值 ≤beat 落地」预算冲突，需重排时间线。</li>
   </ul>
-  <p class="hint">守阵建议：若走 A，在 <code>test_traffic_grid_*.py</code> 加一条「1m/5m 任意 <code>(int(now₀) mod 3, frac(now₀))</code> 组合下 <code>Δfirst</code> 恒 = interval」的二维扫描用例，不能只扫 frac；e2e 帧探针的相位注入要同时钉死 <code>A mod 3</code>（推荐 <code>A=1000000,f=0.7</code> 与 <code>A=1000002,f=0.0</code> 两例）再断言 settled 视口。两条路都需先目视复验（§07）。</p>
+  <p class="hint">守阵建议：若走 A，在 <code>test_traffic_grid_*.py</code> 加「1m/5m 任意 <code>(int(now₀) mod 3, frac)</code> + 30m 任意 <code>(int(now₀) mod 9, frac)</code> 组合下 <code>Δfirst</code> 恒 = interval」的二维扫描用例，不能只扫 frac；e2e 帧探针相位注入要同时钉死 epoch 对齐（1m/5m 推荐 <code>A=1000000,f=0.7</code> 与 <code>A=1000002,f=0.0</code>；30m 推荐 <code>A%9=3,f=0.0</code> 与 <code>A%9=4,f=0.7</code> 两条二拍簇）再断言 settled 视口。两条路都需先目视复验（§07）。</p>
 </section>
 
 <section id="s7">
@@ -182,6 +205,7 @@ A=int(now0) | A%3 | frac | first 逐拍位移（k=1..6）
   <ul>
     <li>2026-11-17 09:36 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-17 09:50 — 入池评审修正：触发判据从单相位改为 <code>(int(now₀) mod 3, frac(now₀))</code> 联合；影响面补 5m；二维复扫与反例入 §02。</li>
+    <li>2026-11-17 10:03 — 用户补报 30m 轻微二拍抖动；真算确认同源轻量化（<code>interval=4.5s / n=401</code>、0/+4.5 一格聚簇），触发面扩到 30m，§02/§03/§05/§06 同步。</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
