@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>test_sync_agent_skills_config 路径断言 Windows 盘符补全盲区 · test · 计划外问题</title>
+<meta name="issue-slug" content="sync-skills-path-windows">
+<meta name="issue-stamp" content="26-11-18-0210">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="sync-skills-path-windows">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="test_sync_agent_skills_config 路径断言 Windows 盘符补全盲区">
+<meta name="issue-summary" content="test_config_can_add_and_remove_entries 断言绝对 POSIX 路径 Path 保持 /abs/... 形态, Windows 上 Path 解析补全盘符 C:/abs/... 恒红">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>test_sync_agent_skills_config 路径断言 Windows 盘符补全盲区</h1>
+<p class="lede">test_config_can_add_and_remove_entries 断言绝对 POSIX 路径 Path 保持 /abs/... 形态, Windows 上 Path 解析补全盘符 C:/abs/... 恒红</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-18-0210-test-sync-skills-path-windows</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 02:10</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-18 在 Windows 侧合流 HR 三表分支(0f720604 入库)后跑 <code>test.quick</code> 撞见: <code>tests/test_sync_agent_skills_config.py::test_config_can_add_and_remove_entries</code> 恒红。该测试与其被测模块 <code>scripts/sync_agent_skills.py</code> 均系上游提交 <code>d8edbdc0</code>(sync_agent_skills 配置化 S9)引入, 与 HR 批次零交集(未触碰该模块任何文件), 属上游 Windows 平台盲区存量红 —— 先例: 上游 <code>c334a039</code>「修绿上游 Windows 盲区 3 条 relocate 红」同族。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>取证 2026-11-18 02:10, Windows 10.0.26300, <code>.venv/Scripts/python.exe -m pytest tests/test_sync_agent_skills_config.py::test_config_can_add_and_remove_entries -x -q</code>:</p>
+<pre><code>    assert targets == [sync.REPO_ROOT / ".zcode" / "skills", Path("/abs/nowhere/skills")]
+E       AssertionError: assert [WindowsPath(...here/skills')] == [WindowsPath(...here/skills')]
+E
+E         At index 1 diff: WindowsPath('C:/abs/nowhere/skills') != WindowsPath('/abs/nowhere/skills')</code></pre>
+  <p>输入配置写的是 <code>paths = [".zcode/skills", "/abs/nowhere/skills"]</code>; 断言期望第二项解析后保持 POSIX 绝对路径形态 <code>/abs/nowhere/skills</code>, 实得 <code>C:/abs/nowhere/skills</code>, 两侧 WindowsPath 字符串不同恒红。全量口径: <code>test.quick 1 failed, 6455 passed, 2 skipped</code>(2026-11-18, 合流后唯一红)。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>Windows + Python 3.13+(ntpath.isabs 语义变更; 3.12 行为未实测, 认领复验时先记录解释器版本)</td></tr>
+    <tr><td>影响范围</td><td>仅测试面: 拦住 Windows 侧 test.quick/test.full 全绿与推送闸门; 生产 <code>sync_agent_skills.py</code> 的 resolve 行为本身是否需要保持 POSIX 形态属设计问题, 待查</td></tr>
+    <tr><td>严重度</td><td>中(Windows 侧闸门常红, 但不损生产数据)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>tests/test_sync_agent_skills_config.py:86</code>(取证 2026-11-18 02:10)· 符号 <code>test_config_can_add_and_remove_entries</code> · grep 关键词 <code>/abs/nowhere/skills</code></li>
+    <li><code>scripts/sync_agent_skills.py</code> · 符号 <code>resolve_sync_config</code> / <code>DEFAULT_LINK_TARGETS</code>(:57)· grep 关键词 <code>link_targets</code>(上游 d8edbdc0 引入)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <p>评审轮只读复现实证(2026-11-18): <code>Path("/abs/nowhere/skills")</code> 本身不做盘符补全(Windows 下保持无盘符 WindowsPath('/abs/...'), is_absolute()==False); 盘符来自生产代码 <code>scripts/sync_agent_skills.py:123</code> 附近的连接分支 <code>REPO_ROOT / p</code> —— Python 3.13 起 <code>ntpath.isabs("/abs/...")</code> 返回 False(3.13 前历史语义 True), 代码走 else 分支, pathlib 除法遇根锚定路径保留左操作数(fixture tmp_path/REPO_ROOT, C 盘)的盘符。3.12 的 isabs 历史语义下应走另一分支(未实测, 认领复核)。已排除: HR 三表批次改动 —— 本批零触碰 sync_agent_skills 模块, 红随上游 d8edbdc0 合入即现。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>两条候选方向（未实施）：① 断言侧兼容 —— 期望值改按 <code>Path("/abs/nowhere/skills").resolve()</code> 同口径现算或 <code>str()</code> 比较，接受 Windows 盘符补全为合法解析结果；② 生产侧钉语义 —— 若「绝对 POSIX 路径原样保留」是 resolve_sync_config 的设计契约，则生产代码应显式保留原始字符串形态并让测试钉住该契约（Linux 与 Windows 行为一致化）。取哪条取决于「link_targets 是否需要跨平台路径形态稳定」的设计判断，待认领时定。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-18 02:10 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-18-0210-test-sync-skills-path-windows.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
