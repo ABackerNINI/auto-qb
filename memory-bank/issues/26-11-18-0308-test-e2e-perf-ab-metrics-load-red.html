@@ -135,13 +135,13 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">已定位（2026-11-18 认领后本地取证）：**不是负载敏感，也不是产品回归，是量具的计数窗口错位**。`window.__gbr` 是整页累计的 `getBoundingClientRect` 计数器；P1-3 预算 `tRows×(rounds+2)+20` 只描述 B 段（窗口化）的逐行测高，旧代码在 A 段（关窗口全量替换）与 B 段之间从不清零，把 A 段的行测量一起算进 B 段。临时埋点实测（E2E_TORRENTS=300）：atlas A 段末 64 次 + B 段增量 75 次 = 累计 139 &gt; 预算 130；prism 30 + 72 = 102 &lt; 125 —— 恰好解释「只有 atlas 红、prism 孪生绿」，与长跑负载无关。短跑单跑即可复现红（原单跑未验证，本轮补上）。已排除：产品侧 gBR 回归（B 段增量本身在预算内）、随机 flaky（计数清零后定向连跑两轮全绿）。</div>
+  <div class="callout">已定位（<strong>双根因, 两 clone 各自独立归因后合流</strong>; 都排除负载敏感与产品回归, 是量具面）。<strong>根因 A —— A/B 段计数窗口错位（远端 30fac406 归因）</strong>: `window.__gbr` 是整页累计的 `getBoundingClientRect` 计数器; P1-3 预算 `tRows×(rounds+2)+20` 只描述 B 段（窗口化）的逐行测高, 旧代码在 A 段（关窗口全量替换）与 B 段之间从不清零, 把 A 段的行测量一起算进 B 段 —— 临时埋点实测（E2E_TORRENTS=300）: atlas A 段末 64 次 + B 段增量 75 次 = 累计 139 &gt; 预算 130; prism 30 + 72 = 102 &lt; 125, 恰好解释「只有 atlas 红、prism 孪生绿」。<strong>根因 B —— 背景轮询 tick 混入 + off→on 重开窗 reprobe（另一 clone W2 归因）</strong>: bench 全程页面轮询照常跑（300 档 basePollMs 1500ms 恒定间隔）, 每拍 /api/state <strong>恒回传 status</strong>（server/routes/state.py `_status_payload` 现拼新对象, 不受 rid 门控）⇒ vm.status 赋值必触发根重渲 ⇒ 根 `updated()`（lifecycle.js）的 `_measureRowH` 对窗内每行发一次 gBCR, 每拍混入 ~tRows 次预算外 gBCR; P1-3 预算不含墙钟项, 慢机上 bench 墙钟拉长 ⇒ 落窗拍数变多 ⇒ 预算被拖穿（本机基线 82/预算 120 余量 38 恰好只容 ~2 个 tick）。轮询隔离成纯净窗口后 atlas 仍红（累计 139 &gt; 130）—— 暴露 <strong>第二机制</strong>: off 轮收尾 rowWin false-&gt;true 重开窗那一拍对全量 DOM 上已持键的行再探一轮（_rowWindow 的 reprobe 面, 26-11-02 后引擎引入）, 实测与轮数无关、皮肤相关（prism ~24 / atlas ~54 次, 逐轮复现）; 原基线 82 是 26-11-02 前引擎的数字, 累计预算公式被引擎演化悄悄作废。已排除: 产品侧 gBR 回归（B 段增量本身在预算内）、随机 flaky（分段清零 + 隔离后定向连跑多轮全绿）。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p>实际修法（与建议方向不同，故保留建议原文）：不改预算、不放宽阈值，改**计数口径**。`e2e/perf.spec.mjs::benchRun` 每段 bench 开始加 `window.__gbr = 0`（A/B 两段各自独立计数），末尾读取因此只含 B 段，与公式 `tRows×(rounds+2)+20` 同口径；`rounds`、预算公式、P1-2 长任务断言一律不动。代价：零产品改动、零判据放松；A 段计数不再可读（本 spec 无断言依赖它）。</p>
+  <p>实际修法（与建议方向不同, 故保留建议原文; <strong>合流后机制 = 远端分段清零 + 另一 clone 的轮询隔离与 off 侧守阵</strong>）: 不改预算、不放宽阈值, 改<strong>计数口径与量具窗口</strong>。(1) `e2e/perf.spec.mjs::benchRun` 每段 bench 开始加 `window.__gbr = 0`（A/B 两段各自独立计数）, 末尾读取只含 B 段, 与公式 `tRows×(rounds+2)+20` 同口径 —— 根因 A 的修法; (2) bench 前量具窗口与背景轮询隔离（`vm.stopPolling()` + `vm.stopEvents()` + 影子化 `vm.scheduleNext`, bench 后复原）, 消除每拍 ~tRows 次预算外 gBCR 的混淆源 —— 根因 B 的修法; (3) off 侧补宽松上限断言 `OFF_GBR_CEILING = 130`, 兜「非窗口化轮次被逐行量高」的回归模式。`rounds`、预算公式、P1-2 长任务断言一律不动。代价: 零产品改动、零判据放松。</p>
 </section>
 
 <section id="s7">
@@ -155,6 +155,20 @@
   <p>复验：2026-11-18 认领后短跑即复现（atlas 累计 139 &gt; 预算 130，原 CI 取证 140 &gt; 130），排除「只在长跑出现」；修正计数窗口后 A/B 定向连跑两轮各 2 passed，整 spec 两轮 8 passed / 4 skipped（4 skip = E2E_TORRENTS=300 的 &gt;500 门控）。</p>
   <h3>修复后补充</h3>
   <p>实际修法：`benchRun` 每段起清零 `window.__gbr`，预算公式/阈值/rounds 零改动（见 §06）。验证：`npx playwright test e2e/perf.spec.mjs --reporter=line` 两轮均 8P/4S；与 settings-backup 合跑 24 例 = 20P/4S（工作区 clone1）。全量 @fast 套件 488P/5S/1F，唯一红为 `e2e/main-table-pinned-matrix.spec.mjs:366`（flux/flat 悬停几何），撤掉本轮 harness 改动后仍确定性红 —— 既有无关红，不属本 issue。</p>
+  <h3>另一 clone 独立归因与验证（合流前 W2；机制合流后本 clone 版为超集落地）</h3>
+  <ul>
+    <li>2026-11-18 — W2 认领（分支 26-11-18-0308-e2e-flaky-fixes, 基线 78022b2a）: 取证（两轮失败 trace 已清扫, 纯静态归因）→ 结构修复（轮询隔离 + P1-3 分段计数, 判据零放松）→ 本机多轮全绿 + 红验。其独立归因补出根因 B（轮询 tick 墙钟敏感 + off→on 重开窗 reprobe, 见 §05）与远端根因 A（计数窗口错位）互补 —— 两机制合流后 perf.spec 取超集版（分段清零同远端语义 + 轮询隔离 + OFF_GBR_CEILING 守阵）。</li>
+    <li>2026-11-18 — 评审轮 1（2 条全修）: 补 off 侧宽松上限断言（OFF_GBR_CEILING=130, 兜「非窗口化轮次被逐行量高」回归模式, 红验双皮 930/964 红; 300 档实测基线 prism 30 / atlas 64, 3000 档 33/68 验证基线不随 tTotal 变）+ 在途拍收尾注释对齐实际保证（尽力落定非硬保证）。3000 档抽验撞见无关存量红（首访路径指纹 152/158 &gt; 150, pristine 基线同样红）已记未尽事项。</li>
+  </ul>
+  <p><strong>验证数字（另一 clone 本机, commands run dev.e2e -- e2e/perf.spec.mjs, 默认 300 种子档, 修复后（含评审轮 1 增量）5 轮全绿 8P/0F/4S ≈ 59-60s/轮）</strong>:</p>
+  <ul>
+    <li>修复前复现: 纯净窗口（轮询已隔离）下 atlas P1-3 仍确定性红 —— 累计 139 &gt; 预算 130（窗口内 22 行/轮）, prism 105 ≤ 120 过; 逐轮分段实测 on 侧每轮 ~24-25 次, off 侧复原翻转一拍 prism 24 / atlas 54 次（与轮数无关, 皮肤相关）。修复后 on 侧长任务四轮全部「无」（修复前 prism on 侧常混入 1 个 55-66ms 毛刺）。</li>
+    <li><strong>红验 1（P1-2）</strong>: 页面内自调度 500ms 忙任务 × 3 轮注入 on 侧 —— 双皮红（sumLt(on)=1500 vs 全量 902/793）, 证明方向断言仍能抓真回归。</li>
+    <li><strong>红验 2（P1-3）</strong>: on 侧每轮对全 DOM 行再探一遍注入 —— 双皮红（prism 135 &gt; 125 / atlas 141 &gt; 130）, 证明分段后判据仍能抓「每轮量高超窗」的真回归。</li>
+    <li><strong>红验 3（OFF_GBR_CEILING）</strong>: on 侧改 off 侧注入全 DOM 行再探 —— 双皮红 930 / 964 &gt;&gt; 130, 证明 off 侧守阵能抓 rowWin 门失效的回归模式。</li>
+    <li><code>commands run test.quick</code>: 6443 passed / 19 skipped / 45.72s 全绿（pytest 面零改动）; 评审轮 1 增量后复跑 6443 passed / 19 skipped / 46.48s 全绿（首跑被 ASCII 符号闸门抓出注释里的 circled 字符, 改 (a)/(b) 后复绿 —— 闸门工作正常）。3000 种子档抽验（<code>E2E_TORRENTS=3000</code>）: A/B 埋点双皮过（gbr 全量 33/68、窗口化 81/87）。</li>
+  </ul>
+  <p><strong>合流未尽事项承接</strong>: atlas off-&gt;on 重开窗一拍探 54 行（vs prism 24）与窗口行数(22)不匹配, 疑窗口估算/行高均值在 atlas 下偏小, 属产品面疑点, 按「范围守恒」不在本 issue 动手; 3000 档「P1-2 首访路径指纹」双皮确定性红（gbr 152/158 &gt; 上限 150, 与本修法无关的存量问题, 该档基线档案值 55 已被引擎演化作废）, 应另入池。</p>
 </section>
 
 <footer>

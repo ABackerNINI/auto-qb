@@ -71,6 +71,11 @@ import { INST, readInst } from './lib/vm.mjs';
  * ── W5 增补(计划 26-11-02-0351 §W5, 2026-11-02): 尾部「主表×抽屉同屏交叉」describe ——
  * 千级种子(E2E_TORRENTS>500)下抽屉滚动/折叠不扰动主表文档型窗口 + 不放大主表轮询节拍,
  * W3 窗口状态分家的端到端零回归确认; 抽屉侧判据在 drawer-content-perf / dt-live-update, 不在此重复。
+ *
+ * ── A/B 量具与背景轮询隔离 + P1-3 分段计数(issue 26-11-18-0308 修法, 2026-11-18):
+ * bench 前拆主轮 + 推送通道 + 影子化 scheduleNext(bench 轮内 refresh 尾部续拍会重新 arm),
+ * P1-3 的 gbr 计数改 benchRun 分段口径(判据只看 on 侧); P1-2 判据与预算公式零放松。
+ * 机制与动作清单见测试内 quiesce 注释块与 P1-3 分段计数注。
  */
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
@@ -165,6 +170,7 @@ for (const skin of SKINS) {
        * P1-3 直接量: 统计"强制重渲染期间 getBoundingClientRect 被调用了多少次"。
        * 每次调用都是一次**强制同步布局**(行越多越贵); 改成 ResizeObserver + rAF 之后,
        * 渲染本身不该再触发它(只有元素被换掉的那一轮才会量一次)。(旧块原样移植)
+       * 计数是分段口径(见下方 P1-3 断言注): __gbr 在每个 benchRun 开头清零, off/on 各计各的。
        */
       await page.evaluate(`(() => {
         window.__gbr = 0;
@@ -175,6 +181,34 @@ for (const skin of SKINS) {
         }
         window.__gbr = 0;
       })()`);
+      /*
+       * 量具窗口与背景轮询隔离(issue 26-11-18-0308 修法 1/2, 2026-11-18): bench 全程页面轮询
+       * 照常跑(300 种子档 basePollMs 1500ms 恒定间隔), 而每拍 /api/state **恒回传 status**
+       * (server/routes/state.py _status_payload 现拼新对象, 不受 rid 门控) => vm.status 赋值
+       * 必触发根组件重渲 => updated()(lifecycle.js)里的 _measureRowH 对渲染窗内每一行发一次
+       * gBCR(columns_grid.js 的签名判定只管作废、不管探测, 签名未变也逐行探) —— 每拍混入
+       * ~tRows 次预算外 gBCR。P1-3 预算公式只按渲染轮数计、不含墙钟项, 慢机上 bench 墙钟
+       * 拉长 => 落进窗口的拍数变多 => 预算被拖穿(Windows/容器两长跑形态各红一次, prism
+       * 孪生同轮绿 —— 本机基线 82/预算 120 的余量 38 恰好只容 ~2 个 tick)。
+       * 修法 = 结构隔离(消除混淆源), 两条断言判据零放松原样保留, 不是放宽预算。
+       * 三个动作缺一不可: stopPolling 拆已 arm 的主轮; stopEvents 拆 SSE ver 驱动(同样汇于
+       * refresh); 影子化 scheduleNext —— bench 轮内直调的 vm.refresh() 尾部会续排下一拍,
+       * 不影子化的话拆了也会在第一轮 refresh 后被重新 arm。影子手法与 W5 的 vm.refresh
+       * 影子计数同款(实例属性盖 mixin 原型方法)。
+       */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm.stopPolling();
+        vm.stopEvents();
+        vm.__schedSaved = vm.scheduleNext;
+        vm.scheduleNext = function () {};
+      })()`);
+      /* 在途拍收尾(尽力落定, 非硬保证): 拆轮询瞬间可能恰有一拍 refresh 在途, 2 rAF 让它的
+       * 重渲+量高大概率在首个 benchRun 清零之前落定; 在途 fetch 晚于两次 rAF resolve 时其
+       * 收尾落进 off 侧计数窗 —— 后果有界: P1-3 只判 on 侧不受影响, off 侧宽松上限(见下方
+       * 反面断言)余量内容得, P1-2 侧只会放大 off 基线使方向断言更宽, 不致假红。 */
+      await page.evaluate(
+        'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))');
       /*
        * A/B 放在同一次运行里: 先关窗口跑 N 轮(= 改动前的全量渲染), 再开窗口跑 N 轮。
        * 只看长任务不够 —— 网络两边一样大, 差的是 CPU 段; 故两个都记。
@@ -187,13 +221,9 @@ for (const skin of SKINS) {
         const saved = vm.rowWin;
         vm.rowWin = ${winOn};
         window.__lt = [];
-        // P1-3 的 gBR 是**整页累计**计数器, 每段 bench 起必须清零: 预算公式
-        // tRows×(rounds+2)+20 只描述窗口化那一段的逐行测高, 而 A 段(关窗口的全量
-        // 替换)本身也会量行 —— 累计读会把 A+B 一起算进 B 的预算。实测 atlas
-        // A 段 64 + B 段 75 = 139 > 130, prism 30+72=102 < 125, 于是只有 atlas
-        // 红(issue 26-11-18-0308-test-e2e-perf-ab-metrics-load-red); 这不是负载
-        // 敏感也不是产品回归, 是量具的计数窗口错位。
-        window.__gbr = 0;
+        window.__gbr = 0;                  // 分段计数(issue 26-11-18-0308 修法 2/2): off/on 各计各的。
+                                           // gBR 是整页累计计数器, 预算公式只描述窗口化那一段 —— 与远端
+                                           // 30fac406 同语义(其注: atlas A 段 64 + B 段 75 = 139 > 130)。
         const ms = [];
         for (let i = 0; i < ${rounds}; i++) {
           vm.lastRid = null;                 // 强制服务端回全量 -> 前端整表替换
@@ -203,7 +233,10 @@ for (const skin of SKINS) {
           ms.push(Math.round(performance.now() - t));
         }
         vm.rowWin = saved;
-        return { ms, lt: window.__lt || [] };
+        /* 复原翻转让它的重渲/迁移探测在本 run 内落定(尤其 off 侧 false->true 重开窗的那一拍,
+         * 见 P1-3 断言注与 off 侧反面断言注) —— 不留到下一个 benchRun 的计数窗里。 */
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        return { ms, lt: window.__lt || [], gbr: window.__gbr };
       })()`);
       const off = await benchRun(false);
       const on = await benchRun(true);
@@ -211,7 +244,24 @@ for (const skin of SKINS) {
       const avg = (a) => Math.round(a.reduce((x, y) => x + y, 0) / (a.length || 1));
       console.log(
         `      [A/B ${rounds} 轮] 全量: refresh ${off.ms.join('/')}ms, 长任务 ${off.lt.join('/') || '无'} | ` +
-        `窗口化: refresh ${on.ms.join('/')}ms, 长任务 ${on.lt.join('/') || '无'}`);
+        `窗口化: refresh ${on.ms.join('/')}ms, 长任务 ${on.lt.join('/') || '无'} | gbr 全量 ${off.gbr}/窗口化 ${on.gbr}`);
+
+      /* P1-3 的 on 侧读数已随 benchRun(true) 返回(on.gbr, 在复原之前捕获): 复原会立即重排
+       * 主轮(一轮 refresh + 根重渲 + 逐行量高), 其 gBCR 属量具窗口外的合法背景, 不得计入
+       * —— 判据量的是 bench 窗口本身。 */
+
+      /* 复原: 把保存的原函数赋回实例属性并重排主轮节拍; 推送通道重启(async, 不 await ——
+       * 其后只剩纯读数断言, 无时序依赖; 失败路径静默返回, 与登录前同口径)。
+       * !不能 delete vm.scheduleNext: Vue 3 公共实例代理按键缓存查找类型(accessCache),
+       * delete 掉实例影子后并不回落 mixin 方法表, vm.scheduleNext 变 undefined(实测
+       * TypeError) —— 赋回保存的原函数是可靠复原; 原函数本就是 methods 绑定态, 直调即原语义。 */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        if (vm.__schedSaved) vm.scheduleNext = vm.__schedSaved;
+        delete vm.__schedSaved;
+        vm.scheduleNext();
+        vm.startEvents();
+      })()`);
 
       /* P1-2: 窗口化的长任务总和不得超过全量渲染 —— 收益方向断言(允许相等, 桩数据小时两边都近零)。 */
       expect(sumLt(on.lt), `P1-2 单轮主线程阻塞下降: 窗口化长任务 ${avg(on.lt)}ms/轮 vs 全量 ${avg(off.lt)}ms/轮; ` +
@@ -220,13 +270,40 @@ for (const skin of SKINS) {
       /*
        * P1-3: 唯一"按渲染次数"的布局读取是 P1-2 的**逐行测高**(行高不齐, 必须逐行记),
        * 量的是**窗口内**那几十行 —— 判据是"≤ 每轮渲染的行数 + 少量余量", 不是 0。
-       * benchRun 每段起已清零, 此处读到的只是 B 段(窗口化)的计数, 与预算同口径。
-       * 预算公式逐字保留: tRows × (rounds + 2) + 20。
+       * benchRun 每段起已清零, 此处读到的只是 B 段(窗口化)的计数, 与预算同口径(与远端
+       * 30fac406 同语义分段)。
+       * 预算公式逐字保留: tRows × (rounds + 2) + 20。背景轮询 tick 已在 bench 前隔离
+       * (见上方 quiesce 注), 预算不含墙钟项的前提由该隔离保证。
+       *
+       * 分段计数(issue 26-11-18-0308 修法 2/2): __gbr 在每个 benchRun 开头清零, 本判据
+       * **只看 on 侧** —— P1-3 的语义就是"窗口化渲染轮次只按窗口行数量高", on 侧是直接
+       * 测量面。off 侧不计入的理由: off 轮(全量渲染) rowWin=false 本就不逐行量高, 但 off
+       * 轮收尾 rowWin false->true 重开窗那一拍, 会对**全量 DOM 上已持键的行**再探一轮
+       * (_rowWindow 的 reprobe 面, 26-11-02 后引擎引入) —— 实测与轮数无关、皮肤相关
+       * (prism ~24 / atlas ~54 次, 纯净窗口下逐轮复现): 计入累计值等于把"只按轮数计"的
+       * 预算公式钉死在引擎无关假设上, atlas 即因此越线(累计 139 > 预算 130, 轮询隔离后
+       * 仍红)。分段不是放松: 真回归(窗口化轮次按全表量高, ~tTotal/轮)全部落在 on 侧
+       * 计数里, 判别力不依赖 off 侧(红验见任务档案)。
        */
-      const gbr = await page.evaluate('window.__gbr');
       const gbrBudget = tRows * (rounds + 2) + 20;
-      expect(gbr, `P1-3 重渲染不再按全表强制布局: ${rounds} 轮共 ${gbr} 次 ` +
+      expect(on.gbr, `P1-3 重渲染不再按全表强制布局(分段计数, on 侧): 窗口化 ${rounds} 轮共 ${on.gbr} 次 ` +
         `(窗口内 ${tRows} 行/轮, 预算 ${gbrBudget}; 全表量法会是 ${tTotal * rounds} 次量级)`).toBeLessThanOrEqual(gbrBudget);
+
+      /*
+       * P1-3 反面(off 侧宽松上限, 评审轮 1 补): 分段后「**非窗口化轮次**被逐行量高」的回归
+       * 模式不在 on 侧判据的覆盖里 —— _measureRowH 首行的 rowWin 门(columns_grid.js
+       * `if (!this.rowWin) return`)被误删/弱化时, off 3 轮各探 ~tTotal 次 gBCR, on 侧恒绿,
+       * P1-2 方向断言反因 off.lt 暴涨**更易过**, 现有守阵无一覆盖。本条用宽松上限兜住该模式,
+       * 两个锚: (a)容得下合法 off 侧基线 —— 实测纯净窗口每 run prism 30 / atlas 64(off 3 轮
+       * ~6-10 次(皮肤相关) + rowWin 复原重开窗的 reprobe 迁移 24/54 次, 后者与轮数无关、由已持键行数决定,
+       * 近似不随 tTotal 变(3000 档实测 30/64 -> 33/68, 差异在噪声内)), 上限取峰值 ~2x; (b)抓得住回归信号 —— rowWin 门失效时 off 侧 ≈
+       * rounds × tTotal(300 档 ≈ 900+, 对 130 余量 ~7x; 种子档越大信号越大, 判别力只增)。
+       * 常量写死不随 tRows/tTotal 缩放: 基线不随数据量变, 缩放反而把回归信号一起放大。
+       */
+      const OFF_GBR_CEILING = 130;
+      expect(off.gbr, `P1-3 反面(非窗口化轮次不被逐行量高, off 侧宽松上限): 全量 ${rounds} 轮 + ` +
+        `rowWin 复原共 ${off.gbr} 次 gBCR(上限 ${OFF_GBR_CEILING}; rowWin 门失效的回归信号是 ` +
+        `~${tTotal * rounds} 次量级)`).toBeLessThanOrEqual(OFF_GBR_CEILING);
     });
 
     test('P1-2 行窗口化生效: DOM 行数远小于数据条数', async ({ page }) => {
