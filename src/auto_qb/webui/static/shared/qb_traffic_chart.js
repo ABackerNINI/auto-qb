@@ -45,7 +45,7 @@
  * 节拍内核(S1, plan 26-11-12-1139): 判定帧 = 续拉快路 setData 落袋时刻, 同帧起每拍 rAF 动画
  * —— L0 视口偏置左移(真窗口已落袋, 绘制视口先摆回旧位置再 ≤beat 归零交还 auto)+ L1 双轨数值
  * 收敛(两列独立插值尾部 1 点, 收敛帧写回真值)。纯函数(公式/时间线/状态机)在模块级「节奏内核」
- * 节, 调度器在 methods 域 _qbBeat*; 动画期 x 轴 ticks 冻结与 tooltip 真值接缝等判据见各处注。
+ * 节, 调度器在 methods 域 _qbBeat*; 动画期 x 轴右缘刻位过滤与 tooltip 真值接缝等判据见各处注。
  *
  * 视觉引擎 V + N 霓虹元素层(S2-a, plan §03 V 表/N 节/D1-D4): 同画布装饰面 —— V1 分级色相
  * (Lv 色表常量, 四皮肤无 --qb-lv* 令牌已核查)/V2 多边形扩张环 + 旋转菱形锚 + glitch 切片/
@@ -562,7 +562,7 @@ function _qbLimitAt(events, ts) {
 /* ---------------- 节奏内核(S1, plan 26-11-12-1139 §03 节奏模型 / L0 / L1) ----------------
  * 本节全部是模块级纯函数(node 电池探针直接真跑, 同 _qbPointsToData 先例); 带副作用的调度器
  * (_qbBeatStart/_qbBeatFrame/_qbBeatConverge/_qbBeatCancel)在 methods 域。运行期状态本体存
- * 图记录(u._qbBeat = 拍时钟/视口偏置/双轨 tracks/ticks 冻结缓存), 不进 Vue state —— 同
+ * 图记录(u._qbBeat = 拍时钟/视口偏置/双轨 tracks), 不进 Vue state —— 同
  * u._qbLimits 款。 */
 /* 节奏公式单点(I1/I2): beat = clamp(period × 0.4, 320, 1000) —— 「真值在 t ≤ beat ≤ 1s 完全
  * 落地」的可验证保证。period = clamp(_qbPollMs() 实算, 1500, 600000) 每拍重算(_qbPollMs 已
@@ -636,6 +636,22 @@ const _QB_FX_CELL_MIN_PX = 0.75;
  * 12:35 根因纠正)。rem 低于此阈值时 dx 已亚毫秒级(1e-4×dx0 ≤ 4.5e-4s, 视口 <0.01px),
  * 肉眼与 splits 均不可辨, 直接钳零让视口精确吸附目标锚点。 */
 const _QB_FX_L0_SNAP_REM = 1e-4;
+/* x 轴右缘刻位容差(issue 26-11-17-0936 第三次纠正): 绝对下限 1e-9 兼容小时间域, 相对项
+ * |vMax|×1e-12 覆盖 1.7e9 秒级挂钟上钳零后 1e-3 秒量级微越界。splits 末位 < vMax - eps
+ * 才画 —— 恰好压在 vMax 上的整点不再多出一条最右纵线。 */
+const _QB_X_SPLIT_EPS = (max) => Math.max(1e-9, Math.abs(max) * 1e-12);
+/* x 轴 splits 生成器包装(建图后挂, 模块级纯函数供 node 电池): uPlot 1.6.x 未导出默认
+ * splits generator, 但建图时已把默认生成器规范化写进 axes[0].splits —— 取来包一层即可。
+ * 丢掉 >= vMax - eps 的右缘刻位, 让网格线数不随 vMax 是否精确压整点而 12↔13 翻转
+ * (L0 钳零令收敛帧 vMax 偶尔精确落 5s 整点, 下一拍退 1.5s 又消失 = 每两拍跳一次)。
+ * 透传全部原签名实参, 不碰 uPlot 内部; 返回新数组, 不修改生成器原结果。 */
+function _qbDropRightEdgeSplits(generator) {
+  return function (u, axisIdx, min, max, incrs, foundSpace, forceDelta) {
+    const raw = generator.call(this, u, axisIdx, min, max, incrs, foundSpace, forceDelta) || [];
+    const eps = _QB_X_SPLIT_EPS(max);
+    return raw.filter((v) => v < max - eps);
+  };
+}
 /* 拍内单帧 dt 上限(ms): 掉帧/长停顿吞进一帧不跳变过半拍(隐藏暂停另有 document.hidden 判定,
  * 时钟在隐藏期根本不累计 —— 见 _qbBeatFrame)。 */
 const _QB_FX_FRAME_MAX_DT_MS = 100;
@@ -1795,7 +1811,7 @@ window.AQB_QB_TRAFFIC = {
     /* y 轴重排(上限变更/限速到手): 只重算 scale 并重画注解层, 不销毁重建、不重取数。
      * setData(resetScales 默认 true) 会重跑 y range 与全部 draw 钩子(注解层随之上新)。
      * S1: 在途拍内触发(y 切档/限速变化两入口)先终止在途拍并**直接落真值**(尾点插值中的值
-     * 写回真值、清 ticks 冻结)再重排 —— 否则动画帧的 y 钉会盖过新档位一拍、偏置视口与新
+     * 写回真值)再重排 —— 否则动画帧的 y 钉会盖过新档位一拍、偏置视口与新
      * 档位错配一帧; 收口语义与收敛帧同款, 不留半帧。 */
     _qbChartRescale(scope) {
       const u = this._qbCharts && this._qbCharts[scope];
@@ -1815,8 +1831,6 @@ window.AQB_QB_TRAFFIC = {
           tr.dl.shown = tr.dl.live ? tr.dl.target : null;
         }
         this._qbBeatCancel(u);
-        u._qbTickFreeze = null;
-        u._qbTickFreezePending = false;
       }
       // F5: 在途摆回拍被重排打断时补点仍在列头 —— 随本次 setData 摘除(收口 = 落真窗口,
       // 不留补点常驻; _qbPad 记账同步归零, 下拍补点定位从真首桶起步)。
@@ -2899,7 +2913,6 @@ window.AQB_QB_TRAFFIC = {
         if (tr.dl.live && tr.dl.prev !== tr.dl.target) u.data[2][n - 1] = tr.dl.prev;
       }
       if (needsShift) {
-        u._qbTickFreezePending = true;  // 判定帧渲染时冻结 x 轴 ticks(§09「x 轴刻度每帧重算」)
         // F5: 摆回锚 = 上一拍视图(min = 真窗起点 - dx0 - padPrev·step, max = 真窗末点 - dxN
         // —— 翻动拍一 dxN=0 max 恒驻/翻动拍二 dx0=0 min 恒驻) —— 补点格恰在视图左缘外展,
         // 曲线左端贴住摆回视图左缘(上一拍视图的 0px 位置), G-B 左缺口瞬移与其右缘镜像一起
@@ -3105,7 +3118,7 @@ window.AQB_QB_TRAFFIC = {
       u.redraw();
       return false;
     },
-    /* 收敛帧: 真值写回 + 显式交还 auto range + x 轴 ticks 一次性刷新, 一次提交完成。
+    /* 收敛帧: 真值写回 + 显式交还 auto range + 强制轴重算一次, 一次提交完成。
      * 交还方式已读 uPlot 1.6.x vendor 源确认: 无持久手动 range —— setScale 只往 pending 表
      * (Kl)写一次、下次提交即消费, setData(resetScales 默认 true) 走 xn() 从数据重推 x range
      * (auto 路径真实存在)并重算 y, 无需额外释放调用。 */
@@ -3120,8 +3133,6 @@ window.AQB_QB_TRAFFIC = {
       if (tr.dl.live) u.data[2][n - 1] = tr.dl.target;
       tr.up.shown = tr.up.live ? tr.up.target : null;
       tr.dl.shown = tr.dl.live ? tr.dl.target : null;
-      u._qbTickFreeze = null;        // ticks 冻结清除: 本次提交即用真窗口现算标签(一次性刷新)
-      u._qbTickFreezePending = false;
       // F5 补点退役: 摆回拍(needsShift)滑动末帧视口已归真窗口 [xs[pad], xs[n-1]], 补点格恰在
       // 视图左缘外 —— 本次 setData 摘除头部补点, auto 重推出的 x range 与末帧逐像素同值
       // (交还无跳变), 补点完成使命出列, 下一拍判定帧重复。非摆回拍(L1-only/装饰, 视图全程
@@ -3133,8 +3144,8 @@ window.AQB_QB_TRAFFIC = {
       u._qbPad = dropPad ? 0 : (u._qbPad || 0);
       // 根因二次纠正(issue 26-11-17-0936): uPlot 只在 scale 变化时置轴重算脏标记(mt), 走 Dn()
       // 重算 _splits/_values。L0 末帧钳零后, 收敛帧 setData 推出的 x range 与末帧视口逐位相同
-      // —— scale 未变 -> 轴不重算 -> 刚清掉的 tick freeze 旧标签滞留在 _values 里, 要等下一拍
-      // 第一个 setScale 改视口才刷新(底部时刻标签比刻位慢一拍, 一帧跳)。这里强制 mt=true 让
+      // —— scale 未变 -> 轴不重算 -> 标签仍是上一帧现算值, 若这一帧的 splits 该变(补点摘除后
+      // 右缘刻位过滤生效)就慢一拍才刷新(底部时刻标签比刻位慢一帧)。这里强制 mt=true 让
       // 本次提交重算一次轴值; 第一参 false 只让 redraw 走 Jn() 提交, 不再写 x scale。
       u.redraw(false, true);
       // F2 常驻菱形锚 · 同步点 2/4(收敛帧): 真值落袋后把锚位写到终值(shown=target), 拍间常驻
@@ -3382,23 +3393,11 @@ window.AQB_QB_TRAFFIC = {
           y: { range: (u, dmin, dmax) => _qbYRange(dmax, this._qbYCapOf(scope)) },
         },
         axes: [
-          { ...axis, values: (u, splits) => {
-            // S1 动画期 x 轴 ticks 冻结(§09「x 轴刻度每帧重算」): L0 过渡期每帧 setScale 重算
-            // splits + 标签(轴标抖动 + 每帧 Date 格式化开销) —— 判定帧渲染时把标签缓存进
-            // u._qbTickFreeze, 过渡期恒返缓存; 收敛帧清除冻结, 一次性现算刷新。
-            // 等长守卫: 过渡中 splits 数变化(视口跨刻度边界进/出一条刻度)即解除缓存回落现算,
-            // 防标签与刻位错位(uPlot 绘制侧按同一索引对位 _splits 与 _values)。
-            if (u._qbTickFreeze) {
-              if (u._qbTickFreeze.length === splits.length) return u._qbTickFreeze;
-              u._qbTickFreeze = null;
-            }
-            const labels = splits.map((ts) => this._qbTickLabel(ts, scope));
-            if (u._qbTickFreezePending) {
-              u._qbTickFreeze = labels;
-              u._qbTickFreezePending = false;
-            }
-            return labels;
-          } },
+          // x 轴标签每帧从实时 splits 现算(issue 26-11-17-0936 第三次纠正): 旧 tick freeze
+          // 只冻文字不冻刻位 —— 文字补刷新只跟 sp0 跨刻度走, 与右缘纵线进出事件错相, 两个
+          // 独立跳变叠加成用户看到的「数字也跳、但不同时」。去掉冻结后标签与 _splits 同帧
+          // 同源; 右缘多线已由建图后挂在 axes[0].splits 的 _qbDropRightEdgeSplits 根除。
+          { ...axis, values: (u, splits) => splits.map((ts) => this._qbTickLabel(ts, scope)) },
           // y 轴槽宽 84: fmtSpeed 轴标最长形("999.9 KiB/s"/"3.86 MiB/s" = 11 字符 x 10px 等宽
           // + 内边距), 60 会把标签左缘截掉(实测 "3.86 MiB/s" 只剩 "86 MiB/s") —— 三主题截图自查发现
           { ...axis, size: 84, values: (u, splits) => splits.map(fmtAxisSpeed) },
@@ -3446,9 +3445,15 @@ window.AQB_QB_TRAFFIC = {
         },
       };
       const u = this._qbCharts[scope] = new uPlot(opts, [data.xs, data.up, data.dl], host);
+      // 右缘刻位过滤(issue 26-11-17-0936 第三次纠正): 建图后包 x 轴 splits —— uPlot 建图时
+      // 已把默认生成器规范化写进 axes[0].splits, 这里取来包一层, 后续每次轴重算都会走它。
+      // 守卫兼容无 axes 的测试桩; 生产图必有可调用的 splits。
+      if (u.axes && u.axes[0] && typeof u.axes[0].splits === "function") {
+        u.axes[0].splits = _qbDropRightEdgeSplits(u.axes[0].splits);
+      }
       u._qbLimits = (d && d.limits) || [];  // 限速事件暂存在图记录上(u.data 只有三列, D4 数据通路)
       // S1 节拍底座初值(图记录面, 同 _qbLimits 款不进 Vue state): 拍时钟/视口偏置空, 双轨以
-      // 建图数据尾点为显示值(首拍 prev 接续 = 建图尾值, 领先沿不回跳), ticks 冻结未挂;
+      // 建图数据尾点为显示值(首拍 prev 接续 = 建图尾值, 领先沿不回跳);
       // step = 建图桶宽(F5 rewin 判据的跨拍对照值), _qbPad = 头部补点格数(建图列恒真值 0)。
       u._qbBeat = {
         raf: 0,
@@ -3463,8 +3468,6 @@ window.AQB_QB_TRAFFIC = {
         },
       };
       u._qbPad = 0;
-      u._qbTickFreeze = null;
-      u._qbTickFreezePending = false;
       // F2 常驻菱形锚(F2, plan 26-11-14-1313): 两枚 DOM 方块挂 .u-wrap(幂等建, 颜色 = 本次
       // 建图捕获的 tk 语义色内联 —— 换肤重建即新令牌), 随后首次位置/门同步; 旋转走 CSS
       // keyframes(注入单点 _qbChartInjectCss), 同步点四处收敛见 _qbFxAnchorSync 注(R3)。

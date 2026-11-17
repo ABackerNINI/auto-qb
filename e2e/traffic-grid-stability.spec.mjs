@@ -265,23 +265,27 @@ test.describe('R1 处置 · hour 段窗(3天档)栅格语义: floor+1 形状 + �
 });
 
 /* ============================================================================ */
-/* A4-b(issue 26-11-17-0936 12:35 + 13:2x 两次根因纠正): 每拍 +1 桶真实几何下 x 轴首刻位
- * 逐帧单调不减, 且非冻结帧标签与刻位同源。
+/* A4-b(issue 26-11-17-0936 三次根因纠正): 每拍 +1 桶真实几何下 x 轴首刻位逐帧单调、
+ * 标签每帧与刻位同源、右缘不多画一条纵线。
  *
  * 为什么 A4 本体没抓到: A4 用每拍 +30 桶(整窗)压缩桩, dx0=30 格走 rewin 瞬时落地、根本
  * 不播 L0, 从不进入末帧 ulp 区。生产每拍 +1 桶(轮询=桶宽=1.5s)播 L0, 末帧 rem=(1-p)^3
  * 逼近 0 时 x.min 落在刻度整数边界前一丁点(120.9999788 而非 121.0), uPlot time splits
  * 据该残差把首刻位低一格(125->124), 下一帧收敛帧精确 121.0 又恢复 —— 单帧刻位/网格线
- * 回跳。钳零修掉它后暴露第二层: 收敛帧 scale 与末帧逐位相同, uPlot 不重算 axes, 冻结
- * 标签滞留到下一拍。本用例逐帧采 _splits[0]/_values[0], 同时堵住两条回潮路径。
+ * 回跳。钳零修掉后暴露第二层: 收敛帧 scale 与末帧逐位相同, uPlot 不重算 axes, 冻结
+ * 标签滞留下一拍。去掉冻结后暴露第三层: L0 钳零令收敛帧 vMax 精确压到 5s 整点,
+ * uPlot 把落在右边界的刻度也画出来(最右多一条纵线 N 12->13), 下一拍退 1.5s 又消失,
+ * 恰成用户所见「每两拍跳一次」。本用例逐帧采 _splits 全量 + _values[0], 三路一起堵。
  * ============================================================================ */
-test.describe('A4-b 每拍 +1 桶真实几何 · 末帧刻位不回跳 + 收敛标签不滞留(issue 26-11-17-0936)', () => {
+test.describe('A4-b 每拍 +1 桶真实几何 · 末帧刻位不回跳 + 标签同源 + 右缘不多线(issue 26-11-17-0936)', () => {
   installRuntimeErrorGuard(test);
 
   const N1 = 41;   // 1m 窗 60/1.5 = 40 整桶 + 1 进行中桶
   test('[chromium] L0 逐帧 x 首刻位单调不减(末帧 ulp 回跳不回潮) @fast', async ({ page }) => {
     test.setTimeout(90_000);
-    const b0 = Math.floor(Date.now() / 1000 / 1.5) * 1.5 - (N1 - 1) * 1.5;
+    // 锚到 15s 网格(1.5s 与 5s 的最小公倍数): 首拍末桶 xs[40] 必精确压 5s 整点,
+    // 让「vMax 落整点多画一条最右纵线」的第三层根因在本用例中确定性复现, 不靠相位碰运气。
+    const b0 = Math.floor(Date.now() / 1000 / 15) * 15 - (N1 - 1) * 1.5;
     let calls = 0;
     await stubFlags(page);
     await page.route('**/api/traffic/qb/torrent/*', (route) => {
@@ -307,7 +311,9 @@ test.describe('A4-b 每拍 +1 桶真实几何 · 末帧刻位不回跳 + 收敛�
     await expect(drawer.locator('.qb-chart-host canvas')).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => readInst(page, 'vm._qbPollMs("torrent")'), { timeout: 15_000 }).toBeLessThanOrEqual(2100);
 
-    /* 逐帧采 _splits[0](只读运行态回填值, 见 pitfalls/uplot-axes-splits-generator)。满 8 拍收口。 */
+    /* 逐帧采 _splits 全量(只读运行态回填值, 见 pitfalls/uplot-axes-splits-generator)与
+     * _values[0]。满 12 个 xs0 收口: 1.5s 步长要 10 拍才回到 15s 网格整点, 12 拍覆盖
+     * 至少一个「vMax 精确压 5s 整点」的收敛帧, 让右缘多线确定性复现。 */
     await page.evaluate(`(() => {
       const vm = ${INST};
       window.__a4b = { frames: [], lastXs0: null, done: false };
@@ -321,14 +327,16 @@ test.describe('A4-b 每拍 +1 桶真实几何 · 末帧刻位不回跳 + 收敛�
           const lv = u.axes[0]._values;
           if (sp && sp.length && st && st.xs0 != null) {
             s.frames.push({
-              sp0: sp[0], xs0: st.xs0, vMin: u.scales.x.min, vMax: u.scales.x.max,
+              sp0: sp[0], spN: sp[sp.length - 1], spCount: sp.length,
+              xs0: st.xs0, vMin: u.scales.x.min, vMax: u.scales.x.max,
               lab0: lv && lv[0],
               expectLab0: vm._qbTickLabel(sp[0], vm.qbCurScope || 'torrent'),
-              frozen: !!u._qbTickFreeze, pending: !!u._qbTickFreezePending,
+              frozen: "_qbTickFreeze" in u || !!u._qbTickFreeze,
+              pending: "_qbTickFreezePending" in u || !!u._qbTickFreezePending,
             });
             if (s.xs0s === undefined) s.xs0s = new Set();
             s.xs0s.add(st.xs0);
-            if (s.xs0s.size >= 9) s.done = true;
+            if (s.xs0s.size >= 12) s.done = true;
           }
         }
         requestAnimationFrame(tick);
@@ -346,16 +354,41 @@ test.describe('A4-b 每拍 +1 桶真实几何 · 末帧刻位不回跳 + 收敛�
         .toBeGreaterThanOrEqual(frames[i - 1].sp0);
     }
 
-    /* 本体 2(13:2x 二次纠正): 收敛帧清掉 tick freeze 后必须当场重算标签。uPlot 在 scale
-     * 不变时不重算 axes —— L0 末帧钳零令收敛帧 scale 与上帧逐位相同, 少了强制重算则
-     * _values 仍是冻结旧标签, 会滞留到下一拍首个 setScale 才补跳(底部时刻一帧闪动)。
-     * 冻结态/挂起态天然允许旧标签, 只钉「非冻结非挂起」帧: 收敛帧与拍间静止帧。 */
-    const settled = frames.filter((f) => !f.frozen && !f.pending && f.lab0 != null);
-    expect(settled.length, '采样窗应覆盖收敛/静止帧(非冻结非挂起)').toBeGreaterThan(0);
-    for (const f of settled) {
-      expect(f.lab0, `刻位 ${f.sp0} 的非冻结帧标签 ${f.lab0} 必须等于现算值 ${f.expectLab0}`
-        + '(收敛帧未强制重算 axes, 冻结标签滞留下一拍 = issue 26-11-17-0936 二次根因回潮)')
+    /* 本体 2(三次纠正): tick freeze 已整体退役 —— 采样面上两枚状态字段都不许存在/为真,
+     * 且**每一帧**标签都等于当前刻位的现算值(不再有「只钉非冻结帧」的豁免口)。旧机制
+     * 只冻文字不冻刻位, 文字补刷新只跟 sp0 跨刻度走, 与右缘纵线事件错相跳。 */
+    for (const f of frames) {
+      expect(f.frozen || f.pending, 'x 轴 tick freeze 状态必须整体退役(起拍挂 pending 回潮即失败)')
+        .toBe(false);
+      expect(f.lab0, `刻位 ${f.sp0} 的标签 ${f.lab0} 必须等于现算值 ${f.expectLab0}`
+        + '(标签未逐帧从实时 _splits 现算 = issue 26-11-17-0936 第三次根因回潮)')
         .toBe(f.expectLab0);
     }
+
+    /* 本体 3(三次纠正): 右缘刻位恒 < vMax - ε。vMax 精确压 5s 整点时 uPlot 原生 splits
+     * 会把该刻位也算进来, 最右多画一条纵线; 下一拍 vMax 退 1.5s 又消失 —— 每两拍一跳。
+     * _qbDropRightEdgeSplits 挂上后该刻位恒被丢掉, 本断言直接钉住行为面。 */
+    for (const f of frames) {
+      const eps = Math.max(1e-9, Math.abs(f.vMax) * 1e-12);
+      expect(f.spN, `第 ${frames.indexOf(f)} 帧右缘刻位 ${f.spN} 不得贴到 vMax ${f.vMax}`
+        + '(右缘整点刻位过滤失效 = 最右纵线每两拍进出, issue 26-11-17-0936 第三次根因回潮)')
+        .toBeLessThan(f.vMax - eps);
+    }
+    /* 同一组 scale(min,max) 必须给出同一组 splits —— 刻位数不得随拍相位翻转(12↔13)。
+     * 按 vMin|vMax 逐字分组, 批内 spCount 恒等; 生产首拍锚到 15s 网格, 必覆盖压整点帧。 */
+    const batch = new Map();
+    for (const f of frames) {
+      const key = f.vMin + '|' + f.vMax;
+      if (!batch.has(key)) batch.set(key, new Set());
+      batch.get(key).add(f.spCount);
+    }
+    for (const [key, counts] of batch) {
+      expect(counts.size, `同一视口 ${key} 的刻位数应恒定, 实得 ${[...counts].join(',')}`
+        + '(同一 scale 两次绘制出不同刻位数 = 纵线跳变)').toBe(1);
+    }
+    const boundaryFrames = frames.filter((f) => Math.abs(f.vMax % 5) < 1e-6);
+    expect(boundaryFrames.length, `采样窗应覆盖 vMax 精确压 5s 整点的帧(首拍锚 15s 网格);`
+      + ` 实得 vMax 样本 ${[...new Set(frames.map((f) => f.vMax))].slice(0, 14).join(', ')}`)
+      .toBeGreaterThan(0);
   });
 });

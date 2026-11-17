@@ -853,9 +853,10 @@ const src = fs.readFileSync(process.argv[1], "utf8");
 const {
   _qbBeatMs, _qbBeatTimeline, _qbFxEaseOut, _qbFxCellPx, _qbFxShouldShift,
   _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbRollJudge, _qbPadTailColumns, _qbFxShiftGate,
+  _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS,
 } = new Function(src + "\nreturn { _qbBeatMs, _qbBeatTimeline, _qbFxEaseOut, _qbFxCellPx,"
   + " _qbFxShouldShift, _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbRollJudge, _qbPadTailColumns,"
-  + " _qbFxShiftGate };")();
+  + " _qbFxShiftGate, _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS };")();
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 const close = (a, b, eps) => Math.abs(a - b) <= (eps === undefined ? 1e-9 : eps);
@@ -1052,6 +1053,43 @@ ok("收敛终点恒为真值(shown(p=1) === target)", close(seq(0.7, 1.0, 1), 1.
     && !!colsReset && colsReset[0].length === 6 && colsReset[0][0] === 1000
     && !!colsStill && colsStill[0].length === 6 && colsStill[0][0] === 970 && colsStill[0][5] === 1120);
 }
+// —— K. x 轴右缘刻位过滤(issue 26-11-17-0936 第三次纠正, 模块级纯函数真跑) ——
+{
+  const max = 1794896895;   // 5s 整点, 1.5s 桶网格可精确落在其上
+  const eps = _QB_X_SPLIT_EPS(max);
+  ok("K1 eps 口径: max(1e-9, |vMax|×1e-12), 小域走绝对下限",
+    close(eps, max * 1e-12, 1e-18) && _QB_X_SPLIT_EPS(0) === 1e-9
+    && _QB_X_SPLIT_EPS(1e-6) === 1e-9);
+  // 复刻 vendor $e: 固定 5s 网格, 把 <= vMax 的刻位全算进来(含恰好压在 vMax 的那一条)
+  const gridGen = (u, i, min, mx) => {
+    const out = [];
+    for (let v = Math.ceil(min / 5) * 5; v <= mx; v += 5) out.push(v);
+    return out;
+  };
+  const wrapped = _qbDropRightEdgeSplits(gridGen);
+  const interior = [max - 10, max - 5];
+  ok("K2 右缘整点被丢, 内部刻位全留(最右纵线不随 vMax 压整点进出)",
+    JSON.stringify(wrapped(null, 0, max - 10, max, [], 0, false))
+      === JSON.stringify(interior));
+  ok("K3 vMax 未压整点时不过滤(vMax 与整点差 > eps)",
+    JSON.stringify(wrapped(null, 0, max - 10, max + 1.5 - 1e-3, [], 0, false))
+      === JSON.stringify([...interior, max]));
+  ok("K4 eps 内微越界也丢(钳零后 1e-3 秒级残差不回潮)",
+    JSON.stringify(wrapped(null, 0, max - 10, max + eps / 2, [], 0, false))
+      === JSON.stringify(interior));
+  ok("K5 透传生成器全部实参 + 返回新数组(不改生成器原结果)",
+    (() => {
+      const seen = [];
+      const ret = [max];
+      const spy = function () { seen.push([...arguments]); return ret; };
+      const out = _qbDropRightEdgeSplits(spy)("u", 3, 0, max, [1, 5], 2, true);
+      return out !== ret && seen.length === 1 && seen[0][0] === "u" && seen[0][1] === 3
+        && seen[0][4][1] === 5 && seen[0][5] === 2 && seen[0][6] === true && out.length === 0;
+    })());
+  ok("K6 生成器返回 null 时回落空数组(不抛)",
+    Array.isArray(_qbDropRightEdgeSplits(() => null)(null, 0, 0, max, [], 0, false))
+    && _qbDropRightEdgeSplits(() => null)(null, 0, 0, max, [], 0, false).length === 0);
+}
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -1194,9 +1232,9 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
       ySeen.push(u.scales.y.max);
     }
   }
-  ok("S2 收敛帧: setData 交还 auto + 两轨真值写回(30/60) + 冻结清除 + anim 收口", u.setDataCount === 1
+  ok("S2 收敛帧: setData 交还 auto + 两轨真值写回(30/60) + anim 收口", u.setDataCount === 1
     && u.data[1][4] === 30 && u.data[2][4] === 60 && u._qbBeat.anim === null
-    && u._qbTickFreeze === null && u._qbTickFreezePending === false && u._qbBeat.raf === 0);
+    && u._qbBeat.raf === 0);
   ok("S2 I1 电池级: 动画结束时刻 - 判定时刻 <= beat(1000ms)", nowMs - t0 <= 1000);
   ok("S2 尾点序列单调收敛(10->30 与 55->60 无回跳无 overshoot)", tails.length > 3
     && tails.every((v, i) => i === 0 || (v[0] >= tails[i - 1][0] - 1e-12 && v[1] >= tails[i - 1][1] - 1e-12))
@@ -1426,13 +1464,12 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 4; i++) { nowMs += 50; pump(); }  // clock 150: 插值中
-  u._qbTickFreeze = ["10:00", "10:01"];  // 模拟冻结已挂(状态面预设, 验 rescale 清冻结)
   ok("S11 前置: 在途拍插值中(尾点偏离真值)", u._qbBeat.anim !== null && u.data[1][4] > 10
     && u.data[1][4] < 30);
   self._qbChartRescale("global");
-  ok("S11 rescale: 在途拍终止 + 真值直接落袋 + ticks 冻结清除 + setData 交还(不留半帧)",
+  ok("S11 rescale: 在途拍终止 + 真值直接落袋 + setData 交还(不留半帧)",
     rafMap.size === 0 && u._qbBeat.anim === null && u.data[1][4] === 30 && u.data[2][4] === 60
-    && u._qbTickFreeze === null && u.setDataCount === 1);
+    && u.setDataCount === 1);
   pump();
   ok("S11 rescale 后无残余帧", u.setDataCount === 1 && u._qbBeat.anim === null);
 }
@@ -1619,7 +1656,7 @@ def test_frontend_qb_beat_kernel_battery():
     7. 调度器行为面(_NODE_QB_BEAT_SCHED_PROBE: 真 mixin 方法 + **提交语义忠实 vendor 的桩 uPlot**
       (setScale 攒 pending、x 提交即 An(!0)、y 无钉按可视窗重算/有钉原样拷贝, S0 对照用例先证桩
       会漂移) + 假 rAF/时钟, 逐帧断言): 完整一拍(起拍视口摆回旧位 [xs0-old] + 尾点摆回显示值
-      -> 逐帧 dx 单调收缩归零 + 两轨尾点单调收敛 + 收敛帧 setData 交还 auto/真值写回/冻结清除,
+      -> 逐帧 dx 单调收缩归零 + 两轨尾点单调收敛 + 收敛帧 setData 交还 auto/真值写回/强制轴重算,
       动画结束-判定 <= beat = I1 电池级)/打断接续(中断值作新拍 prev 不回跳, 旧 rAF 已摘)/页面
       隐藏暂停(时钟冻结零变化)与恢复接续(不吞隐藏时长不重播)/reduce 短路(零 rAF 零 setScale
       真值面) vs enabled=false 不短路(L0/L1 照常)/零变化拍 F6 环境层解绑(只跑 fx 的 impact
@@ -1632,7 +1669,7 @@ def test_frontend_qb_beat_kernel_battery():
       无钉时 y 会随偏置窗剔出窗沿峰值垂直跳), 收敛帧 setData auto 重推同值(交还无跳变); x/y
       提交计数相等; 零变化滚窗(S7b)与纯数值收敛帧(S8)的 y 钉面各自覆盖;
     9. rescale 在途拍收口(评审 #6 回归钉): _qbChartRescale 在插值中触发 -> 在途拍终止 + 真值
-      直接落袋 + ticks 冻结清除 + setData 交还(不留半帧), 后续无残余帧;
+      直接落袋 + setData 交还(不留半帧), 后续无残余帧;
     10. S4-a 盘点轮补三面(plan §10 探针的电池级等价; F1 后 S7b 改钉 fx 恒在场 lv=1 —— 值>0 恒 >=Lv.1, 原「双轨静默零装饰」面收窄为真 0/缺口轨(
       调度器面 —— L0 窗口滚动照滚); F6/D3 后 S7 改钉零变化拍只跑 fx 的 impact 窗(数据面零
       x 提交零改写)+ S7a 真 0 全静默 + S12 零变化连拍 10 次 fx 即抛即清(叠加层零累积)/S12b
@@ -1656,7 +1693,9 @@ def test_frontend_qb_beat_kernel_battery():
     a. 续拉快路逐字序(F5): _qbPadTailColumns 单点 -> setData 落袋 -> _qbPad 记账 -> 同帧
       _qbBeatStart(既有 setData/_qbBeatStart 相邻语义保持);
     b. L0 视口偏置(t=0 摆回旧位 + 每帧 dx 归零)与收敛帧 setData 交还 auto 的成对在位;
-    c. ticks 冻结: needsShift 支路挂 pending、收敛帧清冻结先于 setData(一次性刷新序);
+    c. x 轴右缘刻位过滤 + 标签逐帧现算(issue 26-11-17-0936 三次纠正): 模块级
+      _qbDropRightEdgeSplits 建图后挂 axes[0].splits 丢掉 >= vMax-eps 的右缘刻位;
+      tick freeze 整体退役, 收敛帧 u.redraw(false, true) 强制轴重算保留;
     d. reduce 短路判据读 AQB_FX_CFG 的 on 有效值(on=false 的 reduce 分量才短路, I7);
     e. _qbChartDestroy 先 _qbBeatCancel 再 u.destroy()(换肤/关抽屉终止在途动画不留半帧);
     f. 面板 beat 展示值复用 _qbBeatMs 单点(第二份 clamp 公式退场);
@@ -1745,22 +1784,26 @@ def test_frontend_qb_beat_kernel_battery():
         "收敛帧必须按摆回拍摘除头部补点(F5: needsShift 拍 slice(pad) 落回真窗口, 补点出视图)"
     assert 'setScale("y"' not in conv_blk.group(1), \
         "收敛帧不得再钉 y(setData 交还 auto 重推的正是真窗档位, 与钉值同值 —— 双钉反而挡住 auto 交还)"
-    # c. ticks 冻结序: needsShift 支路挂 pending; 收敛帧清冻结先于 setData(一次性刷新);
-    #    等长守卫在位(过渡中 splits 数变化即解除缓存回落现算, 防 uPlot _splits/_values 对位错位)
-    assert "u._qbTickFreezePending = true;" in start_blk.group(1), \
-        "L0 起拍必须挂 ticks 冻结 pending(判定帧渲染时缓存标签)"
+    # c. x 轴右缘刻位过滤 + 标签逐帧现算(issue 26-11-17-0936 第三次纠正): 模块级包装单点
     conv_body = conv_blk.group(1)
-    assert conv_body.index("u._qbTickFreeze = null;") < conv_body.index("u.setData(dropPad"), \
-        "收敛帧必须先清 ticks 冻结再 setData(同一次提交内完成一次性刷新)"
-    # issue 26-11-17-0936 13:2x 二次纠正: L0 末帧钳零后收敛帧 scale 与末帧逐位相同, uPlot
-    # 不置轴重算脏标记 -> values 回调不执行 -> 刚清掉的冻结旧标签滞留在 _values, 下一拍才跳。
-    # 收敛帧必须在 setData 之后强制 mt=true 重算一次轴值, 让标签当场与 _splits 对齐。
+    #    建图后挂 axes[0].splits, 丢掉 >= vMax - eps 的右缘刻位; tick freeze 整体退役。
+    assert "const _QB_X_SPLIT_EPS = (max) => Math.max(1e-9, Math.abs(max) * 1e-12);" in js, \
+        "右缘刻位容差必须模块级单点 eps=max(1e-9, |vMax|×1e-12)"
+    assert "function _qbDropRightEdgeSplits(generator) {" in js \
+        and "return raw.filter((v) => v < max - eps);" in js, \
+        "x 轴 splits 包装必须丢掉 >= vMax - eps 的右缘刻位(最右纵线每两拍进出根治)"
+    assert "u.axes[0].splits = _qbDropRightEdgeSplits(u.axes[0].splits);" in js, \
+        "建图后必须把包装挂到 x 轴 splits(uPlot 建图时已把默认 generator 规范化进 axes[0].splits)"
+    assert "_qbTickFreeze" not in js, \
+        "tick freeze 必须整体退役(只冻文字不冻刻位 -> 标签与纵线错相跳)"
+    assert "{ ...axis, values: (u, splits) => splits.map((ts) => this._qbTickLabel(ts, scope)) }," in js, \
+        "x 轴标签必须每帧从实时 splits 现算(不得缓存/冻结)"
+    # issue 26-11-17-0936 二次纠正(保留): L0 末帧钳零后收敛帧 scale 与末帧逐位相同, uPlot
+    # 不置轴重算脏标记 -> 本次轴值不刷新。收敛帧必须在 setData 之后强制 mt=true 重算一次。
     assert "u.redraw(false, true);" in conv_body \
         and conv_body.index("u.setData(dropPad") < conv_body.index("u.redraw(false, true);"), \
         "收敛帧 setData 后必须 u.redraw(false, true) 强制重算 axes(scale 未变时 uPlot 不会" \
-        "重算 _values, 冻结标签滞留下一拍 = issue 26-11-17-0936 二次根因回潮)"
-    assert "u._qbTickFreeze.length === splits.length" in js, \
-        "ticks 冻结必须带等长守卫(过渡中 splits 数变化即解除缓存回落现算, 防标签与刻位错位)"
+        "重算 _values, 轴值刷新慢一拍 = issue 26-11-17-0936 二次根因回潮)"
     # d. reduce 短路读有效值单点(on = enabled && !reduce 的 S0-b 产物)
     assert "cfg.enabled === true && cfg.on === false" in start_blk.group(1) \
         and "window.AQB_FX_CFG" in start_blk.group(1), \
@@ -1791,15 +1834,15 @@ def test_frontend_qb_beat_kernel_battery():
     assert hover_blk and "d.points[i]" in hover_blk.group(1) and "u.data" not in hover_blk.group(1), \
         "悬停取值必须读 Vue points 真值(d.points[i]), 不得读 u.data —— L1 尾点插值写在 u.data 绘制面, 两面零交集"
     # j. rescale 在途拍收口(发现 #6): _qbChartRescale(y 切档/限速变化两入口)在在途拍内触发
-    #    必须先落真值 + 终止拍 + 清 ticks 冻结, 再 setData 重排(否则动画帧的 y 钉盖过新档位
+    #    必须先落真值 + 终止拍, 再 setData 重排(否则动画帧的 y 钉盖过新档位
     #    一拍、偏置视口与新档位错配一帧); 行为面 = 调度器电池 S11
     rescale_blk = re.search(r"_qbChartRescale\(scope\) \{\n(.*?)\n    \},", js, re.S)
     assert rescale_blk, "qb_traffic_chart.js 缺 _qbChartRescale(y 轴重排单点)"
     rb = rescale_blk.group(1)
-    assert "st.anim" in rb and "_qbBeatCancel(" in rb and "u._qbTickFreeze = null;" in rb, \
-        "_qbChartRescale 必须收口在途拍(落真值 + _qbBeatCancel + 清冻结), 再 setData 重排"
+    assert "st.anim" in rb and "_qbBeatCancel(" in rb, \
+        "_qbChartRescale 必须收口在途拍(落真值 + _qbBeatCancel), 再 setData 重排"
     assert rb.index("_qbBeatCancel(") < rb.index("u.setData(dropPad"), \
-        "_qbChartRescale 的拍收口必须先于 setData(先落真值清冻结, 再按新档位重排)"
+        "_qbChartRescale 的拍收口必须先于 setData(先落真值, 再按新档位重排)"
     assert "u._qbPad = 0;" in rb, \
         "_qbChartRescale 收口必须摘除头部补点(F5: 落真窗口, 补点不常驻 —— _qbPad 记账归零)"
     # k. F5 rewin 判据单点与补尾格面(plan 26-11-15-1104 F5/R5):
