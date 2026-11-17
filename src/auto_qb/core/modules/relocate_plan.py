@@ -478,7 +478,14 @@ class PlanMixin:
                 st = os.lstat(utils.add_long_path_prefix_for_win(self._syscall(first_native)))
                 tag = getattr(st, "st_reparse_tag", 0)
                 if stat.S_ISLNK(st.st_mode) or tag:
-                    tp_files = (names[0], )
+                    if not self._own_alias_symlink(st):
+                        tp_files = (names[0], )
+                    # S5 同族(链式再迁移放行面, POSIX 侧): 代表文件正被**前任 job 的逐文件
+                    # symlink 别名**挂着 —— POSIX 文件别名主形态是 symlink(alias_fs 阶梯
+                    # POSIX 先 symlink), 收尾窗再迁移必撞本支; 旧写法只给硬链接支留了自有
+                    # 别名豁免, symlink 支无差别判第三方 → Linux 侧链式再迁移被
+                    # GATE_THIRD_PARTY_LINK 整体拒绝(Windows 主形态 hardlink 撞的是下面
+                    # nlink 支, 本地全绿、Linux 合并树全红)。
                 elif st.st_nlink > 1 and not self._own_alias_hardlink(st):
                     # S5(D15 收窄的必然推论): 收尾窗再迁移时组文件正被**前任 job 的逐文件
                     # 硬链接别名**挂着(nlink>=2 来源是自己的别名) —— 这是迁移设计的一部分,
@@ -553,13 +560,28 @@ class PlanMixin:
         事实收集发生在建账之前, 活集扫描会把链式孪生误判第三方硬链接(GATE_HARDLINK)整体
         拒绝。账面登记的别名恒为本链产物(第三方别名从不入账), 终态账扫描不放宽 D11。
         """
+        return self._own_alias_inode_hit(st, follow=True)
+
+    def _own_alias_symlink(self, st: os.stat_result) -> bool:
+        """符号链接形态的代表文件是否挂着**自有别名文件链接**(S5 放行面 POSIX 侧)
+
+        与 _own_alias_hardlink 同一信任模型与扫描面(账面登记的别名恒为本链产物), 差别
+        只在比对口径: lstat 不穿透 —— 代表文件本身是符号链接(symlink 别名主形态, POSIX
+        阶梯先 symlink)时, stat(穿透) 比到的是目标数据 inode 恒不等, 必须比链接自身的
+        inode。第三方链接(别名之外的名字)inode 不同, 照拦不放宽 D11。
+        """
+        return self._own_alias_inode_hit(st, follow=False)
+
+    def _own_alias_inode_hit(self, st: os.stat_result, *, follow: bool) -> bool:
+        """自有别名 inode 扫描核(hardlink/symlink 两支共用; follow 决定 stat/lstat 口径)"""
+        stat_fn = os.stat if follow else os.lstat
         for job in self._jobs.values():
             paths = list(job.alias_paths)
             for entry in job.inherited:
                 paths.extend(entry.alias_paths)
             for p in paths:
                 try:
-                    pst = os.stat(utils.add_long_path_prefix_for_win(self._syscall(p)))
+                    pst = stat_fn(utils.add_long_path_prefix_for_win(self._syscall(p)))
                 except OSError:
                     continue
                 if pst.st_ino == st.st_ino and pst.st_dev == st.st_dev:

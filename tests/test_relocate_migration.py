@@ -43,7 +43,8 @@
 - test_migrated_successor_cancel_semantics_moving_window: 迁移器产物 x 撤销语义 —— 迁移器
   建账(dst 自 superseded_from 还原、带 plan.inherited)的 MOVING job 撤销: 未确认先回
   三段式 guide; 确认后清理面 = 自建链接, inherited 不删不撤(改指收敛前的撤销窗, 继承
-  别名仍指前任 dst, 悬空为已接受遗留风险), 零 qB 写, 前任历史零触碰。
+  别名仍指前任 dst, 悬空为已接受遗留风险), 零 qB 写, 前任历史零触碰。目录别名建链走
+  _DIR_ALIAS_KIND(Windows junction / POSIX symlink, 不绑平台)。
 
 覆盖率补测(2026-11-17, 迁移器/写穿/对账回写剩余分支; 补测轮到闸门绿):
 - test_probe_salt_and_stamp_degenerate_state_shapes: 退化 state 形态 —— probe_salt_ensure
@@ -87,6 +88,11 @@ from auto_qb.core.modules import relocate_units as ru
 from test_recycle_daemon import HOST, PORT, _fr_path, _member_fixture, _run, _stub_qb
 
 from relocate_exec_support import _bare_mod
+
+# 平台中立的目录别名形态: junction 仅 Windows(POSIX 上 ctypes.WinDLL 不存在),
+# POSIX 侧目录 symlink 等价(建/识/穿透/删四件套 alias_fs 单点全覆盖);
+# 撤销语义用例只关心链接在不在/指不指, 与具体形态无关
+_DIR_ALIAS_KIND = afs.KIND_JUNCTION if os.name == "nt" else afs.KIND_SYMLINK
 
 
 def _legacy_job(jid, src, dst, phase, updated, hashes=("HA", "HB"), extra_hashes=()):
@@ -584,8 +590,8 @@ def test_migrated_successor_cancel_semantics_moving_window(tmp_path):
     own_link = os.path.join(old_root, "own-alias")  # 继任自建链接(MOVING 期, src 侧)
     inh_link = os.path.join(src_root, "pred-alias")  # 前任别名(继承条目, 指前任 dst)
     os.makedirs(src_root)
-    afs.create_dir_alias(own_link, os.path.join(old_root, "Show"), afs.KIND_JUNCTION)
-    afs.create_dir_alias(inh_link, os.path.join(old_root, "Show"), afs.KIND_JUNCTION)
+    afs.create_dir_alias(own_link, os.path.join(old_root, "Show"), _DIR_ALIAS_KIND)
+    afs.create_dir_alias(inh_link, os.path.join(old_root, "Show"), _DIR_ALIAS_KIND)
     pred = _legacy_job("jr-p", src_root, flipped, "rewritten", 100.0)
     pred["plan"]["superseded_from"] = old_root
     pred["alias_paths"] = [inh_link]

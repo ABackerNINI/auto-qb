@@ -55,9 +55,9 @@ KIND_DIRS = {"plan": PLANS, "report": REPORTS}
 
 # 存档特例白名单 (2026-11-17 用户拍板): 经用户显式授权原样拷入的外仓档案, 保真优先保 .md
 # (件头「收编注记」声明特例; 不扩到目录级, 新特例须逐件点名 —— 白名单单点在这里)。
-ARCHIVE_MD_EXCEPTIONS = {
-    "memory-bank/reports/26-11-17-0010-report-skill-portability.md",
-}
+# 26-11-17-0010-report-skill-portability.md 的特例已随本仓收编件转 HTML 壳批(820bda57, 两路线
+# 合流取 HTML 侧)清出 —— 白名单暂空, 机制保留, 新特例逐件点名。
+ARCHIVE_MD_EXCEPTIONS: set[str] = set()
 
 
 def _artifacts() -> list[Path]:

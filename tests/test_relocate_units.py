@@ -107,7 +107,8 @@ R4 成员收缩判据追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的
 W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 - test_norm_backslash_bridge_and_within_guard: _norm 反斜杠归一桥(平台盲区)+ 空 scope 守卫
 - test_norm_fold_case_modes_and_at_dst: 刀2/I5 归一单点双口径(fold 平台折叠 / no-fold
-  词法保留)+ 到位判定 at_dst/all_at_dst 并一(显式口径)
+  词法保留)+ 到位判定 at_dst/all_at_dst 并一(显式口径); fold 断言按 os.name 双侧钉
+  (Windows 不敏感 / POSIX 敏感, 不绑平台)
 - test_rel_under_single_point_modes: 刀2 _rel_under 双实现合一(units fold 原形取尾 /
   执行侧 no-fold 归一形取尾; 相等 "" / 根外 None / 空串输入落根外 None 评审 minor-1)
 - test_chain_gate_hits_ancestor_grid_pure: 刀2 0535 祖先候选格纯函数面(祖先覆盖命中 /
@@ -1302,8 +1303,10 @@ def test_norm_fold_case_modes_and_at_dst():
     assert ru._norm("a//b", fold_case=False) == "a/b", "no-fold 口径: 冗余斜杠压缩(path_normalize 单一实现)"
     assert ru._norm("") == ".", "fold 口径: 空串 normpath '.'(既有契约, issue 26-11-05-0200)"
     assert ru._norm("", fold_case=False) == "", "no-fold 口径: 空串恒空串(执行侧判空按原文)"
-    # 到位判定单点: 等值比较 + 口径显式
-    assert ru.at_dst("R:/Dst", "R:/dst", fold_case=True), "fold 口径: 大小写不敏感(Windows 语义)"
+    # 到位判定单点: 等值比较 + 口径显式(fold_case=True = 平台折叠: Windows 不敏感 /
+    # POSIX 敏感, 断言按 os.name 双侧钉住 —— 旧写法裸断 True 只在 Windows 成立,
+    # Linux 合并树假红; 与实现 docstring「POSIX 大小写敏感」口径一致)
+    assert ru.at_dst("R:/Dst", "R:/dst", fold_case=True) == (os.name == "nt"), "fold 口径: 平台折叠(Windows 不敏感 / POSIX 敏感)"
     assert not ru.at_dst("R:/Dst", "R:/dst", fold_case=False), "no-fold 口径: 大小写病态形态保守不等"
     assert ru.at_dst("R:/dst", "R:/dst") is True, "默认口径 = 执行侧不折叠"
     assert ru.all_at_dst(["R:/dst", "R:/dst"], "R:/dst"), "全组到位: 逐成员单点"
