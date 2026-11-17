@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>e2e: flux chip 基线失败 2 例 + views 数据契约长跑 flaky 2 例,同族待归因 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-flux-chip-views-flaky">
+<meta name="issue-stamp" content="26-11-17-0852">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-flux-chip-views-flaky">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="e2e: flux chip 基线失败 2 例 + views 数据契约长跑 flaky 2 例,同族待归因">
+<meta name="issue-summary" content="T6/T7 e2e 全量巡检(2026-11-17):flux-cat-chip-hr-semantics / flux-site-chip-shape-glow 基线失败 2 例(stash 本计划改动后基线同样失败,非流量图根修计划面);views 数据契约长跑 flaky 2 例(单跑 6/6 通过)——同族待归因。">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>e2e: flux chip 基线失败 2 例 + views 数据契约长跑 flaky 2 例,同族待归因</h1>
+<p class="lede">T6/T7 e2e 全量巡检(2026-11-17):flux-cat-chip-hr-semantics / flux-site-chip-shape-glow 基线失败 2 例(stash 本计划改动后基线同样失败,非流量图根修计划面);views 数据契约长跑 flaky 2 例(单跑 6/6 通过)——同族待归因。</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-0852-test-e2e-flux-chip-views-flaky</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 08:52</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">e2e</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">e2e 全量巡检 T6/T7(2026-11-17)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>计划 26-11-15-1104（webui 流量图根修）T6/T7 e2e 全量巡检（2026-11-17）发现两类<strong>非本计划面</strong>的红/flaky：flux chip 基线失败 2 例（stash 本计划改动后基线同样失败 → 与计划改动无关）；views 数据契约长跑 flaky 2 例（全量跑挂、单跑 6/6 过）。同族待归因，先入池。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-17（T6/T7 e2e 全量巡检；巡检记录转述，本会话未复跑 —— 认领后先复验）
+
+基线失败 2 例（stash 计划改动后复跑仍失败）:
+- e2e/flux-cat-chip-hr-semantics.spec.mjs
+  describe「flux HR 分类 chip 三态」:62
+  test「pending/done 语义色让路 + 排除态 + 抽屉 hero @fast (flux)」:65
+- e2e/flux-site-chip-shape-glow.spec.mjs
+  describe「flux 站点 chip 形状分层与辉光 ${skin}」:129
+  test「主判据: site-chip 本体无 clip-path, 切角 polygon(3px 在 ::before 绘制层 @fast」:132
+
+长跑 flaky 2 例（全量并行跑挂，单跑 6/6 通过）:
+- e2e/views.spec.mjs
+  describe「数据契约(桩供数 @fast)」:388
+  test「[${skin}] 数据契约: status.torrents 与桩服务种子数一致 @fast」:390</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>flux chip 2 例：基线态即挂（干净 HEAD 复跑待做）；views 数据契约：全量并行长跑时序敏感，单跑稳定</td></tr>
+    <tr><td>影响范围</td><td>e2e 信号面可信度 —— flux chip 恒红会淹没真回归；views flaky 会制造假红。不涉产品行为</td></tr>
+    <tr><td>严重度</td><td>中（测试基建面；不影响运行时功能）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>e2e/flux-cat-chip-hr-semantics.spec.mjs:62-65</code>（取证 2026-11-17 08:52）· describe「flux HR 分类 chip 三态」 · grep <code>flux HR 分类 chip 三态</code></li>
+    <li><code>e2e/flux-site-chip-shape-glow.spec.mjs:129-132</code> · test「主判据: site-chip 本体无 clip-path」 · grep <code>site-chip 本体无 clip-path</code></li>
+    <li><code>e2e/views.spec.mjs:388-390</code> · describe「数据契约(桩供数 @fast)」 · grep <code>数据契约: status.torrents</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查（两组各自独立归因，已排除：流量图根修计划改动面 —— flux chip 2 例 stash 后基线同样失败；views 数据契约单跑 6/6 过，排除确定性断言错误）。flux chip 需先在干净 HEAD 复现并读断言面（断言过期 vs 真回归）；views 数据契约需在长跑形态下取证失败现场。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>归因前置，两线分开处理：</p>
+  <ul>
+    <li><strong>flux chip 2 例</strong>：干净基线复跑 + 截图/trace，判定是断言过期（UI 语义变了用例没跟上，改断言）还是真回归（修产品面）；</li>
+    <li><strong>views 数据契约</strong>：长跑形态下取证失败现场（video / 失败重放），定位竞态点后决定修用例等待面还是修桩供数；确认稳定后再考虑进 flaky 台账（memory-bank/testing/flaky-ledger.md）。</li>
+  </ul>
+  <p><strong>验收</strong>：两组用例在归因后要么转绿、要么有明确台账/豁免记录；flux chip 归因结论回写本件状态日志。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 08:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-17-0852-test-e2e-flux-chip-views-flaky.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

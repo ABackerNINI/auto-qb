@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>接缝摊配判据 all() 对空游程空真值触发,语义待确认并显式化 · question · 计划外问题</title>
+<meta name="issue-slug" content="traffic-seam-spread-empty-run">
+<meta name="issue-stamp" content="26-11-17-0852">
+<meta name="issue-type" content="question">
+<meta name="doc-topic" content="traffic-seam-spread-empty-run">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="接缝摊配判据 all() 对空游程空真值触发,语义待确认并显式化">
+<meta name="issue-summary" content="traffic_grid.py:796 接缝摊配判据 all(z for ...) 对空游程空真值:缝跨标记但无 z 游程时摊配分支仍触发(P2 承袭语义,step_w 全额归接收桶),建议确认语义并把空游程形态显式化。">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· question</div>
+<h1>接缝摊配判据 all() 对空游程空真值触发,语义待确认并显式化</h1>
+<p class="lede">traffic_grid.py:796 接缝摊配判据 all(z for ...) 对空游程空真值:缝跨标记但无 z 游程时摊配分支仍触发(P2 承袭语义,step_w 全额归接收桶),建议确认语义并把空游程形态显式化。</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-0852-question-traffic-seam-spread-empty-run</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 08:52</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">评审交接 T2(2026-11-17)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>计划 26-11-15-1104（webui 流量图根修）T2 评审交接交出的隐患面：速率面差分入账的「接缝摊配」触发判据里，<code>all(z for _, _, z, _ in run_list)</code> 对<strong>空游程</strong>空真值返回 True —— 「缝跨标记（<code>marked</code>）但游程列表为空」时摊配分支照常进入。该语义是 P2 承袭的原行为，评审未判其对错；本件只记「确认语义 + 把空游程形态显式化」两件事，不预设结论。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># src/auto_qb/core/traffic_grid.py（取证 2026-11-17，HEAD 92d688a4）
+
+# --- :792-797 判据原文 ---
+if (
+    cov_ms &gt; 0 and dur_ms &gt; 0 and (
+        marked or span_ms &gt; cov_ms or
+        span_ms &gt; max(2 * int(round(s.dt_s * 1000)), _V4_SEAM_SPREAD_MIN_S * 1000)
+    ) and all(z for _, _, z, _ in run_list)
+):
+// 注: 空序列 all() == True —— 空真值触发点在 :796
+
+# --- :802-:812 摊配分支节选（:799-801 注释续行、:804 与 :806-811 循环体略） ---
+    # 接缝摊配(P2 承袭): 未覆盖秒不归因 -&gt; 基准先按覆盖份额缩放
+    step_w = step if span_ms &lt;= cov_ms else step * cov_ms // span_ms
+    acc = 0
+    for k, dd, _, _ts in run_list:
+        ...
+    delta = step_w - acc
+// 注: 空游程时循环体零次、acc=0 -&gt; delta = step_w 全额归接收桶
+
+# 设计注释只写「且游程全 z 形」，未提空游程形态（traffic_grid.py:413-414 原文节选）:
+#   (marked / span &gt; cov / span &gt; max(2 x 接收槽 dt, 60s)) 且游程全 z 形</code></pre>
+  <p>空游程路径的实际走向（同文件 :802-823）：run_list 为空时摊配循环零次、<code>acc=0</code>，<code>delta = step_w</code> 全额经 :816-823 计入<strong>接收槽</strong>自己的速率面（<code>e[0]/e[1]</code> 或 <code>e[2]/e[3]</code>）—— 与「有 z 游程时按覆盖份额摊给游程各桶、余额归接收桶」的分布不同。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>游程判定走到「上涨」分支（cur &gt; value）且 run_list 为空（游程刚被重置，见 :783；上涨分支处理完也在 :815 重置 run_list，同样产生空游程来源），同时 marked / 跨度判据命中 —— 含「缝跨标记但无 z 游程」形态</td></tr>
+    <tr><td>影响范围</td><td>src/auto_qb/core/traffic_grid.py 速率面差分入账的摊配一条分支；不涉栅格装配 / 响应面 / 存储</td></tr>
+    <tr><td>严重度</td><td>低（形态是「判据比注释读起来宽」+ 两种语义下桶值分布可观测地不同，非崩溃 / 数据损坏；是否算错取决于语义拍板）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/traffic_grid.py:796</code>（取证 2026-11-17 08:52）· 接缝摊配判据 · grep <code>all(z for</code> / <code>接缝摊配</code></li>
+    <li><code>src/auto_qb/core/traffic_grid.py:413-415</code> · 摊配设计注释（「且游程全 z 形」） · grep <code>游程全 z 形</code></li>
+    <li><code>src/auto_qb/core/traffic_grid.py:783</code> 与 <code>:815</code> · 游程重置点（空游程的来源：:783 是缝跨标记/等值回落分支内的重置，:815 是上涨分支处理完的重置） · grep <code>run[0], run[1], run[2], run[3]</code></li>
+    <li><code>src/auto_qb/core/traffic_grid.py:816-823</code> · delta 速率面入账（接收槽 e[0]/e[2]） · grep <code>不归因不造分母</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待拍板（非缺陷取证）：两候选语义 —— (a) 空游程 + marked 时 step_w 全额归接收桶是 P2 原意，判据行为正确，只需显式化；(b) 原意是「仅在 z 游程上摊配」，空游程不该走摊配 —— 判据加 <code>run_list and</code> 前置后：marked 下走 :814 得 delta = None 不入账；未 marked 下同样走 :814 else 得 delta = step，经 :816-823 全额入账（cov_ms_pair&gt;0 时）——与案 (a) 的 step_w 全额可能缩放值（span&gt;cov 时 step_w = step·cov//span &lt; step）不同。两案桶值分布不同，需按 P2 承袭语义取证后拍板。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>先取证 P2 承袭语义（旧实现 / 接缝摊配系档案，如 issue 26-10-16-0954 一族），拍板后在判据处显式化：</p>
+  <ul>
+    <li><strong>案 (a)</strong>：条件不改，摊配注释补一句「空游程（marked 直达）时 step_w 全额归接收桶」，把空真值形态写明；</li>
+    <li><strong>案 (b)</strong>：判据改 <code>run_list and all(z for ...)</code>，行为变为空游程时 marked 下 delta=None 不入账；未 marked 下 delta=step 全额入账（cov_ms_pair&gt;0 时，与案 (a) 的 step_w 可能缩放值不同）。</li>
+  </ul>
+  <p><strong>验收</strong>：语义有档案级结论；判据与注释对空游程形态不再有歧义；「缝跨标记 + 空游程」路径有单测钉住（按拍板结果断言桶值分布）。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 08:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-17-0852-question-traffic-seam-spread-empty-run.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

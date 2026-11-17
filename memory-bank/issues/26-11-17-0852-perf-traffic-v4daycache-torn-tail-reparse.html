@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>V4DayCache 撕裂尾退全量重解析,续解(torn 行 undo 记账)未实现 · perf · 计划外问题</title>
+<meta name="issue-slug" content="traffic-v4daycache-torn-tail-reparse">
+<meta name="issue-stamp" content="26-11-17-0852">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="traffic-v4daycache-torn-tail-reparse">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="V4DayCache 撕裂尾退全量重解析,续解(torn 行 undo 记账)未实现">
+<meta name="issue-summary" content="天文件撕裂尾(无续点)使 V4DayCache 增量路径判据失效退全量重解析(量级待开工实测;T4 交接口径 ~57ms/次,数字出处为会话交接、库内不可追溯);续解(半行接续 torn 行 undo 记账)未实现,罕见路径的一次性改进。">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· perf</div>
+<h1>V4DayCache 撕裂尾退全量重解析,续解(torn 行 undo 记账)未实现</h1>
+<p class="lede">天文件撕裂尾(无续点)使 V4DayCache 增量路径判据失效退全量重解析(量级待开工实测;T4 交接口径 ~57ms/次,数字出处为会话交接、库内不可追溯);续解(半行接续 torn 行 undo 记账)未实现,罕见路径的一次性改进。</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-17-0852-perf-traffic-v4daycache-torn-tail-reparse</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 08:52</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">评审交接 T4(2026-11-17)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>计划 26-11-15-1104（webui 流量图根修）T4 评审交接指出：天文件<strong>撕裂尾</strong>（非优雅终止留下的末尾半行）使 V4DayCache 的增量续解判据失效，退整文件全量重解析；「续解」（半行接续的 torn 行 undo 记账）在 F4-1 增量方案里未实现，属 docstring 明写的保守取舍，不是缺陷 —— 罕见路径的一次性性能改进。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># src/auto_qb/core/traffic_store.py（取证 2026-11-17，HEAD 92d688a4）
+:643  if (prev is not None and prev.resume is not None and stat_key is not None
+           and stat_key[1] &gt; prev.parsed_bytes):  # 增量路径判据: prev 必须有续点(源码单行, 此处折行)
+:524  - resume: V4DayResume | None —— ...(撕裂尾/缺失/空 = None, 下次追加退全量重解析)
+:582  非整行收尾(撕裂尾, 无续点)、缺失/空文件(无续点)-&gt; 整文件全量重解析。
+
+# codec 侧撕裂尾判定: src/auto_qb/core/traffic_store_codec.py:540/:570-572
+:571  torn_tail = True  # 尾部半行 = 正常崩溃残留(阈值豁免, 对齐 v3)
+
+# 成本量级: T4 评审交接口径 ~57ms/次（全天文件重解析）—— 数字出处为会话交接,
+# 库内不可追溯; 量级待开工实测复验</code></pre>
+  <p>撕裂尾发生后的读路径：该天条目 resume=None → read_day 走 :658-659 全量解析<strong>一次</strong>（结果整条目缓存，后续读不再重解析）；下一次追加前 <code>_ensure_file_prefix</code> 给撕裂尾补换行（traffic_store.py:260）。成本 = 每次撕裂尾事件一次全量重解析，非每请求持续付出。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>写进程非优雅终止恰好落在行中间，之后对该天文件的首次读取；常态运行（优雅退出）几乎不触发</td></tr>
+    <tr><td>影响范围</td><td>读路径单次延迟尖峰（量级待开工实测，T4 交接口径 ~57ms 不可追溯）；正确性不受影响（全量重解析与增量续解逐位等价是既有纪律）</td></tr>
+    <tr><td>严重度</td><td>低（罕见路径 × 单次全量重解析尖峰；正确性无虞，纯性能/完备性改进）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/core/traffic_store.py:643</code>（取证 2026-11-17 08:52；初稿误标 :641，实为 _load_day docstring 收尾）· V4DayCache.read_day 增量判据 · grep <code>prev.resume is not None</code></li>
+    <li><code>src/auto_qb/core/traffic_store.py:524-525</code> · _DayCacheEntry resume 注释 · grep <code>撕裂尾/缺失/空</code></li>
+    <li><code>src/auto_qb/core/traffic_store.py:569-582</code> · class V4DayCache + 增量续解 docstring · grep <code>V4DayCache</code></li>
+    <li><code>src/auto_qb/core/traffic_store_codec.py:570-572</code> · _parse_v4_text torn_tail 判定 · grep <code>torn_tail = True</code></li>
+    <li><code>src/auto_qb/core/traffic_store.py:260</code> · _ensure_file_prefix 撕裂尾补换行 · grep <code>撕裂尾补一个换行</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">已知设计缺口，非缺陷：F4-1 增量续解以「上次解析整行收尾」为前提，撕裂尾时续点置 None 是 docstring 明写的保守取舍。实现续解要处理「半行」的两面：撕裂半行同样进计数（codec :556 <code>data += 1</code> 对每行先计，:569 <code>bad += 1</code> 之后才 :570-571 置 torn_tail 旗），torn_tail 只豁免损坏占比告警；补换行后该行的真实变化 = 「豁免的坏行 → 不豁免的坏行」（坏行计数前后都在，变的是占比告警豁免口径）—— 续点如何跨过这次形态变化（半行 undo/重入账）未设计。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p><strong>方向一（真续解）</strong>：_parse_v4_text 在 torn 时额外给出「最后完整行边界」，V4DayResume 记该边界而非 EOF；下次读取若文件已补换行且新段恰从该边界起，以 resume 续解 —— 需处理补换行(+1 字节)与 stat_key/parsed_bytes 的对齐，及撕裂行在续解段里按坏行入账的计数一致性。半行的实际计数形态已核实（:556/:569 进计数，torn_tail 仅豁免占比告警），据此定 undo 记账细节。</p>
+  <p><strong>方向二（消尖峰即可）</strong>：不做真续解，追加侧在补换行修复撕裂尾后主动预热该天缓存，把全量重解析尖峰从读路径挪到写路径（后台、无请求在途）。</p>
+  <p><strong>验收</strong>：撕裂尾→补换行→续写的往返场景读路径不再触发全量重解析（方向二则实测读路径无全量重解析尖峰）；「增量 == 全量重解析逐位等价」的既有断言不放松；新增撕裂尾往返用例。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-17 08:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-17-0852-perf-traffic-v4daycache-torn-tail-reparse.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
