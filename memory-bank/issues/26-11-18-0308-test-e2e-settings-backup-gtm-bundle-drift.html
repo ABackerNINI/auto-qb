@@ -84,9 +84,9 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· test</div>
+<div class="kicker">计划外问题（已修 · 2026-11-18 05:20 认领并验证）· test</div>
 <h1>e2e: settings-backup gtm 段前提过期 —— 桩环境 gtm 可达后 bundle 含 gtm 段, 8 例确定性红</h1>
-<p class="lede">2026-11-18 复验轮: settings-backup 8 例单跑/全量串行/容器全量均红; spec 前提「gtm 工具不运行 -&gt; bundle.gtm === null + pill 灰显」被 gtm bundle 段上线与桩环境 gtm agent 可达打破 —— 断言/前提漂移待归因回写</p>
+<p class="lede">2026-11-18 复验轮: settings-backup 8 例单跑/全量串行/容器全量均红; spec 前提「gtm 工具不运行 -&gt; bundle.gtm === null + pill 灰显」被 gtm bundle 段上线与桩环境 gtm agent 可达打破 —— 已归因②(桩泄漏宿主 gtm 指针)并修复(2026-11-18): 桩把 gtm 发现指针平台目录钉进沙箱, 断言面零改动</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:08</div></div>
@@ -151,7 +151,7 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">已定位（2026-11-18 认领后本地取证）：**② 桩环境污染**，既不是 spec 前提过期也不是产品误判。本机存在用户级指针 <code>%LOCALAPPDATA%/global-traffic-monitor/endpoint.json</code>（host 127.0.0.1:6422，token_path 指向本仓库 tools 下 monitor.token），GTM 服务真实可达；产品按设计读整机共享指针探活 -&gt; <code>bundle.gtm</code> 非 null、导入框 gtm pill 可选且默认勾、POST sections 带 gtm、「全不勾选」分支走不到 —— 8 例红全是桩把宿主整机状态漏进来的后果。spec 写的「桩前提: gtm 工具不运行」在桩里本该为真，缺的是隔离：<code>tests/conftest.py</code> 已有 pytest 侧 <code>gtm_spike_isolation</code>，e2e 桩不在 pytest 下，没有等价隔离。已排除：执行顺序/共享桩污染（单跑即 8 红）、Windows flaky（8/8 恒红）。容器 2/8 与本机 8/8 的形态差异本轮未复现，不作归因外推。</div>
+  <div class="callout">已定位（2026-11-18 认领后本地取证；另一 clone 在 Linux 侧独立归因到同一结论）：**② 桩环境污染**，既不是 spec 前提过期也不是产品误判。本机存在用户级指针 <code>%LOCALAPPDATA%/global-traffic-monitor/endpoint.json</code>（host 127.0.0.1:6422，token_path 指向本仓库 tools 下 monitor.token），GTM 服务真实可达；产品按设计读整机共享指针探活 -&gt; <code>bundle.gtm</code> 非 null、导入框 gtm pill 可选且默认勾、POST sections 带 gtm、「全不勾选」分支走不到 —— 8 例红全是桩把宿主整机状态漏进来的后果（发现指针是<strong>整机级用户级文件</strong>，<code>pointer_dir()</code> 每次现读平台 env：Windows %LOCALAPPDATA% / Linux $XDG_DATA_HOME 或 ~/.local/share）。spec 写的「桩前提: gtm 工具不运行」在桩里本该为真，缺的是隔离：<code>tests/conftest.py</code> 已有 pytest 侧 <code>gtm_spike_isolation</code>，e2e 桩不在 pytest 下，没有等价隔离。已排除：执行顺序/共享桩污染（单跑即 8 红）、Windows flaky（8/8 恒红）。容器 2/8 与本机 8/8 的形态差异本轮未复现，不作归因外推。<strong>附带真污染风险（另一 clone 同源实证）</strong>：gtm 可达时导入用例的真 POST 会经 <code>backup.py</code> `_apply_gtm_section` PUT 打到宿主真实 gtm 工具覆写其配置 —— 复现轮在假 gtm 服上实测捕到 2 笔 PUT（双皮肤各一），隔离后同条件 0 笔。</div>
 </section>
 
 <section id="s6">
@@ -171,6 +171,12 @@
   <p>复验：2026-11-18 认领前 `npx playwright test e2e/settings-backup.spec.mjs --reporter=line` = 4 passed / 8 failed（与 issue 记录一致）；指针隔离后同命令 12 passed（1.9m）。</p>
   <h3>修复后补充</h3>
   <p>实际修法：`scripts/ui_harness.py` 新增 `_isolate_gtm_discovery(tmp)`，create_app 前把 `agent.pointer_dir()` 重定向到桩临时目录（见 §06）。验证：单跑 12P；与 perf.spec 合跑 24 例 = 20P/4S（工作区 clone1）；全量 @fast 套件 488P/5S/1F，唯一红为 `e2e/main-table-pinned-matrix.spec.mjs:366`（撤掉本轮 harness 改动仍确定性红，既有无关红）。产品代码、spec 断言与用户级 GTM 指针均零改动。</p>
+  <h3>另一 clone 独立复现与验证（合流前 W1，机制合流取远端单点重定向）</h3>
+  <ul>
+    <li>2026-11-17 — 只读取证轮（R1，Linux 本机）：无指针时 <code>probe()</code>=None 不复现；归因②经代码链（agent.pointer_dir 现读平台 env / ui_harness 只钉 config+data_dir）+ 实跑探测证实 —— 与上方本地取证同结论，两 clone 独立归因互相印证。</li>
+    <li>2026-11-18 05:0x — 复现链实跑（Linux 本机，宿主侧伪造指针 + 假 /status 服）：旧桩（批次 base 29bff76e 原样）单跑 spec <strong>8 failed / 4 passed</strong>（与 §02 入池数字同面同红）；另一 clone 当时探索的等价隔离方案是把两平台 env 键指到沙箱子目录，修复后<strong>带宿主指针</strong>复跑 <strong>10 passed / 2 failed</strong>，全部 8 例 gtm 断言转绿，假 gtm 服 <strong>0 笔 PUT</strong>（修复前同链 2 笔，污染面同源消除实证）；2 failed 为与本 issue 无关的本机预存失败（基线桩+无指针对照轮同样 10 passed / 2 failed，失败点 :227 导入 round-trip 的 reload 后可见性等待，双皮肤对称，计时敏感面另案）。合流按用户拍板取远端 <code>_isolate_gtm_discovery</code> 单点重定向机制（env 重定向为等价探索方案，不落地）。</li>
+    <li>2026-11-19 — 合流适配（本 clone W1 重放）：spec 桩前提注释口径改写为远端机制（agent.pointer_dir 单点重定向进桩私有 gtm-pointer 目录）；<code>tests/test_ui_harness_gtm_sandbox.py</code> 适配远端机制（2 例含红验：隔离后 <code>agent.pointer_dir()</code>=<code>&lt;tmp&gt;/gtm-pointer</code>；调用前解析回宿主真实平台目录，判据非恒绿）。</li>
+  </ul>
 </section>
 
 <footer>

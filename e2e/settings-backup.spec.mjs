@@ -20,8 +20,11 @@ installRouteCleanup(test);
  * (ctx-custom / settings-bt-backup 同款口径: 桩 config.yml 是同轮其它 spec 共用的临时
  * 文件); 导入写回的均为原 bundle 或带注释标记的原样副本, 磁盘终态 = 原样, 零净污染。
  *
- * 桩前提: harness 里 gtm 工具不运行 -> 导出 bundle.gtm === null(离线导出形态),
- * 导入确认框里 gtm 勾选灰显(缺段不可勾) —— 这正是 D6「缺段灰显」的真值场景。
+ * 桩前提: harness 已把 gtm 指针发现(agent.pointer_dir 单点)重定向进桩私有临时目录
+ * (gtm-pointer, scripts/ui_harness.py _isolate_gtm_discovery, issue 26-11-18-0308)——
+ * 宿主 endpoint.json 不可见 -> 宿主 gtm 工具在不在跑都一样: 导出 bundle.gtm === null
+ * (离线导出形态), 导入确认框里 gtm 勾选灰显(缺段不可勾) —— 这正是 D6「缺段灰显」
+ * 的真值场景。
  *
  * 断言面(D3 / D6 三闸 / D10 / D12):
  *   导出: cfgDirty 提示不阻断 + download 捕获合法 bundle + ui_prefs 前端并入且与页面
@@ -128,7 +131,8 @@ test.describe('设置页 · 配置备份导出/导入(S3)', () => {
         template: expect.any(String),
         overrides: expect.any(Object),
       });
-      /* 桩前提: gtm 工具不运行 -> 离线导出形态(D9 该段 null) */
+      /* 桩前提: gtm 指针发现已重定向进桩私有目录(_isolate_gtm_discovery) -> 宿主
+       * endpoint.json 不可见 -> 离线导出形态(D9 该段 null), 与宿主是否真跑 gtm 无关 */
       expect(bundle.gtm).toBeNull();
       /* D3: ui_prefs 段在且与页面 localStorage 逐字相等 */
       expect(bundle.ui_prefs && typeof bundle.ui_prefs === 'object' && !Array.isArray(bundle.ui_prefs)).toBe(true);
@@ -186,7 +190,8 @@ test.describe('设置页 · 配置备份导出/导入(S3)', () => {
       await expect(modal).not.toContainText('未保存的改动将丢失');
       await expect(modal).toContainText('bundle 版本');
       await expect(modal).toContainText('机器相关路径');
-      /* gtm 段离线导出为 null -> 灰显不可勾(opt-pill.is-gated 真禁点击, 三层一致口径) */
+      /* gtm 段离线导出为 null(指针发现已隔离, 与宿主 gtm 无关) -> 灰显不可勾
+       * (opt-pill.is-gated 真禁点击, 三层一致口径) */
       const pills = modal.locator('.opt-pill');
       await expect(pills).toHaveCount(3);
       const gated = pills.filter({ hasText: 'gtm' });
