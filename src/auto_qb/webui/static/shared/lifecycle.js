@@ -60,6 +60,11 @@ window.AQB_LIFECYCLE = {
      * —— 每拍要写, 进 data 会平白多触发一轮整表重渲(P1-2 口径)。见 columns_grid.js
      * _reprobeRenderedRowH: 陈旧行高在窗口滑动前用「旧窗口仍在场的行」量真值顶掉。 */
     this._rowProbeSig = {};
+    // 上次行高校准时的根缩放(issue 26-11-16-0716): _rootZoomOf 实测值与它比对, 变了就按
+    // zNew/zOld 原地重标 _rowHs/_rowH(不删键不翻量齐态)。纯标量缓存, 刻意不进 data(同上
+    // P1-2 口径); undefined = 尚未落基线(首拍 _measureRowH 只记值不重标)。见 columns_grid.js
+    // _measureRowH 开头的重标块与 _reprobeRenderedRowH 的过渡拍守卫。
+    this._rowHZoom = undefined;
     // 该 kind 的首访窗口行是否已实测(千级以下 = 全表量齐; 千级以上只会量到视口内那批, 随滚动补齐)
     this._winMeasured = { torrent: false, group: false, member: false };
     /* 行间距(px)**实测**缓存: 三个容器的真实 gap 不同(atlas .group-table 6px / prism 5px /

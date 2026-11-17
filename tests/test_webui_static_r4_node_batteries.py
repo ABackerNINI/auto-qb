@@ -94,6 +94,14 @@
   未展开态(_headEl 无盒)recomputeEffective 对三 HR 页 colWidths 零宽度条目(键置 {} 是
   「立即回弹性模板」设计行为, 垃圾轨语义 = 无 px 条目)。红绿双验锚见函数 docstring。
   无 node 静默跳过
+- test_r4_rowh_zoom_rescale_follows_root_zoom: issue 26-11-16-0716 产品侧修复回归 —— 运行时
+  root zoom 变化, _measureRowH 开头比对 _rootZoomOf() 与上次校准基线 _rowHZoom, 变了就全表乘
+  zNew/zOld 原地重标 _rowHs/_rowH(不删键不翻 _winMeasured 不动冻结门, _rowHVer bump 一次);
+  配套 _reprobeRenderedRowH 过渡拍让路(系统性差值不得当行高真变, 不烧签名)。电池十三项: 首拍落
+  基线 / 全表等比例重标 / est 同比例跟随 / 键数·量齐态·签名零改动 / 重标后与逐行 gBR 逐位一致 /
+  同 z 幂等 / body 读到 null 不误判成 z=1(1↔z 抖动坑) / 过渡拍让路 / 重标后照常重探 /
+  _winSigExtra 令牌两态口径 / 携带x重标共存(跨拍配对优先读 _rowHs 重标现值, 快照只兜底) /
+  携带回落(旧键被签名作废剔键面时才落快照值)
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -2401,6 +2409,178 @@ def test_r4_outgoing_rowh_reprobe_kills_pad_jump():
         assert report["total"] == 22, (f"出窗最后一探电池应有 22 项检查(实测 {report['total']})—— 少项 = 检查被删或"
                                        "中途提前 return, 守阵会静默变弱")
     _assert_battery(report, "出窗最后一探电池")
+
+
+# issue 26-11-16-0716 修复回归: 运行时 root zoom 变化, 行高基准按比例原地重标 -----------
+_NODE_ZOOM_RESCALE_PROBE = r"""
+const fs = require("fs");
+global.ROW_WIN_MIN = 200;
+global.ROW_WIN_OVERSCAN = 10;
+global.ROW_WIN_EST_MIN = 200;
+global.ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
+global.ROW_WIN_GAP_FALLBACK = 0;
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_COLUMNS;");
+const M = globalThis.__W2__.methods;
+
+const N = 300;
+const TRUE_H = (i) => (i % 2 ? 65.781 : 43.7);
+let Z = 1;   // 当前根缩放: body 比值与逐行 gBR 同步缩放 = 真实浏览器语义(zoom 是纯线性缩放)
+let gbrCalls = 0;
+const mkRow = (i) => ({
+  getAttribute: (a) => a === "data-hash" ? "t" + i : null,
+  getBoundingClientRect: () => { gbrCalls++; return { height: TRUE_H(i) * Z }; },
+});
+const rows = Array.from({ length: N }, (_, i) => mkRow(i));
+const mkDoc = () => ({
+  querySelectorAll: (sel) => sel === '.torrent-row[data-table="torrent"][data-hash]' ? rows : [],
+  querySelector: () => null,
+  body: { offsetWidth: 100, getBoundingClientRect: () => ({ width: 100 * Z }) },
+});
+global.document = mkDoc();
+global.TABLE_DEFS = {
+  group: { cols: "gCols", tableRef: null },
+  torrent: { cols: "tCols", tableRef: null },
+  detail: { cols: "mCols", tableRef: null },
+};
+const mkCtx = () => Object.assign({}, M, {
+  rowWin: true,
+  // 0553 换键携带块(issue 26-11-11-0553)在 group kind 上读 this.filteredGroups(生产是
+  // filters.js 的 computed, 恒为数组) —— 本桩不建模筛选面, 给空集 = 无换键面, 携带分支
+  // 零副作用; 重标块对携带值同样按比例平移(携带值是 gBR 视觉量值, 与全表同空间)。
+  filteredGroups: [],
+  _winMeasured: { torrent: true, group: true, member: true, drawerContent: true },
+  _rowH: { torrent: 50, group: 50, member: 50, drawerContent: 50 },
+  _rowHVer: 1,
+  _rowHSig: { torrent: "0|3|3|3", group: "0|3|3|3", member: "0|3|3|3", drawerContent: "0|3" },
+  _winResize: 0,
+  tCols: [{}, {}, {}], gCols: [{}, {}, {}], mCols: [{}, {}, {}],
+  _rowHs: {},
+  _rowProbeSig: {},
+  _rowPre: {},
+});
+const seed = (c) => { for (let i = 0; i < N; i++) c._rowHs["torrent:t" + i] = TRUE_H(i); return c; };
+
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// --- 首拍只落基线: _rowHZoom 未定义 = 现有存值本就在当前缩放下量的, 记值不重标 ---
+const c = seed(mkCtx());
+const ver0 = c._rowHVer;
+M._measureRowH.call(c);
+ok("首拍落基线: _rowHZoom 记当前 z, 存值/est/版本零改动",
+   c._rowHZoom === 1 && c._rowHVer === ver0
+   && Math.abs(c._rowHs["torrent:t1"] - TRUE_H(1)) < 1e-9 && c._rowH.torrent === 50);
+
+// --- z 变 1→0.9: 全表按 zNew/zOld 等比例重标, 不删键不翻量齐态(全量重渲坑零触发) ---
+Z = 0.9; gbrCalls = 0;
+const keys0 = Object.keys(c._rowHs).length;
+const measured0 = JSON.stringify(c._winMeasured);
+const sig0 = JSON.stringify(c._rowHSig);
+M._measureRowH.call(c);
+ok("z 变: _rowHs 全表按比例重标(视觉量值 ×zNew/zOld)",
+   Math.abs(c._rowHs["torrent:t1"] - TRUE_H(1) * 0.9) < 1e-9
+   && Math.abs(c._rowHs["torrent:t0"] - TRUE_H(0) * 0.9) < 1e-9);
+ok("z 变: est 基准同比例跟随(未量行 pad 不再按旧缩放偏大 ~11%)",
+   Math.abs(c._rowH.torrent - 45) < 1e-9 && Math.abs(c._rowH.drawerContent - 45) < 1e-9);
+ok("z 变: 不删键不翻 _winMeasured 不动 _rowHSig, 仅 _rowHVer +1(响应式重算一次)",
+   Object.keys(c._rowHs).length === keys0 && measured0 === JSON.stringify(c._winMeasured)
+   && sig0 === JSON.stringify(c._rowHSig) && c._rowHVer === ver0 + 1);
+ok("z 变: 重标后与当前缩放的逐行 gBR 逐位一致(重标 = 重新实测的等价形式, 零改写)",
+   gbrCalls === N
+   && Math.abs(c._rowHs["torrent:t7"] - TRUE_H(7) * 0.9) < 1e-9);
+
+// --- 同 z 再拍: 幂等(黄金法则 1), 零重标零 bump ---
+gbrCalls = 0;
+const snap = JSON.stringify(c._rowHs);
+M._measureRowH.call(c);
+ok("同 z 再拍幂等: 零重标零 bump(逐行 gBR 照付但不改值)",
+   c._rowHVer === ver0 + 1 && JSON.stringify(c._rowHs) === snap && gbrCalls === N);
+
+// --- body 读不到(null): 跳过重标, 不误判成「缩放回 1」(issue §06 方案 A 点名的 1↔z 抖动坑) ---
+const noBody = mkDoc(); delete noBody.body;
+global.document = noBody;
+M._measureRowH.call(c);
+ok("z 读不到(null)跳过重标, _rowHZoom 基线与存值都不动",
+   c._rowHZoom === 0.9 && Math.abs(c._rowHs["torrent:t1"] - TRUE_H(1) * 0.9) < 1e-9
+   && c._rowHVer === ver0 + 1);
+
+// --- 出窗重探的过渡拍让路: zoom 变了但重标块还没跑的拍, 系统性差值不得当行高真变 ---
+Z = 0.9;
+global.document = mkDoc();
+const cT = seed(mkCtx());
+cT._rowHZoom = 1;                    // 上次校准在 z=1
+cT._rowHs["torrent:t61"] = 69.609;   // 陈旧键(故意, 旧缩放量值)
+M._reprobeRenderedRowH.call(cT, "torrent", "sig-t");
+ok("过渡拍让路: 不探不写(全表系统性差值不是个别行真变), 且不烧去重签名",
+   cT._rowHs["torrent:t61"] === 69.609
+   && Math.abs(cT._rowHs["torrent:t0"] - TRUE_H(0)) < 1e-9
+   && !(cT._rowProbeSig || {}).torrent);
+// 重标落地后(_rowHZoom 追平 + 存值已按比例平移)同几何照常重探, 只顶真陈旧的键
+for (const k in cT._rowHs) cT._rowHs[k] *= 0.9;
+cT._rowHs["torrent:t61"] = 69.609;   // 重标后仍是陈旧值的键(真正要修的)
+cT._rowHZoom = 0.9;
+M._reprobeRenderedRowH.call(cT, "torrent", "sig-t");
+ok("重标后同几何照常重探: 陈旧键被新缩放真值顶掉, 签名照常落盘",
+   Math.abs(cT._rowHs["torrent:t61"] - TRUE_H(61) * 0.9) < 1e-9
+   && cT._rowProbeSig.torrent === "sig-t");
+
+// --- _rootZoomOf 单点复用: 令牌回落口径与既有 _winSigExtra 行为逐位一致 ---
+delete global.document;
+const cS = mkCtx();
+ok("_rootZoomOf 读不到 → _winSigExtra 缩放令牌回落 1(与 26-11-14-0844 既有口径一致)",
+   M._winSigExtra.call(cS).endsWith("1.0000"));
+global.document = mkDoc(); Z = 0.9;
+ok("_rootZoomOf 有值 → _winSigExtra 缩放令牌随 body 比值",
+   M._winSigExtra.call(cS).endsWith("0.9000"));
+
+// --- 0553 携带 x zoom 重标共存(评审轮 3, issue 26-11-16-0716): 跨拍配对窗口(先删后加隔拍
+// 交付)里发生过 zoom 变化时, 孤儿快照 rec.h 是捕获时刻旧缩放值(重标块只平移 _rowHs 不动模块
+// 级池) —— 配对必须优先读 _rowHs 旧键现值(已被重标平移), 快照只兜底(旧键被签名作废剔除面) ---
+const cCarry = seed(mkCtx());
+cCarry._rowHs["group:old"] = 90;   // 旧键现值: 已被重标平移过的新缩放量值
+ROWH_ORPHANS.clear(); ROWH_FRESH.clear(); ROWH_LIVE = null;
+ROWH_ORPHANS.set("old", { h: 100, ts: Date.now() });   // 捕获时刻快照: 旧缩放值(未随重标平移)
+ROWH_FRESH.set("new", Date.now());
+M._measureRowH.call(cCarry);
+ok("携带 x 重标: 跨拍配对优先读 _rowHs 旧键现值(新缩放), 快照旧缩放值不落新键",
+   cCarry._rowHs["group:new"] === 90);
+const cFall = seed(mkCtx());
+ROWH_ORPHANS.clear(); ROWH_FRESH.clear(); ROWH_LIVE = null;
+ROWH_ORPHANS.set("gone", { h: 100, ts: Date.now() });
+ROWH_FRESH.set("fresh", Date.now());
+M._measureRowH.call(cFall);
+ok("携带回落: 旧键已不在 _rowHs(签名作废剔键面)时回落孤儿快照",
+   cFall._rowHs["group:fresh"] === 100);
+ROWH_ORPHANS.clear(); ROWH_FRESH.clear(); ROWH_LIVE = null;  // 池复位, 不串扰后续电池
+
+console.log(JSON.stringify({
+  ok: checks.filter((x) => x[1]).length, total: checks.length,
+  failed: checks.filter((x) => !x[1]).map((x) => x[0]),
+}));
+"""
+
+
+def test_r4_rowh_zoom_rescale_follows_root_zoom():
+    """issue 26-11-16-0716 产品侧修复回归: 运行时 root zoom 变化, 行高基准按比例原地重标。
+
+    根因: _rowHs/_rowH 存的是 gBR 视觉量值, 而重校签名(_winResize|可见列数)不含 zoom ——
+    运行时改 root zoom 门恒关, 缩放 1→0.9 后未量行仍按旧缩放估高(偏大 ~11%, 只胖 pad 总高/
+    滚动条长度, 不搬已渲染内容)。修复 = _measureRowH 开头比对 _rootZoomOf() 与上次校准基线
+    _rowHZoom, 变了就全表乘 zNew/zOld(不删键不翻 _winMeasured 不动冻结门), _rowHVer bump 一次;
+    配套 _reprobeRenderedRowH 过渡拍让路(否则「旧缩放存值 vs 新缩放 gBR」的系统性差值会被当
+    行高真变写进 _rowHs, 随后重标再乘一遍 = 双重缩放)。
+    电池十三项: 首拍只落基线 / 全表等比例重标 / est 同比例跟随 / 键数·量齐态·签名零改动 /
+    重标后与逐行 gBR 逐位一致 / 同 z 幂等 / body 读不到(null)不误判成 z=1(1↔z 抖动坑) /
+    过渡拍让路不烧签名 / 重标后照常重探 / _winSigExtra 令牌两态口径 / 携带x重标共存(跨拍配对
+    优先读 _rowHs 重标现值, 快照只兜底) / 携带回落(旧键被签名作废剔键面时才落快照值)。
+    无 node 静默跳过。"""
+    report = _run_probe(_NODE_ZOOM_RESCALE_PROBE, bundle_file("columns.js"))
+    if report is not None:
+        assert report["total"] == 13, (f"缩放重标电池应有 13 项检查(实测 {report['total']})—— 少项 = 检查被删或"
+                                       "中途提前 return, 守阵会静默变弱")
+    _assert_battery(report, "缩放重标电池")
 
 
 def test_r4_dt_table_exception_list_geometry_guard():

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="bug-webui-rowwin-frozen-est-zoom-drift">
 <meta name="doc-refs" content="memory-bank/pitfalls/web-ui/rowwin-stale-rowh-pad-jump.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="行窗口化占位基准冻结后, 运行时 zoom 变化不再重校: 未量行估高按旧缩放偏大 ~11%">
 <meta name="issue-summary" content="占位估算基准 _rowH[kind] 是视觉空间值(gBR 均值), 冻结后只有 _winMeasured 被翻 false 才重校; 而运行时 root zoom 变化既不改 _winResize 也不改可见列数, _winMeasured 恒 true → 缩放 1→0.9 后基准保持旧缩放量值(偏大 ~11%), 影响未量行 pad 总高/滚动条长度(不搬内容)。修复前靠逐拍重算均值自愈, 冻结后不再自愈。">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-16-0716-bug-webui-rowwin-frozen-est-zoom-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-16 07:16</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -179,11 +179,15 @@ columns_grid.js:433   const sig = `${this._winResize}|${winDefs.map((d) => this[
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-16 07:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-16 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-16（HEAD 2e2ffe1f）仍复现 —— 锚点全部命中（<code>_winMeasured[kind] ||</code> 冻结门 / <code>const sig =</code> 重校签名不含 zoom / <code>const est = this._rowH</code> 兜底 / <code>_winZoomOf</code> pad 出口）；关闭重标块的 e2e 红验复现未量行估高不随缩放（3/3 红，见修复后补充）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>：按建议修法 A 落地（未改道），三件套：<code>columns_grid.js</code> ①新增
+  <code>_rootZoomOf()</code> 缩放比值实测单点（body gBR 宽/offsetWidth，与 <code>_winSigExtra</code> 缩放令牌同源同口径；量不到返回 <b>null</b> 不回落 1 —— 回落 1 会把「body 暂时读不到」误判成缩放回 1，1↔z 抖动反复重标整表，即建议里点名的坑），<code>_winSigExtra</code> 改走该单点（令牌回落 "1.0000" 逐位不变）；②<code>_measureRowH</code> 开头比对当前 z 与上次校准基线 <code>_rowHZoom</code>（created() 初始化的非响应式纯缓存），变了全表乘 <code>zNew/zOld</code> 原地平移 <code>_rowHs</code>+<code>_rowH</code>（不删键、不翻 <code>_winMeasured</code>、不动冻结门），<code>_rowHVer</code> bump 一次；③<code>_reprobeRenderedRowH</code> 加过渡拍让路守卫 —— zoom 刚变、重标块还没跑的拍，出窗最后一探会把「旧缩放存值 vs 新缩放 gBR」的系统性差值（=行高×(1-z)）当行高真变写进 <code>_rowHs</code>，随后重标再乘一遍 = 双重缩放，故过渡拍不探不记签名（建议修法 A 没提这条，实施时补上）。与建议的差异：z 来源不走 <code>_winZoomOf</code>（容器不在场回落 1 的坑）而走 body 比值单点。</p>
+  <p><b>验证方式</b>：三层守阵全绿 + 双向红验。<b>静态</b> <code>test_webui_static_dom_page_layout.py::test_frontend_rowh_zoom_rescale_guard</code>（剥注释断言：单点恰一次定义且量不到返回 null / 两处共用 / 重标块只平移不删键不翻量齐态 / 过渡拍让路在位 / <code>_rowHZoom</code> created() 初始化）；<b>行为</b> <code>test_webui_static_r4_node_batteries.py::test_r4_rowh_zoom_rescale_follows_root_zoom</code>（node 电池 13 项：首拍只落基线 / 全表等比例重标 / est 同比例跟随 / 键数·量齐态·签名零改动 / 重标后与逐行 gBR 逐位一致 / 同 z 幂等 / null 不误判成 z=1 / 过渡拍让路不烧签名 / 重标后照常重探 / 令牌两态口径 / 携带x重标共存 / 携带回落 —— 后两项为评审轮 3 补充的 0553 携带机制共存断言, 11→13）；<b>e2e</b> <code>row-window-zoom.spec.mjs</code> 新增「运行时 zoom 1→0.9」用例 ×3 皮肤（判据 = 重标拍落地判稳——连续 10 采样 ≥2.5s 同高覆盖 ≥1 个数据拍——后 <code>scrollHeight ≈ 0.9×before</code> ≤2 行盒 + 末行可达）。</p>
+  <p><b>测试数字</b>（2026-11-16 实测）：静态守阵 + 出窗重探旧电池 + win-src 参数化电池 5 用例绿；node 电池 11/11；<code>row-window-zoom</code> e2e 6/6（新 3 + 旧 3）；红验两轮：首轮（临时关重标块）新 3 用例 3/3 红、旧 3 用例仍绿；评审指出首版「立即收敛等待」判据在重标拍落地前即绿、判别力不足（zoom 设定后 DOM 未重渲前 scrollHeight 已即时 0.9×before），改判稳后等待复做红验（prism 单皮肤）在 scrollHeight 断言处精确红（1907px ≫ 130px 容差，before 21162 / after 20953）；<code>drawer-dock-stability</code>+<code>window-invalidation</code> 回归 38/38；<code>test.quick</code> 6253 passed / 19 skipped；<code>test.full</code> 6253 passed / 19 skipped、覆盖 99%。合流后复测(2026-11-17, 终树 = 远端 011e1aeb + 本批, 远端同批合入 0553 携带机制与 HR 迁 aq-table 面用例): <code>test.full</code> 6437 passed / 23 skipped、覆盖 99%（含轮 3 补项后 13 项电池绿验）。判据备注（取证期外新发现）：<code>document.documentElement.scrollHeight</code> 随 zoom 报<b>视觉 px</b>（与 gBR/scrollY 同空间）且 DOM 未重渲前就即时随缩放——重标只影响下一次重渲时 pad 的布局高，正确性判据必须等重标拍落地后再取值；issue §02 复现步骤里「scrollHeight 与逐行真值之和比对」在视觉空间下应作 <code>scrollHeight/0.9</code> 或 <code>0.9×缩放前</code> 口径。</p>
 </section>
 
 <footer>

@@ -101,4 +101,72 @@ for (const skin of ZOOM_SKINS) {
     const s3 = await sampleVisible(page);
     expect(s3.visible, `scrollBy(0,+1) 回贴底后可见行数`).toBeGreaterThanOrEqual(5);
   });
+
+  /**
+   * 运行时 zoom 1→0.9 重标守阵(issue 26-11-16-0716, 2026-11-16 修)。
+   *
+   * 缺陷: 占位估算基准 _rowH[kind] 是 gBR 视觉量值, 首校后冻结; 重校签名(_winResize|可见列数)
+   * 不含 zoom → 运行时改 root zoom 门恒关, 未量行仍按旧缩放估高(偏大 ~11%), 只胖 pad 总高/
+   * 滚动条长度(不搬已渲染内容), 刷新才恢复。修复 = _measureRowH 开头比对 _rootZoomOf() 与
+   * 上次校准基线 _rowHZoom, 变了全表乘 zNew/zOld 原地重标(不删键不翻量齐态)。
+   *
+   * 与上面用例的次序互为镜像: 那条是「先缩放后首访」(基准本来就按 0.9 校准), 这条是
+   * 「先首访量齐(zoom=1 冻结)后运行时缩放」—— 唯有这条次序基准冻结才咬人。
+   */
+  test(`运行时 zoom 1→0.9: 未量行估高按比例重标, scrollHeight 不虚胖 + 末行可达 @fast (${skin})`, async ({ page }) => {
+    test.setTimeout(90_000);
+    collectRuntimeErrors(page);
+
+    await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+    await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+    await page.click('nav.tabs [data-view="torrents"]');
+    await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+
+    // 缩放前落定(zoom=1 首校): **不滚动** —— 滚动会把途经行逐行实测, 未量行消失 = 场景失效
+    // (触发条件是「行数远超视口 + 有未量行」, 300 种子首访只量视口那十几行)。
+    await waitListSettled(page);
+    const before = await page.evaluate(() => document.documentElement.scrollHeight);
+
+    // 运行时改 root zoom(不刷新): 既不改 _winResize 也不改可见列数。
+    await page.evaluate(() => { document.documentElement.style.zoom = '0.9'; });
+    // 重标在下一个数据拍(轮询 >=1.5s 一拍)的重渲里落地 —— 等 scrollHeight 连续 10 次
+    // (拍距 250ms ≥ 2.5s > 轮询周期)同高再判: 保证至少经过一个数据拍。zoom 设定后未重渲前
+    // DOM 不变, scrollHeight(视觉)已即时 = 0.9×before, 两态同值 —— 判别力在「稳定之后」的
+    // 断言: 重标拍落地后修复前 pad 视觉高跳回 ≈before(断言红), 修复后保持 0.9×before(绿)。
+    await page.waitForFunction(() => {
+      const h = document.documentElement.scrollHeight;
+      const s = window.__zoomSettle || (window.__zoomSettle = { h: null, n: 0 });
+      if (s.h === h) { s.n++; return s.n >= 10; }
+      s.h = h; s.n = 0;
+      return false;
+    }, undefined, { timeout: 20_000, polling: 250 });
+    const after = await page.evaluate(() => document.documentElement.scrollHeight);
+
+    // 判据: scrollHeight 随 zoom 报**视觉 px**(gBR/scrollY 一族同空间), 重标落地后正确总高
+    // = 0.9×缩放前 —— 未量行 pad 视觉高从 est(65.77/行) 变 0.9×est(59.19/行)。修复前重标不
+    // 发生, 重渲拍后 pad 布局高按旧缩放 est 撑回 → scrollHeight ≈ before, 与 0.9×before 差
+    // 0.1×before ≈ +2000px(300 种子未量 ~288 行); 修复后重标 est×0.9, pad 换算 /z 后视觉值
+    // 恰缩 0.9 → |Δ| ≤ 2 行盒。
+    const rowBox = await page.evaluate(() => {
+      const r = document.querySelector('.torrent-row');
+      const h = r ? r.getBoundingClientRect().height : 60;
+      return h + 6;
+    });
+    expect(Math.abs(after - 0.9 * before), `zoom 1→0.9 重标落地后 scrollHeight 应 ≈ 0.9×before(before ${before} / after ${after})`)
+      .toBeLessThanOrEqual(rowBox * 2);
+
+    // 末行可达: 贴底(重贴循环, 同用例 1 机理)后末行与视口相交 —— 修复前 pad 虚胖能滚过真实末尾。
+    for (let i = 0; i < 4; i++) {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await waitListSettled(page);
+      const atBottom = await page.evaluate(
+        () => window.scrollY >= document.documentElement.scrollHeight - window.innerHeight - 2);
+      if (atBottom) break;
+    }
+    const s = await sampleVisible(page);
+    expect(s.visible, `运行时缩放后贴底可见行数(rendered ${s.rendered})`).toBeGreaterThanOrEqual(5);
+    expect(s.lastTop, `末行 rect.top(应 < innerHeight)`).toBeLessThan(await page.evaluate(() => window.innerHeight));
+    expect(s.lastBottom, `末行 rect.bottom(应 > 0)`).toBeGreaterThan(0);
+  });
 }

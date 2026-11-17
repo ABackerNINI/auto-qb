@@ -345,18 +345,30 @@ Object.assign(window.AQB_COLUMNS.methods, {
       }
       return this._winGap[kind];
     },
+    /* 根缩放实测单点(body 的 gBR 宽 / offsetWidth): _winSigExtra 的缩放令牌与 _measureRowH
+     * 的行高基准重标(issue 26-11-16-0716)共用同一份比值, 两处各写一份 = 改一处漏一处。
+     * !比值实测而非读 computed zoom: Chrome 不把 zoom 报成继承, html 设 0.9 时 body/子孙
+     * computed 恒 "1"。!量不到(body 不在场 / offsetWidth 非正 / 比值非有限正)返回 **null**
+     * 而不是 1 —— 重标面拿 null 当 1 会把「body 暂时读不到」误判成「缩放回到 1」, 1↔z 抖动
+     * 反复重标整表(issue §06 方案 A 点名的坑); 回落口径由调用方自定(令牌回落 "1", 重标跳过)。
+     * 每次调用都是一次强制同步布局: 调用点只有 _winSigExtra(每拍一次)与两处低频探测面。 */
+    _rootZoomOf() {
+      const b = typeof document !== "undefined" ? document.body : null;
+      if (!b || !b.offsetWidth) return null;
+      const rz = b.getBoundingClientRect().width / b.offsetWidth;
+      return Number.isFinite(rz) && rz > 0 ? rz : null;
+    },
     _winSigExtra() {
       // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态 / 根缩放。
       // !根缩放必须进签名(issue 26-11-14-0844): zoom!=1 把全部视觉几何按 z 缩放, 表顶文档偏移
       // (_winTop = rect.top + scrollY, 视觉空间)随之变 —— 不进签名的话 zoom 切换后 _winTop 沿用
-      // 旧值, rel 偏 (1-z)×表顶, 窗口选行整体错位约一行。比值实测(body 的 gBR/offsetWidth)而非
-      // 读 computed zoom: Chrome 不把 zoom 报成继承, html 设 0.9 时 body/子孙 computed 恒 "1"。
+      // 旧值, rel 偏 (1-z)×表顶, 窗口选行整体错位约一行。缩放比值走 _rootZoomOf 单点(见上);
+      // 量不到回落格式化的 "1.0000" = 与 zoom=1 同签名(既有口径, dom_page_support 电池钉住)。
       // 代价: 这让 _winSigExtra 从纯字符串变成每次 _ensureWinTop(每拍 updated)读一次 body gBR
       // (强制同步布局) —— 换取 zoom 切换后的 winTop 重量; 增量 = 每拍一次 body gBR, 量级被
       // 同帧既有的逐行 gBR 探测(_measureRowH)淹没。
-      const b = typeof document !== "undefined" ? document.body : null;
-      const rz = (b && b.offsetWidth) ? b.getBoundingClientRect().width / b.offsetWidth : 1;
-      const zTok = Number.isFinite(rz) && rz > 0 ? rz.toFixed(4) : "1";
+      const rz = this._rootZoomOf();
+      const zTok = rz !== null ? rz.toFixed(4) : "1.0000";
       return `${this.distTotal ? 1 : 0}${this.searchQuery && this.searchQuery.trim() ? 1 : 0}${this.filtersActive ? 1 : 0}${zTok}`;
     },
     /* 窗口源描述符解析(计划 26-11-02-0351 W2): kind 未注册回落文档型 —— 描述符缺失 = 现行为。 */
@@ -441,6 +453,33 @@ Object.assign(window.AQB_COLUMNS.methods, {
      * 替换 —— 否则 3000 行首访要付「全量 patch + 逐行 gBR + 每行监听增删」一发 8.4s 长任务。 */
     _measureRowH() {
       if (!this.rowWin) return;
+      // 根缩放变化的原地重标(issue 26-11-16-0716, 修法 = issue §06 方案 A): _rowHs/_rowH 存的
+      // 是 gBR **视觉空间**量值, 运行时改 root zoom 后全部量值应按 zNew/zOld 等比例平移
+      // (zoom 是纯线性缩放, 布局不变 → 乘比例 = 重新按新缩放实测)。不删键、不翻 _winMeasured、
+      // 不动冻结门 —— 否则重踩 rowh-sig-and-transition-geometry 的 3000 行全量重渲坑。重校签名
+      // (_winResize|可见列数)不含 zoom: zoom 只改渲染尺度不动布局宽, 门恒关, 1→0.9 后未量行
+      // 仍按旧缩放估高(偏大 ~11%, 只胖 pad 总高/滚动条长度不搬已渲染内容)—— 本块就是那个洞。
+      // !z 走 _rootZoomOf 单点(与 _winSigExtra 令牌同源): 量不到返回 null = 跳过重标, 不当 1
+      // —— 否则 body 暂时读不到的拍会被误判成「缩放回 1」, 1↔z 抖动反复重标整表。
+      // !阈值 1e-4: 比值实测的浮点噪声 ~1e-7, 真实缩放步进(0.05~0.1)远大于它; 比例本身用
+      // 全精度实测值, 不用 toFixed 令牌。首拍只落基线不重标(_rowHZoom 未定义 = 现有存值本来
+      // 就是在当前缩放下量的)。乘法覆盖全部 kind(含抽屉桥): 缩放对每座表一致。gap 不重标
+      // (computed rowGap 是布局空间, 天然不随 zoom 变); pad 出口的 /z 换算照旧(两者衔接后
+      // est×zNew/zOld ÷ zNew = 旧布局值, 即重标后 pad 总高与缩放前逐位一致)。
+      const zRoot = this._rootZoomOf();
+      if (zRoot !== null) {
+        if (this._rowHZoom === undefined) {
+          this._rowHZoom = zRoot;
+        } else if (Math.abs(zRoot - this._rowHZoom) > 1e-4) {
+          const ratio = zRoot / this._rowHZoom;
+          for (const k in this._rowHs) this._rowHs[k] *= ratio;
+          const nh = {};
+          for (const k in this._rowH) nh[k] = this._rowH[k] * ratio;
+          this._rowH = nh;
+          this._rowHZoom = zRoot;
+          this._rowHVer++;  // 响应式: 让窗口按重标后的高度重算(同拍 updated 链内收敛)
+        }
+      }
       // 签名取三个有窗口的层(与 _rowWindow 的 kind 对齐; 顺序 group/torrent/detail 与旧字面量一致)
       const winDefs = [TABLE_DEFS.group, TABLE_DEFS.torrent, TABLE_DEFS.detail];
       // !签名不含 viewMode(2026-11-02 关抽屉/切页卡死取证): 三 kind 行宽几何都不随 viewMode 变
@@ -495,7 +534,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
           ROWH_LIVE = live;
           if (ROWH_FRESH.size === 1 && ROWH_ORPHANS.size === 1) {
             const freshKey = ROWH_FRESH.keys().next().value;
-            const orphan = ROWH_ORPHANS.values().next().value;
+            const [orphanKey, orphan] = ROWH_ORPHANS.entries().next().value;
             /* 与行窗口化 pad 修复(issue 26-11-15-0332)的共存关系:
              * 其一, 携带值 = 旧键实测高的转记, 写进 _rowHs 后即满足「已实测」判据(键在即已实测)
              *   —— _reprobeRenderedRowH 把它当已有键、行进窗口后照常按真值修正(真值优先于
@@ -504,8 +543,15 @@ Object.assign(window.AQB_COLUMNS.methods, {
              *   首校后已冻结(门恒关), 携带值只进 _rowHs 不触发均值重校, 不搬 pad;
              * 其三, 出窗最后一探在 render 拍(reprobe 旧键)、携带在 updated() 拍, 时序天然错开:
              *   旧键被顶掉陈旧值后才入孤儿池(孤儿高反而更准), 携带键是新键、reprobe 只修
-             *   已有键不会顶掉它。 */
-            this._rowHs["group:" + freshKey] = orphan.h;
+             *   已有键不会顶掉它。
+             * 其四(与 zoom 重标共存, issue 26-11-16-0716 评审轮 3): 跨拍配对窗口里发生过 zoom
+             *   变化时, 本函数开头的重标块只平移 _rowHs, **不动模块级孤儿池** —— rec.h 是捕获
+             *   时刻量值, 直接转记就是旧缩放值, 逃过本次重标(已跑过)且下次 zoom 变化只等比
+             *   保持相对误差, 该行进窗被实测覆盖前恒偏 zOld/zNew 倍。优先读 _rowHs 旧键现值
+             *   (已被重标按比例平移), 旧键被签名作废剔掉时才回落快照(rec.h); 携带值本就只是
+             *   est 级兜底, 进窗即被真值校正, 回落面是窄径。 */
+            const liveH = this._rowHs["group:" + orphanKey];
+            this._rowHs["group:" + freshKey] = liveH !== undefined ? liveH : orphan.h;
             ROWH_ORPHANS.clear();
             ROWH_FRESH.delete(freshKey);
             this._rowHVer++;  // 让窗口按携带高度重算, 消掉那一拍 est 跳变(与 _measureRowH/
@@ -539,12 +585,8 @@ Object.assign(window.AQB_COLUMNS.methods, {
         // 会让总偏变大, 所以别指望「误差单调下降」; 而基准一动, 滚动中的内容就整段跳
         // (本 issue 要修的正病)。
         // 列集合/窗宽变化仍会翻 _winMeasured=false, 下一拍照常重新校准, 不残留旧几何。
-        // !但**运行时改 root zoom 不在此列**(issue 26-11-16-0716 已入池): 基准存的是 gBR 视觉
-        // 量值, 而这条重校签名只看布局宽度代与可见列数 —— zoom 只改渲染尺度、不动布局宽, 于是
-        // _winMeasured 恒 true、门恒关, 缩放 1→0.9 后未量行仍按旧缩放估高(偏大 ~11%)。影响面
-        // 限于 pad 总高/滚动条长度/可达底端, **不搬已渲染内容**(所以不是本 issue 那个跳变病),
-        // 刷新即恢复。修法要么按 zNew/zOld 原地重标 _rowHs+_rowH(不删键不翻量齐态), 要么把基准
-        // 改存布局 px; 两条都动到 _winZoomOf 的换算面, 故不随本批做。
+        // !运行时改 root zoom 也已接进重标面(函数开头, issue 26-11-16-0716): 按比例原地平移,
+        // 不走本门(删键翻量齐态) —— zoom 是全表一致缩放, 比例重标即等价于全量重新实测。
         // 例外: 抽屉内容桥**不冻结**(见下面第四探测位) —— 它挂 content-visibility:auto,
         // 首拍量到的是 intrinsic 占位高 28, 必须靠后续均值收敛拉回真值 27。
         const avg = this._rowHAvgOf(kind);
@@ -706,6 +748,18 @@ Object.assign(window.AQB_COLUMNS.methods, {
           || typeof document.querySelectorAll !== "function") return;
       const cache = this._rowProbeSig || (this._rowProbeSig = {});
       if (cache[kind] === sig) return;
+      /* 缩放过渡拍守卫(issue 26-11-16-0716): zoom 刚变、_measureRowH 的重标块还没跑到的这一拍,
+       * 本方法的逐行对比会把「旧缩放存值 vs 新缩放 gBR」的**全表系统性差值**(=行高×(1-z), 远超
+       * 0.5px 容差)当成行高真变写进 _rowHs —— 随后 _measureRowH 的整体重标把这些行再乘一遍
+       * 比例 = 双重缩放, 且被改坏的行若不再进窗就永不修正。缩放是全表一致平移, 归 _measureRowH
+       * 的重标块管; 本方法只修「个别行真变了」。过渡拍(当前 z ≠ 上次校准 z)直接让路: 不探、
+       * 不记签名(空探不记账同口径), 同拍稍后的 _measureRowH 重标完, _rowHVer bump 出的下一
+       * 渲染再照常重探。z 走 _rootZoomOf 单点; 量不到(null)不让路 —— 与重标块「读不到不重标」
+       * 同口径, 过渡判据两侧都拿不到真值时保持既有行为。 */
+      if (this._rowHZoom !== undefined) {
+        const zNow = this._rootZoomOf();
+        if (zNow !== null && Math.abs(zNow - this._rowHZoom) > 1e-4) return;
+      }
       const probe = this._rowHProbeRows(kind);
       if (!probe) return;
       const hs = this._rowHs;

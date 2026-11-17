@@ -70,6 +70,14 @@
   非响应式纯缓存; 第二根因(占位估算基准随每量一行微动 δ, 把 pad 区上百行未实测行连坐搬
   δ×N, flux 取证 +3.8px)由 _measureRowH 主表均值量齐后冻结钉住(抽屉 content-visibility:auto
   需逐拍收敛 28→27, 显式不冻)。行为面对同电池 + 去掉预热滚动的 T7/S-A 像素判据
+- test_frontend_rowh_zoom_rescale_guard: issue 26-11-16-0716 修复守阵 —— 运行时 root zoom
+  变化行高基准按比例重标: _rootZoomOf() 是缩放比值的单点(body gBR 宽/offsetWidth, 量不到返回
+  null 不回落 1 —— null 当 1 会把「body 暂时读不到」误判成缩放回 1, 1↔z 抖动反复重标整表),
+  _winSigExtra 令牌与 _measureRowH 重标块共用该单点(两处各写一份 = 改一处漏一处); 重标块在
+  _measureRowH 开头, 变了全表乘 zNew/zOld 且不删键/不翻 _winMeasured/不动冻结门(踩全表作废坑
+  = 3000 行全量重渲长任务); _reprobeRenderedRowH 过渡拍让路守卫在位(旧缩放存值 vs 新缩放 gBR
+  的系统性差值不得当行高真变, 不烧去重签名); _rowHZoom 基线在根 created() 初始化为非响应式
+  纯缓存。行为面对 node 电池 test_r4_rowh_zoom_rescale_follows_root_zoom
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -1551,4 +1559,68 @@ def test_frontend_outgoing_rowh_reprobe_guard():
     assert 'if (this._rowH["drawerContent"] === undefined' in mm.group(1), (
         "抽屉内容桥的均值必须保持逐拍收敛, 不可一并冻结 —— content-visibility:auto 首拍量到"
         " intrinsic 占位高 28, 冻结就永远拉不回真值 27"
+    )
+
+
+def test_frontend_rowh_zoom_rescale_guard():
+    """issue 26-11-16-0716 修复守阵: 运行时 root zoom 变化, 行高基准按比例原地重标。
+
+    根因: _rowHs/_rowH 存的是 gBR 视觉量值, 重校签名(_winResize|可见列数)不含 zoom —— 运行时
+    改 root zoom 门恒关, 1→0.9 后未量行按旧缩放估高(偏大 ~11%, 只胖 pad 总高/滚动条长度)。
+    修复 = _measureRowH 开头比对 _rootZoomOf() 与上次校准基线 _rowHZoom, 变了全表乘 zNew/zOld
+    (不删键不翻量齐态 —— 踩 rowh-sig-and-transition-geometry 坑就是 3000 行全量重渲长任务);
+    配套 _reprobeRenderedRowH 过渡拍让路(否则系统性差值被当行高真变写进 _rowHs, 重标再乘一遍
+    = 双重缩放)。行为面对: node 电池 test_r4_rowh_zoom_rescale_follows_root_zoom。
+    """
+    rel = "shared/columns.js"
+    text = _strip_js_comments(read_shared("columns.js"))
+
+    # 1) 缩放比值单点: _rootZoomOf 恰一次定义, body gBR 宽/offsetWidth 比值实测, 量不到返回 null
+    defs = [m.start() for m in re.finditer(r"_rootZoomOf\(\)\s*\{", text)]
+    assert len(defs) == 1, f"{rel} _rootZoomOf() 应恰一次定义(实测 {len(defs)} 次) —— 缩放比值两处各写一份 = 改一处漏一处"
+    mz = re.search(r"_rootZoomOf\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mz, "_rootZoomOf() 结构变了? 同步本守阵"
+    zbody = mz.group(1)
+    assert "getBoundingClientRect().width" in zbody and "offsetWidth" in zbody, (
+        "_rootZoomOf 必须比值实测(body gBR 宽 / offsetWidth) —— 读 computed zoom 不行: "
+        "Chrome 不把 zoom 报成继承, html 设 0.9 时 body/子孙 computed 恒 \"1\""
+    )
+    assert "return null" in zbody, (
+        "_rootZoomOf 量不到必须返回 null 不许回落 1 —— 重标面拿 1 当回落值会把「body 暂时"
+        "读不到」误判成「缩放回到 1」, 1↔z 抖动反复重标整表(issue §06 方案 A 点名的坑)"
+    )
+
+    # 2) 单点复用: _winSigExtra 与 _measureRowH 都走 _rootZoomOf(零平行 body 比值实测)
+    msw = re.search(r"_winSigExtra\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert msw and "this._rootZoomOf()" in msw.group(1), ("_winSigExtra 未走 _rootZoomOf 单点 —— 缩放比值两处实测 = 令牌与重标基线口径漂移")
+    mm = re.search(r"_measureRowH\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mm and "const zRoot = this._rootZoomOf();" in mm.group(1), (
+        "_measureRowH 开头缺缩放重标块(zRoot 来源必须是 _rootZoomOf 单点) —— 运行时改 root "
+        "zoom 后未量行按旧缩放估高(issue 26-11-16-0716 复发)"
+    )
+
+    # 3) 重标块形态: 比例平移, 不删键/不翻量齐态/不动冻结门(全表作废坑零触发)
+    mres = re.search(r"const ratio = zRoot / this\._rowHZoom;(.*?)this\._rowHZoom = zRoot;", text, re.S)
+    assert mres, "_measureRowH 缺按比例重标块(ratio = zNew/zOld 全表平移) —— 同步本守阵"
+    res = mres.group(1)
+    assert "*= ratio" in res and re.search(r"this\._rowH\[[^\]]+\] \* ratio|this\._rowH\[k\] \* ratio",
+                                           res), ("重标块必须同时平移 _rowHs(逐行存值)与 _rowH(est 基准) —— 只动一处, 未量行与已量行口径分叉")
+    assert "delete" not in res and "_winMeasured" not in res and "viewMode" not in res, (
+        "重标块里出现 delete/翻 _winMeasured/扩签名 —— zoom 是全表一致缩放, 比例平移即等价于"
+        "全量重新实测; 走删键翻量齐态 = 重踩 3000 行全量重渲长任务坑(rowh-sig-and-transition-geometry)"
+    )
+
+    # 4) 过渡拍让路: 出窗重探在 z 未追平时不探不记签名
+    mr = re.search(r"_reprobeRenderedRowH\(kind, sig\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mr and "this._rowHZoom !== undefined" in mr.group(1) \
+        and "Math.abs(zNow - this._rowHZoom)" in mr.group(1), (
+        "_reprobeRenderedRowH 缺缩放过渡拍让路守卫 —— zoom 刚变的拍, 「旧缩放存值 vs 新缩放 "
+        "gBR」的系统性差值(=行高×(1-z))会被当行高真变写进 _rowHs, 随后重标再乘一遍 = 双重缩放"
+    )
+
+    # 5) _rowHZoom 基线是非响应式纯缓存, 必须在 created() 初始化(与 _rowHs/_rowProbeSig 同族)
+    life = open(os.path.join(STATIC_ROOT, "shared", "lifecycle.js"), encoding="utf-8").read()
+    mc = re.search(r"created\(\)\s*\{(.*?\n  \},)", life, re.S)
+    assert mc and "this._rowHZoom = undefined;" in mc.group(1), (
+        "_rowHZoom 未在根 created() 初始化 —— 进 data 会参与依赖追踪, 每拍写入平白多触发一轮整表重渲(P1-2 口径)"
     )

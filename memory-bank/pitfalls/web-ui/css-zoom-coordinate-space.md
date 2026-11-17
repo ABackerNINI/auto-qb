@@ -3,7 +3,7 @@
 > 摘要: html{zoom!=1}(分数布局)下窗口化几何输入 window.scrollY / scrollHeight / getBoundingClientRect 全按**视觉空间**(缩放后)报数, 而占位件 style.height / getComputedStyle().height / computed rowGap 是**布局空间**(缩放前) —— 前缀和(视觉)直接写进 style 会再被 zoom 缩一遍, pad 恒短 (1-z) 倍, 贴文档底后 padTop 差约 (1-z)×视觉总高(flux 实测 ~1900px), 渲染行整体落在视口上方全不可见。窗口选行与前缀和在视觉空间内自洽, pad 是唯一不闭环出口, 所以错位只在文档底附近爆发、scrollBy ±1 跟随但不自愈。
 > 触发: zoom 0.9, 分数布局, DPR 1.25, 窗口化错位, 行全在视口上方, 贴文档底, pad 短一截, getBoundingClientRect 视觉空间, offsetHeight 取整, computed zoom 不继承, style.height 布局空间, rowGap 布局
 
-**Refs:** memory-bank/issues/26-11-14-0844-bug-webui-zoom-window-misalign.html, memory-bank/tasks/26-11-14-webui-row-window-zoom.md
+**Refs:** memory-bank/issues/26-11-14-0844-bug-webui-zoom-window-misalign.html, memory-bank/issues/26-11-16-0716-bug-webui-rowwin-frozen-est-zoom-drift.html, memory-bank/tasks/26-11-14-webui-row-window-zoom.md, memory-bank/pitfalls/web-ui/rowwin-stale-rowh-pad-jump.md
 
 ### 实测坐标空间模型(Chrome, 2026-11-14, html{zoom:0.9} 探针)
 
@@ -20,4 +20,4 @@
 
 `columns_grid.js`: `_winZoomOf(kind, refName)` 单点实测有效缩放; `_rowWindow` 两个 pad 出口按 `pre[start]/z - gap` 换算(gap 本就是布局空间, 放在除法之后同单位相减); `_winSigExtra` 加根缩放令牌(zoom 切换后 `_winTop` 重量, 否则 rel 偏 (1-z)×表顶、窗口选行错约一行)。zoom=1 时 z 数值等价 1(至多浮点重结合 1ulp 差), 逐位零差异。验证: e2e/row-window-zoom.spec.mjs(三皮肤贴底可见行) + node 语义电池 23/23。
 
-**已知权衡(勿"补全")**: `_measureRowH` 的行高签名(`_winResize|列集合`)**有意不含根缩放** —— `_rowHs` 是视觉空间(gBR 实测)值, zoom 切换后整表陈旧且不失效, 只能靠 updated() 对已渲染行的逐行重探收敛自愈(收敛前 padBottom/文档总高偏大约 (1-z)×未重探尾部高, 键盘跨窗按 `_rowPre` 换算取旧值)。**别直觉地把 zoom 令牌加进 `_measureRowH` 签名** —— 那会踩回 viewMode 曾踩过的「每次切页作废三 kind 行高全表 + 3000 行 5.8s 全量重渲长任务」坑(见 `test_frontend_row_window_sig_and_ctn_sync_guard` 守阵)。
+**已知权衡(勿"补全")**: `_measureRowH` 的行高签名(`_winResize|列集合`)**有意不含根缩放** —— 那会踩回 viewMode 曾踩过的「每次切页作废三 kind 行高全表 + 3000 行 5.8s 全量重渲长任务」坑(见 `test_frontend_row_window_sig_and_ctn_sync_guard` 守阵)。签名不含 zoom 造成的「缩放后基准陈旧」洞已由**比例重标**另路补上(issue 26-11-16-0716, 2026-11-16 修): `_measureRowH` 开头比对 `_rootZoomOf()`(body gBR 宽/offsetWidth 比值单点, 量不到返回 null 不回落 1)与上次校准基线 `_rowHZoom`, 变了全表乘 `zNew/zOld` 原地平移 `_rowHs`+`_rowH`(不删键不翻量齐态), `_rowHVer` bump 一次; 出窗最后一探有过渡拍让路守卫(系统性差值不得当行高真变, 否则双重缩放)。e2e 判据注意: `scrollHeight` 属视觉空间(随 zoom 缩), 运行时缩放后正确总高 = 0.9×缩放前, 不是前后相等 —— 别把判据写成「前后差小」。守阵: `test_frontend_rowh_zoom_rescale_guard`(静态) + `test_r4_rowh_zoom_rescale_follows_root_zoom`(node 电池 13 项: 含携带x重标共存——跨拍配对优先读 `_rowHs` 重标现值、快照只兜底——与携带回落两断言) + `row-window-zoom.spec.mjs` 运行时缩放用例。机制细节与判别见 `rowwin-stale-rowh-pad-jump.md` 缩放重标段。
