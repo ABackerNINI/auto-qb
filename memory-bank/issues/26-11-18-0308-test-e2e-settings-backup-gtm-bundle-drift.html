@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>e2e: settings-backup gtm 段前提过期 —— 桩环境 gtm 可达后 bundle 含 gtm 段, 8 例确定性红 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-settings-backup-gtm-bundle-drift">
+<meta name="issue-stamp" content="26-11-18-0308">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-settings-backup-gtm-bundle-drift">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="e2e: settings-backup gtm 段前提过期 —— 桩环境 gtm 可达后 bundle 含 gtm 段, 8 例确定性红">
+<meta name="issue-summary" content="2026-11-18 复验轮: settings-backup 8 例单跑/全量串行/容器全量均红; spec 前提「gtm 工具不运行 -&gt; bundle.gtm === null + pill 灰显」被 gtm bundle 段上线与桩环境 gtm agent 可达打破 —— 断言/前提漂移待归因回写">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>e2e: settings-backup gtm 段前提过期 —— 桩环境 gtm 可达后 bundle 含 gtm 段, 8 例确定性红</h1>
+<p class="lede">2026-11-18 复验轮: settings-backup 8 例单跑/全量串行/容器全量均红; spec 前提「gtm 工具不运行 -&gt; bundle.gtm === null + pill 灰显」被 gtm bundle 段上线与桩环境 gtm agent 可达打破 —— 断言/前提漂移待归因回写</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>复验 issue 26-11-17-0852 的长跑轮（2026-11-18，干净 HEAD d3bc0352）顺带发现：e2e/settings-backup.spec.mjs 红面收敛在本 spec，其它 spec 不受累。已实测形态：单跑 spec 8 failed / 4 passed、Windows 全量串行 8 例全红（9 failed 中的 8 条）—— 两形态同面同红，与执行顺序无关；容器 testbed --full 仅 2 例红（:147 导入 round-trip 双皮肤），其余 6 例容器轮绿 —— 该差异未归因，认领时先取证（容器 retries/形态差/时点 HEAD 差异三候选）。定性按已实测形态写作「确定性红」，容器形态的覆盖率差异不影响「spec 与产品/桩漂移」的主判断。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-18（单跑: commands run dev.e2e -- e2e/settings-backup.spec.mjs -> 8 failed / 4 passed）
+
+代表例 1（:193, prism/atlas 各一）:
+  Error: expect(received).toHaveClass(/is-gated/)
+  locator('.modal').locator('.opt-pill').filter({ hasText: 'gtm' })
+  14 x locator resolved to &lt;button ... class="opt-pill on" aria-checked="true" ...&gt;
+  - unexpected value "opt-pill on"        # 期望 gtm pill 灰显(is-gated), 实为可选且默认勾上
+
+代表例 2（:303, prism/atlas 各一）:
+  expect(Object.keys(importBodies[0].sections)).toEqual(['webui_keys'])
+  + Received  + 1
+    Array [ "webui_keys", + "gtm" ]       # 导出 bundle 混入了 gtm 段
+
+代表例 3（:384, prism/atlas 各一）:
+  expect(locator('.toast-wrap .toast.warn')...).toBeVisible() -> element(s) not found
+  # 「未勾选任何要应用的段」warn 未出现(导入链路假设的失败分支没走到)
+
+另 :132 的 expect(bundle.gtm).toBeNull() 应也已不成立(由例 2 可知 bundle.gtm 非 null)。
+
+对照面:
+- spec 前提(文件头 + :23/:131-132/:189): 「桩前提: gtm 工具不运行 -> 导出 bundle.gtm === null(离线导出形态), 导入确认框里 gtm 勾选灰显(缺段不可勾)」
+- 产品面: src/auto_qb/webui/static/shared/ui_prefs.js:85 已把 gtm 登记为 bundle 段(「流量监控工具配置(gtm)」, 计划 26-11-14-0624 S3); src/auto_qb/webui/server/routes/backup.py::build_backup_bundle/_gtm_section 的 gtm 段取 traffic_monitor._source_status, reachable 即非 null</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>spec 跑在「gtm agent 探测 reachable」的桩环境(本机两形态 8/8 红实证); 容器全量轮仅 2/8 红, 该形态差异待归因; 与数据量/皮肤无关(双皮肤对称红)</td></tr>
+    <tr><td>影响范围</td><td>e2e/settings-backup.spec.mjs 8 例(导出 2 + 导入 round-trip 2 + apply 分支 2 + 422 失败路径 2, 双皮肤); e2e 信号面被恒红淹没, 不涉产品运行时行为</td></tr>
+    <tr><td>严重度</td><td>中(测试基建面; 但需先归因是 spec 前提过期还是产品误把桩环境判成 gtm 在线)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>e2e/settings-backup.spec.mjs:23/:132/:193/:303/:384</code>（取证 2026-11-18 03:08）· 桩前提与三组断言 · grep <code>bundle.gtm</code> / <code>is-gated</code></li>
+    <li><code>src/auto_qb/webui/server/routes/backup.py</code> :: <code>_gtm_section</code> / <code>build_backup_bundle</code> · grep <code>_source_status</code> · 行号 93-125（取证 2026-11-18 03:08）</li>
+    <li><code>src/auto_qb/webui/static/shared/ui_prefs.js:85</code> · gtm 段登记 · grep <code>流量监控工具配置</code>（取证 2026-11-18 03:08）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查（方向二选一，认领后先取证）：① spec 前提过期 —— gtm 段(26-11-14-0624)上线后 spec 没跟上，修法 = spec 按「gtm 段在场」改断言面；② 产品面回归 —— e2e 桩环境本不该 reachable(_source_status 探测在桩上误判 ready)，修法 = 产品/桩探测面归位。已排除：执行顺序/共享桩污染（单跑即红）；Windows 两形态的 flaky（8/8 恒红）。容器 2/8 覆盖率差异未归因前，不把「flaky 已排除」外推到容器形态。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>先归因再动：在 e2e 环境实跑 <code>traffic_monitor._source_status</code> 看 state/reachable 判定值（读哪个 config/state 文件导致 ready），据此在 ①/② 里择一修；若 ①，注意 spec 头部「桩前提」段与 :23/:131/:189 三处注释要同步改口径，别只翻断言。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-18 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

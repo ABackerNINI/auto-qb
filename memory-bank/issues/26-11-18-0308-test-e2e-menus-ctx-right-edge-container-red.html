@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>e2e: menus CTX-fit 右缘钳制(prism)容器全量红一次, 慢 CPU 候选 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-menus-ctx-right-edge-container-red">
+<meta name="issue-stamp" content="26-11-18-0308">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-menus-ctx-right-edge-container-red">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="e2e: menus CTX-fit 右缘钳制(prism)容器全量红一次, 慢 CPU 候选">
+<meta name="issue-summary" content="2026-11-18 复验轮: 容器 testbed --full 闪一次 menus prism「CTX-fit 右缘: 菜单右缘钳进视口」(实测右缘 1440 &gt; 1432), Windows 同轮绿 —— 容器慢 CPU/渲染家族候选待采样归因">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>e2e: menus CTX-fit 右缘钳制(prism)容器全量红一次, 慢 CPU 候选</h1>
+<p class="lede">2026-11-18 复验轮: 容器 testbed --full 闪一次 menus prism「CTX-fit 右缘: 菜单右缘钳进视口」(实测右缘 1440 &gt; 1432), Windows 同轮绿 —— 容器慢 CPU/渲染家族候选待采样归因</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-18-0308-test-e2e-menus-ctx-right-edge-container-red</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>复验 issue 26-11-17-0852 的长跑轮（2026-11-18）顺带发现: 容器 testbed --full 闪一次 menus prism「CTX-fit 右缘: 锚点贴滚动容器右缘, 菜单右缘钳进视口(≤ 视口宽 - 8)」, 实测右缘 1440 > 1432。同轮 Windows 全量串行该 spec 全绿 —— 目前只在容器形态冒过一次。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-18（容器 testbed --full, 636P/4F 那轮; error-context 在容器 workdir test-results/）
+
+  Error: 菜单右缘 1440 应 ≤ 视口宽 - 8(1432) —— 溢出即右缘项点不到
+  expect(received).toBeLessThanOrEqual(expected)
+  Expected: &lt;= 1433
+  Received:    1440
+  at e2e/menus.spec.mjs:425:7 (CTX-fit 右缘, prism)
+- 差值恰好 = 8(钳制完全没生效/或钳制读取的视口宽与断言基准错位 8px), 非毫厘级漂移</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>容器 testbed(swiftshader 软件渲染 + 慢 CPU)全量形态, 636P/4F 轮 4F 之一(总 640); Windows 同轮绿</td></tr>
+    <tr><td>影响范围</td><td>menus.spec.mjs prism CTX-fit 右缘一条; 判据「右缘钳进视口」涉及真实点击可达性, 假红/真回归都值得归因</td></tr>
+    <tr><td>严重度</td><td>低-中(容器限定偶发; 但 1440 vs 1432 的整 8px 差更像机制问题而非测量噪声)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>e2e/menus.spec.mjs:425</code>（取证 2026-11-18 03:08）· test「CTX-fit 右缘」 · grep <code>菜单右缘</code></li>
+    <li>容器失败现场: <code>/root/auto-qb-tests/aqb-29768-20261118T014413/code/test-results/menus-…chromium/error-context.md</code>(容器清扫前取)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查。整 8px 差值是主线索: 要么钳制分支在慢环境下没跑(菜单打开瞬间视口度量未就绪), 要么钳制基准与断言基准读了不同的视口宽。容器 --full 形态复跑采样; 若稳定复现可容器内单跑缩小。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>容器形态采样取第二现场; 归因后修用例等待面(等度量就绪再量)或产品钳制面; 与 2026-11-12 容器计时敏感家族(route-cleanup 已修)同归「容器形态差」口径, 数字不进基线。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-18 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-18-0308-test-e2e-menus-ctx-right-edge-container-red.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
