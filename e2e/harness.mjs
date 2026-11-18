@@ -66,14 +66,23 @@ export const SKIP_CHECK = process.env.E2E_SKIP_CHECK || 'on';
 /** HR 在线核实桩场景 —— 对应 ui_harness.py `--hr-scene`(on | empty | off)。 */
 export const HR_SCENE = process.env.E2E_HR_SCENE || 'on';
 
+/**
+ * 冷启动两跳观测模式(plan 26-11-18-0259 S2 e2e) —— 对应 ui_harness.py `--boot-first`(on | off)。
+ * on: 桩 store 不预灌, 启动首轮经真实 _sync_line 在主线程跑(提前发布基础代), 归组在 files 闸口
+ * 挂起, 由 /__harness__/boot_go 与 /__harness__/boot_gate 分两跳放行(e2e/boot-first-two-hop.spec.mjs);
+ * off(默认): 桩行为与历史逐字不变。
+ */
+export const BOOT_FIRST = process.env.E2E_BOOT_FIRST || 'off';
+
 /** 合成种子总数 —— 与 ui_harness.py 的 `--torrents` 同值, 供数据契约/轮询分档断言使用。 */
 export const TORRENTS = Number(process.env.E2E_TORRENTS || 300);
 
-/** 三个模式维度的合法取值(与 ui_harness.py 的 argparse choices 逐字对齐)。 */
+/** 四个模式维度的合法取值(与 ui_harness.py 的 argparse choices 逐字对齐)。 */
 const MODE_CHOICES = {
   CMD_RESULT: ['ok', 'error', 'hang'],
   SKIP_CHECK: ['on', 'off'],
   HR_SCENE: ['on', 'empty', 'off'],
+  BOOT_FIRST: ['on', 'off'],
 };
 
 /**
@@ -90,6 +99,8 @@ export function assertModesValid() {
     bad.push(`E2E_HR_SCENE=${HR_SCENE}(允许: ${MODE_CHOICES.HR_SCENE.join('|')})`);
   if (!Number.isInteger(TORRENTS) || TORRENTS <= 0)
     bad.push(`E2E_TORRENTS=${process.env.E2E_TORRENTS}(须为正整数)`);
+  if (!MODE_CHOICES.BOOT_FIRST.includes(BOOT_FIRST))
+    bad.push(`E2E_BOOT_FIRST=${BOOT_FIRST}(允许: ${MODE_CHOICES.BOOT_FIRST.join('|')})`);
   if (bad.length)
     throw new Error(`[e2e] 模式矩阵 env 非法:\n  - ${bad.join('\n  - ')}`);
 }
@@ -124,4 +135,5 @@ export const HARNESS_CMD = [
   CMD_RESULT !== 'ok' ? `--cmd-result ${CMD_RESULT}` : '',
   SKIP_CHECK !== 'on' ? '--skip-check-menu off' : '',
   HR_SCENE !== 'on' ? `--hr-scene ${HR_SCENE}` : '',
+  BOOT_FIRST !== 'off' ? '--boot-first on' : '',
 ].filter(Boolean).join(' ');

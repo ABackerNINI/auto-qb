@@ -1,6 +1,6 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test';
-import { HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
+import { BOOT_FIRST, HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
 
 /**
  * S5 e2e 并行化(计划 26-11-05-0118 §04 S5 / §06 D14): 并行的正确形态是 **shard 多进程**
@@ -20,6 +20,16 @@ const SHARDED = !!process.env.E2E_SHARD_TOTAL;
  * 拍墙钟 <= animEnd+900ms 与采样帧数下限(按帧距折算), rAF 帧距被并发拖长即假红。 */
 const CPU_SENSITIVE_SPECS = ['**/perf.spec.mjs', '**/drawer-content-perf.spec.mjs', '**/traffic-fx-frames.spec.mjs'];
 
+/* boot-first 模式隔离(plan 26-11-18-0259 S2 评审): E2E_BOOT_FIRST=on 的桩形态与全套件
+ * **结构性不兼容**(store 不预灌 -> 启动首轮由 boot_go 放行/站点健康注入跳过/无启动 rebuild),
+ * 其余 spec 无一声明 bootFirst 门控(requireMode) —— 按 dev.e2e 矩阵轮口径带 env 误跑全套件
+ * 会把不兼容桩当成默认桩, 成批假红。该轮 testMatch 白名单只剩冷启动两跳 spec
+ * (与 mode.mjs requireMode / harness.mjs assertModesValid 的防误跑口径对齐; 默认模式本分支
+ * 不生效, spec 集逐字不变。!实测: testIgnore 的 `!` 否定写法会把白名单文件一并吃掉 ——
+ * Playwright 的 ignore 语义是"命中任一模式即忽略", 不能当"all except"用, 故走 testMatch)。 */
+const BOOT_FIRST_ISOLATED = BOOT_FIRST === 'on';
+const BOOT_FIRST_ONLY = ['**/boot-first-two-hop.spec.mjs'];
+
 /**
  * WEB UI 真浏览器冒烟 —— 本仓库"静态守阵之外"的那一层门禁。
  *
@@ -37,8 +47,10 @@ const CPU_SENSITIVE_SPECS = ['**/perf.spec.mjs', '**/drawer-content-perf.spec.mj
 export default defineConfig({
   testDir: './e2e',
 
-  /* 仅 shard 会话(e2e/shard-run.mjs 置 E2E_SHARD_TOTAL)排除 CPU 敏感量具 spec —— 见文件头注释 */
-  testIgnore: SHARDED ? CPU_SENSITIVE_SPECS : undefined,
+  /* 仅 shard 会话(e2e/shard-run.mjs 置 E2E_SHARD_TOTAL)排除 CPU 敏感量具 spec —— 见文件头注释;
+   * boot-first 轮(E2E_BOOT_FIRST=on)白名单只剩冷启动两跳 spec(见上方注释)。 */
+  testIgnore: BOOT_FIRST_ISOLATED ? undefined : SHARDED ? CPU_SENSITIVE_SPECS : undefined,
+  testMatch: BOOT_FIRST_ISOLATED ? BOOT_FIRST_ONLY : undefined,
 
   /* Windows 上给 webServer 收尾兜底 —— 不兜的话用例全 PASS 但命令永不退出(根因与实测见该文件
    * 顶部注释)。非 Windows 是 no-op, CI 不受影响。 */

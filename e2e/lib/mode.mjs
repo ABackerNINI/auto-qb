@@ -22,6 +22,7 @@
  *   · 阈值数字(P1-2/P1-3 预算、2500~6000ms 窗口、轮询分档期望值)逐字保留。
  */
 import {
+  BOOT_FIRST,
   CMD_RESULT,
   HR_SCENE,
   SKIP_CHECK,
@@ -32,11 +33,12 @@ import {
 /** module load 即自检 —— env 写错在本批任何 spec 加载瞬间就炸, 不等到 webServer 起。 */
 assertModesValid();
 
-/** 当前模式四元组(与 ui_harness.py 桩形态同源, 桩与断言不会漂)。 */
-export { CMD_RESULT, SKIP_CHECK, HR_SCENE, TORRENTS };
+/** 当前模式五元组(与 ui_harness.py 桩形态同源, 桩与断言不会漂)。 */
+export { BOOT_FIRST, CMD_RESULT, SKIP_CHECK, HR_SCENE, TORRENTS };
 
 /** env 键的可读标签(skip 消息里直接引用, 排障照着抄就能改 env)。 */
 const ENV_KEYS = {
+  bootFirst: 'E2E_BOOT_FIRST',
   cmdResult: 'E2E_CMD_RESULT',
   skipCheck: 'E2E_SKIP_CHECK',
   hrScene: 'E2E_HR_SCENE',
@@ -45,6 +47,7 @@ const ENV_KEYS = {
 
 /** 当前值对照表(requireMode 的比较与 skip 消息共用同一来源)。 */
 const CURRENT = {
+  bootFirst: BOOT_FIRST,
   cmdResult: CMD_RESULT,
   skipCheck: SKIP_CHECK,
   hrScene: HR_SCENE,
@@ -54,13 +57,13 @@ const CURRENT = {
 const asList = (v) => (Array.isArray(v) ? v : [v]);
 
 /** @type {readonly (keyof typeof CURRENT)[]} —— 不标注则 dim: string, req[dim] 会报 ts(7053)。 */
-const DIMS = ['cmdResult', 'skipCheck', 'hrScene', 'torrents'];
+const DIMS = ['bootFirst', 'cmdResult', 'skipCheck', 'hrScene', 'torrents'];
 
 /**
  * 模式门控: 任一维度不满足当前 env 就把整组 skip, 消息带当前值与要求值。
  *
  * @param {import('@playwright/test').Test} test —— 调用方传入的 test 对象(describe 回调内可用)。
- * @param {{cmdResult?: string|string[], skipCheck?: string|string[],
+ * @param {{bootFirst?: string|string[], cmdResult?: string|string[], skipCheck?: string|string[],
  *          hrScene?: string|string[], torrents?: number}} req —— 各维度要求(多值 = 任一即跑)。
  */
 export function requireMode(test, req) {

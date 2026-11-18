@@ -3,7 +3,7 @@
 **Status:** Open
 **Added:** 2026-11-18
 **Updated:** 2026-11-18
-**Summary:** 重启后 WebUI 首份数据 5-15s: 立项分析 + S0 真机取证(根因链两形态实测坐实) + S1 启动首轮提前发布落地(S2 守阵 / S3 真机验收待做)
+**Summary:** 重启后 WebUI 首份数据 5-15s: 立项分析 + S0 真机取证(根因链两形态实测坐实) + S1 提前发布 + S2 守阵补齐落地(S3 真机验收待做)
 **Topics:** webui-boot-first-data
 **Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html
 
@@ -38,7 +38,7 @@
 | 立项 | 根因分析 + grilling D1-D11 + 计划入库 + ②③入池 | Done(2026-11-18) |
 | S0 | real-machine 环境重启取证(各视图首份数据时刻 + 管线时间窗) | Done(2026-11-18, 基线 `testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md`) |
 | S1 | 启动首轮提前发布(apply_sync 后插发布点) | Done(2026-11-18) |
-| S2 | 守阵(单测/e2e/test.full) | Open |
+| S2 | 守阵(单测/e2e/test.full) | Done(2026-11-18, 数字见 kb.baseline 本切片) |
 | S3 | 真机验收(修复前后对比, 数字回写 issue②) | Open |
 
 ## 进度日志
@@ -62,3 +62,11 @@
 - S1 完成: `qbmanager._refresh_torrents` 在 `apply_sync` 落库后、`need_validate` 分支前插入启动首轮提前发布点 —— 判据 = **落库前 capture `store.rounds_applied == 0`**(纯内存计数: `__init__` 置 0 / `_apply` 每轮自增单点 / 不落盘 / `reset_runtime` 不清 ⇒ 热重载 L2 / qB 重启补 / 重连全量轮均 >0 零行为变化; 不依赖种子数)。发布复用同一 **on_sync_line hook**(`host.run_sync_line(False)` → webui `flush_views` → `_publish_locked`, P2 守阵禁直驱表现层), 不新增锁/线程/配置键; `force=False`(首个主循环发布前不存在未取走版本, "已取走"门控恒可过); 提前发布失败吞异常记 WARNING 不打断首轮管线(权威发布在管线结束既有路径 —— 归组经 `group_key_migrations` 登记 → full 理由触发第二跳; grouping 关闭且无 HR/规则写标签的形态第二跳无迁移理由、靠下一变更轮自愈, site 列可能滞留至该轮, 已知代价面)。单测: 新文件 `tests/test_webui_boot_first_publish.py` 4 用例(管线中即有含落库数据的基础代+site=Unknown 证早于 full_round / 竞态空代不跳过 / 非启动轮零行为变化 / 失败不打断管线) + 既有守阵 `test_p2a_sync_line_flush_propagates_to_host` 按新契约更新(启动首轮恰两次 [False, True]); 相关子集 6 批 38 文件全绿(qbmanager/webui-delta/store/views/grouping/sync/episodes/modules_p5/ui/checking/local_qb/ascii/config/actions/hr), 全量 test.full 留 S2(数字见 kb.baseline)。dry-run 语义核实: flush 路径无 dry_run 门, 提前 fire 与现状同机制(web 未启/无请求 → is_active False → 不发布); 计划外观察(只报告): dry-run/首轮提前 fire 会让 OpsModule 跳检备份对账提前约 1 拍触发(对账自身按进程幂等, 重加路径无 dry_run 门系既有面)。
 
 - 2026-11-18 06:13 R2
+
+### R3 · S2 守阵补齐 (2026-11-18)
+
+- S2 完成(产品代码零改动)。**单测补齐**(盘点 S1 已钉面后只补缺, `tests/test_webui_boot_first_publish.py` 增至 6 用例): `test_base_generation_lacks_site_derived_fields_completion_fills_them` —— 基础代 site 派生面全空(site=Unknown/hr_tag=""/hr_triggered=False/hr_req_time=0, 错误种子只有笼统回退「错误」) + 补全代 HR 派生字段落位(tracker_conf 匹配后现算) + **错误原因补齐面实测口径**: 取数器在任务线(`module.on_task_line` = advance_error_reasons -> flush_views), 同步线两代都不含具体原因, 任务线一代补齐、ver 逐代 +1 —— 计划 §03「第二跳补齐 tracker 错误原因」的表述与实现有差(第二跳只补 site/HR 派生面, 具体原因晚一代), 按实现钉; `test_delta_client_two_generation_sequence_compatibility` —— 时间线恰两代 ver 严格连续(不跳不重)/rid==ver 零回传/补全代经组键迁移降级 full(R10/R11 协议回退, 「多吃一代」实际代价 = 补全代一次全量载荷)/未协商客户端历史形状逐键兼容/真实增量轮(delta_fields 速度)回增量。S1 已显式钉过「groups 首代空、flat 首代满」(test 1 断言原样), 未重复。**e2e 桩冷启动两跳**(可观测性方案): 桩管线毫秒级跑完且 uvicorn 起在管线后, 两跳窗口 HTTP 天然不可观测 —— 加 `--boot-first on` 模式(E2E_BOOT_FIRST 第五维, 默认 off 桩行为逐字不变): store 不预灌、启动首轮经真实 `_sync_line` 在主线程跑(空 store -> rounds_applied==0 判据自然成立)、归组 files 单发在 `_BootGate` 闸口挂起、`/__harness__/boot_go|boot_gate` 两跳放行; 新 spec `e2e/boot-first-two-hop.spec.mjs` 断言 空代(S0 §02.2 第 3 点形态) -> 基础代(flat 满/groups 空/singles 超集/shows 解析 + UI 种子行先出/分组页空) -> 补全代(groups 落位/singles 收缩/flat 恒满 + UI 分组行落位), rid 严格 +1(两跳间零中间代); 观察端轮询/SSE 全程跨两代 = R2 回归面, 同轮 delta-sync 双皮肤全绿。桩配套两处: `_FileEntry`(dict 子类 + 属性访问 —— files 端点可序列化与真归组 `f.name` 两面交集, 纯 dict 会让归组全数落待归组补偿、纯 SimpleNamespace 会让 files 端点 500); boot-first 模式跳过站点健康两态注入(首轮 full_round 重匹配会覆写 tracker_conf)。**静态守阵**: ascii/port-zero/legacy 脚本守阵全绿(踩 1: `ui_harness.py` docstring ①② circled 类符号被 ASCII 闸拦, 改 (a)/(b))。**全量验证**: test.full 全绿(数字见 kb.baseline 本切片); 默认模式抽查 delta-sync + views 全绿(桩默认路径行为逐字不变)。计划 HTML 与两条 issue 未动(收口统一处理)。R1 单写线程守阵以「提前发布同步完成恰一次」断言落实(发布走主循环线程内既有 hook, 无异步形态); 显式 get_ident 断言评审裁量不采。
+
+- 2026-11-18 07:40 R3: 单测 6 用例(S1 面 + S2 补缺: 两代派生字段/错误原因任务线补齐/delta 两代兼容) + e2e 冷启动两跳 spec(--boot-first 模式可观测方案) + 静态守阵全绿 + test.full 全绿(数字见 kb.baseline 本切片), 产品代码零改动
+
+- 2026-11-18 07:26 S2 守阵补齐: 单测补缺(6 用例) + e2e 冷启动两跳(--boot-first 模式) + 静态守阵全绿 + test.full 全绿(数字见 kb.baseline 本切片)

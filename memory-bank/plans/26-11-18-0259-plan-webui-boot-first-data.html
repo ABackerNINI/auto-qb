@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-boot-first-data">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-18-0259">
-<meta name="doc-updated" content="26-11-18-0259">
+<meta name="doc-updated" content="26-11-18-0800">
 <meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>重启后 WebUI 首份数据 5-15s(首轮管线挡发布): 提前发布方案</h1>
 <p class="lede">本篇只回答: 重启后 WebUI 首份数据 5-15s 怎么修 —— 根因是重启后首个<b>含落库数据</b>的视图代要等首轮数据管线整条跑完才发布(请求触发的提前发布只能拿到落库前的空代), 修法是「启动首轮 apply_sync 落库后立即发布基础视图」; 归组 files 串行与挂载点探测两个管线重活不入本计划(已入池两条 issue 独立排期)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-18-0259 · <b>doc-updated</b> 26-11-18-0259 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-18-0259 · <b>doc-updated</b> 26-11-18-0800 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话「auto-qb 重启后 WEBUI 刷新后主界面要 5-15 秒才出现(约 210 种子)」问答轮根因分析(取证 2026-11-18) + 两轮 grilling D1-D11 拍板(2026-11-18) + 用户指令「立项分析, grilling and then create a plan」
 </div>
 
@@ -108,9 +108,9 @@
 </ol>
 
 <h2><span class="no">§03</span>方案总览</h2>
-<p><b>主线(D3)</b>: 启动首轮在 <code>_refresh_torrents</code> 的 <code>apply_sync</code> 落库后、<code>need_validate</code> 分支之前, <b>先走一次既有发布单点</b>(flush_views → _publish_locked)发布<b>基础视图</b>: flat 全量; singles 为全量种子的<b>超集</b>(<code>_build_singles_view</code> 语义 = 不在任何组的种子, 归组前全体都算未归组), 第二跳收缩; shows 按名称解析可给; groups 为空(组键依赖文件列表, 归组尚不可得)。管线照常继续, 结束时 on_sync_line 正常第二次发布(归组/HR 派生字段/tracker 错误原因补齐)。前端两跳落位: 种子/剧集列表 1-2s 秒出, 分组随管线补齐。</p>
+<p><b>主线(D3)</b>: 启动首轮在 <code>_refresh_torrents</code> 的 <code>apply_sync</code> 落库后、<code>need_validate</code> 分支之前, <b>先走一次既有发布单点</b>(flush_views → _publish_locked)发布<b>基础视图</b>: flat 全量; singles 为全量种子的<b>超集</b>(<code>_build_singles_view</code> 语义 = 不在任何组的种子, 归组前全体都算未归组), 第二跳收缩; shows 按名称解析可给; groups 为空(组键依赖文件列表, 归组尚不可得)。管线照常继续, 结束时 on_sync_line 正常第二次发布(归组/HR 派生字段补齐; tracker 错误原因晚一代 —— 取数器挂在任务线 <code>module.on_task_line</code>, 任务线一代补齐)。前端两跳落位: 种子/剧集列表 1-2s 秒出, 分组随管线补齐。</p>
 <p><b>触发面(D4)</b>: 仅启动首轮; 其它全量轮(reset_runtime / qB 重启补 / 热重载 L2)行为不变 —— 它们已有「发布→管线重跑→再发布」的自然节奏。判据 = 「apply_sync 落库后, <b>此前发布的最后一代尚不含落库数据</b>」(以落库前 <code>store.rounds_applied == 0</code> 判定, 不依赖种子数) —— 用户首请求抢先触发过空代发布的竞态下不失效(见 §07 R3)。</p>
-<p><b>代价面(D6, 用户已接受)</b>: 视图多落一代(rid+1, delta 客户端多吃一代); 基础视图缺 HR 派生字段/tracker 错误原因(第二跳补齐); 基础代 singles 为全量超集、第二跳收缩(观感两跳, 语义自愈); 无配置开关(D11)。</p>
+<p><b>代价面(D6, 用户已接受)</b>: 视图多落一代(rid+1, delta 客户端多吃一代); 基础视图缺 HR 派生字段(tracker 匹配后第二跳补齐)/tracker 错误原因(晚一代 —— 取数器在任务线, 任务线一代补齐); 基础代 singles 为全量超集、第二跳收缩(观感两跳, 语义自愈); 无配置开关(D11)。</p>
 <p><b>分期</b>: S0 取证 → S1 提前发布 → S2 守阵 → S3 真机验收(见 §04)。</p>
 <p><b>范围外(D5)</b>: ②首轮归组 files 逐种子单发预算化、③path_map_selfcheck/冲突检查挪出关键路径 —— 不入主修, 已入池: <code>26-11-18-0259-perf-first-round-grouping-files-serial</code> · <code>26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path</code>(Open 待排期, S0 数字喂基线)。</p>
 
@@ -134,7 +134,7 @@
   <tr><td>D3</td><td>主修法</td><td>方向① apply_sync 落库后先发布基础视图, 管线结束后第二次发布补全</td></tr>
   <tr><td>D4</td><td>触发面</td><td>仅启动首轮(store 空 → 首个全量同步); 其它全量轮不动</td></tr>
   <tr><td>D5</td><td>方向②③处置</td><td class="wr">改判: 不入主修、不做计划内 R 项, <b>入池两条 issue 独立排期</b>(2026-11-18 用户改判)</td></tr>
-  <tr><td>D6</td><td>代价面</td><td>接受: 多落一代 rid+1 / HR 字段两段式 / 基础代 singles 全量超集第二跳收缩 / 不破四视图同轮发布与单写线程</td></tr>
+  <tr><td>D6</td><td>代价面</td><td>接受: 多落一代 rid+1 / HR 字段两段式 / 基础代 singles 全量超集第二跳收缩 / 不破四视图同轮发布与单写线程。S2 实测修正: tracker 错误原因不在第二跳内补齐(取数器挂任务线, 晚一代, ver 逐代 +1) —— 守阵已按实际行为钉住</td></tr>
   <tr><td>D7</td><td>取证与验收轨道</td><td>S0 取证步前置; 守阵/e2e 照常规; real-machine 轨道先行</td></tr>
   <tr><td>D8</td><td>交付物</td><td>计划 HTML(Open) + 档案立档; 本轮零代码改动; commit 等显式指令</td></tr>
   <tr><td>D9</td><td>North Star 观测面</td><td>分视图口径: flat/singles/shows ≤2s 硬判据; groups 第二跳记录数字不设硬判据(提速承接②)</td></tr>
@@ -148,13 +148,14 @@
   <tr><td>R1</td><td>提前发布代与管线中间态竞态</td><td>多线程并发写视图</td><td>发布点在主循环线程内同一拍、view_lock 单点, 结构上无并发写; 守阵钉单写线程断言</td></tr>
   <tr><td>R2</td><td>delta 客户端多吃一代</td><td>SSE/轮询消费节奏</td><td>一次性代价; SSE 主路径每版必拉(消费动态实测口径)无积压; e2e delta-sync 回归覆盖</td></tr>
   <tr><td>R3</td><td>启动判据误伤真 0 种子库 / 竞态下判据失效</td><td>qB 真库无种子; 或用户首请求早于 apply_sync 到达</td><td>判据 = 「落库前 <code>store.rounds_applied == 0</code> 且落库后发布」, 不依赖种子数(0 种子库发布空代 = 现状行为无差异), 竞态下(空代已存在)判据仍为真、发布照常触发</td></tr>
-  <tr><td>R4</td><td>基础视图缺 HR/错误原因字段被误读为数据丢失</td><td>用户在第二跳前看行字段</td><td>第二跳 ≤ 管线时长自愈; 档案记语义; 真机验收观察</td></tr>
+  <tr><td>R4</td><td>基础视图缺 HR/错误原因字段被误读为数据丢失</td><td>用户在第二跳前看行字段</td><td>第二跳 ≤ 管线时长自愈(HR 派生字段/site); tracker 错误原因晚一代(取数器在任务线 <code>module.on_task_line</code>, 任务线一代补齐) —— 档案记语义; 真机验收观察</td></tr>
   <tr><td>R5</td><td>修后 groups 页仍 2-6s 被误判为未修</td><td>用户只看默认落地页</td><td>分视图口径已写明(§01/§06 D9); S0/S3 数字分视图记录; groups 提速指向②的 issue</td></tr>
 </table>
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-18-0259</span> 初版: 会话问答轮根因分析(排除面桩实测 + 根因链取证) → 用户指令「立项分析, grilling and then create a plan」→ 两轮 grilling 11 问拍板(D5/D10 用户改判) → 计划入库 Open。S0-S3 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-18-0800</span> S2 落地按实测改写 tracker 错误原因语义: 取数器挂任务线(module.on_task_line), 不在第二跳内补齐、晚一代(ver 逐代 +1); 守阵 tests/test_webui_boot_first_publish.py 钉实际行为。同轮 playwright.config.mjs 增 boot-first 轮隔离(E2E_BOOT_FIRST=on 时 testMatch 白名单只剩 e2e/boot-first-two-hop.spec.mjs, 防矩阵轮误跑全套件假红)</li>
 </ul>
 
 </div>

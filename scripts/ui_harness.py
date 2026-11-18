@@ -39,6 +39,13 @@
     --hr-scene on|empty|off(默认 on): HR 在线核实桩场景(计划 26-10-04-0312 S5) ——
                    on 灌五形态拉取历史(表3., HHan/HDSky 跨站时间轴), empty 验空态,
                    off 验未启用态; 配套 e2e 轮 E2E_HR_SCENE(仅 on 跑表3.断言组, e2e/hr-history.spec.mjs)
+    --boot-first on|off(默认 off): 冷启动两跳观测模式(plan 26-11-18-0259 S2 e2e) ——
+                   store **不预灌**: 启动首轮由主线程经真实 _sync_line 跑(空 store ->
+                   rounds_applied==0 -> apply_sync 落库后提前发布基础代), 归组 files 单发在
+                   闸口挂起; HTTP 侧经 /__harness__/boot_go 放行、/__harness__/boot_gate 开闸,
+                   分两跳观察「首跳基础代(flat 满/groups 空/singles 超集) -> 第二跳补全代
+                   (groups 落位/singles 收缩)」。配套 e2e 轮 E2E_BOOT_FIRST(仅 on 跑
+                   e2e/boot-first-two-hop.spec.mjs); 默认模式(预灌 + 直写组)行为逐字不变。
 
 注意
 ----
@@ -219,12 +226,7 @@ def _install_search_refresh_probe(app, mgr, site_conf) -> None:
         )
         mgr.client.torrents[h] = tor
         mgr.client.files_map[h] = [
-            {
-                "name": f"{name}/{name}.mkv",
-                "size": size,
-                "progress": 1.0,
-                "priority": 1
-            },
+            _FileEntry(name=f"{name}/{name}.mkv", size=size, progress=1.0, priority=1),
         ]
         mgr._refresh_torrents(False)
         # !生产里视图发布由主循环每拍 flush_views; 桩没有主循环 —— 不补这一次, store 有了新种子、
@@ -771,6 +773,82 @@ def _inject_hr_history(mgr, data_dir: str, scene: str):
     )
 
 
+class _FileEntry(dict):
+    """文件条目: dict 兼容 + 属性访问(qB 真机同形态)
+
+    两个消费面的交集: (a)详情抽屉 /api/torrents/{hash}/files 直出 JSONResponse(dict 可序列化);
+    (b)真实归组管线读 f.name / f.size(属性访问, qB TorrentFileDictionary 是对象)。冷启动两跳
+    模式(--boot-first on)走真归组, 纯 dict 会让 300 次归组全数落进待归组补偿
+    ('dict' object has no attribute 'name', 2026-11-18 实测); 纯 SimpleNamespace 会让 files
+    端点 500(json.dumps 不认)。dict 子类两头都过, JSON 输出与纯 dict 逐字节一致。
+    """
+    def __getattr__(self, k):
+        try:
+            return self[k]
+        except KeyError as e:
+            raise AttributeError(k) from e
+
+
+class _BootGate:
+    """归组 files 单发闸(冷启动两跳观测, plan 26-11-18-0259 S2 e2e; 仅 --boot-first on 武装)
+
+    动机: 桩管线(进程内 FakeClient)整条跑完是毫秒级, 「首跳基础代」的 HTTP 观察窗口天然
+    不存在 —— 与 S0 真机取证同款瓶颈(管线挡住发布窗口)。武装后首个 torrents_files 调用
+    (归组逐种子单发的第一发)挂起, 管线就停在「提前发布基础代之后、归组之前」—— HTTP 侧
+    确定性观察基础代; open() 放行后管线照常完成, 既有收尾发布点落补全代。
+
+    挂点安全性: 提前发布在 _refresh_torrents 内 apply_sync 之后立即执行(在任何 files 单发
+    之前), 所以无论首个调用来自归组还是其它相位, 闸口都停在基础代已发布的窗口内。
+    超时自动放行(默认 30s): 观测端崩溃/忘记开闸时管线自行走完, 桩永不死锁。
+    """
+    def __init__(self, client, timeout_s: float = 30.0):
+        self._event = threading.Event()
+        self._timeout = timeout_s
+        self._orig = client.torrents_files
+        client.torrents_files = self._files  # 实例级替换: 包装 FakeClient 的 files 单发
+
+    def _files(self, h, **kw):
+        if not self._event.wait(self._timeout):
+            print("[harness] boot gate 超时自动放行(观测端未开闸?)", flush=True)
+        return self._orig(h, **kw)
+
+    def open(self) -> None:
+        self._event.set()
+
+
+def _install_boot_first_controls(app, mgr, boot_go: "threading.Event", gate: _BootGate) -> None:
+    """冷启动两跳观测控制端点(plan 26-11-18-0259 S2 e2e; 仅回环测试桩, 不进生产)
+
+    - POST /__harness__/boot_go : 放行主线程的启动首轮, 并等「提前发布的基础代」落位后返回
+      —— 观测端随后轮询拿到的就是首跳; 放行前先补一次 web.touch(提前发布门控要求
+      Web 客户端活跃, 观测端只打本端点时也能工作)。
+    - POST /__harness__/boot_gate: 开归组 files 闸 -> 管线完成 -> 既有收尾发布点落补全代。
+    路由登记与 _install_search_refresh_probe 同款: 先登记再整体挪到路由表最前
+    (create_app 末尾的 StaticFiles "/" 是 POST 兜底匹配, 后追加的路由永远轮不到)。
+    """
+    first_probe = len(app.router.routes)
+
+    @app.post("/__harness__/boot_go")
+    def _boot_go():
+        ver0 = mgr.web.group_view_ver
+        mgr.web.touch()  # 提前发布门控(is_active: WEB_VIEW_TTL=10s)需要活跃窗口
+        boot_go.set()
+        deadline = time.time() + 15.0
+        while time.time() < deadline and mgr.web.group_view_ver == ver0:
+            time.sleep(0.05)  # 等基础代落位(闸口挂起前必已发布; 超时兜底防观测端死等)
+        return {"go": True, "ver_before": ver0, "ver": mgr.web.group_view_ver}
+
+    @app.post("/__harness__/boot_gate")
+    def _boot_gate():
+        ver0 = mgr.web.group_view_ver
+        gate.open()
+        return {"gate": "open", "ver_before": ver0, "ver": mgr.web.group_view_ver}
+
+    probes = app.router.routes[first_probe:]
+    del app.router.routes[first_probe:]
+    app.router.routes[0:0] = probes
+
+
 def _target_hashes(mgr, cmd: str, body: dict):
     """命令影响到的 hash 列表(桩里没有真实 qB, 只能按 payload 展开)"""
     if cmd in ("pause_torrent", "resume_torrent"):
@@ -1130,6 +1208,14 @@ def main() -> int:
         help="站点健康两态桩(默认 on, 见 _inject_site_alerts): 1 行缺站点配置 + 1 行 tracker 报错, "
         "供 e2e/site-alerts.spec.mjs 断言站点 chip 左槽图标(计划 26-10-19-2007 S3)",
     )
+    ap.add_argument(
+        "--boot-first",
+        choices=["on", "off"],
+        default="off",
+        help="冷启动两跳观测模式(默认 off, 见文件头参数节): on = store 不预灌, 启动首轮经真实"
+        " _sync_line 在主线程跑(提前发布基础代), 归组 files 单发在闸口挂起, 由"
+        " /__harness__/boot_go 与 /__harness__/boot_gate 分两跳放行。配套 e2e 轮 E2E_BOOT_FIRST",
+    )
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
         "--skip-check-menu",
@@ -1240,18 +1326,33 @@ def main() -> int:
     _inject_hr_history(mgr, tmp, args.hr_scene)
     if args.hr_scene != "off":
         print(f"[harness] HR 场景={args.hr_scene}: 站点状态 + 拉取历史表3.已注入(HHan/HDSky)")
-    seed_store(mgr, torrents)
+    # 冷启动两跳模式(plan 26-11-18-0259 S2 e2e): store 不预灌 —— 启动首轮由主线程经真实
+    # _sync_line 跑(空 store -> rounds_applied==0 -> apply_sync 落库后提前发布基础代),
+    # 归组在 files 闸口挂起; 默认模式(预灌 + 直写组 + 启动即 rebuild)行为逐字不变。
+    boot_first = args.boot_first == "on"
+    boot_go: "threading.Event" = threading.Event()
+    gate = _BootGate(mgr.client) if boot_first else None
+    if boot_first:
+        mgr.config.grouping.enabled = True  # 冷启动走真实归组管线(默认模式直写组绕过它)
+        print("[harness] 冷启动两跳模式: store 空, 启动首轮等 /__harness__/boot_go 放行; 归组在 files 闸口挂起", flush=True)
+    else:
+        seed_store(mgr, torrents)
     for tor in torrents:  # 抽屉/详情端点按 hash 取, 与 store 保持一致
         mgr.client.torrents[tor.hash] = tor
-    # 对齐增量同步游标(issue 26-11-03-1135): seed_store 直写 by_hash 绕过了首轮同步, store.rid
-    # 仍为 0 —— 首个 /__harness__/add_torrent|remove_torrent 探针拿 rid=0 会得到 full_update,
-    # _refresh_torrents 随即 emit full_round, TrackerModule 按 client.torrents_trackers 重匹配所有
-    # tracker_conf=None 的记录, 把 _inject_site_alerts 注入的 no_site_conf 行改回 HHan(站点告警
-    # 用例便随“哪个 spec 先用了探针”而红)。生产首轮本就是全量轮, 这里补跑一次真实全量同步, 让
-    # 后续探针都走增量路径。注入必须在这之后: 否则全量 delta 会覆盖注入的 tracker 字段。
-    mgr.store.apply_sync(mgr.api)
-    if args.site_alert == "on":
-        _inject_site_alerts(torrents)
+    if boot_first:
+        # 增量游标对齐由启动首轮本身完成(apply_sync 即首个全量轮); 站点健康两态注入跳过:
+        # 首轮 full_round 会重匹配 tracker_conf=None 的记录, 把 no_site_conf 行改回 HHan
+        print("[harness] 冷启动两跳模式: 跳过站点健康两态注入(首轮 full_round 重匹配会覆写 tracker_conf)", flush=True)
+    else:
+        # 对齐增量同步游标(issue 26-11-03-1135): seed_store 直写 by_hash 绕过了首轮同步, store.rid
+        # 仍为 0 —— 首个 /__harness__/add_torrent|remove_torrent 探针拿 rid=0 会得到 full_update,
+        # _refresh_torrents 随即 emit full_round, TrackerModule 按 client.torrents_trackers 重匹配所有
+        # tracker_conf=None 的记录, 把 _inject_site_alerts 注入的 no_site_conf 行改回 HHan(站点告警
+        # 用例便随“哪个 spec 先用了探针”而红)。生产首轮本就是全量轮, 这里补跑一次真实全量同步, 让
+        # 后续探针都走增量路径。注入必须在这之后: 否则全量 delta 会覆盖注入的 tracker 字段。
+        mgr.store.apply_sync(mgr.api)
+        if args.site_alert == "on":
+            _inject_site_alerts(torrents)
     # 抽屉 peers 页签的数据面(issue 26-10-07-2309): FakeClient.peers_map 默认恒空 => peers 页签
     # 在桩服务下永远渲染空态, e2e 与截图目检从未覆盖「有数据」渲染路径。按种子序号灌合成对端
     # (含 flags/速度/进度/客户端多样性, 见 _make_peers_response), 端点 /api/torrents/{h}/peers
@@ -1266,25 +1367,27 @@ def main() -> int:
         # (一目录一文件、优先级一普通一跳过)让经典表走「有数据」渲染路径, e2e 可断言行内容
         if tor.hash not in mgr.client.files_map:
             mgr.client.files_map[tor.hash] = [
-                {
-                    "name": "Show/Season 01/Show - S01E01.mkv",
-                    "size": 734003200,
-                    "progress": 1.0,
-                    "priority": 1
-                },
-                {
-                    "name": "Show/Season 01/Show - S01E02.mkv",
-                    "size": 712000000,
-                    "progress": 0.42,
-                    "priority": 0
-                },
+                _FileEntry(
+                    name="Show/Season 01/Show - S01E01.mkv",
+                    size=734003200,
+                    progress=1.0,
+                    priority=1,
+                ),
+                _FileEntry(
+                    name="Show/Season 01/Show - S01E02.mkv",
+                    size=712000000,
+                    progress=0.42,
+                    priority=0,
+                ),
             ]
 
     # 添加种子窗口的分类/标签候选(2026-10-09): 与 peers/trackers 同病 —— 默认桩恒空 => 那两条
     # 下拉的「最近使用排序」渲染路径在 e2e 与截图里从未被覆盖过(see _inject_add_options)。
     _inject_add_options(mgr, torrents)
 
-    if not args.no_groups:
+    if boot_first:
+        pass  # 组面由真实归组管线在开闸后建出(组键 = 真机口径 (save_path, 文件列表))
+    elif not args.no_groups:
         groups = {}
         for i in range(min(args.groups, len(torrents) // 2)):
             a, b = torrents[i * 2], torrents[i * 2 + 1]
@@ -1302,12 +1405,16 @@ def main() -> int:
         mgr.store.member_to_key = {h: k for k, hs in groups.items() for h in hs}
     # relocate 投影的数据面(issue 26-11-06-0330): job 快照在 rebuild_views 前挂上, 首轮视图即带标注
     _inject_relocate_jobs(mgr, torrents)
-    mgr.web.rebuild_views()
+    if not boot_first:
+        mgr.web.rebuild_views()
     _start_command_pump(mgr, args.cmd_result, args.state_revert_ms, args.cmd_wait_ms)
 
     app = create_app(mgr)
     # 搜索自动更新 e2e 的控制面(plan 26-11-03-0120 P3; 仅回环测试桩, 不进生产)
     _install_search_refresh_probe(app, mgr, site_conf)
+    if boot_first:
+        # 冷启动两跳观测控制面(plan 26-11-18-0259 S2 e2e; 仅回环测试桩, 不进生产)
+        _install_boot_first_controls(app, mgr, boot_go, gate)
     # 捕获契约(计划 26-11-03-0316 §03): Playwright `webServer.wait` 的正则从这里取实绑定口,
     # 必须形如 `[harness] http://127.0.0.1:<实端口>/...` 且 flush=True。
     print(
@@ -1320,7 +1427,25 @@ def main() -> int:
 
     uv_config = uvicorn.Config(app, host=args.host, port=actual, log_level="warning")
     try:
-        uvicorn.Server(uv_config).run(sockets=[sock])
+        if boot_first:
+            # 冷启动两跳: uvicorn 先行(观测端必须能 touch + 放行), 主线程当"主循环"跑启动首轮 ——
+            # 单一写线程假设不破: 视图/state 的写都在本线程, HTTP 侧只有 ensure_state 的
+            # web 线程语义(与生产同一把 view_lock)。
+            server = uvicorn.Server(uv_config)
+            thread = threading.Thread(
+                target=server.run, kwargs={"sockets": [sock]}, daemon=True, name="harness-uvicorn"
+            )
+            thread.start()
+            while not server.started:
+                time.sleep(0.05)
+            print("[harness] 冷启动两跳: HTTP 已就绪, 等观测端 boot_go ...", flush=True)
+            if not boot_go.wait(timeout=60.0):
+                print("[harness] boot_go 超时(无观测端放行), 照常跑启动首轮", flush=True)
+            mgr._sync_line(False)  # 启动首轮: 提前发布基础代 -> 归组挂闸 -> (boot_gate 开闸后)收尾发布补全代
+            print("[harness] 冷启动启动首轮完成(基础代/补全代两跳均已落位)", flush=True)
+            thread.join()  # 桩是长驻进程: 主线程在此等 uvicorn(收尾由 Playwright teardown 兜底)
+        else:
+            uvicorn.Server(uv_config).run(sockets=[sock])
     finally:
         sock.close()
     return 0
