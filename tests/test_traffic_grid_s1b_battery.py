@@ -1,62 +1,45 @@
-"""test_traffic_grid_s1b_battery 测试计划: 26-11-15-1104 S1b 收口电池(T3 = F3 holding 新定义
-+ F2 后半有界空桶持有回填)—— A1/A5 验收仿真流
+"""test_traffic_grid_s1b_battery 测试计划(26-11-18-0037 T1c-2 退役转世): 26-11-15-1104
+S1b 收口电池(T3 有界空桶持有回填 + F3 尾桶 holding)已随挂钟桶面退役 —— A1/A5 验收语义
+承袭到样本分组装配新契约面, _SamplerSim 写侧仿真器保留复用:
 
 ## 测试计划(每个测试函数一条)
-- test_a1_steady_beat_diff_tail_within_two_buckets: (A1)稳态恒速仿真逐拍差分(3 seed:
-  11/23/37)—— 相邻两拍 payload(rate + totals 两面)变化桶数 <= 2 且变化桶只在尾部 1-2 段
-  (新样本合理收敛); 值不振荡(同一桶值不出现 A->B->A 翻转); 仿真流含写侧累积漂移
-  (DRIFT_TOL_MS 量级)与 dt 修正跳变(恰等桶宽跳桶的写侧形态)
-- test_a5_active_endpoint_on_line_and_no_false_break: (A5 活跃态)采样器活跃时曲线终点恒落
-  判定线(每拍尾桶非 null); 覆盖段无伪断线(首个非 null 桶到尾桶之间无 None 洞); dt 修正
-  跳变跨过的空桶 = 有界持有回填(is_hold 点, held = 前桶速率, totals = 前桶快照, w = 0)
-  —— i=40 注入相位钉定的保证跳桶拍(_force_skip_beat), held 回填断言体实际执行
-  (skip_asserted 计数), 非死代码
-- test_a5_stall_over_bound_honest_null: (A5 停滞态, R8「间隙过界仍 null」)停止进样后间隙
-  有界(<= max(B, si) x 2)的拍尾桶仍 held 落线; 间隙过界后尾桶 null 诚实断线且不再恢复;
-  停滞期已定影桶逐拍不变(不回写); 判据界两侧(有界 held / 过界 null)都被真实观测到
-- test_a5_disconnect_n_run_stays_null: (A5 断连态, R8「真断连仍 null」)两态: 有界断连缝
-  (单拍 disconnect, 对末真实样本对跨 <= 判据界且跨过 1 枚空桶 —— 几何满足回填面, 仅
-  断连守卫 marked/null_since_obs 拦住回填, 空桶保持 null = 守卫判别力钉)与长断连(观测缝
-  > 60s 停机洞, 重连桶速率 None 不造值, 快照照记); 重连拍尾桶 = 诚实缺口(held 被标记
-  清空 -> 速率面 (None, None)), 重连后首个真实差分拍恢复落线
+- test_a1_steady_beat_diff_tail_appends_only: (A1)稳态恒速仿真逐拍差分(3 seed: 11/23/37)
+  —— 新契约下逐样本点一旦落定恒不变(k=1 每样本一点, 值 = 该样本差分/覆盖, 一次算定):
+  重叠 t 逐拍恒等(无振荡面), 新点只出现在尾部(追加), 掉点只出现在窗沿(前缀收缩),
+  变化集 = 新增 + 前缀掉出; 仿真流含写侧累积漂移(DRIFT_TOL_MS 量级)与 dt 修正跳变
+- test_a5_active_endpoint_true_value_no_false_break: (A5 活跃态)采样器活跃时曲线终点 =
+  最新样本真值(t = 末样本 ts, 值 = 真实差分/覆盖, 无持有克隆); 覆盖段无空值点(dt 修正
+  跳变/偶发 4s 大步进都被 dt 链吸收 —— 未采样非断连, 旧「跳变空桶有界持有回填」面随
+  桶面退役); 镜像不变量逐拍核验(读侧块首槽 == 写侧块首)
+- test_a5_stall_freezes_at_last_sample: (A5 停滞态)停止进样后窗口推进 —— 点集只在窗沿
+  收缩, 无新点无空值点, 末点 t/值恒定(诚实滞后; 旧「有界 held 落线/过界 null」二态随
+  持有面退役 —— 停流可见性由前端徽标按末样本 ts 承载, §03/D3)
+- test_a5_disconnect_explicit_null_and_reconnect: (A5 断连态)断连 = 显式空值点(n 游程
+  折叠一点, 端点 = 空值点, 无真值点尾随); 重连样本 = 诚实缩放(断连面 marked -> 摊配
+  回收 step x 覆盖 // span, 速率 < 真实速率不冒充), totals = 跨缺口全量快照差分(字节
+  真值); 长断连(观测缝 > 60s 停机洞)-> 重连样本速率 None 不造值(totals 真值), 空值点
+  序列如实; 重连后首拍起终点恢复落线
 
-仿真形态(生产同构): 采样间隔 si = 1.5s(生产现况), 1m 窗桶宽 B = 1.5(F1: k=1, 桶宽 = 采样
-整倍); 写侧游标仿真 traffic_sample_mod 形态 —— 块首 B.start = int(首记录实测), 每拍标称推进
-si, 累积漂移 |actual - (游标 + si)| > DRIFT_TOL_MS(250ms)时本拍写实测 dt_ms 并自然复位;
-字节按真实耗时累积(恒速 1000/500 B/s, 计数器单调; qB 不可达拍计数器冻结)。活尾 = 整块
-head_pending 形态(start_epoch = block_start —— 读侧链锚 == 写侧游标, 镜像不变量由
-_beat_payload 的首槽锚断言逐拍核验); 判据界 gap_bound = max(B, si) x 2 与
-v4_series_points gap_bound_s 同一单点值。
+仿真形态(生产同构): 采样间隔 si = 1.5s(生产现况), 1m 窗(窗内样本 ~40 -> k=1); 写侧
+游标仿真 traffic_sample_mod 形态 —— 块首 B.start = int(首记录实测), 每拍标称推进 si, 累积
+漂移 |actual - (游标 + si)| > DRIFT_TOL_MS(250ms)时本拍写实测 dt_ms 并自然复位; 字节按
+真实耗时累积(恒速 1000/500 B/s, 计数器单调; qB 不可达拍计数器冻结)。活尾 = 整块
+head_pending 形态(start_epoch = block_start —— 读侧链锚 == 写侧游标, 镜像不变量由 _beat
+的首槽锚断言逐拍核验); 活尾复原 = v4_live_tail_slots 无 now 形态(持有延伸分支已退役)。
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— now 由仿真显式推进, 窗口/活尾逐拍直构。
 """
 
-import math
 import random
 
-from auto_qb.core.traffic_grid import (
-    WindowGrid,
-    _floor_buckets,
-    rate_points,
-    series_totals_points,
-    v4_grid_obs,
-    v4_series_points,
-)
-from auto_qb.core.traffic_store import LiveTail, V4NullRun, V4Sample, v4_live_tail_slots
+from auto_qb.core.traffic_group_assembly import assemble_group_points
+
+from auto_qb.core.traffic_store import LiveTail, V4NullRun, V4Sample, v4_block_slots, v4_live_tail_slots
 from auto_qb.core.traffic_store_common import DRIFT_TOL_MS
 
 _SI = 1.5  # 采样间隔(生产现况)
-_B = 1.5  # 1m 窗桶宽(F1: k=1, 桶宽 = 采样整倍)
-_GAP_BOUND = max(_B, _SI) * 2.0  # 判据界单点(与 v4_live_tail_slots max_gap_s / gap_bound_s 同值)
-_DRIFT_TOL = DRIFT_TOL_MS / 1000.0  # 写侧漂移容差(延伸判据的链端超前界, 单点引用)
+_DRIFT_TOL = DRIFT_TOL_MS / 1000.0  # 写侧漂移容差(dt 修正触发的累积界, 单点引用)
 _START = 1_800_000_000  # 时钟基点(纯测试时刻; 块首 = int(首记录实测), 非本值)
-
-
-def _grid_1m(now):
-    """1m 窗栅格(F1 桶宽 = si 整倍 k=1 -> B = si; floor 对齐 + floor+1 进行中桶)"""
-    t0 = int(now) - 60
-    t1 = int(now)
-    return WindowGrid("1m", t0, t1, _B, "raw", _floor_buckets(t0, t1, _B))
 
 
 class _SamplerSim:
@@ -123,222 +106,163 @@ class _SamplerSim:
             open_run=None,
         )
 
+    def slots(self):
+        """当前全部记录的槽序(磁盘 + 活尾复原的并集: head_pending 整块形态下活尾槽 ==
+        整块重算槽, 无需去重; 生产形态去重在缓存锁内, 本仿真直喂装配面)"""
+        return v4_live_tail_slots(self.tail())
 
-def _force_skip_beat(sim):
-    """构造保证跳桶的一拍(评审轮1 #3): 落点钉到「游标所在桶 + 2」内 —— 跨过恰好 1 枚
-    空桶, 且显式对跨 <= 2B = 判据界(有界回填必触发, 不会滑成停滞 null)。
-
-    相位钉定: target = (b+2)B + min(0.05, mod/2)(mod = 游标桶内相位):
-    - mod >= 0.1: dt = 2B + 0.05 - mod <= 2B - 0.05, 落点距桶界 0.05(ms 舍入界外);
-    - mod < 0.1: dt = 2B - mod/2 <= 2B, 落点 = (b+2)B + mod/2(>= 桶界; mod 极小时
-      dt_ms 舍入恒 = 3000 -> 落点 = (b+2)B + mod >= 桶界, floor 仍入 b+2)。"""
-    b = math.floor(sim.cursor / _B)
-    mod = sim.cursor - b * _B
-    target = (b + 2) * _B + min(0.05, mod / 2)
-    return sim.beat(gap=target - sim.now)
-
-
-def _beat_payload(sim, now):
-    """单拍 payload(生产同构: 活尾合流 -> 点位归属归桶 -> 响应两面); rate/totals 字典
-    保留 null 桶(值 None —— 空桶断线语义, 与响应数组的 null 槽位同形)。
-    镜像不变量逐拍核验: 读侧块首槽 == 写侧块首(链锚对齐, 评审轮1 #1 回归面)。"""
-    grid = _grid_1m(now)
-    tail_slots = v4_live_tail_slots(sim.tail(), now=now, max_gap_s=_GAP_BOUND)
-    assert tail_slots[0].ts == float(sim.block_start), (
-        tail_slots[0].ts,
-        sim.block_start,
-        "读侧链锚 != 写侧块首(镜像不变量破坏)",
-    )
-    points = v4_series_points((), grid, tail_slots=tail_slots, gap_bound_s=_GAP_BOUND)
-    obs = v4_grid_obs(points, grid)
-    rate = {b: ((d["dl"], d["up"]) if d is not None else None) for b, d in zip(grid.buckets, rate_points(obs, grid))}
-    totals = {
-        b: ((d["dl"], d["up"]) if d is not None else None)
-        for b, d in zip(grid.buckets, series_totals_points(obs, grid))
-    }
-    return grid, rate, totals, points
+    def beat_payload(self):
+        """单拍装配(生产同构: 活尾槽序 -> 样本分组装配, 窗 = [req_now-60, req_now));
+        镜像不变量逐拍核验: 读侧块首槽 == 写侧块首(链锚对齐, 评审轮1 #1 回归面)。"""
+        slots = self.slots()
+        assert slots[0].ts == float(self.block_start), (
+            slots[0].ts,
+            self.block_start,
+            "读侧链锚 != 写侧块首(镜像不变量破坏)",
+        )
+        res = assemble_group_points(slots, self.req_now - 60, self.req_now, _SI)
+        return res
 
 
-def test_a1_steady_beat_diff_tail_within_two_buckets():
-    """(A1)稳态恒速 + 漂移/dt 修正跳变流逐拍差分(3 seed): 变化桶数 <= 2, 变化桶只在
-    尾 1-2 段, 值不振荡(A->B->A 翻转不存在)—— 封口桶不可变使振荡在语义上不可能,
-    此断言为其回归面"""
+def _real(res):
+    """真值点 (t, dl, up) 序列(空值点 = totals None 剔除)"""
+    return [(p["t"], p["dl"], p["up"]) for p, t in zip(res.points, res.totals) if t is not None]
+
+
+def _null_ts(res):
+    """显式空值点 t 序列(判据 = totals None)"""
+    return [p["t"] for p, t in zip(res.points, res.totals) if t is None]
+
+
+def test_a1_steady_beat_diff_tail_appends_only():
+    """(A1)稳态恒速 + 漂移/dt 修正跳变流逐拍差分(3 seed): 逐样本点落定恒不变(k=1 一次
+    算定)—— 重叠 t 逐拍恒等、新点只追加在尾、掉点只收缩在窗沿(变化集 = 新增 + 前缀
+    掉出), 无振荡面(旧「封口桶不可变」的振荡不可能性由逐样本一次算定自然承载);
+    dt 修正跳变(显式 dt > 标称 + 100ms)真实出现在仿真流中(漂移累积超容差)"""
     for seed in (11, 23, 37):
         sim = _SamplerSim(seed=seed)
-        history: dict = {}  # 桶键 -> rate 值历史(振荡检测)
-        jump_count = 0
         prev = None
+        jump_count = 0
         for i in range(80):
             rec = sim.beat()
-            grid, rate, totals, points = _beat_payload(sim, sim.req_now)
-            if prev is not None and i >= 30:  # 预热 30 拍后断言(窗口被链上下文填满)
-                changed = [t for t in rate.keys() & prev[0].keys() if rate[t] != prev[0][t]]
-                changed_t = [t for t in totals.keys() & prev[1].keys() if totals[t] != prev[1][t]]
-                assert len(changed) <= 2, (seed, i, sorted(changed), "rate 面变化桶数超界")
-                assert len(changed_t) <= 2, (seed, i, sorted(changed_t), "totals 面变化桶数超界")
-                for t in changed:
-                    # 变化桶只在尾部 1-2 段(尾桶与次尾桶; 桶宽 B 步进)
-                    assert t >= grid.last - 2 * _B, (seed, i, t, grid.last, "变化桶越出尾部两段")
-                for t in changed:
-                    h = history.setdefault(t, [])
-                    h.append(rate[t])
-                    # 振荡 = 值回到两个拍之前的值且与上一拍不同(A->B->A)
-                    assert not (len(h) >= 3 and h[-1] == h[-3] and h[-1] != h[-2]), (seed, t, h, "值振荡")
-            prev = (rate, totals)
-            # dt 修正跳变(显式 dt > 标称 + 100ms —— 正向漂移修正的写侧形态)计数
+            res = sim.beat_payload()
             if rec.dt_ms is not None and rec.dt_ms > _SI * 1000 + 100:
-                jump_count += 1
-        # 仿真流确含 dt 修正跳变(DRIFT_TOL_MS 量级漂移的自然结果)
+                jump_count += 1  # dt 修正跳变(正向漂移修正的写侧形态)
+            if i < 10:  # 预热: 链尚短
+                prev = res
+                continue
+            cur = {p["t"]: (p["dl"], p["up"]) for p, t in zip(res.points, res.totals) if t is not None}
+            prv = {p["t"]: (p["dl"], p["up"]) for p, t in zip(prev.points, prev.totals) if t is not None}
+            overlap = set(cur) & set(prv)
+            # 重叠 t 逐拍恒等(样本值一次算定不再改写 —— 振荡在语义上不可能)
+            for t in overlap:
+                assert cur[t] == prv[t], (seed, i, t, cur[t], prv[t], "重叠样本点值漂移")
+            # 新点只在尾部追加(新样本), 掉点只在窗沿(前缀)
+            added = set(cur) - set(prv)
+            dropped = set(prv) - set(cur)
+            assert all(t > max(prv) for t in added), (seed, i, sorted(added), "非尾部新增点")
+            assert all(t < min(cur) for t in dropped), (seed, i, sorted(dropped), "非窗沿掉点")
+            assert not _null_ts(res), (seed, i, _null_ts(res), "稳态流无空值点")
+            prev = res
         assert jump_count > 0, (seed, "仿真流应含 dt 修正跳变(漂移累积超容差)")
 
 
-def test_a5_active_endpoint_on_line_and_no_false_break():
-    """(A5 活跃态)终点恒落判定线 + 覆盖段无伪断线 + 跳变空桶有界回填(held 面):
-    i=40 注入保证跳桶拍(_force_skip_beat), held 回填断言体实际执行(skip_asserted 计数
-    —— 评审轮1 #3: 原唯一自然跳桶事件落 warmup 被跳过, 断言零执行)"""
+def test_a5_active_endpoint_true_value_no_false_break():
+    """(A5 活跃态)终点 = 最新样本真值: 每拍末点 t = 末样本槽 ts(链端, 无持有克隆 ——
+    旧面 now 延伸 holding 槽面退役), 值 = 真实差分/覆盖(恒速 1000/500, 抖动容差带);
+    覆盖段无空值点(偶发 4s 大步进被 dt 链吸收 —— 未采样非断连, 旧跳变回填面退役);
+    镜像不变量逐拍核验(见 _SamplerSim.beat_payload)"""
     sim = _SamplerSim(seed=23)
-    skip_detected = 0
-    skip_asserted = 0  # held 回填断言体实际执行次数(非死代码证明)
     for i in range(80):
-        rec = _force_skip_beat(sim) if i == 40 else sim.beat()
-        # dt 修正跳变检测: 本拍显式 dt 使样本跨过 >= 1 个栅格桶 -> 记录空桶与源桶键
-        skip_pair = None
-        if rec.dt_ms is not None:
-            first = _grid_1m(sim.req_now).first
-            prev_ts = sim.cursor - rec.dt_ms / 1000.0
-            i_prev = int((prev_ts - first) // _B)
-            i_cur = int((sim.cursor - first) // _B)
-            if i_cur > i_prev + 1:
-                skip_pair = (i_prev + 1, i_prev)
-                skip_detected += 1
-        grid, rate, totals, points = _beat_payload(sim, sim.req_now)
-        # 跳变跨过的空桶(窗内) = held 回填点: held = 前桶速率, totals = 前桶快照, w = 0
-        # (置于预热 continue 之前 —— 保证跳桶拍在 i=40, 此块必实际执行)
-        if skip_pair is not None:
-            bf_key = grid.first + skip_pair[0] * _B
-            src_key = grid.first + skip_pair[1] * _B
-            if bf_key >= grid.t0:
-                skip_asserted += 1
-                bf = next(p for p in points if p.t == bf_key)
-                assert bf.is_hold and bf.w == 0.0, (i, bf, "跳变空桶应为 held 回填点")
-                src = next(p for p in points if p.t == src_key)
-                assert (bf.dl_rate, bf.up_rate) == (src.dl_rate, src.up_rate), (i, bf, src, "held = 前桶速率")
-                assert (bf.dl_total, bf.up_total) == (src.dl_total, src.up_total), (i, bf, src, "totals = 前桶快照")
-                assert rate.get(bf_key) is not None, (i, bf_key, "回填桶不落线 = 伪断线")
-        if i < 5:
-            continue  # 预热: 块首几拍链尚短(终点/覆盖段断言需链上下文)
-        # 终点恒落判定线: 尾桶非 null(尾桶 = 进行中桶, holding/held 或真实观测)
-        assert rate.get(grid.last) is not None, (i, grid.last, "尾桶 null = 终点脱线")
-        # 覆盖段无伪断线: 首个非 null 桶到尾桶之间无 None 洞
-        covered = [t for t in sorted(rate) if t >= grid.t0 and rate[t] is not None]
-        first = covered[0]
-        hole = [t for t in rate if first <= t <= grid.last and rate[t] is None]
-        assert not hole, (i, hole, "覆盖段出现伪断线")
-    # 保证跳桶拍被检测且回填断言体实际执行(评审轮1 #3: 非死代码)
-    assert skip_detected > 0 and skip_asserted >= 1, (skip_detected, skip_asserted, "跳桶事件/断言体未执行")
+        # i % 17 == 5 注入 4s 大步进(恰跨数个采样间隔的写侧形态 —— dt 链吸收, 无空值点)
+        sim.beat(gap=4.0) if i % 17 == 5 and i > 0 else sim.beat()
+        if i < 3:
+            continue  # 预热: 链首样本无基线 0 线, 末点真值断言需 >= 1 个差分对
+        res = sim.beat_payload()
+        real = _real(res)
+        assert real, (i, "活跃流应有点")
+        last = real[-1]
+        # 终点 = 窗内最新样本(槽 ts < t1; 写侧游标可在漂移容差内超前实测时刻, 末槽
+        # 偶发落在 t1 之后被窗尾过滤 —— 新契约无持有豁免, 端点如实取窗内最新样本)
+        expected = max(s.ts for s in sim.slots() if s.ts < sim.req_now)
+        assert last[0] == expected, (i, last, expected, "末点 t != 窗内最新样本 ts")
+        # 真实速率带: 标称 1000/500; 漂移修正拍的对跨被压缩(< elapsed)令样本速率上浮
+        # (上限 = 1000 x si/(si - DRIFT_TOL) x 抖动余量), 下浮由抖动/取整给出
+        assert 850 <= last[1] <= 1300 and 425 <= last[2] <= 650, (i, last, "末点值偏出真实速率带")
+        assert not _null_ts(res), (i, _null_ts(res), "活跃流无空值点(大步进被 dt 链吸收)")
 
 
-def test_a5_stall_over_bound_honest_null():
-    """(A5 停滞态, R8 间隙过界仍 null): 有界间隙拍尾桶仍 held(相邻有界拍值恒定 —— 无
-    闪烁); 过界后 null 诚实断线不恢复; 停滞期已定影桶逐拍不变; 判据界两侧都被真实观测到
-    (saw_held/saw_null 旗)"""
+def test_a5_stall_freezes_at_last_sample():
+    """(A5 停滞态)停止进样后窗口半拍步进推进(12 拍): 点集只在窗沿收缩(前缀掉样本),
+    无新点无空值点, 末点 t/值恒定 —— 旧「判据界内有界 held 落线/过界 null」二态随持有面
+    退役: 数据面停滞期不动, 滞后可见性 = 前端徽标按末样本 ts vs 墙钟承载(§03/D3)"""
     sim = _SamplerSim(seed=37)
-    prev_rate = None
-    real_pts = []
-    for i in range(50):
+    for _ in range(50):
         sim.beat()
-        grid, rate, totals, points = _beat_payload(sim, sim.req_now)
-        prev_rate = (grid, rate)
-        # 非持有观测桶集合 = 停滞期不得改写的定影面(持有/回填面在过界后随判据消失,
-        # 不属定影; 进样期末桶若为 hold 面, 停滞首拍可因窗口推进收敛出被窗尾过滤的
-        # 末样本真实值 —— 开放面收敛, 非定影改写)
-        real_pts = [p for p in points if not p.is_hold and p.dl_rate is not None]
-    assert prev_rate[1].get(prev_rate[0].last) is not None, "进样期终点应落线"
-    # 停滞: 停止进样, now 以半拍步进推进(写侧无新记录)—— 间隙逐拍增长; 期望值按活尾
-    # 延伸判据(间隙 = now - 读侧链端 <= max(B, si) x 2 时 held, 过界 null)逐拍推导
-    # (链端 = 写侧游标: 镜像不变量由 _beat_payload 逐拍核验, 手工推导与 src 同源;
-    #  半拍步进使判据界两侧各有 >= 2 拍被真实观测, 不整拍跨过过界点 —— 评审轮1 #2)
-    sealed = {p.t: (p.dl_rate, p.up_rate) for p in real_pts if p.t >= prev_rate[0].t0}
-    stall_endpoint = []
-    saw_held_after_stall = False
-    saw_null_after_stall = False
-    prev_bounded_endpoint = None
+    res0 = sim.beat_payload()
+    last0 = _real(res0)[-1]
+    assert _real(res0)[-1][1] is not None, "进样期终点应落线"
+    frozen = 0
     for b in range(1, 13):
-        now = sim.req_now + b * _SI / 2
-        grid, rate, totals, _ = _beat_payload(sim, now)
-        stall_endpoint.append(rate.get(grid.last))
-        # 真实观测桶(定影面)逐拍不变(不回写不翻转; 持有/回填面随判据消失属诚实行为)
-        for t, v in sealed.items():
-            if t in rate:
-                assert rate[t] == v, (b, t, "停滞期定影桶被改写")
-        gap = now - sim.cursor  # 读侧链端 = 写侧游标(镜像)
-        if -_DRIFT_TOL < gap <= _GAP_BOUND:  # 延伸判据(与 v4_live_tail_slots 同一单点): 有界 + 链端超前不超写侧漂移容差
-            # 有界间隙(判据界内侧): 尾桶仍持有落线, 且相邻有界拍值恒定(无闪烁)
-            saw_held_after_stall = True
-            endpoint = rate.get(grid.last)
-            assert endpoint is not None, (b, grid.last, "有界间隙尾桶不应断线")
-            if prev_bounded_endpoint is not None:
-                assert endpoint == prev_bounded_endpoint, (b, endpoint, prev_bounded_endpoint, "有界拍 held 值应恒定")
-            prev_bounded_endpoint = endpoint
-        else:
-            # 间隙过界(判据界外侧): 尾桶 null 诚实断线, 且此后不再恢复
-            saw_null_after_stall = True
-            assert rate.get(grid.last) is None, (b, grid.last, "间隙过界尾桶应 null")
-    # 判据界两侧都被真实观测到(评审轮1 #2: 不得整拍跨过过界点)
-    assert saw_held_after_stall and saw_null_after_stall, (stall_endpoint, "停滞流应含有界与过界两态")
-    assert stall_endpoint[-1] is None and stall_endpoint[-2] is None, "过界后应持续断线"
+        sim.req_now += _SI / 2  # 写侧无新记录, 只推请求时刻
+        res = sim.beat_payload()
+        assert _real(res)[-1] == last0, (b, _real(res)[-1], last0, "停滞期末点被改写")
+        assert not _null_ts(res), (b, "停滞期无空值点(不造断连)")
+        assert set(p["t"] for p, t in zip(res.points, res.totals) if t is not None) <= set(
+            p["t"] for p, t in zip(res0.points, res0.totals) if t is not None
+        )
+        frozen += 1
+    assert frozen == 12  # 判据面被真实观测(12 拍全部冻结)
 
 
-def test_a5_disconnect_n_run_stays_null():
-    """(A5 断连态, R8 真断连仍 null)两态:
-    - 有界断连缝: 单拍 disconnect(对末真实样本对跨 <= 判据界且跨过 1 枚空桶 —— 几何
-      与判据界都满足回填面, 仅断连守卫 marked/null_since_obs 拦住回填), 缝内空桶保持
-      null(守卫判别力钉 —— 评审轮1 #4: 移除守卫此例必红);
-    - 长断连(观测缝 > 60s 停机洞): 重连桶速率 None 不造值(快照照记);
-    - 重连拍尾桶 = 诚实缺口(held 被标记清空 -> 速率面 (None, None) —— 评审轮1 #5:
-      原断言对元组 is not None 恒真), 重连后首个真实差分拍恢复落线"""
-    # --- 有界断连缝(守卫判别力) ---
+def test_a5_disconnect_explicit_null_and_reconnect():
+    """(A5 断连态)断连 = 显式空值点(n 游程折叠一点, 端点 = 空值点无真值尾随); 重连样本
+    = 诚实缩放(marked -> step x 覆盖 // span, 速率 < 真实速率不冒充), totals = 跨缺口
+    全量快照差分(字节真值); 长断连(观测缝 > 60s 停机洞)-> 重连样本速率 None(totals
+    真值), 重连后首拍起终点恢复落线"""
+    # --- 有界断连缝(显式空值点 + 诚实缩放) ---
     sim = _SamplerSim(seed=41)
     for _ in range(40):
         sim.beat()
     c0 = sim.cursor  # 末真实样本槽(重连前最后观测; 读侧链端镜像)
-    sim.beat(gap=1.2, disconnect=True)  # 短缝断连: null 槽(实测 dt 修正 ~1.2s, 判据界量级)
-    grid_d, rate_d, _, _ = _beat_payload(sim, sim.req_now)
-    assert rate_d.get(grid_d.last) is None, (grid_d.last, "断连中尾桶应 null(末槽 obs None 不延伸)")
+    sim.beat(gap=1.2, disconnect=True)  # 短缝断连: null 槽
+    res_d = sim.beat_payload()
+    nulls = _null_ts(res_d)
+    assert nulls, (nulls, "断连拍应产显式空值点")
+    assert nulls[-1] == float(int(sim.cursor))  # n 首槽 floor 取整(链端镜像)
+    assert _real(res_d)[-1][0] == c0  # 空值点之前的末真值点 = 末真实样本(无真值点尾随)
     sim.beat()  # 重连(qB 恢复)
-    grid_r, rate_r, totals_r, points_r = _beat_payload(sim, sim.req_now)
-    # 判别力前置: 重连对末真实样本的对跨 <= 判据界 且 跨过 >= 1 枚空桶 —— 几何与界都
-    # 满足 held_backfill 的非守卫条件, 缝内空桶仍 null 只能来自断连守卫
-    i_prev = int((c0 - grid_r.first) // _B)
-    i_cur = int((sim.cursor - grid_r.first) // _B)
-    gap_total = sim.cursor - c0
-    assert i_cur >= i_prev + 2 and gap_total <= _GAP_BOUND, (i_prev, i_cur, gap_total, "判别力前置不成立")
-    bf_key = grid_r.first + (i_prev + 1) * _B
-    assert rate_r.get(bf_key) is None, (bf_key, "有界断连缝空桶被回填(断连守卫失守)")
-    # 重连拍尾桶 = 诚实缺口: held 被断连标记清空 -> 速率面 (None, None)(不造值不落线)
-    assert rate_r.get(grid_r.last) == (None, None), (grid_r.last, rate_r.get(grid_r.last), "重连拍尾桶应诚实缺口")
-    # --- 长断连(观测缝 > 60s 停机洞) ---
+    res_r = sim.beat_payload()
+    real_r = _real(res_r)
+    recv = real_r[-1]
+    assert recv[0] == sim.cursor  # 重连样本 = 新末点
+    # 诚实缩放: 断连面 marked -> step_w = step x 覆盖 // span(缝 1.2s 不归因), 速率
+    # < 真实速率 1000(不冒充连续); totals = 跨缺口全量快照差分(字节真值)
+    assert recv[1] < 1000 and recv[1] > 0, (recv, "重连样本应诚实缩放(非真实速率非 None)")
+    tot_r = [t for p, t in zip(res_r.points, res_r.totals) if t is not None]
+    # 跨缺口字节含在后继样本差分里(计数器真值 —— 断连拍计数器冻结, 仅缝前累计 + 重连拍)
+    assert int(1000 * 1.2) <= tot_r[-1]["dl"] <= int(1000 * 3.0), (tot_r[-1], "跨缺口 totals 应计数器真值")
+    # --- 长断连(观测缝 80s > 60s 停机洞) ---
     sim2 = _SamplerSim(seed=41)
     for _ in range(40):
         sim2.beat()
-    for _ in range(4):
-        sim2.beat(gap=20.0, disconnect=True)  # 观测缝 80s > _V4_SEAM_NULL_S
-    grid_d2, rate_d2, _, _ = _beat_payload(sim2, sim2.req_now)
-    assert rate_d2.get(grid_d2.last) is None, (grid_d2.last, "长断连中尾桶应 null")
+    for _ in range(2):
+        sim2.beat(gap=40.0, disconnect=True)  # 观测缝 80s > _V4_SEAM_NULL_S(停机洞)
+    res_d2 = sim2.beat_payload()
+    # 连续 n 游程折叠一点: 单个空值点 @断连起点(c0 + 40, 在窗内 —— 缝 80s < 窗 60s + 延迟)
+    assert _null_ts(res_d2) == [float(int(c0 + 40.0))], (_null_ts(res_d2), "长断连应产单空值点@断连起点")
     sim2.beat()  # 重连(qB 恢复)
-    grid_r2, rate_r2, totals_r2, points_r2 = _beat_payload(sim2, sim2.req_now)
-    # 断连段桶(重连后回看)保持 null —— 标记(n 游程)不回填, 洞后不摊配(诚实断线)
-    null_span = [t for t in rate_r2 if grid_r2.t0 <= t < grid_r2.last and rate_r2[t] is None]
-    assert null_span, "断连段应有 null 桶(诚实断线)"
-    # 重连桶: 停机洞断链 -> 速率 None 不造值(快照照记, totals 非 None)
-    recv_key = grid_r2.first + int((sim2.cursor - grid_r2.first) // _B) * _B  # 重连样本点位归属桶
-    recv = next(p for p in points_r2 if p.t == recv_key)
-    assert recv.dl_rate is None and recv.up_rate is None, (recv, "重连桶速率应 None(洞后断链不造值)")
-    assert recv.dl_total is not None and recv.up_total is not None, (recv, "重连桶快照应照记")
-    # 重连拍尾桶诚实缺口(held 被标记清空)
-    assert rate_r2.get(grid_r2.last) == (None, None), (grid_r2.last, rate_r2.get(grid_r2.last), "重连拍尾桶应诚实缺口")
-    # 重连后再进两拍: 首个真实差分拍起链恢复, 终点持续落线(恢复落线钉在此, 非重连拍)
+    res_r2 = sim2.beat_payload()
+    real_r2 = _real(res_r2)
+    recv2 = real_r2[-1]
+    assert recv2[0] == sim2.cursor
+    assert recv2[1] is None and recv2[2] is None, (recv2, "重连样本速率应 None(洞后断链不造值)")
+    tot_r2 = [t for p, t in zip(res_r2.points, res_r2.totals) if t is not None]
+    # 跨洞 totals = 计数器真值(qB 不可达拍计数器冻结 —— 缝内零字节, 仅重连拍字节入账)
+    assert 0 < tot_r2[-1]["dl"] <= int(1000 * 2.0), (tot_r2[-1], "跨洞 totals 应计数器真值(冻结缝不造字节)")
+    # 重连后再进两拍: 链恢复, 终点持续落线(恢复落线钉在此, 非重连拍)
     for _ in range(2):
         sim2.beat()
-        grid, rate, _, _ = _beat_payload(sim2, sim2.req_now)
-        assert rate.get(grid.last) is not None, (grid.last, "恢复期尾桶应持续落线")
+        res = sim2.beat_payload()
+        last = _real(res)[-1]
+        assert last[0] == sim2.cursor and 900 <= last[1] <= 1100, (last, "恢复期终点应落线")

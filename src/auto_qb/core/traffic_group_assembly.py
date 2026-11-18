@@ -8,10 +8,10 @@ v4 样本槽流(V4Slot 序列, 由 traffic_store_codec.v4_block_slots / v4_block
   恒同 -> 逐成员分组点列同构, 组端点 Sigma 现算可用)。
 - 差分链 / 接缝摊配 / null 标记判定承袭旧面单点, 不重写: 摊配 = traffic_grid.
   _seam_spread_delta(原样提取件); 重置/基线缺失三层口径 = traffic_grid._bucket_delta;
-  null 标记 = fold 的 n 槽(floor 取整 + last_was_null 去重)与块间真空(首槽声称覆盖接不住
-  链终值, t = int(prev_chain_end))判定, 承袭为槽粒度(块内 dt 链连续 -> 与旧「块首判定」
-  等价; 同秒真空+n 双标记折叠一点为新契约收紧, 详 _slot_null_marks)。本模块不调用
-  _V4SeriesFold / V4SeriesBucketCache / 桶缓存 / 持有回填(旧面, 阶段 1 后续任务退役)。
+  null 标记 = 旧 fold 的 n 槽(floor 取整 + last_was_null 去重)与块间真空(首槽声称覆盖
+  接不住链终值, t = int(prev_chain_end))判定, 承袭为槽粒度(块内 dt 链连续 -> 与旧
+  「块首判定」等价; 同秒真空+n 双标记折叠一点为新契约收紧, 详 _slot_null_marks)。
+  !旧挂钟桶面(_V4SeriesFold / V4SeriesBucketCache / 持有回填)已随 T1c-2 退役删除。
 
 契约要点(计划 §03 逐条):
 - points = ({t, dl, up} | {t, dl: None, up: None}) 升序点列: 每点必带 t(真值点 = 组末样本
@@ -33,7 +33,7 @@ v4 样本槽流(V4Slot 序列, 由 traffic_store_codec.v4_block_slots / v4_block
   窗首组含窗外种子基线到窗首样本的差分(D3 窗首种子的 totals 面)。
 
 设计纪律: 纯函数无时钟 —— t0/t1/采样间隔一律入参(幂等性黄金法则); 入参非法(槽乱序/
-时间倒挂/窗口非法/is_hold 持有槽)fail-fast raise, 不静默修复。
+时间倒挂/窗口非法)fail-fast raise, 不静默修复。
 """
 import math
 from dataclasses import dataclass
@@ -87,20 +87,17 @@ def _check_window(t0: float, t1: float, sample_interval_s: float) -> tuple:
 
 
 def _guard_slot_order(slots: tuple) -> None:
-    """槽流时序守卫(_guard_group_order 同款 fail-fast): 槽 ts 非降(容差同 _V4_VACUUM_EPS_S);
-    倒挂 = 输入槽流结构性异常(调用面槽序被破坏), fail-fast 拒装配, 不静默产出负对跨的
-    脏速率。同刻(及 -eps 带内)重复槽不拒 —— 输入契约: 槽流须已按 ts 去重, 重叠去重是
-    调用方义务(旧面 v4_series_points 活尾按 ts 精确去重同款); 未去重的重复槽按同刻病理
+    """槽流时序守卫(fail-fast, 判据承袭旧面 _guard_group_order): 槽 ts 非降(容差同
+    _V4_VACUUM_EPS_S); 倒挂 = 输入槽流结构性异常(调用面槽序被破坏), fail-fast 拒装配,
+    不静默产出负对跨的脏速率。同刻(及 -eps 带内)重复槽不拒 —— 输入契约: 槽流须已按 ts
+    去重, 重叠去重是调用方义务(旧面活尾按 ts 精确去重同款); 未去重的重复槽按同刻病理
     面处理(对跨 0 -> 覆盖 0 不归因, 不炸), 但重复样本会计入组序号(分组锚错位), 该形态
-    由调用方去重义务排除而非此处静默修复。is_hold 持有槽 = 旧 F3/F4 持有延伸面形态 ——
-    新契约无持有面(§03: 尾组恒真值无克隆), 入列即 raise(调用方以纯采样槽流喂入, 活尾
-    走 S6 快照面)。"""
+    由调用方去重义务排除而非此处静默修复。!旧 is_hold 持有槽拒收支已随持有面退役删除
+    (V4Slot.is_hold 字段同批退役 —— 新契约无持有面, §03: 尾组恒真值无克隆)。"""
     prev_ts = None
     for s in slots:
         if not isinstance(s, V4Slot):
             raise TypeError(f"非 V4Slot 槽: {type(s).__name__}")
-        if s.is_hold:
-            raise ValueError(f"持有槽不合样本分组契约(持有面已退役): ts={s.ts!r}")
         if prev_ts is not None and s.ts < prev_ts - _V4_VACUUM_EPS_S:
             raise ValueError(f"槽流时序倒挂: 槽 {s.ts!r} 先于前槽 {prev_ts!r}")
         prev_ts = s.ts

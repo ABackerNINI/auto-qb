@@ -8,7 +8,7 @@
 - test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
 - test_api_traffic_qb_global_24h_points_totals_and_stale: (T1b 改判)global 24h 窗天文件块 -> 样本分组装配(k=6 组均值, 组点 + 显式空值点升序) + totals = 组粒度快照差分和(重置逐向 None/跨断连字节承袭) + 读取竞态降级回上一份快照标 stale + meta 全量形状(schema=2/stride=k/interval_s=组距标称 + P4 server_started_at + F6 sample_interval_s)
 - test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (T1b 改判)raw 5m 短窗 k=1 逐样本点列(速率 = 样本差分/覆盖, 瞬时直采值零上图) + totals 逐样本快照差分(窗首基线缺失) + 活尾样本跨盘/尾接缝差分(图尾随最新样本)
-- test_api_traffic_qb_raw_live_tail_true_tail_no_hold_clone: (T1b 改写, 取代 F4 持有延伸)raw 段窗活尾合流: 活尾槽复原不传 now(持有分支不得被 raw 路径触发 —— 接线钉: v4_live_tail_slots 调用无 now/max_gap_s 实参, 位置实参形态一并钉死 26-11-18-0037 评审 #5: spy 记 (a, kw) 二元组断 a == ())—— 尾点 = 最新真实样本 ts 的真值, 最新样本之后无任何点(无持有克隆), totals 尾点 = 真实差分非 0 增量; 端点取时冻结假钟消除窗界竞态
+- test_api_traffic_qb_raw_live_tail_true_tail_no_hold_clone: (T1b 改写, 取代 F4 持有延伸)raw 段窗活尾合流: 活尾槽复原即纯槽序(now/max_gap_s 形参面已随持有面退役 —— 接线钉: v4_live_tail_slots 调用无 now/max_gap_s 实参, 位置实参形态一并钉死 26-11-18-0037 评审 #5: spy 记 (a, kw) 二元组断 a == ())—— 尾点 = 最新真实样本 ts 的真值, 最新样本之后无任何点(无持有克隆), totals 尾点 = 真实差分非 0 增量; 端点取时冻结假钟消除窗界竞态
 - test_api_traffic_qb_group_raw_live_tail_true_tail_no_hold_clone: (T1b 改写)组端点 raw 段成员循环同款接线钉(同评审 #5 记 (a, kw)) —— 成员活尾(torrent:HA)复原无持有延伸, 组响应尾点 = Σ 成员最新真实样本真值且之后无点; 组空态判据计入活尾(member_has_tail)
 - test_api_traffic_qb_raw_seed_extension_window_start_baseline: (T1b 改判)窗首种子 D3: 读窗起点 = 装配消费下界 t0-si-回看界, 窗外前缀只作差分基线不产组点 —— 窗首样本速率 = 差分/覆盖(非 0 线非瞬时值), totals 窗首组含窗外种子差分(600/300, 字节守恒)
 - test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (T1b 改判)种子跨真空: 种子/恢复块各移 30s(未观测恰 60s = 重启缝)—— 恢复首样本 = step/实测对跨 90s 摊配回收(107/53), 次样本基线恢复; totals = 组粒度快照差分和(离线字节含在后继样本快照差分里 —— 9600/4800 入账)
@@ -300,13 +300,12 @@ def test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged(web_env):
 
 
 def test_api_traffic_qb_raw_live_tail_true_tail_no_hold_clone(web_env, monkeypatch):
-    """(26-11-18-0037 T1b 改写, 取代 F4 持有延伸)raw 段窗活尾合流: 活尾槽复原不传 now
-    (v4_live_tail_slots 向后兼容形态 —— 持有延伸分支不得被 raw 路径触发: 新装配对
-    is_hold 槽 fail-fast raise, 新契约尾组恒真值无克隆)。响应尾点 = 最新真实样本 ts 的
-    真值(20/10, 瞬时垃圾字段 9999 零上图), 最新样本之后无任何点(无持有克隆); totals
-    尾点 = 真实差分 600/300(非持有面 0 增量)。接线钉: 端点调用 v4_live_tail_slots 不传
-    now/max_gap_s(变异加回即红)。活尾纯内存(不落盘), 磁盘零块 -> 无真空缝, 差分链干净;
-    端点取时冻结假钟消除窗界竞态"""
+    """(26-11-18-0037 T1b 改写, 取代 F4 持有延伸; T1c-2 后 now/max_gap_s 形参面已随
+    持有面退役 —— v4_live_tail_slots 复原即纯槽序)raw 段窗活尾合流: 新契约尾组恒真值
+    无克隆。响应尾点 = 最新真实样本 ts 的真值(20/10, 瞬时垃圾字段 9999 零上图), 最新
+    样本之后无任何点(无持有克隆); totals 尾点 = 真实差分 600/300(非持有面 0 增量)。
+    活尾纯内存(不落盘), 磁盘零块 -> 无真空缝, 差分链干净; 端点取时冻结假钟消除窗界
+    竞态"""
     from auto_qb.core.traffic_store import LiveTail, V4Sample
     from auto_qb.webui.server import traffic_qb as tq
 
@@ -358,8 +357,8 @@ def test_api_traffic_qb_raw_live_tail_true_tail_no_hold_clone(web_env, monkeypat
 
 def test_api_traffic_qb_group_raw_live_tail_true_tail_no_hold_clone(web_env, monkeypatch):
     """(26-11-18-0037 T1b 改写)组端点 raw 段成员循环的活尾接线钉(与 global 用例同构):
-    成员活尾挂在 torrent:HA(键 = TORRENT_KEY_PREFIX + 成员 hash), 活尾槽复原不传 now
-    (持有分支不触发)—— 组响应尾点 = Σ 成员最新真实样本真值(仅 HA 有活尾, HB 无行
+    成员活尾挂在 torrent:HA(键 = TORRENT_KEY_PREFIX + 成员 hash), 活尾槽复原即纯槽序
+    (持有延伸形参面已随持有面退役)—— 组响应尾点 = Σ 成员最新真实样本真值(仅 HA 有活尾, HB 无行
     缺位点不进并集 -> 20/10), 最新样本之后无任何点(无持有克隆); totals 尾点 = 真实
     差分。组空态判据计入活尾(member_has_tail), 变异加回 now=/max_gap_s= 实参即红"""
     from auto_qb.core.traffic_store import LiveTail, V4Sample

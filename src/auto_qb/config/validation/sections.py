@@ -107,7 +107,9 @@ FLUSH_INTERVAL_MIN_S = 60.0
 FLUSH_INTERVAL_MAX_S = 3600.0
 
 # qb_traffic.sample_interval_multiplier 的有效秒数上限(计划 26-11-10-0252 D6): 倍数本身无独立上限,
-# 只约束 multiplier x main_tick <= 600s —— 原「防视图颗粒过粗」口径; MAX_RAW_BUCKETS 只封桶数不封颗粒
+# 只约束 multiplier x main_tick <= 600s —— 原「防视图颗粒过粗」口径(读侧桶数预算面已随
+# 26-11-18-0037 样本分组契约退役: 旧挂钟桶面 MAX_RAW_BUCKETS 只封桶数不封颗粒, 样本分组
+# 预算 = traffic_group_assembly.MAX_RAW_POINTS 组点+空值点共用, 同为读侧内建非配置键)
 SAMPLE_INTERVAL_MAX_S = 600.0
 
 # hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集

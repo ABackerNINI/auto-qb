@@ -179,15 +179,14 @@ class _GroupFoldState:
     # ---------- 批次时序守卫(fail-fast, 折叠前先验) ----------
 
     def guard_batch(self, slots: tuple, last: Optional[float] = None) -> Optional[float]:
-        """槽批次时序守卫(_guard_slot_order 同款判据): 槽 ts 非降(容差 _V4_VACUUM_EPS_S)、
-        禁 is_hold 持有槽(持有面已退役, 入流 = 结构性异常)。last = 批前衔接锚(链上
+        """槽批次时序守卫(_guard_slot_order 同款判据): 槽 ts 非降(容差 _V4_VACUUM_EPS_S)。
+        !旧 is_hold 持有槽拒收支已随持有面退役删除(V4Slot.is_hold 字段同批退役 ——
+        v4_live_tail_slots 复原即纯槽序, 持有延伸分支不存在)。last = 批前衔接锚(链上
         末槽 ts, 跨批次链式校验), 返回批末槽 ts 供下批续链。折叠前先验, 违一即 raise
         不落任何状态。"""
         if last is None:
             last = self.prev_chain_end
         for s in slots:
-            if s.is_hold:
-                raise ValueError(f"持有槽不合样本分组契约(持有面已退役): ts={s.ts!r}")
             if last is not None and s.ts < last - _V4_VACUUM_EPS_S:
                 raise ValueError(f"槽流时序倒挂: 槽 {s.ts!r} 先于前槽 {last!r}")
             last = s.ts
@@ -553,9 +552,9 @@ class V4SeriesGroupCache:
 
         days = V4DayCache.read_window 产物 ((date_str, V4ParsedDay | None), 日期升序);
         grid = 请求栅格(raw 段窗); raw_tail_slots = 活尾快照纯槽复原(v4_live_tail_slots
-        不传 now/max_gap_s 的向后兼容形态, 调用面从活尾快照整体替换面复原 —— 复原在
-        调用方、去重在锁内, 持有延伸分支不触发: is_hold 槽入流被 guard_batch fail-fast
-        拒收); sample_interval = 生效采样间隔(配置指纹 + 消费下界/预期样本数入参)。返回
+        的无 now 形态 —— 持有延伸分支已随持有面退役, 复原即纯槽序; 复原在调用方、
+        去重在锁内); sample_interval = 生效采样间隔(配置指纹 + 消费下界/预期样本数入参)。
+        返回
         (GroupAssemblyResult, blocks, tail_slots) —— blocks 供组端点空态判据
         (v4_earliest_row_ts 承袭)复用, tail_slots = 去重后的活尾槽序(空态判据计入)。
         OSError 不经过本类(调用方读文件在先), 读取竞态走端点 last-good 兜底(§08)。
@@ -615,12 +614,11 @@ class V4SeriesGroupCache:
 
     def _tail_slots(self, raw_tail_slots: tuple, disk_end: Optional[float]) -> tuple:
         """活尾槽序 -> 去重后槽序(S6 读侧接缝, T1b _tail_slots_plain 的锁内面): 复原
-        (v4_live_tail_slots, 不传 now/max_gap_s = 链端持有延伸分支不触发)在调用方,
-        本方法只做与磁盘链的按 ts 去重 —— 同 ts 槽 = 同一记录「写侧游标推进」与「落盘
-        后重算」的恒等形态, 保留严格更晚后缀即不重不漏(去重基准 = 已展开磁盘链末槽
-        prev_chain_end, 生产恒 == 全链末槽, 见模块 docstring「已知边界」); 新装配契约
-        要求槽流已按 ts 去重(重复槽会错位分组锚)。is_hold 槽(持有面已退役)由
-        guard_batch fail-fast 拒收。"""
+        (v4_live_tail_slots 无 now 形态, 持有延伸分支已退役)在调用方, 本方法只做与磁盘链
+        的按 ts 去重 —— 同 ts 槽 = 同一记录「写侧游标推进」与「落盘后重算」的恒等形态,
+        保留严格更晚后缀即不重不漏(去重基准 = 已展开磁盘链末槽 prev_chain_end, 生产恒
+        == 全链末槽, 见模块 docstring「已知边界」); 新装配契约要求槽流已按 ts 去重
+        (重复槽会错位分组锚)。"""
         slots = raw_tail_slots
         if slots and disk_end is not None:
             slots = tuple(s for s in slots if s.ts > disk_end + _V4_VACUUM_EPS_S)

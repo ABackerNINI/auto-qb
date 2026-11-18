@@ -12,7 +12,6 @@ from .traffic_store_common import (
     AGG_FIELDS,
     AGG_KINDS,
     AGG_LEGACY_FIELDS,
-    DRIFT_TOL_MS,
     HEADER_LINE_V4,
     HOUR_SECONDS,
     _fmt_dt_tail,
@@ -57,20 +56,16 @@ class V4Slot:
 
     obs 形态: r 槽 = (dl_rate, up_rate, dl_total, up_total); z 槽 = (0, 0, dlt, upt)
     (空闲观测, totals 恒定); n 槽 = None(null)。ts 为浮点秒 —— 显式 dt_ms 带亚秒精度;
-    dt_s = 距上一槽有效间隔(秒, §02.3 桶宽的有效 dt; 块首槽取标称 interval_s)。
-    is_hold = True 表示活尾延伸合成槽(v4_live_tail_slots 的 holding 槽, 计划
-    26-11-14-1313 F4)—— 非「采样观测」, 是「末次观测仍有效」的持有面: 消费面
-    (v4_series_points)对它豁免 ts >= t1 窗尾过滤(持有槽 ts = now 恒在窗界上),
-    归桶走点位归属同一路径(F3, 26-11-15-1104: ts=now 恒落进行中桶 grid.last, 与末
-    样本同桶天然合并), 速率面持有上一非持有观测桶速率(不进差分面)。磁盘槽
-    与活尾的采样/游程槽恒 False(缺省值, 构造面无需感知)。
+    dt_s = 距上一槽有效间隔(秒, §02.3 有效 dt; 块首槽取标称 interval_s)。
+    !旧 is_hold 字段(活尾链端延伸合成槽, F4/F3 计划 26-11-14-1313/26-11-15-1104)已随
+    持有面退役(26-11-18-0037 D2 样本分组契约: 尾组恒真值无克隆)删除 —— 槽 = 纯采样
+    /游程观测, 空值点契约无持有槽(v4_live_tail_slots 复原即纯槽序)。
     """
 
     ts: float
     dt_s: float
     obs: Optional[tuple]
     is_zero: bool  # True = z 游程槽(速率恒 0); n 槽为 False 且 obs = None
-    is_hold: bool = False  # True = 活尾 holding 槽(F4/F3): ts=now 的持有面合成槽
 
 
 def v4_block_slots(block: "V4Block") -> tuple:
@@ -138,7 +133,7 @@ def v4_block_slots(block: "V4Block") -> tuple:
     return tuple(slots)
 
 
-#: 块级槽游标(F4-2 桶值单调缓存): (rec_idx, slots_done, anchor_t, run_base, run_spacing)
+#: 块级槽游标(F4-2 立, 现消费者 = 分组点列缓存): (rec_idx, slots_done, anchor_t, run_base, run_spacing)
 #: - rec_idx = 消费停驻的记录下标; slots_done = 该记录已消费槽数(0 = 记录边界)。
 #: - slots_done == 0: anchor_t = dt 链锚点(上一已消费记录的槽位终点; rec_idx == 0 时 =
 #:   block.start_epoch), run_base/run_spacing 恒 None。
@@ -154,12 +149,13 @@ def v4_block_slots_from(block: "V4Block", cursor: tuple, t1: Optional[float] = N
     从游标 cursor 接续展开 block 的槽序, 返回 (slots, next_cursor, exhausted)。
 
     - slots = 本段展开的全部槽(V4Slot 升序, 含 ts >= t1 的窗尾外槽 —— 调用方消费面
-      按 v4_series_points 同款窗尾过滤逐槽裁决, 本函数不代滤; 游标仍停在首个 ts >= t1
-      的槽, 窗尾外的槽下轮请求重展重判 —— 与全量现算「每请求按当时窗界消费」语义一致)。
+      (样本分组装配 / 分组点列缓存)按窗尾过滤逐槽裁决, 本函数不代滤; 游标仍停在首个
+      ts >= t1 的槽, 窗尾外的槽下轮请求重展重判 —— 与全量现算「每请求按当时窗界消费」
+      语义一致)。
     - next_cursor 同构游标; exhausted = True 表示整块槽序展完(next_cursor 停块尾)。
     - t1 = None: 全量展开(next_cursor 停块尾)。同游标起点 _V4_BLOCK_CURSOR_START、
       t1=None 时 slots 与 v4_block_slots(block) 逐位相等(同一 dt 链实现的两形态, 槽位
-      表达式逐字同式; 守阵 test_traffic_grid_bucket_cache::test_block_slots_from_full_
+      表达式逐字同式; 守阵 test_traffic_store_slots::test_block_slots_from_full_
       equivalence 钉住)。
     - 只认 V4 记录型(与 v4_block_slots 同判); 未知型 TypeError fail-fast。
     """
@@ -275,8 +271,8 @@ def v4_block_agg_totals(block: "V4Block") -> tuple:
 
 
 # v4_bucket_width_s(逐记录覆盖桶宽 max(1, ceil(有效dt)))已随 26-11-15-1104 F2 栅格单几何
-# 退役: 点位归属归桶下槽不再自带覆盖桶宽, 桶宽单点在 traffic_grid.build_grid(raw = 采样
-# 整倍)。dt_s 仍为槽层的有效间隔(§02.3), 供读侧差分对跨的未观测秒判据消费。
+# 退役; 后续挂钟桶面(F1 桶宽加宽)亦随 26-11-18-0037 样本分组契约退役 —— 槽不再自带覆盖
+# 桶宽。dt_s 仍为槽层的有效间隔(§02.3), 供读侧差分对跨的未观测秒判据消费。
 
 # ---------- 活尾快照(S6 验收追加, 2026-10-05): 写侧未落盘状态 -> 读侧续链 ----------
 
@@ -336,7 +332,7 @@ class LiveTail:
     pending_agg: tuple = ()  # 未封口聚合部分行(S7; AggRow 元组, 缺省空 = 纯磁盘 agg 读)
 
 
-def v4_live_tail_slots(tail: LiveTail, now: Optional[float] = None, max_gap_s: Optional[float] = None) -> tuple:
+def v4_live_tail_slots(tail: LiveTail) -> tuple:
     """活尾快照 -> 槽序(S6 读侧接缝, 纯函数): 绝对槽位复原规则见 LiveTail docstring
     (head_pending 整块复用 v4_block_slots / 否则从 projected_ts 倒推 —— 两者都与这些
     记录落盘后的重算恒等)。开放游程 = 未来封口形态的槽位: 链锚点 = 记录链终点
@@ -345,40 +341,14 @@ def v4_live_tail_slots(tail: LiveTail, now: Optional[float] = None, max_gap_s: O
     last_seen] 端点含)。z 槽 obs = (0,0,快照), n 槽 obs = None。返回 Tuple[V4Slot, ...]
     (ts 升序)。
 
-    活尾链端延伸(F4, 计划 26-11-14-1313; P1 拍板默认; F3 26-11-15-1104 精调延伸窗口):
-    now 非 None 且间隙有界时, 满足以下全部条件追加一枚 holding 槽(ts = max(now, 链端)
-    —— 保持槽序升序, dt_s = max(now - 链端, 0), obs/is_zero = 末槽原值, is_hold=True):
-    - 间隙有界(双向): now - 链端 <= max_gap_s。上界从调用面传入: raw 段窗传
-      max(interval_s 桶宽, 采样间隔) x 2(P1 默认 —— 正常采样节律内, 主循环单顿卡不
-      误判为停滞); max_gap_s=None(缺省)落 tail.interval_s x 2 —— 只读活尾快照自带的
-      标称槽距(= 采样间隔)这一最窄既有口径, 不发明新配置键。
-    - 链端不超前至多一个写侧漂移容差: now - 链端 > -DRIFT_TOL_MS/1000。链端超前
-      now 是写侧游标伪迹(负向累积漂移未及修正 —— 游标按标称推进而实测步长可连续
-      小于标称, 超前量恒 <= DRIFT_TOL_MS: 越过容差写侧即以实测 dt 修正), 非停滞
-      —— 此形态不延伸会让活跃链尾桶间歇 null(A5 终点脱线)。超前超出容差 = 时钟
-      异常面, 不延伸(诚实)。
-    - 链端有速率: 末槽 obs 非 None(r 槽或 z 槽)。z 游程末速率 0 同规则延伸(持有
-      速率 0 —— 「最新已知状态仍有效」语义, 与开放游程合成同款); n 游程(断连)末槽
-      obs = None 不延伸。
-    诚实边界: 活尾延伸仅在采样链活跃且间隙有界时持有末次观测速率, 停滞/断连不延伸
-    —— 间隙过界即保持原槽序(null 诚实断线, 不造数据)。holding 槽 totals = 末次快照
-    同值 -> 下游 delta 链 0 增量(累计面不造字节); 速率面由 v4_series_points 的
-    is_hold 分支持有上一非持有观测桶速率(不进差分面)。F3(26-11-15-1104)新定义:
-    尾桶 = 进行中桶, 速率 = 持有末次观测速率(held)—— 归桶走点位归属同一路径(与末
-    样本同桶天然合并), 链上间隙 <= max(B, si) x 2 的空桶由同一判据单点(本函数延伸上界
-    与 v4_series_points gap_bound_s 同源)按持有语义回填, 间隙过界不回填保持 null。
-    向后兼容面: now=None(缺省)不延伸, 输出与无参形态逐槽恒等。now 非 None 时须为
-    有限数值, max_gap_s 须为正有限数值(违者 ValueError, fail-fast)。"""
+    活尾链端延伸(holding 槽, F4 计划 26-11-14-1313 / F3 26-11-15-1104 的 now/max_gap_s
+    形参面)已随持有面退役(26-11-18-0037 D2 样本分组契约: 尾组 = 最新样本恒真值无克隆,
+    每 tick 随样本更新; 停滞/断连不造点 —— 滞后/断连可见性由前端徽标按末样本 ts 与
+    显式空值点承载): 本函数复原即**纯槽序**, 无任何合成槽; 与磁盘链的按 ts 去重
+    (保留严格更晚后缀)在消费面缓存锁内(traffic_group_cache._tail_slots)。
+    """
     if not tail.block_open and (tail.records or tail.head_pending):
         raise ValueError("活尾快照 invariant 破坏: block_open=False 不得携带 records/head_pending")
-    if now is not None:
-        if not isinstance(now, (int, float)) or isinstance(now, bool) or not math.isfinite(now):
-            raise ValueError(f"非法 now(须有限数值): {now!r}")
-        if max_gap_s is not None and (
-            not isinstance(max_gap_s, (int, float)) or isinstance(max_gap_s, bool) or not math.isfinite(max_gap_s) or
-            max_gap_s <= 0
-        ):
-            raise ValueError(f"非法 max_gap_s(须正有限数值): {max_gap_s!r}")
     slots: list = []
     interval = float(tail.interval_s)
     if tail.block_open and tail.head_pending and tail.records:
@@ -437,24 +407,6 @@ def v4_live_tail_slots(tail: LiveTail, now: Optional[float] = None, max_gap_s: O
             spacing = span / (n - 1) if n > 1 else 0.0
             for k in range(n):
                 slots.append(V4Slot(ts=start + spacing * k, dt_s=spacing or interval, obs=z_obs, is_zero=is_z))
-    # 活尾链端延伸(F4; F3 精调: 链端超前至多一个写侧漂移容差亦延伸 —— 超前是写侧
-    # 游标伪迹非停滞, 详 docstring): 采样链活跃(末槽有速率)且间隙有界时追加 holding
-    # 槽持有末次观测(诚实边界与 z-run 语义见 docstring); 其余形态保持原槽序(null 不延伸)
-    if now is not None and slots:
-        last = slots[-1]
-        gap = float(now) - last.ts
-        if last.obs is not None and gap <= (
-            float(max_gap_s) if max_gap_s is not None else interval * 2.0
-        ) and gap > -DRIFT_TOL_MS / 1000.0:
-            slots.append(
-                V4Slot(
-                    ts=max(float(now), last.ts),  # 保持槽序升序(链端超前 now 时 = 链端)
-                    dt_s=max(gap, 0.0),
-                    obs=last.obs,
-                    is_zero=last.is_zero,
-                    is_hold=True,
-                )
-            )
     return tuple(slots)
 
 

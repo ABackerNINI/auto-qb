@@ -594,8 +594,10 @@ class V4DayCache:
     - last-good 两面口径(§08): 端点的 last-good 是响应快照(traffic_qb); 缓存面只保证
       「失败不清条目」, 二者都不以空态冒充无数据。
 
-    S3b 接缝: 视图端点经 read_window(窗口 -> 日期集合 -> 只读涉及文件, 24h 窗至多
-    2 个日期文件)取 V4ParsedDay, 块序列交给 traffic_grid.v4_series_points 归桶;
+    S3b 接缝: 视图端点经 read_window(窗口 -> 日期集合 -> 只读涉及文件, 24h 窗读起点 =
+    装配消费下界 t0 - si - 回看界, 常态 3 个日期文件)取 V4ParsedDay, 块序列交给样本分组
+    装配(core.traffic_group_assembly, 26-11-18-0037 T1b 起; 旧 traffic_grid.
+    v4_series_points 归桶面已随 T1c-2 退役);
     agg.dat 消费(hour/day/month 段)经 read_agg 同款 mtime/size 键控缓存(S3b 加)。
     """
     def __init__(self, data_dir: str, budget: int = V4_DAY_CACHE_BUDGET_BYTES) -> None:

@@ -10,7 +10,7 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   停机洞; sample_interval_s = 生效采样间隔, plan 26-11-14-1313 F6 只增键 —— 与 interval_s
   分离的显示口径: raw 段桶宽经采样整倍加宽后可与采样间隔不等(26-11-15-1104 F1 后可为半秒值),
   agg 段窗二者恒不同)。
-  interval_s = 桶宽: raw 段窗 = 生效采样间隔的整倍加宽(桶数 <= MAX_RAW_BUCKETS=500), 3d/7d/30d = 3600, 6mo/1y = 86400
+  interval_s = 桶宽: raw 段窗 = 组距标称 k x 采样间隔(schema=2), 3d/7d/30d = 3600, 6mo/1y = 86400
   (本地日界), all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
@@ -22,20 +22,19 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   样本分组装配(§03 契约: points 每点带 t 的样本分组点列, 缺口 = 显式空值点; meta
   schema=2/stride=k), 经 core.traffic_group_cache.V4SeriesGroupCache 分组点列缓存
   (T1c-1: 天游标只展新增槽 + 逐样本前缀和, 重复请求 O(组数) 现推组界 —— 旧挂钟桶面
-  (F1 桶宽/F2 归桶/F3 持有/F4-2 V4SeriesBucketCache 桶值缓存)在 raw 路径停用, 类本体
-  待 T1c-2 退役); agg 段窗(3d/7d/30d/6mo/1y/all)经 V4DayCache.read_agg 单文件读取
+  (F1 桶宽/F2 归桶/F3 持有/F4-2 V4SeriesBucketCache 桶值缓存)已随 T1c-2 退役删除);
+  agg 段窗(3d/7d/30d/6mo/1y/all)经 V4DayCache.read_agg 单文件读取
   (mtime/size 键控缓存), 行按 kind 直映栅格桶(3d+ 组图由 M×31 -> M×1 次文件读取;
   dl_avg 已是真均值, 不做差分变换; agg 段行直映本就毫秒级, 不设桶值缓存面)。
 - 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
   不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重(traffic_group_cache
-  _tail_slots: 保留严格更晚后缀 —— 复原在调用方 v4_live_tail_slots 不传 now, 去重在
-  缓存锁内), 快照与 flush 竞态不重不漏; 活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续。
-  持有链端延伸(F4, 计划 26-11-14-1313)已随挂钟桶面退役(26-11-18-0037 D2): 活尾槽复原
-  不传 now(v4_live_tail_slots 向后兼容形态, 持有分支不触发 —— 新装配对 is_hold 槽
-  fail-fast raise), 新契约尾组恒真值无克隆: 尾点 = 最新真实样本, 每 tick 随样本更新;
-  停滞/断连不造点(诚实)。agg 段窗(3d+)活尾合流不动 —— pending_agg 开放桶部分行已有
-  自己的合成段。
+  _tail_slots: 保留严格更晚后缀 —— 复原在调用方 v4_live_tail_slots, 去重在缓存锁内),
+  快照与 flush 竞态不重不漏; 活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续。
+  持有链端延伸(F4, 计划 26-11-14-1313)已随挂钟桶面退役(26-11-18-0037 D2, T1c-2 删
+  v4_live_tail_slots 的 now/max_gap_s 形参面 —— 复原即纯槽序), 新契约尾组恒真值无克隆:
+  尾点 = 最新真实样本, 每 tick 随样本更新; 停滞/断连不造点(诚实)。agg 段窗(3d+)活尾
+  合流不动 —— pending_agg 开放桶部分行已有自己的合成段。
   agg 段窗(3d+)的活尾合流(S7 验收追加, 2026-10-14): 同一快照的 pending_agg 未封口
   部分行(开放小时/当日/当月)按 epoch 与磁盘封口行合流(v4_merge_agg 口径, 与写侧
   _agg_merge_prev 同判据)—— 补「图尾停在最后一个封口桶」的真空(用户报「3 天及以上
@@ -169,8 +168,8 @@ class QbTrafficChartApi:
         # 分组点列缓存(26-11-18-0037 阶段 1 T1c-1, §03): raw 段窗样本分组装配的增量
         # 游标缓存(天游标只展新增槽 + 逐样本前缀和, 温态 O(组数) 现推组界, 与冷算逐位
         # 等价)—— 26-11-15-1104 F4-2 桶值缓存(V4SeriesBucketCache)的改造转世, 旧类
-        # 本体待 T1c-2 随挂钟桶面退役。实例随本装配体每域一份 —— 实例身份即隔离边界
-        # (qB 多实例不同 data_dir 不同实例)
+        # 本体已随 T1c-2 挂钟桶面退役删除。实例随本装配体每域一份 —— 实例身份即隔离
+        # 边界(qB 多实例不同 data_dir 不同实例)
         self._bucketcache = V4SeriesGroupCache()
         # 限速历史读侧缓存(plan 26-10-12-0535 D3″): 构造期预建(同 issue 26-10-06-0028 时序
         # 契约); data_dir 缺字段时落空串 = 未启用防御语义(read_day 恒空)
@@ -226,8 +225,8 @@ class QbTrafficChartApi:
         return tg.DEFAULT_SAMPLE_INTERVAL_S
 
     def _grid(self, window: str) -> tg.WindowGrid:
-        """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 生效采样间隔的整倍加宽(26-11-15-1104 F1,
-        桶数 <= MAX_RAW_BUCKETS=500, 可为半秒值; 未启用/缺省兜底 30s),
+        """当前时刻的时间栅格; raw 段窗(1m-24h)= 窗界载体(26-11-18-0037 T1c-2: 挂钟桶面
+        退役, buckets 恒空, t1 浮点挂钟; 未启用/缺省兜底 si 30s),
         hour 段窗(3d/7d/30d)恒 3600s, day 段窗(6mo/1y)= 本地日界 86400s;
         month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)。
         26-11-18-0037 T1b: raw 段桶宽不再进 meta(组端点契约下 meta.interval_s 转组距
@@ -297,8 +296,8 @@ class QbTrafficChartApi:
         read_lo = group_null_lo(grid.t0, sample)
         days = self.v4cache.read_window(key, read_lo, grid.t1)
         tail = self._live_tail(key)
-        # 活尾纯槽复原不传 now/max_gap_s(持有延伸分支不得被 raw 路径触发, T1b 接线钉):
-        # 复原在调用方(本方法), 与磁盘链的 ts 去重在缓存锁内(基准 = 磁盘链末槽)
+        # 活尾纯槽复原(持有延伸形参面已随 T1c-2 退役, 复原即纯槽序): 复原在调用方
+        # (本方法), 与磁盘链的 ts 去重在缓存锁内(基准 = 磁盘链末槽)
         raw_tail = v4_live_tail_slots(tail) if tail is not None else ()
         return self._bucketcache.series_result(key, days, grid, raw_tail, sample)
 

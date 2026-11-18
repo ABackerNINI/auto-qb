@@ -33,7 +33,7 @@
 - test_marks_outside_window_not_emitted: 窗前 n 游程/真空不产空值点(断连面 marked 语义
   仍生效), 窗尾外标记同样不产
 - test_fail_fast_invalid_inputs: 入参非法 fail-fast —— 窗口倒挂/非有限数值/bool/si 非正/
-  槽流时序倒挂/is_hold 持有槽/非 V4Slot 项, 一律 raise 不静默修复
+  槽流时序倒挂/非 V4Slot 项, 一律 raise 不静默修复(is_hold 持有槽拒收支已随持有面退役删除)
 - test_member_points_isomorphic: 组端点同构 —— 同 tick 采样的两个成员(含 z/n 游程与块缝)
   各自装配, 点列 t 逐位相等、stride 相等、空值点位置相等
 - test_from_blocks_wrapper_uses_series_slots: 便捷入口复用 v4_series_slots 平展(乱序块
@@ -357,7 +357,8 @@ def test_marks_outside_window_not_emitted():
 
 
 def test_fail_fast_invalid_inputs():
-    """入参非法 fail-fast: 窗口倒挂/非有限数值/bool/si 非正/槽流倒挂/is_hold/非 V4Slot"""
+    """入参非法 fail-fast: 窗口倒挂/非有限数值/bool/si 非正/槽流倒挂/非 V4Slot
+    (is_hold 持有槽拒收支已随持有面退役删除: V4Slot.is_hold 字段同批退役)"""
     blk = _blk(1000, 2, _samples([(100, 50), (160, 50)]), 100, 50)
     slots = v4_block_slots(blk)
     with pytest.raises(ValueError, match="窗口非法"):
@@ -376,9 +377,6 @@ def test_fail_fast_invalid_inputs():
         assemble_group_points(slots, 1000, 2000, -1.5)
     with pytest.raises(ValueError, match="时序倒挂"):
         assemble_group_points(tuple(reversed(slots)), 1000, 2000, 2)
-    hold = V4Slot(ts=1005.0, dt_s=2.0, obs=(0, 0, 100, 50), is_zero=False, is_hold=True)
-    with pytest.raises(ValueError, match="持有槽"):
-        assemble_group_points(slots + (hold, ), 1000, 2000, 2)
     with pytest.raises(TypeError, match="非 V4Slot"):
         assemble_group_points((object(), ), 1000, 2000, 2)
 

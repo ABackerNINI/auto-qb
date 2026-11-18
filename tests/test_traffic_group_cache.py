@@ -582,14 +582,11 @@ def test_lru_eviction_and_multi_key(tmp_path):
 
 
 def test_fail_fast_guards_whitebox():
-    """fail-fast 面白盒 —— guard_batch 持有槽/时序倒挂 raise; series_result 非 raw 段窗
-    raise; compact 无死区调用为无操作; 同刻病理槽序(对跨 0 -> 覆盖 0)差分不归因(0,0)
-    定影(T1a test_zero_coverage_pair 同款防御面的折叠态直驱形)"""
+    """fail-fast 面白盒 —— guard_batch 时序倒挂 raise(持有槽拒收支已随持有面退役删除:
+    V4Slot.is_hold 字段同批退役, v4_live_tail_slots 复原即纯槽序); series_result 非 raw
+    段窗 raise; compact 无死区调用为无操作; 同刻病理槽序(对跨 0 -> 覆盖 0)差分不归因
+    (0,0) 定影(T1a test_zero_coverage_pair 同款防御面的折叠态直驱形)"""
     st = gmod._GroupFoldState()
-    # 持有槽(持有面已退役)入流 = fail-fast
-    hold = V4Slot(ts=100.0, dt_s=2.0, obs=(10, 10, 100, 100), is_zero=False, is_hold=True)
-    with pytest.raises(ValueError, match="持有槽"):
-        st.guard_batch((hold, ))
     # 时序倒挂(跨批衔接锚) = fail-fast
     st.guard_batch((V4Slot(ts=10.0, dt_s=2.0, obs=(10, 10, 100, 100), is_zero=False), ))
     with pytest.raises(ValueError, match="时序倒挂"):
