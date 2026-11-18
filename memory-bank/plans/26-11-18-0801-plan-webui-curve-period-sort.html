@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>限速曲线自动按天数排序</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-curve-period-sort">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-18-0801">
+<meta name="doc-updated" content="26-11-18-0801">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-18-webui-curve-period-sort.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-curve-period-sort</div>
+<h1>限速曲线自动按天数排序</h1>
+<p class="lede">本篇只回答: <code>global_speed_limit_curve.curves</code> 列表如何自动按 period 天数升序 —— 展示(GET 路由)、运行时(loader)、前端交互(新增/改值)三层落点与被动落盘收敛; 阈值面与限速语义零变化。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-18-0801 · <b>doc-updated</b> 26-11-18-0801 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-18)四轮 13 问(Q1-Q13)逐项拍板; 用户指令「限速曲线自动按天数排序, grilling」→ 共识清单确认 →「出计划然后提交」; 档案 <a href="../tasks/26-11-18-webui-curve-period-sort.md">26-11-18-webui-curve-period-sort</a>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景</h3>
+<p><code>curves</code> 列表(多条 period 曲线: DAY / ND / MONTH)的顺序今天<strong>完全随写入序</strong>, 校验层只拒重复 period、无任何排序规则(<code>validation/curves.py:55-61</code>)。真实实例已出现乱序展示(Q4 场景确认); UI 新增 period 是尾部追加(<code>config_editor_curve.js:53-58</code>), 加 7D 会落到 MONTH 之后即乱。动机 = Web UI 展示顺序(D2); 入口 = UI 为主、手改/复制粘贴 <code>config.yml</code> 为辅(D3)。</p>
+<h3>目标(做到什么算成)</h3>
+<ul>
+  <li>编辑器打开即有序(GET 面排序); 新增/改值即时归位(前端两触发点); 乱序磁盘经<strong>一次 UI 保存</strong>收敛为规范序(被动)。</li>
+  <li>限速语义与阈值校验<strong>零变化</strong>; 全量测试绿。</li>
+</ul>
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><strong>幂等</strong>(黄金法则 1): 排序键唯一(重复 period 已被校验拒绝)+ 稳定排序, 重入无漂移; month 不按当月实际天数参与比较(D5, 否则 28-31 天波动导致重排翻转)。</li>
+  <li><strong>保守默认</strong>(黄金法则 2): 数据可疑不动手 —— GET 树任一 period 解析失败即整段放弃排序(D8); 不加启动迁移主动改生产文件(D7)。</li>
+  <li><strong>fail-fast 不放松</strong>(黄金法则 4): 阈值「严格递增」硬报错保持(<code>validation/curves.py:86-91</code>), 自动排序仅针对无语义的列表序(D1/D6)。</li>
+  <li><strong>单点</strong>: 排序键 helper Python 单点(<code>core/curves.py</code> 挂 <code>normalize_period</code> 旁); JS 复刻一份并注释互指(D4/D12)。</li>
+  <li><strong>范围守恒</strong>(黄金法则 6): 阈值面 UI 加点乱序的改善不在本计划, 需要则另行入池(D6)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>关键事实(决定落点)</h3>
+<ul>
+  <li><strong>UI 渲染的是磁盘原始树, 不是解析模型</strong>: <code>GET /api/config</code> → <code>read_tree</code>(PyYAML BaseLoader, 保磁盘顺序, <code>routes/config.py:129-136</code>); 编辑器工作对象 = 该树(<code>config_editor.js:177</code>)。<strong>没有任何写回路径序列化解析模型</strong> → 仅 loader 排序到不了 UI, 解决不了动机。</li>
+  <li><strong>运行时与顺序无关</strong>: 多曲线同方向取 min 合并(<code>core/curves.py:107-117</code>); 列表序只影响 <code>period_stats</code> 日志行序与展示。运行时排序纯规范面。</li>
+  <li><strong>writer 列表 = 整体替换语义</strong>(<code>writer.py:868</code>): 提交列表与磁盘不同 → 整体重建(列表项内注释丢失一次); 相同 → skip, 字节稳定(<code>writer.py:863-867</code>)。UI 保存提交的是前端树(PUT <code>routes/config.py:138-170</code>), 保存后重拉(<code>config_editor.js:216-217</code>)。</li>
+  <li><strong>period 归一化</strong>: <code>normalize_period</code>(<code>core/curves.py:33-43</code>) → <code>"day"</code> / <code>"month"</code> / <code>"{N}D"</code>; 别名 DAY/1D/D → day。重复 period 在校验层按归一化值拒绝(<code>validation/curves.py:55-61</code>)。</li>
+  <li><strong>loader 先验证再解析</strong>(<code>loaders.py:444-490</code>, 排序自然槽位 = 循环结束后构造 <code>GlobalSpeedLimitCurve</code> 前); GET 面则是磁盘原始树, 可能遇到运行中手改的非法 period。</li>
+  <li>阈值点乱序 = 硬报错(<code>validation/curves.py:86-91</code>); UI 图表对阈值显示副本已排序(<code>config_editor_curve.js:162</code>)。</li>
+</ul>
+<h3>痛点</h3>
+<ul>
+  <li>乱序实例 UI 展示无序(用户实证, Q4)。</li>
+  <li>UI 新增 period 尾部追加, 添加即乱。</li>
+  <li>复制粘贴他实例配置(任意序)后 UI 展示随粘贴序。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>排序键(D5)</h3>
+<p>归一化 period → 序: <code>day</code>=(0,) &lt; <code>{N}D</code>=(1,N) 按 N 数值(2D &lt; 10D) &lt; <code>month</code>=(2,) <strong>恒最后</strong>。别名归一化后判键。</p>
+<h3>三层落点(D4)</h3>
+<table>
+  <tr><th>层</th><th>位置</th><th>作用</th></tr>
+  <tr><td>GET 路由</td><td><code>routes/config.py</code> GET /api/config 返回前, 对树内 <code>curves</code> 数组排序</td><td>编辑器打开即有序(动机主面)</td></tr>
+  <tr><td>loader</td><td><code>loaders.py</code> 构造 <code>GlobalSpeedLimitCurve</code> 前排序</td><td>运行时模型有序(period_stats 日志序); diff 基线两侧一致, 消灭首次保存 phantom diff</td></tr>
+  <tr><td>前端</td><td><code>config_editor_curve.js</code> + <code>traffic-card.html</code></td><td>新增定位插入(D9) + 改值提交重排(D10)</td></tr>
+</table>
+<h3>前端两触发点(D9/D10)</h3>
+<ul>
+  <li><strong>新增</strong>(<code>cfgCurveAddPeriod</code>): 按天数定位插入(默认 <code>1D</code>→day→插最前), 展开态 <code>cfg.openCurves</code> 按实际插入下标记录(现 <code>[list.length-1]</code> 需改)。</li>
+  <li><strong>改值</strong>(period 输入框): <code>@input</code> 逐键写树照旧; <code>@change</code>(失焦/回车)提交时整段重排, <code>openCurves</code> 按条目身份跟随搬移(模式参照 <code>cfgCurveRemovePeriod:65-70</code>)。<span class="wr">逐键重排有数据错写风险</span>: v-for 是下标 key(<code>traffic-card.html:169</code>), 重排后焦点所在行数据换条, 继续键入写错条目 —— 故重排只挂提交时机(D10)。</li>
+  <li><strong>JS 解析失败</strong>: 与 GET 面同策略 —— 任一 period 解析不了整段放弃(不重排, 新增退回尾部追加)(D8/D11)。</li>
+</ul>
+<h3>落盘收敛(D7)</h3>
+<p>被动: 不加启动迁移。乱序磁盘在下次 UI 保存时经整体替换语义自然重排为规范序; 不保存则磁盘保持原序(UI/运行时已有序)。乱序实例曲线段列表项内注释在该次保存丢失一次(当前 <code>config.yml:131-189</code> 已升序, 走 skip 路径无损)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td><code>core/curves.py</code> 排序键 helper(挂 <code>normalize_period</code> 旁; 非法值抛 <code>ValueError</code>, 调用方捕获即放弃)</td><td>单测: 别名归一(DAY/1D/D→同键) / ND 数值序(2D&lt;10D) / month 恒最后 / 非法抛错</td></tr>
+  <tr><td>S2</td><td>loader 排序(<code>loaders.py</code> 构造模型前, 输入已过校验无需放弃分支)</td><td>单测: 乱序 YAML → 模型 curves 有序; <code>test_speed_curve_config.py</code> 增断言并同步文件头测试计划</td></tr>
+  <tr><td>S3</td><td>GET 路由展示树排序(任一 period 解析失败 → 整段原样返回)</td><td>单测: 乱序树 → 响应有序; 含非法 period 树 → 原样</td></tr>
+  <tr><td>S4</td><td>前端: JS 排序键复刻(注释互指) + 新增定位插入 + 改值 <code>@change</code> 重排 + <code>openCurves</code> 身份跟随 + 解析失败放弃</td><td>e2e(@fast): 乱序树渲染有序 / 新增插入位置正确 / 改值失焦重排(视 e2e 能否模拟 blur); 静态接线守阵(若有同形先例)</td></tr>
+  <tr><td>S5</td><td>文档回写 + 收尾 DoD</td><td><code>docs/configuration.md</code>「全局限速曲线」节写排序键定义与自动排序行为(手写顺序随意, UI 保存后落盘为规范序); 真机自检按 <code>testing/real-machine.md</code> §00 判定(本功能纯展示/规范面, 预判纯桩可验, 结论记档案); 分批评审 + kb.wrap + 全量绿</td></tr>
+</table>
+<p class="aside">实施顺序 S1→S5 单波次; S2/S3 依赖 S1, S4 依赖键定义(可与 S2/S3 并行), S5 收口。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 13 问已在 grilling 会话逐项拍板(Q1-Q13), 结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>问</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>Q1 排序对象</td><td><code>curves</code> 列表(period 天数升序); 阈值点不动(严格递增硬报错保持)</td><td>2026-11-18</td></tr>
+  <tr><td>D2</td><td>Q2+Q4 动机/场景</td><td>Web UI 展示顺序; 真实实例已乱序(非纯预防)</td><td>2026-11-18</td></tr>
+  <tr><td>D3</td><td>Q3 入口</td><td>UI 为主, 手改/复制粘贴 <code>config.yml</code> 为辅(乱序粘贴件必须正确处置)</td><td>2026-11-18</td></tr>
+  <tr><td>D4</td><td>Q5 落点</td><td>GET 路由 + loader + 前端三层; Python 排序键单点。否决: 仅前端展示副本(磁盘永双标) / 仅 loader(到不了 UI)</td><td>2026-11-18</td></tr>
+  <tr><td>D5</td><td>Q6 month 位置</td><td>month 恒最后(day &lt; ND 按 N &lt; month); 否决按当月天数数值比较(28-31 波动→重排翻转, 不幂等)</td><td>2026-11-18</td></tr>
+  <tr><td>D6</td><td>Q7 阈值面</td><td>完全不动; UI 乱序加点改善另行入池</td><td>2026-11-18</td></tr>
+  <tr><td>D7</td><td>Q8 落盘收敛</td><td>被动(下次 UI 保存自然重排); 否决启动迁移(保守默认, 迁移写入同样丢注释)</td><td>2026-11-18</td></tr>
+  <tr><td>D8</td><td>Q9 解析失败</td><td>GET 树任一 period 解析失败 → 整段放弃排序, 原样返回(保存时 <code>_validate_tree</code> 本会拦)</td><td>2026-11-18</td></tr>
+  <tr><td>D9</td><td>Q10 新增时机</td><td>前端新增按天数定位插入(否决尾部追加等保存后 reload 才有序)</td><td>2026-11-18</td></tr>
+  <tr><td>D10</td><td>Q11 改值时机</td><td><code>@change</code>(失焦/回车)提交时整段重排; 否决逐键重排(下标 key v-for 焦点行数据错写)与改值不重排(半吊子)</td><td>2026-11-18</td></tr>
+  <tr><td>D11</td><td>Q12 JS 策略</td><td>JS 解析失败策略与 D8 对齐(整段放弃, 新增退回尾部追加)</td><td>2026-11-18</td></tr>
+  <tr><td>D12</td><td>Q13 回归保障</td><td>pytest(loader/GET/键) + e2e(@fast)乱序渲染有序+新增插入位置; 双份键逻辑注释互指 + 文档单点(漂移自愈: 保存一次即被后端归一)</td><td>2026-11-18</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>曲线段列表项内注释丢失(writer 整体替换语义, <code>writer.py:868</code>)</td><td>乱序件首次 UI 保存(已拍板接受, D7)</td><td>docs 明示; 当前生产 <code>config.yml</code> 已升序走 skip 无损; 需要注释者保存前自行留档</td></tr>
+  <tr><td>JS 与 Python 排序键漂移(双份实现)</td><td>任一侧改键未同步</td><td>注释互指 + 键定义 docs 单点; 漂移自愈(UI 序≠后端序时保存一次即归一)</td></tr>
+  <tr><td>重排与下标 key v-for 交互(展开态串位/焦点错写)</td><td>改值重排实现不当</td><td>重排只挂 <code>@change</code> 提交时机(D10); <code>openCurves</code> 按条目身份搬移(参照 <code>cfgCurveRemovePeriod</code> 模式); e2e 钉</td></tr>
+  <tr><td>GET 面非法 period(运行中手改配置)</td><td>实例运行中手改 <code>config.yml</code> 引入坏 period</td><td>整段放弃排序(D8); 该树保存被 <code>_validate_tree</code> 拦, 不入盘</td></tr>
+  <tr><td>新增默认 <code>1D</code> 插最前的预期差(旧行为=尾部追加)</td><td>用户预期「添加=追加」</td><td>已拍板 D9; 新增后自动展开插入项(<code>cfg.openCurves</code>), 位置可视即确认</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-18-0801</span> 初版: grilling 四轮 13 问拍板 + 共识清单经用户确认后立项; 零代码改动, S1-S5 待显式开工。</li>
+</ul>
+
+</div>
+</body>
+</html>
