@@ -109,6 +109,10 @@
 300 种子档同断言: 绿（本机 5 轮全绿）
 对照: pristine 78022b2a（本分支改动前）stash 实测同样红 —— 排除本分支引入
 档案值: 55（断言注释/引入时基线）</code></pre>
+<pre><code># 取证 2026-11-19 05:3x（修复 issue 26-11-19-0258-perf-webui-rowwin-reopen-reprobe-excess 的验证轮, E2E_TORRENTS=600）
+600 种子档同断言: 双皮红(2 failed) —— 与 3000 档同向, 档间漂移面更大; 300 档同轮抽验仍绿(2 passed)
+pristine 对照: 本轮修复前基线(stash 修法后)同样红 —— 非该修法引入, 与池内既有取证同判
+触发路径: commands run dev.e2e-perf-serial(默认抬 600)即命中 —— 该档是量具串行门禁的常规档, 非 3000 抽验专属</code></pre>
 </section>
 
 <section id="s3">
@@ -146,6 +150,7 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 02:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-19 — 补充证据（600 种子档，见 §02 第二段）：同断言双皮红且 600 档是 dev.e2e-perf-serial 串行门禁的默认档 —— 漂移面从「3000 抽验」扩到「量具常规门禁」；300 档仍绿。状态保持 <strong>Open</strong></li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>

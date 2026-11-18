@@ -820,10 +820,18 @@ Object.assign(window.AQB_COLUMNS.methods, {
       /* issue 26-11-15-0332: 前缀和必须用「出窗行最后一发真值」累加。调用点放在所有早退
        * 之后、pre[] 之前 —— 此刻 render 尚未 patch, 旧窗口的行还在 DOM, 重探来得及顶掉
        * 陈旧存值; 早退的那些分支(未开窗/未量齐/容器不在场)本来就不产出 pad, 无需重探。
-       * 签名只取本拍的滚动几何/规模/宽度代/表顶偏移(全是本次开窗已读过的量), 不新增
-       * 行高签名因子 —— 见 _reprobeRenderedRowH 的「不踩全表作废坑」注释。 */
+       * 签名只取本拍的滚动几何/规模/宽度代(全是本次开窗已读过的量), 不新增行高签名因子
+       * —— 见 _reprobeRenderedRowH 的「不踩全表作废坑」注释。
+       * !签名不含 _winTop(issue 26-11-19-0258): 表顶 = .content 顶 + 前置 sticky 列头高,
+       * 后者在页面收敛期(列偏好/字体落定)与窗口化/全量两渲染态间有亚像素~4px 抖动 ——
+       * 它是布局读数, 不是行高陈旧信号。嵌进签名的后果: 去重缓存存的是上次实探时的表顶,
+       * off 轮(_ensureWinTop 签名含 lastRid)重读出新值即假失配, 复原重开窗一拍对全部已持
+       * 键行白付一轮 gBCR(取证: atlas 窗口化 182.5 vs off 轮重读 178.5 → 32 键行全量重探,
+       * off 侧 68 vs prism 34; prism 表顶恰好两态恒定才幸免)。滚驱动的出窗(sy 变化)与
+       * 宽度代变化照常失配重探, 0332 主场景(深滚 pad 跳变)不受影响; zoom 过渡拍另有函数
+       * 体内的守卫(751-762)让路, 不依赖签名。 */
       this._reprobeRenderedRowH(
-        kind, `${sy}|${vh}|${n}|${this._winResize}|${this._winTop[kind] || 0}`,
+        kind, `${sy}|${vh}|${n}|${this._winResize}`,
       );
       const hs = this._rowHs;
       const pre = new Array(n + 1);

@@ -67,7 +67,8 @@
   窗口行仍在 DOM); 只刷已有键、零全表作废(禁 delete/_rowHVer/_rowH/_winMeasured/_rowHSig/
   viewMode/_winResize++)、同拍 sig 去重、抽屉 content-visibility:auto 守卫在位; 主表三 kind
   探测位与 _measureRowH 共用 ROW_H_MAIN_PROBES 单点; _rowProbeSig 在根 created() 初始化为
-  非响应式纯缓存; 第二根因(占位估算基准随每量一行微动 δ, 把 pad 区上百行未实测行连坐搬
+  非响应式纯缓存; 重探签名不含 viewMode / _winTop(viewMode = 全表作废坑; _winTop = 表顶
+  抖动假失配, issue 26-11-19-0258 取证 atlas off 侧 68 vs prism 34); 第二根因(占位估算基准随每量一行微动 δ, 把 pad 区上百行未实测行连坐搬
   δ×N, flux 取证 +3.8px)由 _measureRowH 主表均值量齐后冻结钉住(抽屉 content-visibility:auto
   需逐拍收敛 28→27, 显式不冻)。行为面对同电池 + 去掉预热滚动的 T7/S-A 像素判据
 - test_frontend_rowh_zoom_rescale_guard: issue 26-11-16-0716 修复守阵 —— 运行时 root zoom
@@ -1486,6 +1487,11 @@ def test_frontend_outgoing_rowh_reprobe_guard():
     ms = re.search(r"_reprobeRenderedRowH\(\s*\n\s*kind, `([^`]*)`", text)
     assert ms, "_rowWindow 缺出窗重探的几何签名(结构变了? 同步本守阵)"
     assert "viewMode" not in ms.group(1), ("出窗重探签名扩进 viewMode 等非几何因子 = 重踩全表作废坑")
+    assert "_winTop" not in ms.group(1), (
+        "出窗重探签名嵌 _winTop(表顶) = 重探去重被表顶抖动假失配打穿(issue 26-11-19-0258: "
+        "atlas off 轮重读表顶 178.5 vs 窗口化存值 182.5 → 复原重开窗一拍 32 键行全量重探, "
+        "off 侧 68 vs prism 34) —— 表顶是布局读数, 不是行高陈旧信号"
+    )
 
     # 2) 重探实现: 只刷已有键, 零全表作废 / 零响应式自激
     mr = re.search(r"_reprobeRenderedRowH\(kind, sig\)\s*\{(.*?\n    \},)", text, re.S)

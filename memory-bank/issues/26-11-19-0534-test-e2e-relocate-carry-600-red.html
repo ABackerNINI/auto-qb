@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>e2e relocate-key-change-pad 换键携带 600 档稳定红: 新键 15s 内未拿到携带实测高 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-relocate-carry-600-red">
+<meta name="issue-stamp" content="26-11-19-0534">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-relocate-carry-600-red">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="e2e relocate-key-change-pad 换键携带 600 档稳定红: 新键 15s 内未拿到携带实测高">
+<meta name="issue-summary" content="600 种子档 relocate-key-change-pad 换键携带用例两轮稳定红(修复前基线同红), 300 档被 TORRENTS&lt;400 门控跳过 —— 量具常规档上 0553 携带守阵失效待归因">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>e2e relocate-key-change-pad 换键携带 600 档稳定红: 新键 15s 内未拿到携带实测高</h1>
+<p class="lede">600 种子档 relocate-key-change-pad 换键携带用例两轮稳定红(修复前基线同红), 300 档被 TORRENTS&lt;400 门控跳过 —— 量具常规档上 0553 携带守阵失效待归因</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-19-0534-test-e2e-relocate-carry-600-red</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 05:34</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>修复 <a href="26-11-19-0258-perf-webui-rowwin-reopen-reprobe-excess.html">26-11-19-0258</a>（reprobe 去重签名去 _winTop）的验证轮撞见: <code>E2E_TORRENTS=600 commands run dev.e2e -- e2e/window-invalidation.spec.mjs e2e/relocate-key-change-pad.spec.mjs</code> 里「换键后新键沿用旧键实测高度」稳定红。stash 该修法在修复前基线上复跑同样红 → 非该修法引入。该用例门控 <code>TORRENTS&lt;400 skip</code>, 默认 300 档全量跑永不执行, 600 档(量具串行门禁默认档)才真跑。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-19 05:34 与 05:5x 两轮(修复修法在场) + 基线对照一轮(修法 stash), E2E_TORRENTS=600, flux 皮肤
+x  1 e2e\relocate-key-change-pad.spec.mjs:37:5 › 组键换键行高携带 flux › 换键后新键沿用旧键实测高度(est 兜底消失) @fast
+  Error: 换键携带: 新键沿用旧键实测高度(issue 26-11-11-0553 修法)
+  expect(received).not.toBe(undefined) // Object.is equality
+  Expected: not undefined
+  Call Log:
+  - Timeout 15000ms exceeded while waiting on the predicate
+    104 |  () => page.evaluate(... return vm._rowHs["group:" + k2]; ...)
+  > 106 |  ).not.toBe(undefined);
+  1 failed (前置段全过: 换键落定 poll 成功, k2 与旧键不同且旧键已离场)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>E2E_TORRENTS&gt;=400(600 档实测稳定红)跑 e2e/relocate-key-change-pad.spec.mjs; 300 档被门控跳过不可见</td></tr>
+    <tr><td>影响范围</td><td>issue 26-11-11-0553 换键携带守阵在 600 档失效(产品行为是否也回归待归因 —— 用例红可能是产品回归也可能是量具/桩数据漂移); 不影响本修(26-11-19-0258, 修复前基线同红)</td></tr>
+    <tr><td>严重度</td><td>中(守阵在门禁常规档失效 = 该面回归不可见; 真实回归面未证实)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>e2e/relocate-key-change-pad.spec.mjs:103-108</code>（取证 2026-11-19 05:34）· 换键携带断言(expect.poll 15s) · grep <code>换键携带</code></li>
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js</code>（取证 2026-11-19 05:34）· <code>ROWH_ORPHANS</code>/<code>ROWH_FRESH</code> 配对池与携带写点(<code>_measureRowH</code> kind==="group" 块) · grep <code>ROWH_CARRY_TTL</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查。已排除: 本轮 reprobe 修法引入(修复前基线同红)、门控配置(600 档本就该真跑)。候选: 配对池单配判据(两侧各恰一个才配)在 600 组数据下歧义退让(维持 est 兜底不猜) / 桩数据换键场景在 600 档形态变化 / 产品携带面回归 —— 归因需在 600 档抓 <code>ROWH_FRESH</code>/<code>ROWH_ORPHANS</code> 两池快照。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>待定。方向: 先在 600 档取证两池快照与配对判据走向(歧义退让是设计行为还是数据形态撞上), 再据结果定是修配对判据、修用例前置形态还是修产品携带面。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-19 05:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-19-0534-test-e2e-relocate-carry-600-red.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

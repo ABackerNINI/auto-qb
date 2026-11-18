@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 7/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `search-views.md` … `toast-queue-pushin-overlap.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `search-pending-collapse.md` … `toast-kind-unstyled.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [search-pending-collapse.md](search-pending-collapse.md) | 搜索匹配是服务端单点(search_torrents)、前端消费 searchHits 的模式下, "输入新词到响应返回之间沿用上一查询的命中集"(search-as-you-type)契约对「空集→首词」转换失效 —— 首词的待响应窗(防抖 400ms + 请求往返)里 searchHits 还是空集, 命中门照常生效把整个列表塌成 0 行: 文档高塌掉 → 滚动位置被钳回 0(列表中部搜一次整页跳顶), 底部停靠面板失去 sticky 锚点跟着弹。修法 = searchPending 门(待响应且命中集未落袋时不许命中门接管列表, 落袋后一次性换真结果); 配套 .layout min-height 撑满首屏治 sticky 脱锚(见 dock-panel)。 | 改搜索/筛选派生, 改 searchHits 消费, 新增走命中门的列表视图, 搜索时列表闪空, 搜索整页跳顶, 搜索时面板跳动, 待响应窗, search-as-you-type, filteredTorrents, filteredGroups, searchPending, _searchGateActive |
 | [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
 | [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trigger: on_torrent_field_changed 下允许) ⇒ **保存必败且无法从 UI 自救**。处置 = 键残留会非法的条件下显隐一律改用 grey_if(灰显仍可见可编辑, 清得掉)。 | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
 | [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
@@ -21,4 +22,3 @@
 | [template-render.md](template-render.md) | 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。 | 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote, 类名撞名, 容器类, 行修饰, hb-ro, 只读行变窄, 文字自动换行, max-width 接管, 折叠头, 可折叠段头, aria-expanded, aria-hidden, getByRole, aq-fold, aq-switch, aq-seg, 分段钮, 小控件, ctl-bits |
 | [toast-countdown-ttl-misattributed.md](toast-countdown-ttl-misattributed.md) | 同一条提示条的进度条时长与退场定时器不同源 —— stamp 时用的是"整栈共用"的 ttl, 同一 tick 里先发出的归档条(4000)把 TTL 贴到了后推入的结果条(12000)上 | 进度条到了不消失, 倒计时条走完窗口还在, 时间指示条停在末尾, 强制重新汇报失败窗口不消失, --fx-life, data-fx-cd, toastSync ttl, 归档条 TTL 串条 |
 | [toast-kind-unstyled.md](toast-kind-unstyled.md) | toast 新 kind 不登记样式 = 与 info 同貌 | toast, kind, 提示条, warn 档, 消息弹窗, 样式没生效, 与 info 一样, toast 颜色, 语义档, msg-tone, msg-line |
-| [toast-queue-pushin-overlap.md](toast-queue-pushin-overlap.md) | 给底部锚定的提示条栈补了 FLIP 之后, 新条仍走「原地淡入」, 于是旧条还没让开、新条已经落在同一块地方 —— 重叠是入场形态的锅, 不是 FLIP 的锅 | toast 重叠, 队列重排, FLIP, 叠画, 新条入场, 顶掉, 提示条重叠, 强制汇报两个窗口, 队列推入, data-fx-queue |

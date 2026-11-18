@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 8/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `tpl-comment-split-orphan.md` … `wording-audit-surface.md`(共 12 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `toast-queue-pushin-overlap.md` … `wording-audit-surface.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [toast-queue-pushin-overlap.md](toast-queue-pushin-overlap.md) | 给底部锚定的提示条栈补了 FLIP 之后, 新条仍走「原地淡入」, 于是旧条还没让开、新条已经落在同一块地方 —— 重叠是入场形态的锅, 不是 FLIP 的锅 | toast 重叠, 队列重排, FLIP, 叠画, 新条入场, 顶掉, 提示条重叠, 强制汇报两个窗口, 队列推入, data-fx-queue |
 | [tpl-comment-split-orphan.md](tpl-comment-split-orphan.md) | 把单文件模板切成 `shared/tpl/*.html` 时, 若一条 `<!-- ... -->` 的开头半被切走/丢弃, 分片里只剩 结尾的 `-->`, 聚合(boot.js 把清单里同目标分片拼成一条 HTML 串再注入)里就成了**孤儿 `-->`** —— 被当**文字节点渲染出来**。标签配平 / CSS 注释扫描等既有守阵全查不出。 | 页面出现不该有的中文注释文字, 页面上出现 `-->`, 模板分片, tpl-manifest, 聚合, 注释没闭合 |
 | [ui-entry-tradeoff-unreported.md](ui-entry-tradeoff-unreported.md) | 配置键/功能在设置页的**入口取舍**(图形化与否、hidden 后用户在哪编辑、接线位置)是用户可感知的交互面决策, 不是实现细节 —— 实现者把「通用编辑树表达不了 → hidden + YAML 手编」当可自行拍板的实现细节定下, 代码全绿、评审通过, 入口却没上设置页; 副因: 收口验收只有代码断言与评审, 无「设置页过一遍」动作, e2e 对设置页零断言, 全绿掩盖入口缺失。动作两条: ①影响用户入口/交互面的取舍必须上报拍板, 不得以实现细节名义自行决定; ②涉设置页/入口面的计划, 收口验收必须含浏览器级断言或显式目检项。 | 设置页, 接线, hidden, 入口, 验收遗漏, UI 未接线, 图形化 |
 | [ui-location-persist.md](ui-location-persist.md) | "刷新后回到别的页"这类报障的固定判据 —— 位置属于**用户意图**该落盘, 但只改初值不够(按需加载的页面必须在启动路径补一次加载), 且恢复的值必须对 schema 校验, 采用时要复用既有跳转方法。 | 刷新回种子页, 设置页刷新, 刷新掉回首页, 页面位置, 停在哪一页, page 持久化, hub.view, F5 丢位置, 记住上次在哪, 展开态被收起, 切视图, expandedKey, 分组展开, 追剧展开 |

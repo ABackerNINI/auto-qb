@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-rowwin-reopen-reprobe-excess">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="atlas off→on 重开窗一拍 reprobe 超量探测: prism 24/atlas 54 次, 疑行高均值偏小致渲染超量行">
 <meta name="issue-summary" content="perf 量具分段实测发现 rowWin off→on 复原重开窗一拍对全 DOM 行再探, prism ~24/atlas ~54 次(窗口实际 ~22 行), 皮肤相关疑 atlas 行高估算偏小; 分段计数后不拖穿预算但属无谓工作面">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· perf</div>
+<div class="kicker">计划外问题（已修）· perf</div>
 <h1>atlas off→on 重开窗一拍 reprobe 超量探测: prism 24/atlas 54 次, 疑行高均值偏小致渲染超量行</h1>
 <p class="lede">perf 量具分段实测发现 rowWin off→on 复原重开窗一拍对全 DOM 行再探, prism ~24/atlas ~54 次(窗口实际 ~22 行), 皮肤相关疑 atlas 行高估算偏小; 分段计数后不拖穿预算但属无谓工作面</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0258-perf-webui-rowwin-reopen-reprobe-excess</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 02:58</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -110,6 +110,14 @@ off 侧每 run gBCR: prism 30 / atlas 64
   (reprobe 项与轮数无关、逐轮复现)
 on 侧窗口行 tRows ≈ 20-22 (300 种子/900 高)
 3000 档抽验: off 侧 33 / 68 —— reprobe 项近似不随 tTotal 变(差异在噪声内)</code></pre>
+<pre><code># 取证 2026-11-19 04:57（探针精确复刻 benchRun(false) 时序 + 引擎决策包装, E2E_TORRENTS=600）
+benchRun(false) off.gbr: prism 34 / atlas 68(复现)
+reprobe 决策(atlas): 重开窗签名 0|900|600|0|178.5 != 去重缓存 0|900|600|0|182.5 -> 全量重探 32 个已持键行
+reprobe 决策(prism): 签名 0|900|600|0|173.734375 == 缓存 -> 去重命中, 0 探
+表顶两态读数: .group-table top 窗口化 178.981 vs 全量 178.5(本跑差 0.48px; 复刻跑窗口化存值 182.5)
+  表顶 = .content 顶 145.69 + 前置 sticky 列头高 ~32.8 —— 列头/收敛期高度亚像素~4px 抖动
+静态排除面: 两皮肤行盒 CSS 逐字同构(单行 ~42.7px), ROW_WIN_EST_H 四皮肤共用,
+  冻结均值 prism 46.25 / atlas 45.25 几乎相同, _rowHs 键集均 32 —— 「atlas 行高估算偏小」不成立</code></pre>
 </section>
 
 <section id="s3">
@@ -134,24 +142,33 @@ on 侧窗口行 tRows ≈ 20-22 (300 种子/900 高)
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查。候选: atlas 行高估算/均值偏小 → 首帧估算窗口行数超实际 → 重开窗按估算渲染超量行再被 reprobe 逐行量高。已排除: 背景轮询混淆（W2 量具窗口已隔离轮询，纯净窗口下逐轮复现同一量级）。</div>
+  <div class="callout">已查明(2026-11-19, 探针取证): reprobe 去重签名(<code>columns_grid.js</code> <code>_rowWindow</code> 调用点, 26-11-15-0332 引入)嵌了 <code>_winTop[kind]</code>(表顶文档偏移)。表顶是<strong>布局读数</strong>(.content 顶 + 前置 sticky 列头高), 随页面收敛期与窗口化/全量两渲染态间抖动(亚像素~4px), 不是行高陈旧信号。off 轮 <code>_ensureWinTop</code>(签名含 lastRid)逐轮重读出新表顶, 与上次实探落盘的去重缓存<strong>假失配</strong>, 复原重开窗一拍对全部已持键行白付一轮 gBCR。皮肤差异只是表象: atlas 表顶恰在两态间漂移(182.5→178.5)而 prism 恒 173.734375 幸免 —— 同拍重开窗 prism 走 measureRowH(~26) / atlas 多付 reprobe 全量(32)。候选估算面假说(atlas 行高/均值偏小)经静态 CSS 对照 + 冻结均值实测排除(46.25 vs 45.25); W2 取证里 prism 的「reprobe 24」实为重开窗 measureRowH, reprobe 真失配只发生在 atlas。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
   <p>待定。方向: 先归因 atlas vs prism 的行高估算差（EST_H/均值面），据结果修估算面；或 reprobe 限定在窗口行集合内避免全 DOM 遍历。代价: 估算面改动会牵动窗口化多面判据，需带守阵。</p>
+  <p class="hint">改道说明(修后): 两个建议方向均未采用 —— 取证排除估算面(两皮肤估算对称), 且假失配修掉后重开窗本就零重探, 无需限定窗口行集合。实际修法见下方「修复后补充」。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 02:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 04:26 — 复验：仍复现，状态保持 <strong>Open</strong>（锚点两面均在 + 量具复测量级吻合，见下方复验记录）</li>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+    <li>2026-11-19 — 收尾实测：pytest 全量（基线 7d88fee1，含守阵新增 _winTop 断言）<strong>6477 passed / 6 skipped / 0 failed</strong>，覆盖率 99%，168.8s；静态守阵 <code>test_frontend_outgoing_rowh_reprobe_guard</code> 已同步钉住「签名不含 _winTop」</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-19 04:26 <strong>仍复现</strong>。锚点两面均原样在场（<code>columns_grid.js</code> <code>_reprobeRenderedRowH</code>/<code>_rowWindow</code> reprobe 调用点、<code>app.js</code> <code>ROW_WIN_EST_H</code>/<code>ROW_WIN_MIN</code> 估算面，grep 实测 2026-11-19）；量具复跑 <code>commands run dev.e2e-perf-serial -- e2e/perf.spec.mjs -g "A/B 埋点"</code>（E2E_TORRENTS=600，2 passed / 0 failed，12.1s）：</p>
+<pre><code># 复验取证 2026-11-19 04:26（600 档, 分段 __gbr 口径同原证）
+off 侧每 run gBCR: prism 34 / atlas 68
+  分解 = off 3 轮渲染量 ~6-10 次 + rowWin 复原重开窗 reprobe 迁移 ~24-28 / ~58-62 次
+  与原证同量级(300 档 30/64、3000 档 33/68) —— reprobe 项仍与轮数/tTotal 近似无关、皮肤相关(atlas ≈ prism 2 倍)</code></pre>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(2026-11-19): 去重签名去掉 <code>_winTop[kind]</code> 项, <code>sig = sy|vh|n|_winResize</code> —— <code>columns_grid.js</code> <code>_rowWindow</code> reprobe 调用点单点改动(注释含机理与取证数字)。滚驱动出窗(sy 变化)与宽度代变化照常失配重探, 0332 主场景不受影响; zoom 过渡拍本就有函数体内守卫, 不依赖签名。</p>
+  <p><strong>验证方式与测试数字</strong>: ① <code>dev.e2e-perf-serial -g "A/B 埋点"</code>(600 档): off 侧 gBCR prism 34 / atlas <strong>68 → 35</strong>, 收敛对称, P1-2/P1-3/off 上限 130 全绿; ② 复刻探针: 修后两皮肤 reprobe 均去重命中(0 重探), 重开窗窗口行数不变(25/26); ③ 相邻守阵六个 spec(drawer-dock-stability / row-window-zoom / kbd-scroll-band / dt-table-layout-parity / window-invalidation / relocate-key-change-pad): 72 passed / 11 skipped(既有 TORRENTS 档位门控) / 0 failed; ④ pytest 全量见状态日志。600 档下 <code>perf.spec 首访路径指纹</code> 与 <code>relocate-key-change-pad 换键携带</code> 两条红为<strong>既有问题</strong>(修复前基线同红, 300 档指纹绿), 与本修无关。</p>
 </section>
 
 <footer>
