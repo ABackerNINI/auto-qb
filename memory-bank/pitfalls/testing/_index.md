@@ -14,9 +14,9 @@
 |---|---|---|
 | [1](_index-1.md) | `annotations-lazy-eval.md` … `config-validation-test-input.md` | 17 |
 | [2](_index-2.md) | `consecutive-port-run.md` … `fixed-port-test-collision.md` | 17 |
-| [3](_index-3.md) | `flaky-midnight-daycount.md` … `headless-prefers-light-theme-gate.md` | 17 |
-| [4](_index-4.md) | `heredoc-cjk-punct-js-syntax.md` … `mutation-revert-git-checkout.md` | 17 |
-| [5](_index-5.md) | `mutmut-mtime-race-stale-trampoline.md` … `qb-profile-nic.md` | 17 |
-| [6](_index-6.md) | `qb-tags-multi-split-strip.md` … `sidefx-diagnostic-probe.md` | 17 |
-| [7](_index-7.md) | `sidefx-import-time-temp-roots.md` … `tmpdir.md` | 17 |
-| [8](_index-8.md) | `tool-mode-coverage.md` … `xdist-worker-global-snapshot.md` | 10 |
+| [3](_index-3.md) | `flaky-midnight-daycount.md` … `headless-canvas-decor-ink.md` | 17 |
+| [4](_index-4.md) | `headless-prefers-light-theme-gate.md` … `mutation-pool-artifact.md` | 17 |
+| [5](_index-5.md) | `mutation-revert-git-checkout.md` … `qb-api-latency-probe.md` | 17 |
+| [6](_index-6.md) | `qb-profile-nic.md` … `side-effects.md` | 17 |
+| [7](_index-7.md) | `sidefx-diagnostic-probe.md` … `timing-tolerance.md` | 17 |
+| [8](_index-8.md) | `tmpdir.md` … `xdist-worker-global-snapshot.md` | 11 |

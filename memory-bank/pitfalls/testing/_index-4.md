@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `heredoc-cjk-punct-js-syntax.md` … `mutation-revert-git-checkout.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `headless-prefers-light-theme-gate.md` … `mutation-pool-artifact.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [headless-prefers-light-theme-gate.md](headless-prefers-light-theme-gate.md) | 无头浏览器跟随系统亮色会误触亮主题排除前缀, 让暗主题规则整体假性失效 | 无头, Playwright, 亮主题, prefers-color-scheme, 诊断假象, theme 排除 |
 | [heredoc-cjk-punct-js-syntax.md](heredoc-cjk-punct-js-syntax.md) | 对 drawer_tpl/*.js 这类「字符串数组拼 CSS/JS」的变体文件做批量编辑(heredoc 重写、切片替换、python 正则改写)时, 两个高频翻车点: ①heredoc 内容里的**中文标点**(「」（）等)或行尾引号被 shell/编码吃掉, 产生残行(如孤立的 `07");`); ②切片偏移算错一行, 替换把相邻声明腰斩。两者都**不报错于编辑时**, 只在运行/加载时炸。纪律: 变体文件任何批量编辑后必跑 `node --check <file>`(加载前语法闸), 守阵(静态扫描)再做第二层。 | 批量编辑变体, heredoc 改 js, 切片替换, 残行, 语法错误, node --check, drawer_tpl, 字符串数组, 中文标点, 引号错位, 编辑后没检查语法 |
 | [hot-reload-mock-sections.md](hot-reload-mock-sections.md) | apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化 | 改 apply_new_config / 新增模块 apply / 热重载守阵, 见到 MagicMock 配置 + 新模块段短路判据 |
 | [hot-reload-section-choice-side-effects.md](hot-reload-section-choice-side-effects.md) | 驱动 apply_new_config 的测试(段认领兜底/回执/级别语义类)如果改的是 notify 这类「apply 有 | 写热重载/兜底类测试选驱动段时; 见「单跑绿全量红」且红在 logging 全局面断言 |
@@ -24,4 +25,3 @@
 | [mutants-shared-mirror.md](mutants-shared-mirror.md) | (2026-11-12 起容器口径) 镜像仓默认**按目标派生** `/root/auto-qb-tests/mutation/<pkg>`(`mutants.py` 的 `derive_mirror`, 每目标一份), **换目标互不冲**; 但容器 `auto-qb-testbed` 是**全宿主共享**的(多 clone 的会话都 exec 进同一个容器), **同 target 的并行会话仍互冲** —— `mutants.run` 的 `[4/6]` 步 `rm -rf mutants mutmut-cache.db` 会把正在跑的 `mutants/**/*.meta` 一起删掉, 下一次结果落盘时崩在 `FileNotFoundError: mutants/.../<file>.meta`(WSL 时代实测 hr 首轮在 5125/8027 处崩, 85% 作废)。**同目标并行**时: `--mirror <容器内绝对路径>` 各占一份(`report` / `verify` 带**同一个** `--mirror`), 并存时把 `--children` 降到 2(对方 3); **不同目标**用默认派生仓即天然隔离。 | 并行会话, 共享镜像, rm -rf mutants, FileNotFoundError, .meta 被删, mutmut 崩, only_mutate 被改, 专用镜像, --mirror, --children, 同 target 并行, 容器共享, 按目标派生, derive_mirror |
 | [mutants-wsl-shell.md](mutants-wsl-shell.md) | (2026-11-12 起容器口径) `mutants.*` 后端已迁 `docker exec auto-qb-testbed bash -c`(计划 26-11-12-0152 S4), 容器 bash **不存在本坑** —— 脚本经 argv 直传容器 bash, 无登录壳、无 zsh, `cd` 与 `$()`/`$PWD` 是同进程常规语义; `mutants.status` 脚本已回归常规 `$(...)` 形态。本坑只剩 **WSL 形态的历史价值**(见下「历史留痕」), 仅当再写 WSL 侧脚本(兜底/迁移/一次性探针)时才需提防。 | WSL, wsl.exe, bash -lc, zsh, 命令替换, $(), $PWD, cd 不生效, 相对路径读错, mutants.status, mutmut=no, 镜像目录, 路径漂移, docker exec, bash, 不适用, 容器 |
 | [mutation-pool-artifact.md](mutation-pool-artifact.md) | 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的**假存活** —— 同一目标同一套变异, 只把池从 1 个测试文件换到 5 个, 存活数 97 → 70(−27%); 一个被判成 SURVIVED 的变异, 拿**全套件**手工改一次其实是被杀死的。判一个存活变异是不是真洞, **唯一标准**是拿全套件手工造同构变异看红不红。不先立这条规矩就投产, 第一份存活清单会被当成缺口单, 人力全浪费在伪洞上。 | 变异测试, mutmut, pytest-gremlins, 存活变异, 杀死率, 选择池, 假存活, 等价变异, 真洞, 机器提名手工确认, 变异审计 |
-| [mutation-revert-git-checkout.md](mutation-revert-git-checkout.md) | 红绿双验做突变时, 用 `git checkout -- <file>` 还原文件会把**本轮尚未提交的全部改动**一起冲掉 —— 突变注入的 sed 与手头未提交的实现在同一个工作区文件里, checkout 不区分。防御: 精确反向 Edit 重放突变(或 `git stash` 之外的备忘), 还原后先 `git status` 核对改动面。 | 红绿双验, 变异测试, 突变, 判红, git checkout 还原, 冲掉未提交, 工作区回退, sed 注入 |

@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 6/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `qb-tags-multi-split-strip.md` … `sidefx-diagnostic-probe.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `qb-profile-nic.md` … `side-effects.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [qb-profile-nic.md](qb-profile-nic.md) | 换机抄 qB profile 残留原机网卡标识 ⇒ connection_status=disconnected 假红 | disconnected, 网卡, ethernet_, profile, 换机, firewalled, real.up, connection_status |
 | [qb-tags-multi-split-strip.md](qb-tags-multi-split-strip.md) | qBittorrent 的 tags 字段以「, 」(逗号+空格)连接多标签; `split(",")` 不 strip 会把第二个标签解析成带前导空格的串(`" real-fake"` != `"real-fake"`), 所有「按标签认领种子」的成员判断随即静默失明。单标签时无空白无感, 第二个标签(实测: 产品打的 MISSING)进场即中招。 | 按标签认领/过滤种子, 写 tags 成员判断, tests-real 基建, qB API tags 字段 |
 | [read-source-static-guard-mutation.md](read-source-static-guard-mutation.md) | S4「全套件手工确认」的判据是「同构变异 **是否让某条用例变红**」。若池里含**读源码文本**的静态守卫(措辞守卫 / 数字守卫, 断言 `read_text()` 里的包内字符串/数字与冻结常数一致), 它们在挂载环境里**基线就红或本就近红**, 于是**任何** src 变异都会让它们继续红/转红 —— 机器把全部候选报成 `KILLED`(假存活), 真洞清单被洗成零, 整轮判据报废。判别: 报「全杀」时先看基线绿不绿(有既有红守卫就可能伪杀), 再 `grep` 池里有没有 `read_text`/`Path(...).read_text` 型断言。处置: **变异判据排除读源码文本的静态守卫**(显式 `--deselect`), 且 S4 前必须先跑一次基线确认 `passed`。 | 变异测试, mutmut, S4, 全套件确认, 假存活, 全杀, 幸存清零, 真洞清单为零, 读源码文本, 静态守卫, 措辞守卫, 数字守卫, read_text, 基线就红, 既有红守卫, 镜像 memory-bank 落后, deselect, 判据污染, 结构性伪影 |
 | [real-probe-rid-window.md](real-probe-rid-window.md) | 真机探针增量窗口: trigger 后重置 rid 会把窗口内事件被全量冲掉(假阴性) | 真机探针, 增量窗口, rid 重置, 全量冲掉, 假阴性, sync/maindata, torrents_removed, 删后重加, 探针方法论 |
@@ -24,4 +25,3 @@
 | [sandbox-venv-in-workspace.md](sandbox-venv-in-workspace.md) | agent 沙箱给工作区目录打了 Low 完整性标签 + 沙箱 capability ACE, 在**工作区内**新建的 venv, 其 `Scripts/python.exe` 读不到**同目录的** `pyvenv.cfg` —— 报 `Cannot read ... pyvenv.cfg` / exit 107 (`uv run` 另报 `uv trampoline failed to spawn Python child process: permission denied (os error 5)`); 重建 venv 无效, 把同一份 venv 拷到工作区外即正常。处置 = `UV_PROJECT_ENVIRONMENT` 指到工作区外。 | exit 107, Cannot read pyvenv.cfg, pyvenv.cfg 不可读, uv run 失败, 工具 venv 坏, permission denied os error 5, uv trampoline, venv 重建无效, gtm 测试跑不了, UV_PROJECT_ENVIRONMENT, env.sync, trampoline 失效, 既有 venv 突然坏 |
 | [seed-store-full-replace.md](seed-store-full-replace.md) | `tests/helpers.py::seed_store(mgr, torrents)` 的形参像「灌入这些种子」(增量), 实际语义是 | seed_store, 全量替换, 整体替换, by_hash, 增量追加, 部分灌入, 挤出快照, 种子不存在, webui_helpers, |
 | [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |
-| [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例, 与肇事者无关 | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
