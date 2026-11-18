@@ -13,6 +13,38 @@ from fastapi import APIRouter
 from ..context import WebContext
 
 
+def _sort_tree_curve_periods(tree: dict) -> None:
+    """GET 树内 global_speed_limit_curve.curves 按 period 键升序(计划 26-11-18-0801 S3/D8)
+
+    编辑器工作对象 = 磁盘原始树(read_tree 保磁盘顺序), 仅 loader 排序到不了 UI —— GET 面
+    也排一次, 编辑器打开即有序。键序单点在 core.curves.period_sort_key(day < ND按N < month),
+    前端 JS 复刻版为后续批次(落地时注释互指)。
+
+    失败策略(D8 拍板, 保守默认): 任一 period 解析失败(抛 ValueError, 含非字符串等怪值)或
+    树形不符预期(缺段/段非字典如手改成标量/缺 curves/条目非字典) -> **整段放弃排序, 原样
+    返回**, 不部分重排 —— 数据可疑不动手; 该树保存时 _validate_tree 本会拦, 不入盘。
+    """
+    from ....core import curves
+
+    root = (tree or {}).get("config")
+    section = root.get("global_speed_limit_curve") if isinstance(root, dict) else None
+    items = section.get("curves") if isinstance(section, dict) else None
+    if not isinstance(items, list):
+        return  # 缺段/段非字典/缺 curves/形状不符: 没有可排序面, 原样返回
+
+    def _key(item):
+        # 树内条目 = {curve: {...}} 单项映射, 标量为字符串(YAML 同构)
+        spec = item.get("curve") if isinstance(item, dict) else None
+        if not isinstance(spec, dict):
+            raise ValueError("curve 条目形状异常")
+        return curves.period_sort_key(spec.get("period"))
+
+    try:
+        items.sort(key=_key)  # 稳定排序; 重复 period 已被校验层拒绝, 键唯一无歧义
+    except ValueError:
+        pass  # D8: 任一 period 解析失败 -> 整段放弃, 原样返回
+
+
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
     _enqueue = ctx.enqueue
@@ -125,11 +157,17 @@ def build_router(ctx: WebContext) -> APIRouter:
         敏感字段(qB 密码 / tracker passkey / WEB 密钥)按**键名**掩码为 MASK_SENTINEL: 明文
         进浏览器内存、截图与日志即为凭据泄漏。保存时 PUT 会用磁盘旧值还原哨兵 —— 掩码只影响
         展示, 不会把密码写死成占位串。
+
+        树内 global_speed_limit_curve.curves 按 period 键升序(计划 26-11-18-0801 S3):
+        编辑器打开即有序, 乱序磁盘经一次 UI 保存被动收敛(见 _sort_tree_curve_periods, D8
+        解析失败整段放弃)。
         """
         from ....config.writer import MASK_SENTINEL, mask_tree, read_tree
 
+        tree = read_tree(manager.config_path)
+        _sort_tree_curve_periods(tree)
         return {
-            "tree": mask_tree(read_tree(manager.config_path)),
+            "tree": mask_tree(tree),
             "path": manager.config_path,
             "masked": True,
             "mask_sentinel": MASK_SENTINEL,

@@ -50,7 +50,8 @@ def period_sort_key(value: Any) -> Tuple[int, ...]:
       ValueError, 由调用方捕获决定放弃该次排序。
     - ND 的 N 按数值比较(2D < 10D), 非字典序; month 恒最后且不按当月实际天数参与比较
       (28-31 天波动会导致重排翻转, 破坏幂等)。
-    - 前端 JS 复刻版在 config_editor_curve.js(注释互指; 前端接线为后续批次)。
+    - 前端 JS 复刻版后续批次落 config_editor_curve.js(S4, 计划 26-11-18-0801; 落地时两侧
+      加注释互指)。
     """
     p = normalize_period(value)
     if p == "day":

@@ -15,7 +15,8 @@
 - test_period_sort_key_nd_numeric: ND 按 N 数值序(2D < 10D, 非字典序)
 - test_period_sort_key_month_last: month 恒最后(任意 ND < month)
 - test_period_sort_key_invalid_raises: 非法 period 抛 ValueError
-- test_period_sort_key_idempotent: 同一 period 重复取键结果一致
+- test_period_sort_key_idempotent: 一次乱序 sorted == 手写期望序(有失败能力); 已序列再排不变; 别名同键稳定序
+- test_speed_curve_config_curves_sorted_by_period: 乱序 YAML -> 模型 curves 按 period 键升序(loader 排序, S2)
 - test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
 - test_parse_history_dat_bad_lines: 脏行计数(同分支多条累加) / 非法日期 / 重复日期取最后
 - test_aggregate_periods: day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)
@@ -175,6 +176,22 @@ def test_speed_curve_config_parses_sample(tmp_path):
     # 第二曲线只配 download_curve -> upload_points None(不管理上传)
     assert week.upload_points is None
     assert week.download_points[0].speed_bytes_per_s == 10 * MIB
+
+
+def test_speed_curve_config_curves_sorted_by_period(tmp_path):
+    """乱序 YAML -> 模型 curves 按 period 键升序(loader 排序, 计划 26-11-18-0801 S2/D5)
+
+    排序在构造 GlobalSpeedLimitCurve 前(loaders.py), 输入已过校验层无需放弃分支; 效果 =
+    运行时模型有序(period_stats 日志序) + diff 基线两侧一致(消灭首次保存 phantom diff)。
+    """
+    def curve_item(period):
+        return {"curve": {"period": period, "upload_curve": [{"10GiB": {"upload_speed_limit": "6MiB/s"}}]}}
+
+    spec = copy.deepcopy(_valid_spec())
+    # 乱序写入: month / 30D / 1D(day) / 7D / 2D —— 期望键序 day < 2D < 7D < 30D < month
+    spec["curves"] = [curve_item("month"), curve_item("30D"), curve_item("1D"), curve_item("7D"), curve_item("2D")]
+    g = _load(tmp_path, spec).global_speed_limit_curve
+    assert [c.period for c in g.curves] == ["day", "2D", "7D", "30D", "month"]
 
 
 def test_speed_curve_config_enabled_key(tmp_path):
@@ -473,10 +490,18 @@ def test_period_sort_key_invalid_raises():
 
 
 def test_period_sort_key_idempotent():
-    """幂等: 同一 period 重复取键结果一致; 相同键可稳定归组"""
-    for p in ("day", "DAY", "1D", "2D", "10D", "month"):
-        assert curves.period_sort_key(p) == curves.period_sort_key(p)
-    assert len({curves.period_sort_key(p) for p in ("day", "DAY", "D")}) == 1
+    """幂等(黄金法则1): 一次乱序 sorted 等于手写期望序(有失败能力); 已序列再排不变
+
+    别名归一后判同键(DAY/1D/D 与 day 同键), 同键条目按稳定排序保持原有相对位置。
+    """
+    periods = ["month", "10D", "day", "2D", "DAY", "7D", "30D", "1D"]
+    once = sorted(periods, key=curves.period_sort_key)
+    # 乱序输入的完全期望序手写钉死: day < 2D < 7D < 10D < 30D < month; 同键别名(DAY/1D)按稳定序
+    assert once == ["day", "DAY", "1D", "2D", "7D", "10D", "30D", "month"]
+    assert sorted(once, key=curves.period_sort_key) == once  # 已序列重排不变(重入无漂移)
+    # 别名混排: 同键条目不产生新序(稳定序), 异键条目正常归位
+    aliased = sorted(["day", "1D", "2D", "D"], key=curves.period_sort_key)
+    assert aliased == ["day", "1D", "D", "2D"]
 
 
 def test_parse_history_dat_rows():

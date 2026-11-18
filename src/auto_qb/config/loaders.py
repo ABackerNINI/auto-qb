@@ -481,6 +481,11 @@ def load_global_speed_limit_curve(spec: dict | None) -> Optional[GlobalSpeedLimi
                 ),
             )
         )
+    # 模型 curves 按 period 键升序(计划 26-11-18-0801 S2, 键序见 curves.period_sort_key D5):
+    # 运行时与列表序无关(同方向 min 合并), 排序纯规范面 —— period_stats 日志序稳定, diff
+    # 基线两侧一致(消灭首次保存 phantom diff)。输入已过校验层(非法/重复 period 已拒),
+    # 排序必成, 无放弃分支。
+    period_curves.sort(key=lambda c: curves.period_sort_key(c.period))
     # curves 为必填(无默认), 其余可选键取值统一走 _get(issue 26-10-11-0032):
     # 字段默认经类属性读取(dataclass 有默认值的字段即类属性, 默认值单源仍是 models)
     return GlobalSpeedLimitCurve(

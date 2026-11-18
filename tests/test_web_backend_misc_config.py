@@ -9,6 +9,9 @@
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_config_tree_masks_secrets: /api/config 掩码敏感字段, 且"读取→原样保存"不会把密码写成占位串
 - test_config_tree_masks_transfer_target_passwords: /api/config 对 web.transfer.targets[].password 同哨兵掩码(D4) —— GET 不回明文, 原样保存磁盘仍是真密码且无哨兵
+- test_config_tree_curves_sorted_by_period: GET 树内 global_speed_limit_curve.curves 按 period 键升序(计划 26-11-18-0801 S3; 内层结构与其它段不被误动)
+- test_config_tree_curves_unsortable_left_untouched: 任一 period 解析失败 -> 整段放弃排序原样返回(D8)
+- test_config_tree_curve_section_scalar_left_untouched: 段为真值非字典(标量) -> 不 500, 该段树原样(D8)
 """
 
 import logging
@@ -150,6 +153,86 @@ def test_config_tree_masks_secrets(web_env):
     text = open(mgr.config_path, encoding="utf-8").read()
     assert "password: p" in text, f"原样保存不得把密码写成占位串: {text}"
     assert data["mask_sentinel"] not in text
+
+
+def _curve_config_text(periods) -> str:
+    """构造带 global_speed_limit_curve.curves 的配置文本(period 列表按给定序落盘)"""
+    lines = [
+        "config:\n",
+        "  schema_version: 8\n",
+        "  qbittorrent:\n",
+        "    host: h\n",
+        "  global_speed_limit_curve:\n",
+        "    curves:\n",
+    ]
+    for p in periods:
+        lines += [
+            "      - curve:\n",
+            f"          period: {p}\n",
+            "          upload_curve:\n",
+            "            - 10GiB: {upload_speed_limit: 6MiB/s}\n",
+        ]
+    return "".join(lines)
+
+
+def _tree_curve_periods(tree) -> list:
+    return [c["curve"]["period"] for c in tree["config"]["global_speed_limit_curve"]["curves"]]
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": _curve_config_text(["month", "7D", "1D"])}], indirect=True)
+def test_config_tree_curves_sorted_by_period(web_env):
+    """GET 树内 global_speed_limit_curve.curves 按 period 键升序(计划 26-11-18-0801 S3/D5)
+
+    编辑器工作对象 = 磁盘原始树(read_tree 保磁盘顺序), GET 面排序让编辑器打开即有序
+    (day < ND按N < month 恒最后); 磁盘文件本身不动(被动收敛见计划 D7)。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = client.get("/api/config", headers=auth).json()
+    assert _tree_curve_periods(data["tree"]) == ["1D", "7D", "month"]
+    # 排序只动列表序, 条目内层结构完整(照盘面期望值逐位核对)
+    curves = data["tree"]["config"]["global_speed_limit_curve"]["curves"]
+    for c in curves:
+        assert list(c["curve"].keys()) == ["period", "upload_curve"]
+        assert c["curve"]["upload_curve"] == [{"10GiB": {"upload_speed_limit": "6MiB/s"}}], \
+            "标量为字符串(YAML 同构), 内层档位结构原样"
+    # 其它 config 段未被误动
+    assert data["tree"]["config"]["qbittorrent"] == {"host": "h"}
+    # 磁盘原始文件保持写入序(GET 面只重排展示树, 不动盘)
+    disk = open(mgr.config_path, encoding="utf-8").read()
+    assert disk.index("period: month") < disk.index("period: 7D") < disk.index("period: 1D")
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": _curve_config_text(["month", "weekly", "1D"])}], indirect=True)
+def test_config_tree_curves_unsortable_left_untouched(web_env):
+    """任一 period 解析失败 -> 整段放弃排序, 原样返回(D8, 保守默认: 数据可疑不动手)
+
+    运行中手改 config.yml 可引入非法 period; GET 不部分重排, 该树保存时 _validate_tree 拦。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = client.get("/api/config", headers=auth).json()
+    assert _tree_curve_periods(data["tree"]) == ["month", "weekly", "1D"]
+
+
+@pytest.mark.parametrize(
+    "web_env",
+    [{
+        "config_text": "config:\n  schema_version: 8\n  qbittorrent:\n    host: h\n  global_speed_limit_curve: hello\n"
+    }],
+    indirect=True,
+)
+def test_config_tree_curve_section_scalar_left_untouched(web_env):
+    """段为真值非字典(如运行中手改 global_speed_limit_curve: hello) -> 不 500, 该段树原样(D8)
+
+    BaseLoader 标量全为字符串, 段取值后必须 isinstance(dict) 防御才能落到 curves 探测;
+    否则 AttributeError 逃出 except ValueError 使 GET 整个 500, 违反「树形不符整段放弃」。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    resp = client.get("/api/config", headers=auth)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["tree"]["config"]["global_speed_limit_curve"] == "hello"
 
 
 _TRANSFER_CONFIG_TEXT = (
