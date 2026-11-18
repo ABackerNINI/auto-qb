@@ -43,6 +43,23 @@ def normalize_period(value: Any) -> str:
     raise ValueError(f"无效 period(支持: day/1D, month, ND 如 7D): {value}")
 
 
+def period_sort_key(value: Any) -> Tuple[int, ...]:
+    """period 排序键(计划 26-11-18-0801 D5): day=(0,) < {N}D=(1,N) 按 N 数值 < month=(2,) 恒最后
+
+    - 输入先经 normalize_period 归一化(别名 DAY/1D/D 等归一后判同键); 非法 period 抛
+      ValueError, 由调用方捕获决定放弃该次排序。
+    - ND 的 N 按数值比较(2D < 10D), 非字典序; month 恒最后且不按当月实际天数参与比较
+      (28-31 天波动会导致重排翻转, 破坏幂等)。
+    - 前端 JS 复刻版在 config_editor_curve.js(注释互指; 前端接线为后续批次)。
+    """
+    p = normalize_period(value)
+    if p == "day":
+        return (0, )
+    if p == "month":
+        return (2, )
+    return (1, int(p[:-1]))
+
+
 # TODO: Traffic Monitor的history_traffic.dat目前是每天一行倒序排列, 可以只读取 N 行, 比如31+5行
 # TODO: 或者第一次读取N行, 剩下的只读取2行(除首行), 更新今天和昨天的数值就可以了
 def parse_history_dat(text: str, scale: int = KB) -> Tuple[List[HistoryRow], int]:

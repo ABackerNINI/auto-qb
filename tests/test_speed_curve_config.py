@@ -11,6 +11,11 @@
 - test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法/多阈值键
 - test_speed_unit_prefixless_ib_aggregates_config_error: 守阵(issue 26-10-29-1252)——速度键写无前缀 iB/s 时 load_config 聚合成 ConfigError(消息含键名), 不许 KeyError 裸穿「统一 ConfigError」契约
 - test_normalize_period_aliases: period 别名归一化(day/1D/D/month/ND) / 非法值 ValueError
+- test_period_sort_key_aliases: 排序键别名归一(DAY/1D/D/day -> 同一键)
+- test_period_sort_key_nd_numeric: ND 按 N 数值序(2D < 10D, 非字典序)
+- test_period_sort_key_month_last: month 恒最后(任意 ND < month)
+- test_period_sort_key_invalid_raises: 非法 period 抛 ValueError
+- test_period_sort_key_idempotent: 同一 period 重复取键结果一致
 - test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
 - test_parse_history_dat_bad_lines: 脏行计数(同分支多条累加) / 非法日期 / 重复日期取最后
 - test_aggregate_periods: day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)
@@ -432,6 +437,46 @@ def test_normalize_period_aliases():
     for bad in ("weekly", "0D", "3", "-1D", ""):
         with pytest.raises(ValueError):  # utils 层原始 ValueError, 非配置校验错误
             curves.normalize_period(bad)
+
+
+def test_period_sort_key_aliases():
+    """排序键别名归一: DAY/1D/D/day(含大小写) 归一后判同键 (D5, 计划 26-11-18-0801)"""
+    assert curves.period_sort_key("day") == curves.period_sort_key("DAY")
+    assert curves.period_sort_key("1D") == curves.period_sort_key("D")
+    assert curves.period_sort_key("1d") == curves.period_sort_key("day")
+    assert curves.period_sort_key("month") == curves.period_sort_key("Month")
+    assert curves.period_sort_key("7D") == curves.period_sort_key("7d")
+
+
+def test_period_sort_key_nd_numeric():
+    """ND 的 N 按数值比较(2D < 10D, 非字典序)"""
+    assert curves.period_sort_key("2D") < curves.period_sort_key("10D")
+    assert curves.period_sort_key("7D") < curves.period_sort_key("30D")
+    periods = ["30D", "2D", "10D", "3D", "7D"]
+    assert sorted(periods, key=curves.period_sort_key) == ["2D", "3D", "7D", "10D", "30D"]
+
+
+def test_period_sort_key_month_last():
+    """month 恒最后: day < 任意 ND < month (D5; 不按当月实际天数参与比较)"""
+    for nd in ("2D", "10D", "365D"):
+        assert curves.period_sort_key(nd) < curves.period_sort_key("month")
+    assert curves.period_sort_key("day") < curves.period_sort_key("2D")
+    periods = ["month", "day", "30D", "2D"]
+    assert sorted(periods, key=curves.period_sort_key) == ["day", "2D", "30D", "month"]
+
+
+def test_period_sort_key_invalid_raises():
+    """非法 period(归一化失败)抛 ValueError, 由调用方捕获决定放弃"""
+    for bad in ("weekly", "0D", "-1D", ""):
+        with pytest.raises(ValueError):
+            curves.period_sort_key(bad)
+
+
+def test_period_sort_key_idempotent():
+    """幂等: 同一 period 重复取键结果一致; 相同键可稳定归组"""
+    for p in ("day", "DAY", "1D", "2D", "10D", "month"):
+        assert curves.period_sort_key(p) == curves.period_sort_key(p)
+    assert len({curves.period_sort_key(p) for p in ("day", "DAY", "D")}) == 1
 
 
 def test_parse_history_dat_rows():
