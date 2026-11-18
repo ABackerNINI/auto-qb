@@ -149,6 +149,11 @@ test.describe('设置页 · 配置备份导出/导入(S3)', () => {
     });
 
     test(`[${skin}] 导入 round-trip: 内存改 bundle 真落盘 -> 导原 bundle 还原; POST 体无 ui_prefs; 缺段灰显 @fast`, async ({ page }) => {
+      /* 双 skin 里最重的一条: 导出三轮/导入两轮 + **两次整页 reload**(每次 boot 都要串行拉全量
+       * 模板/脚本, 容器软件渲染下单个请求 ~48ms、整条 boot ~5s), Windows 侧全程 ~19s, 容器实测
+       * 超 30s 默认预算 —— trace 实证 teardown 时 boot #2 还在拉脚本(issue 26-11-19-0230),
+       * 非挂死, 纯时间预算。90s 与 column-prefs 双整页加载同档。 */
+      test.setTimeout(90_000);
       /* PUT /api/config 拦桩只记账不落盘(共用 tmp config.yml 的污染口径见文件头);
        * GET 放行真盘(cfgSave 的 fresh 回读走真数据)。 */
       let savedPayload = null;

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-settings-backup-container-fail">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-18-webui-curve-period-sort.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e settings-backup 导入 round-trip 容器环境确定性失败">
 <meta name="issue-summary" content="settings-backup.spec.mjs 导入还原后 reload 等整组迁移块 30s 超时, 容器内双皮肤确定性红; Windows 侧另有 8/12 红因本机真实 gtm 工具响应违反桩前提; 三层对照实验实锤与 S4 改动无关">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0230-test-e2e-settings-backup-container-fail</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 02:30</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">e2e(settings-backup.spec.mjs / testbed 容器)</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">S4 实施子代理(计划 26-11-18-0801, 经主会话入池)</div></div>
 </div>
@@ -150,11 +150,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 02:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验 2026-11-19(认领轮): 容器内单跑 <code>e2e/settings-backup.spec.mjs</code> 12 例 2 失败——双皮肤 round-trip 仍红,<strong>但红点比入池取证更精确</strong>: 不在第一次 reload(line 209, 过), 而在<strong>还原导入后的第二次 reload</strong>(line 227, <code>input2</code> 30s 不可见)。Windows 侧同用例 2/2 绿——入池时记的「Windows 8/12 红」已被 issue 26-11-18-0308 的 gtm 指针隔离修复收掉(本报告入池时间在该修复入库前后, Windows 观察是修复前的旧态)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(与 §06 建议方向不同道——根因既非等待条件也非迁移触发链): trace 取证(test.linux-e2e 透传 <code>--trace on</code>)实锤为<strong>纯时间预算</strong>: Playwright 默认 test 级超时 30s(config 未设 <code>timeout</code>), 本用例含导出三轮/导入两轮 + <strong>两次整页 reload</strong>, 容器软件渲染下每次 boot 串行拉全量模板/脚本(~48ms/请求, 整条 boot ~5s), 全程 &gt;30s——teardown 发生在 boot #2 串行拉脚本中途(<code>columns_grid.js</code> 停在 st=-1), 非服务端挂死(失败后同桩后续 10 例全过)。修法 = 该用例 <code>test.setTimeout(90_000)</code>(e2e/settings-backup.spec.mjs, 先例 column-prefs 双整页加载同档), 一行, 零产品代码改动。</p>
+  <p><strong>验证方式与数字</strong>: Windows 侧全 spec 12/12 绿(2.1m); 容器内全 spec 12/12 绿(3.4m, test.linux-e2e)。修复前容器 10/12(复验基线)。</p>
 </section>
 
 <footer>

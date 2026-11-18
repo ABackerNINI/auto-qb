@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `headless-prefers-light-theme-gate.md` … `mutation-pool-artifact.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `headless-canvas-decor-ink.md` … `mutants-wsl-shell.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [headless-canvas-decor-ink.md](headless-canvas-decor-ink.md) | 本机(Windows 无 testbed)Playwright headless 用软件光栅, rAF 渲染间读画布像素读不到**装饰层墨** —— 读数恒 0, 探针「通过」其实是假阴性(装饰根本没显形也过); 真 0 判据面与像素强度判据面在此环境都不可落地。降级判据: 装饰的**机制面**改运行时记账(包 drawAxes 钩子 + ctx.rect 只读包装), **调度器面**改 anim/fx 在场断言 —— 钉「代码改的那件事本身」而不是「像素结果」。 | canvas 像素探针, getImageData, 装饰墨, 软件光栅, headless, 假阴性, 右缘装饰带, 像素量, 帧采样, e2e 画布读数恒 0, traffic fx, A6, 像素强度 |
 | [headless-prefers-light-theme-gate.md](headless-prefers-light-theme-gate.md) | 无头浏览器跟随系统亮色会误触亮主题排除前缀, 让暗主题规则整体假性失效 | 无头, Playwright, 亮主题, prefers-color-scheme, 诊断假象, theme 排除 |
 | [heredoc-cjk-punct-js-syntax.md](heredoc-cjk-punct-js-syntax.md) | 对 drawer_tpl/*.js 这类「字符串数组拼 CSS/JS」的变体文件做批量编辑(heredoc 重写、切片替换、python 正则改写)时, 两个高频翻车点: ①heredoc 内容里的**中文标点**(「」（）等)或行尾引号被 shell/编码吃掉, 产生残行(如孤立的 `07");`); ②切片偏移算错一行, 替换把相邻声明腰斩。两者都**不报错于编辑时**, 只在运行/加载时炸。纪律: 变体文件任何批量编辑后必跑 `node --check <file>`(加载前语法闸), 守阵(静态扫描)再做第二层。 | 批量编辑变体, heredoc 改 js, 切片替换, 残行, 语法错误, node --check, drawer_tpl, 字符串数组, 中文标点, 引号错位, 编辑后没检查语法 |
 | [hot-reload-mock-sections.md](hot-reload-mock-sections.md) | apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化 | 改 apply_new_config / 新增模块 apply / 热重载守阵, 见到 MagicMock 配置 + 新模块段短路判据 |
@@ -24,4 +25,3 @@
 | [mutants-mirror-dirty-worktree.md](mutants-mirror-dirty-worktree.md) | `mutants.run` / `mutants.verify` 是**就地改源码**的(`mutmut apply` 把变异体写进镜像 `src/`), 正常路径跑完会还原。但上一轮被**中断**(超时被杀 / `TaskStop` / 崩)时, 变异体可能**留在镜像工作树里**, 而 `git status` / `git diff` / `git update-index --really-refresh` **全判净**(替换前后**字节数相同**时 git 的 stat 缓存直接跳过内容比对)。后果: 下一次 `--no-refresh` 轮**带着一个已被变异的源码**开跑, 该文件的变异体集合与基线都不再是 develop, 结果不可信 —— 而且**没有任何报错**。判别: 跑 `--no-refresh` 前, 别信 `git status`, 直接 `grep` 目标文件的关键行(或 `git checkout -f -- src/` 无条件还原)。实测残留: hr 专用镜像 `~/auto-qb-mut-hr` 的 `queue.py` 留着 `left = deadline + time.monotonic()`(= `wait__mutmut_19`)。 | 变异测试, mutmut, 镜像残留, 工作树脏, apply 未还原, 中断, TaskStop, 超时被杀, --no-refresh, git status 判净, stat 缓存, 同长度替换, git diff 看不出, git checkout -f, 基线污染 |
 | [mutants-shared-mirror.md](mutants-shared-mirror.md) | (2026-11-12 起容器口径) 镜像仓默认**按目标派生** `/root/auto-qb-tests/mutation/<pkg>`(`mutants.py` 的 `derive_mirror`, 每目标一份), **换目标互不冲**; 但容器 `auto-qb-testbed` 是**全宿主共享**的(多 clone 的会话都 exec 进同一个容器), **同 target 的并行会话仍互冲** —— `mutants.run` 的 `[4/6]` 步 `rm -rf mutants mutmut-cache.db` 会把正在跑的 `mutants/**/*.meta` 一起删掉, 下一次结果落盘时崩在 `FileNotFoundError: mutants/.../<file>.meta`(WSL 时代实测 hr 首轮在 5125/8027 处崩, 85% 作废)。**同目标并行**时: `--mirror <容器内绝对路径>` 各占一份(`report` / `verify` 带**同一个** `--mirror`), 并存时把 `--children` 降到 2(对方 3); **不同目标**用默认派生仓即天然隔离。 | 并行会话, 共享镜像, rm -rf mutants, FileNotFoundError, .meta 被删, mutmut 崩, only_mutate 被改, 专用镜像, --mirror, --children, 同 target 并行, 容器共享, 按目标派生, derive_mirror |
 | [mutants-wsl-shell.md](mutants-wsl-shell.md) | (2026-11-12 起容器口径) `mutants.*` 后端已迁 `docker exec auto-qb-testbed bash -c`(计划 26-11-12-0152 S4), 容器 bash **不存在本坑** —— 脚本经 argv 直传容器 bash, 无登录壳、无 zsh, `cd` 与 `$()`/`$PWD` 是同进程常规语义; `mutants.status` 脚本已回归常规 `$(...)` 形态。本坑只剩 **WSL 形态的历史价值**(见下「历史留痕」), 仅当再写 WSL 侧脚本(兜底/迁移/一次性探针)时才需提防。 | WSL, wsl.exe, bash -lc, zsh, 命令替换, $(), $PWD, cd 不生效, 相对路径读错, mutants.status, mutmut=no, 镜像目录, 路径漂移, docker exec, bash, 不适用, 容器 |
-| [mutation-pool-artifact.md](mutation-pool-artifact.md) | 窄池跑出来的存活清单, 相当一部分是「相关测试不在池里」的**假存活** —— 同一目标同一套变异, 只把池从 1 个测试文件换到 5 个, 存活数 97 → 70(−27%); 一个被判成 SURVIVED 的变异, 拿**全套件**手工改一次其实是被杀死的。判一个存活变异是不是真洞, **唯一标准**是拿全套件手工造同构变异看红不红。不先立这条规矩就投产, 第一份存活清单会被当成缺口单, 人力全浪费在伪洞上。 | 变异测试, mutmut, pytest-gremlins, 存活变异, 杀死率, 选择池, 假存活, 等价变异, 真洞, 机器提名手工确认, 变异审计 |
