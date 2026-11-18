@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>settings-backup :227 导入 round-trip 刷新后 btBackupInput 30s 不可见, 三形态交叉复现 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-settings-backup-import-roundtrip-timeout">
+<meta name="issue-stamp" content="26-11-19-0258">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-settings-backup-import-roundtrip-timeout">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="settings-backup :227 导入 round-trip 刷新后 btBackupInput 30s 不可见, 三形态交叉复现">
+<meta name="issue-summary" content="导入 round-trip 第二次刷新页面后备份输入框 30s 超时: 本机确定性 2 红 + shard 重负载轮 + 容器 --full 两轮同点复现, 与 gtm 桩隔离修复无关(对照轮同败), 计时敏感面候选待采样归因">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>settings-backup :227 导入 round-trip 刷新后 btBackupInput 30s 不可见, 三形态交叉复现</h1>
+<p class="lede">导入 round-trip 第二次刷新页面后备份输入框 30s 超时: 本机确定性 2 红 + shard 重负载轮 + 容器 --full 两轮同点复现, 与 gtm 桩隔离修复无关(对照轮同败), 计时敏感面候选待采样归因</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-19-0258-test-e2e-settings-backup-import-roundtrip-timeout</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 02:58</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>三处独立形态交叉观察同一缺陷面（均 2026-11-18）: ①W1 修 gtm 桩隔离（issue <a href="26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift.html">26-11-18-0308</a>）的验证轮: 本机单跑 settings-backup 10P/2F，:151/:227 导入 round-trip 双皮 30s 超时（第二次刷新页面后 <code>btBackupInput</code> 不可见），修复/基线 × 有/无 gtm 指针四轮对照全部同点同败；②W3 shard 采样轮 1（shard 3/3 重负载）同两例红，另见 <code>Runtime.callFunctionOn: session closed</code>；③W4 容器 --full 轮 1/轮 2 同点复现。该 issue（gtm 前提过期）已修并把 :227 红面标「计时敏感面另案」，本件承接另案。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-18（W1 验证轮, 本机单跑 e2e/settings-backup.spec.mjs）
+Error: expect(locator).toBeVisible() failed
+Locator: locator('.hb-blk').filter({ has: locator('.bh-t').filter({ hasText: '整组迁移' }) }).last().locator('.bt-bk input')
+Expected: visible
+Error: element(s) not found
+Call log:
+  - Expect "toBeVisible" locator('.hb-blk').filter({ has: locator('.bh-t').filter({ hasText: '整组迁移' }) }).last().locator('.bt-bk input') with timeout 30000ms
+  - waiting for locator('.hb-blk').filter({ has: locator('.bh-t').filter({ hasText: '整组迁移' }) }).last().locator('.bt-bk input')
+  - Protocol error (Runtime.callFunctionOn): Internal server error, session closed.   (prism 侧留档; 另一份为 Test timeout of 30000ms exceeded.)
+Test timeout of 30000ms exceeded.
+- Location: e2e/settings-backup.spec.mjs:151:5
+—— 两份留档(双皮)同面: btBackupInput 是 spec 内 helper 函数名(:59), 非真实 CSS 类; :151/:227 导入 round-trip 各一
+# 四轮对照（修复/基线 × 有/无指针）全部同点同败 —— 与 gtm 修复无关
+
+# W3 shard 轮 1（shard 3/3）: 同两例红 + prism 侧另见
+Runtime.callFunctionOn: session closed
+# error-context 留档: test-results/w3-r1-s3/settings-backup-*chromium/（W4 轮 2 亦同点红）</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>导入 round-trip 用例第二次刷新页面（:227 reload）后 btBackupInput 30s 窗口内不可见；本机单跑确定性复现，容器 --full 与 shard 重负载轮复现</td></tr>
+    <tr><td>影响范围</td><td>e2e/settings-backup.spec.mjs 导入 round-trip 2 例（双皮）；e2e 门禁面恒红/偶红（形态相关）</td></tr>
+    <tr><td>严重度</td><td>中（多形态交叉复现的计时敏感面；与 settings-bt-backup「探测 ambiguous」容器计时家族（26-11-13-0212）同族候选）</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul class="todo">
+    <li><code>e2e/settings-backup.spec.mjs:151/:227</code>（取证 2026-11-18）· 导入 round-trip / 第二次 reload · grep <code>btBackupInput</code> / <code>导入 round-trip</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查。候选: reload 后 harness/server 就绪竞态使 30s 窗口不足（重负载下更易咬合），或 reload 后模态状态未恢复。已排除: gtm 指针/桩隔离修复引入（四轮对照同败）、执行顺序污染（单跑即红）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>待定。先采样归因: reload 后对 server ready/模态就绪做打点看 30s 内卡在哪一环；归因后修等待面或按 26-11-13-0212 先例收口。与 gtm issue 的「另案」标注互认。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-19 02:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-19-0258-test-e2e-settings-backup-import-roundtrip-timeout.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
