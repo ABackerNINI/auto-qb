@@ -9,7 +9,7 @@
 <meta name="issue-stamp" content="26-11-18-2350">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="graceful-stop-sigterm-stall">
-<meta name="doc-refs" content="memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md, memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html, memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md">
+<meta name="doc-refs" content="memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md, memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html, memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md, memory-bank/testing/real-baselines/26-11-19-0316-graceful-stop-sigterm-stall-resampling.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="优雅停偶发 38.75s: SIGTERM 后主线程长时未到收尾(疑似阻塞 C 调用, 挂点未定位)">
@@ -139,7 +139,7 @@
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
-  <p>待定(挂点未定位, 不实施)。方向沿用原三条, 已细化为复验计划 <code>memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html</code>(Open, D1-D5 待拍板): ①复验增强 —— <code>graceful_stop</code> 等待期每 0.25s 继续轮询 WEB(polls 进 measure.json stop 子树): 复发时轮询<b>持续正常</b> = 主线程单点阻塞(H2), 轮询<b>一起冻结</b> = 整进程冻结(H1), 一拍判定; ②runner 内 <code>faulthandler.dump_traceback_later(15s)</code> 看门狗 —— 38s 未退自动落全线程栈, 挂点直读; ③≥20 轮批量采样给复发率下界。三步全部只改 <code>tests-real/tools/run_s0_boot.py</code>(零产品改动); 判定回写本件 §07。</p>
+  <p>待定(挂点未定位, 不实施)。方向沿用原三条, 已细化为复验计划 <code>memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html</code>(已拍板执行完毕, 见 §07 复验行与计划 §06): ①复验增强 —— <code>graceful_stop</code> 等待期每 0.25s 继续轮询 WEB(polls 进 measure.json stop 子树): 复发时轮询<b>持续正常</b> = 主线程单点阻塞(H2), 轮询<b>一起冻结</b> = 整进程冻结(H1), 一拍判定; ②runner 内 <code>faulthandler.dump_traceback_later(15s)</code> 看门狗 —— 38s 未退自动落全线程栈, 挂点直读; ③≥20 轮批量采样给复发率下界。三步全部只改 <code>tests-real/tools/run_s0_boot.py</code>(零产品改动); 判定回写本件 §07。</p>
 </section>
 
 <section id="s7">
@@ -149,7 +149,7 @@
     <li>2026-11-19 00:54 — 静态排查回写(状态仍 <strong>Open</strong>): 停滞窗口修正为 04:45:12.4→50.995(信号触发→KI 浮出; LogRecord.created 硬判定), 排除面闭合七项, 剩余假设 H1/H2/H3 排序; 复验判别计划 26-11-19-0054 入库(观测面贯穿停机窗口 + faulthandler 看门狗 + ≥20 轮采样, 零产品改动), 执行待显式开工</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-19 03:19 — 复验判别计划 26-11-19-0054 执行完毕: S0/S1 观测面落地(9a28eebe), 21 连续优雅停未复现(20 轮采样全绿: stop_s 0.45-1.24s/median 1.16, 0 dump, polls 无断流), 复发率 0/21(95% CI 上界≈14%), H1/H2 未获新证据, 判别面(15s 看门狗+stop.polls)保持武装, 复发即当场落栈; 证据: <code>memory-bank/testing/real-baselines/26-11-19-0316-graceful-stop-sigterm-stall-resampling.md</code></p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
 </section>

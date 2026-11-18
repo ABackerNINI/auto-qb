@@ -7,10 +7,10 @@
 <title>优雅停偶发 38.75s: 复验判别计划 — 观测面贯穿停机窗口 + faulthandler 看门狗 + 批量采样</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="graceful-stop-sigterm-stall">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-19-0054">
-<meta name="doc-updated" content="26-11-19-0054">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md, memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html, memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md">
+<meta name="doc-updated" content="26-11-19-0319">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md, memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html, memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md, memory-bank/testing/real-baselines/26-11-19-0316-graceful-stop-sigterm-stall-resampling.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>优雅停偶发 38.75s: 复验判别计划 — 观测面贯穿停机窗口 + faulthandler 看门狗 + 批量采样</h1>
 <p class="lede">本篇只回答: issue 26-11-18-2350(优雅停偶发 38.75s)的挂点怎么<b>判别定位</b> —— 复发时两条正交证据自动落盘(停机窗口 WEB 轮询序列 + 全线程栈 dump), 外加批量采样给复发率; 零产品改动, 观测面全在 tests-real。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-19-0054 · <b>doc-updated</b> 26-11-19-0054 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-19-0054 · <b>doc-updated</b> 26-11-19-0319 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话分析轮(2026-11-19, issue 26-11-18-2350 静态排查结论)+ 用户指令「落成正式计划」
 </div>
 
@@ -116,7 +116,15 @@
 </table>
 
 <h2><span class="no">§06</span>拍板记录</h2>
-<p>暂无 —— 计划入库 Open, 开工时逐条按 §05 默认确认或改判后回填本表(含日期)。</p>
+<p>2026-11-19 用户拍板「<b>全部按默认 + 真机轮连续做</b>」—— D1-D5 逐条按 §05 默认确认, 无改判:</p>
+<table>
+  <tr><th>#</th><th>决策</th><th>拍板(2026-11-19)</th></tr>
+  <tr><td>D1</td><td>改动边界</td><td>按默认 —— 只改 <code>tests-real/tools/run_s0_boot.py</code>, 零产品改动(已按此落地 9a28eebe)</td></tr>
+  <tr><td>D2</td><td>判别字段落点</td><td>按默认 —— measure.json <code>stop</code> 子树新增 <code>polls</code>(另带 <code>touched_epoch</code>/<code>dump_file</code>, 既有键不变)</td></tr>
+  <tr><td>D3</td><td>看门狗形态</td><td>按默认 —— 标准库 <code>faulthandler.dump_traceback_later(15s)</code>, runner 内 arm(实现按证据等价处置: API 只收文件对象, arm 即建 0 字节占位、atexit 自清, <code>dump_file</code> 键记武装路径 —— 见 §10 R1)</td></tr>
+  <tr><td>D4</td><td>采样轮数</td><td>按默认 —— 20 轮(T3 实际执行 20 轮全绿)</td></tr>
+  <tr><td>D5</td><td>复发后的处置</td><td>按默认 —— 只判定记录, 修法另议另批(本轮零复发, 未触发)</td></tr>
+</table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
@@ -131,6 +139,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-19-0054</span> 初版: 2026-11-19 分析轮产出 —— issue 26-11-18-2350 静态排查(排除面闭合 + 停滞窗口修正 12.4→50.995)之后, 用户授权「落成正式计划」; 三步分期 S0 观测面贯穿 / S1 faulthandler 看门狗 / S2 ≥20 轮采样, D1-D5 待拍板。</li>
+  <li><span class="tag">R1 · 26-11-19-0318</span> 执行完成: S0/S1 观测面落地 9a28eebe(只改 tests-real/tools/run_s0_boot.py 零产品改动), T2 验收轮通过(stop_s=1.17s, exit_code=0, stop.polls 在场, 0 dump), T3 批量采样 20/20 全绿零复发(stop_s 0.45-1.24s / median 1.16, polls 无断流, 复发率 0/21 → 95% CI 上界≈14%, R5 口径不断言已修复), 判别面常驻 driver; 注明 D3 字面 file=路径 与 faulthandler 实际 API(只收文件对象)的实现偏差已按证据等价处置(dump_file 键=武装路径语义, 真证据=磁盘非空文件); 证据档 memory-bank/testing/real-baselines/26-11-19-0316-graceful-stop-sigterm-stall-resampling.md</li>
 </ul>
 
 </div>
