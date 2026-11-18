@@ -69,8 +69,9 @@
   退回保留窗全量读(诚实兜底不猜不静默), 读集 = 窗内全部天文件, hour 行照常补齐 + INFO 留痕
 - test_recovery_instrumentation_logs_counts: 埋点(§7-B4) —— 起止 INFO(系列数/天文件数/
   补算小时数/耗时) + 读集 >2 天留下界来源; 计数落模块属性(机检面)
-- test_read_side_view_contract_table: 读侧契约逐档机检(§3.2, 表驱动 13 档 x 时钟冻结) ——
-  raw 段只开涉及日期天文件(窗外 decoy 零 open) / 3d+ 恒 1 个 agg.dat(天文件零 open) /
+- test_read_side_view_contract_table: 读侧契约逐档机检(§3.2, 表驱动 13 档 x 时钟冻结;
+  26-11-18-0037 T1b 读窗改判) —— raw 段只开装配消费下界(t0-si-回看界)以来涉及日期天文件
+  (decoy 在消费下界之前, 零 open) / 3d+ 恒 1 个 agg.dat(天文件零 open) /
   限速注解面 = [t0-86400, t1] 日期集
 - test_read_side_no_poll_when_traffic_tab_closed: 「不打开 = 0 请求」—— 前端轮询门控单点
   (关抽屉/形态切换/登出 -> _qbPollStop clearInterval, 重开幂等不叠加)
@@ -1391,13 +1392,15 @@ def test_recovery_instrumentation_logs_counts(tmp_path, monkeypatch):
 @pytest.mark.parametrize("window", ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all"))
 def test_read_side_view_contract_table(web_env, monkeypatch, window):
     """读侧契约逐档机检(§3.2, 表驱动 13 档, 端点时钟冻结): 一次 GET 的读集 —— raw 段
-    (1m-24h)只开窗口涉及日期天文件(集 = 窗首种子外扩后日期集, 窗外 decoy 零 open) /
-    hour/day/month 段(3d-all)恒恰 1 个 agg.dat + 天文件零 open / 限速注解面打开集 =
-    [grid.t0-86400, grid.t1] 日期集(与数据面分开计数); 「不打开 = 0 请求」由前端
-    轮询门控单点保证(all 档同用例静态钉住: 关抽屉/形态切换/登出 -> clearInterval)"""
+    (1m-24h)只开装配消费下界(t0 - si - 回看界, 26-11-18-0037 T1b 读窗给足)以来涉及日期
+    天文件(decoy 在消费下界日期之前, 零 open)/ hour/day/month 段(3d-all)恒恰 1 个
+    agg.dat + 天文件零 open / 限速注解面打开集 = [grid.t0-86400, grid.t1] 日期集(与数据
+    面分开计数); 「不打开 = 0 请求」由前端轮询门控单点保证(all 档同用例静态钉住:
+    关抽屉/形态切换/登出 -> clearInterval)"""
     from types import SimpleNamespace
 
     from auto_qb.core import traffic_grid as tg
+    from auto_qb.core.traffic_grid import _V4_SEAM_LOOKBACK_S
     from auto_qb.core.traffic_limits import limits_day_path
 
     mgr, client = web_env
@@ -1422,8 +1425,11 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
     lim_decoy = v4_epoch_date_str(frozen - 700 * 86400)
     # 造数: 本档读集范围内的天/限速文件 + 本档消费的 agg 行
     if seg == "raw":
-        involved = sorted(v4_window_dates(grid.t0 - grid.interval, grid.t1))  # 镜像端点窗首种子外扩
+        # (T1b 改判)镜像端点读窗 = 装配消费下界 t0 - si - 回看界(_assemble_series_raw
+        # read_lo 同式); decoy 相应移到消费下界日期之前(昨日可能已入读集)
+        involved = sorted(v4_window_dates(grid.t0 - 2.0 - _V4_SEAM_LOOKBACK_S, grid.t1))
         exp_days, exp_agg = involved, 0
+        decoys = [v4_epoch_date_str(v4_date_str_epoch(involved[0]) - d * 86400) for d in (1, 3, 400)]
         for d in involved + decoys:
             if not os.path.exists(v4_day_file_path(mgr.config.data_dir, key, d)):
                 _write_day_file(mgr.config.data_dir, key, d)

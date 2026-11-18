@@ -16,21 +16,26 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
 - window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
 - 读盘 v4(plan 26-10-04-1957 R2 换代立, 只读 qb-traffic-v4/ 新目录): raw 段窗(1m-24h)经
-  V4DayCache.read_window 按窗口日期集合只读涉及天文件(窗首种子外扩一个桶宽, 24h 窗常态
-  2 个/窗首跨本地午夜边界时至多 3 个), 块序列 -> traffic_grid 桶值单调缓存(F4-2/3,
-  26-11-15-1104 S2-2: 封口桶不可变按 系列 x 窗 驻留, 每请求只折增量槽 + 现算非封口桶,
-  折叠语义与 v4_series_points 同一实现) -> v4_grid_obs 直映栅格桶观测; agg 段窗
-  (3d/7d/30d/6mo/1y/all)经 V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按
-  kind 直映栅格桶(3d+ 组图由 M×31 -> M×1 次文件读取; dl_avg 已是真均值, 不做差分变换;
-  agg 段行直映本就毫秒级, 不设桶值缓存面)。
+  V4DayCache.read_window 按窗口日期集合只读涉及天文件(读起点 = 样本分组装配的消费下界
+  t0 - 采样间隔 - 回看界, 窗首种子 D3 与接缝锚回看给足 —— 26-11-18-0037 阶段 1 T1b;
+  24h 窗常态 3 个/t0 相位近日界边角至多 4 个), 槽流 -> core.traffic_group_assembly
+  样本分组装配(§03 契约: points 每点带 t 的样本分组点列, 缺口 = 显式空值点; meta
+  schema=2/stride=k), 经 core.traffic_group_cache.V4SeriesGroupCache 分组点列缓存
+  (T1c-1: 天游标只展新增槽 + 逐样本前缀和, 重复请求 O(组数) 现推组界 —— 旧挂钟桶面
+  (F1 桶宽/F2 归桶/F3 持有/F4-2 V4SeriesBucketCache 桶值缓存)在 raw 路径停用, 类本体
+  待 T1c-2 退役); agg 段窗(3d/7d/30d/6mo/1y/all)经 V4DayCache.read_agg 单文件读取
+  (mtime/size 键控缓存), 行按 kind 直映栅格桶(3d+ 组图由 M×31 -> M×1 次文件读取;
+  dl_avg 已是真均值, 不做差分变换; agg 段行直映本就毫秒级, 不设桶值缓存面)。
 - 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
-  不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏;
-  活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续, 图尾桶同为区间平均(计划 26-10-07-2127 S2)。
-  活尾链端延伸(F4, 计划 26-11-14-1313): raw 段窗传 now(请求时刻)+ 间隙上界
-  max(interval_s, 采样间隔) x 2(P1 默认)给 v4_live_tail_slots —— 采样链活跃且间隙有界时
-  链端追加 holding 槽持有末次观测速率, 尾桶恒有观测(曲线终点恒落判定线); 停滞/断连
-  不延伸(null 诚实)。agg 段窗(3d+)不传 —— pending_agg 开放桶部分行已有自己的合成段。
+  不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重(traffic_group_cache
+  _tail_slots: 保留严格更晚后缀 —— 复原在调用方 v4_live_tail_slots 不传 now, 去重在
+  缓存锁内), 快照与 flush 竞态不重不漏; 活尾槽带绝对 totals, 差分链跨盘/尾接缝自然延续。
+  持有链端延伸(F4, 计划 26-11-14-1313)已随挂钟桶面退役(26-11-18-0037 D2): 活尾槽复原
+  不传 now(v4_live_tail_slots 向后兼容形态, 持有分支不触发 —— 新装配对 is_hold 槽
+  fail-fast raise), 新契约尾组恒真值无克隆: 尾点 = 最新真实样本, 每 tick 随样本更新;
+  停滞/断连不造点(诚实)。agg 段窗(3d+)活尾合流不动 —— pending_agg 开放桶部分行已有
+  自己的合成段。
   agg 段窗(3d+)的活尾合流(S7 验收追加, 2026-10-14): 同一快照的 pending_agg 未封口
   部分行(开放小时/当日/当月)按 epoch 与磁盘封口行合流(v4_merge_agg 口径, 与写侧
   _agg_merge_prev 同判据)—— 补「图尾停在最后一个封口桶」的真空(用户报「3 天及以上
@@ -46,18 +51,21 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   (任一成员 r/z 观测即程序存活真值); 指纹解析不到成员 / 组从未产过流量(全部成员无块无
   agg 行, v4_earliest_row_ts 全 None)-> 空态。
 """
+from typing import Optional
+
 from fastapi import HTTPException
 
 from ...core import traffic_grid as tg
-from ...core.traffic_grid import V4SeriesBucketCache
+from ...core.traffic_group_assembly import group_null_lo
+from ...core.traffic_group_cache import V4SeriesGroupCache
 from ...core.traffic_limits import LimitsCache, limits_events_for_window
 from ...core.traffic_store import (
     GLOBAL_KEY,
     TORRENT_KEY_PREFIX,
     V4DayCache,
-    v4_live_tail_slots,
     v4_series_dir,
 )
+from ...core.traffic_store_codec import v4_live_tail_slots
 from ...infra.clock import SYSTEM_CLOCK
 from .common import group_key_param
 
@@ -84,6 +92,69 @@ def parse_window(window: str) -> str:
     return window
 
 
+def _group_merge_points(member_pts: list, member_tots: list) -> tuple:
+    """成员分组点列 -> 组点列/组 totals(E6 组图 Σ 现算, 26-11-18-0037 阶段 1 T1b)
+
+    成员同 tick 采样 -> 逐成员分组点列同构, Σ 按 t 合并(t 并集升序; 同构成员即逐位对齐;
+    窗中段入组的部分数据面成员按其自有 t 落并集 —— 每成员字节都落组, 守恒不丢)。口径
+    逐条对账旧面 tg.group_*(成员观测面裁决承袭):
+    - null 裁决 = group_null_mask 同判: 该 t 任一成员有真值点(totals 非 None)即非 null;
+      全员无真值点(无点 / 显式空值点 / 全 None 真值点)-> 组空值点 {t, dl: None, up: None}
+      + totals None(旧 v4_grid_obs 剔 null 点同判);
+    - 速率 Σ = group_rate_points 同判: 成员已知向求和(未知向按 0 计), 有成员观测而全成员
+      该向皆未知 -> 该向 None(断链未知不画 0 值孤点, issue 26-10-16-0954 语义承袭);
+    - totals Σ != group_totals_points: 其输入是绝对快照、函数内做相邻桶差分; 新成员
+      totals 已是装配内「逐样本先差分再求和」的组粒度增量(跨缺口字节承袭在成员自己的
+      点列里), 再差分即字节双扣 —— 组 totals = 逐成员逐向求和(缺失/重置向按 0 计,
+      group_totals_points 的缺失贡献 0 口径), Sigma(组 totals) = Sigma(成员 totals)
+      恒等(E6 字节守恒对账锚)。
+    """
+    idxs = []  # 逐成员 t -> 点下标(升序遍历后写胜出: 同刻发射序空值点在前、真值点在后,
+    # 后写恒取真值点 —— 成员自身同刻「空值标记 + 真值点」并存的病理面以真值裁决)
+    ts_all = set()
+    for pts in member_pts:
+        idx = {}
+        for i, p in enumerate(pts):
+            idx[p["t"]] = i
+            ts_all.add(p["t"])
+        idxs.append(idx)
+    out_pts: list = []
+    out_tots: list = []
+    for t in sorted(ts_all):
+        has_obs = False
+        dl = up = 0
+        dl_known = up_known = False
+        tot_dl = tot_up = 0
+        for pts, tots, idx in zip(member_pts, member_tots, idxs):
+            i = idx.get(t)
+            if i is None:
+                continue  # 该成员此 t 无点(无行成员): 按 0 计, 不设观测
+            p = pts[i]
+            tot = tots[i]
+            if tot is None:
+                continue  # 显式空值点(缺口): 无观测(旧 v4_grid_obs 剔 null 点同判)
+            if p["dl"] is None and p["up"] is None and tot["dl"] is None and tot["up"] is None:
+                continue  # 全 None 真值点(无差分无快照): 旧 v4_grid_obs 剔除同判
+            has_obs = True
+            if p["dl"] is not None:
+                dl += p["dl"]
+                dl_known = True
+            if p["up"] is not None:
+                up += p["up"]
+                up_known = True
+            if tot["dl"] is not None:
+                tot_dl += tot["dl"]
+            if tot["up"] is not None:
+                tot_up += tot["up"]
+        if not has_obs:
+            out_pts.append({"t": t, "dl": None, "up": None})
+            out_tots.append(None)
+        else:
+            out_pts.append({"t": t, "dl": dl if dl_known else None, "up": up if up_known else None})
+            out_tots.append({"t": t, "dl": tot_dl, "up": tot_up})
+    return out_pts, out_tots
+
+
 class QbTrafficChartApi:
     """单域流量图端点的读侧装配(每域 router 一实例; 无锁 —— 只读 + 原子替换读语义)"""
     def __init__(self, manager) -> None:
@@ -95,11 +166,12 @@ class QbTrafficChartApi:
         # data_dir 缺字段(测试替身 config)时落空串 = 未启用防御语义, 用法仍由 _feature_on 兜底
         self._v4cache = V4DayCache(getattr(manager.config, "data_dir", ""))
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
-        # 桶值单调缓存(26-11-15-1104 F4-2/3, S2-2): 封口桶不可变(T2/T3 定影定义单点对齐)
-        # 按 系列 x 窗 LRU 驻留, 每请求只折增量槽 + 现算开放面; 组图 Σ 成员查表复用同一
-        # 缓存(成员系列键即键面, 成员集变化 = 新成员首请求冷算, 组图无二级缓存, D5)。
-        # 实例随本装配体每域一份 —— 实例身份即隔离边界(qB 多实例不同 data_dir 不同实例)
-        self._bucketcache = V4SeriesBucketCache()
+        # 分组点列缓存(26-11-18-0037 阶段 1 T1c-1, §03): raw 段窗样本分组装配的增量
+        # 游标缓存(天游标只展新增槽 + 逐样本前缀和, 温态 O(组数) 现推组界, 与冷算逐位
+        # 等价)—— 26-11-15-1104 F4-2 桶值缓存(V4SeriesBucketCache)的改造转世, 旧类
+        # 本体待 T1c-2 随挂钟桶面退役。实例随本装配体每域一份 —— 实例身份即隔离边界
+        # (qB 多实例不同 data_dir 不同实例)
+        self._bucketcache = V4SeriesGroupCache()
         # 限速历史读侧缓存(plan 26-10-12-0535 D3″): 构造期预建(同 issue 26-10-06-0028 时序
         # 契约); data_dir 缺字段时落空串 = 未启用防御语义(read_day 恒空)
         self._limitscache = LimitsCache(getattr(manager.config, "data_dir", ""))
@@ -112,8 +184,8 @@ class QbTrafficChartApi:
         return self._v4cache
 
     @property
-    def bucketcache(self) -> V4SeriesBucketCache:
-        """桶值单调缓存(F4-2/3; 构造期预建, 只读引用)"""
+    def bucketcache(self) -> V4SeriesGroupCache:
+        """分组点列缓存(T1c-1, 26-11-18-0037 §03; 构造期预建, 只读引用)"""
         return self._bucketcache
 
     @property
@@ -157,33 +229,40 @@ class QbTrafficChartApi:
         """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 生效采样间隔的整倍加宽(26-11-15-1104 F1,
         桶数 <= MAX_RAW_BUCKETS=500, 可为半秒值; 未启用/缺省兜底 30s),
         hour 段窗(3d/7d/30d)恒 3600s, day 段窗(6mo/1y)= 本地日界 86400s;
-        month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)"""
+        month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)。
+        26-11-18-0037 T1b: raw 段桶宽不再进 meta(组端点契约下 meta.interval_s 转组距
+        标称 k x si)—— raw 路径只取本栅格的窗界(t0/t1, 限速事件取数界 + 装配窗)与
+        window 名, 桶面仅 agg 段窗继续消费。"""
         sample = self._sample_interval()
         if tg.WINDOW_SPECS[window][1] == "month":
             return tg.build_month_grid((), SYSTEM_CLOCK.now())  # 请求处理叶子走取时单点(挂钟)
         return tg.build_grid(window, SYSTEM_CLOCK.now(), sample)
 
-    def _tail_gap_bound(self, grid: tg.WindowGrid) -> float:
-        """活尾延伸的间隙上界(F4, 计划 26-11-14-1313 P1 拍板默认): max(interval_s 桶宽,
-        采样间隔) x 2 —— 正常采样节律内, 主循环单顿卡不误判为停滞; 超界(停滞/断连)
-        不延伸(null 保持诚实)。读 grid.interval 与 _sample_interval 两个既有口径现算,
-        非配置键(不进 validate_config 面)。仅 raw 段窗使用(agg 段窗活尾合成段不动)。"""
-        return max(grid.interval, self._sample_interval()) * 2.0
-
-    def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
+    def _meta(self, grid: tg.WindowGrid, stale: bool, stride: Optional[int] = None) -> dict:
         """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
         未知键, 降级 last-good 分支按键展开同样携带)。sample_interval_s = 生效采样间隔
-        (plan 26-11-14-1313 F6 后端半, 与桶宽 interval_s 分离的显示口径 —— raw 段桶宽经
-        采样整倍加宽后可与采样间隔不等(26-11-15-1104 F1 后可为半秒值), hour/day/month 段窗二者恒不同; P4 响应契约
-        键, 非 validate_config 面)"""
-        return {
+        (plan 26-11-14-1313 F6 后端半, P4 响应契约键, 非 validate_config 面)。
+        raw 段窗(26-11-18-0037 §03 meta 契约, D6): stride 非 None 时 = 样本分组契约响应
+        —— 六键全保留, 新增 schema=2 与 stride=k, interval_s 语义转组距标称 = k x 采样
+        间隔(整值归一 int, 沿桶宽惯例); stride=None(agg 段窗/未启用空态)= 旧形,
+        interval_s = grid.interval(agg 段窗一个字不动, D4)。"""
+        si = self._sample_interval()
+        meta = {
             "window": grid.name,
             "interval_s": grid.interval,
-            "sample_interval_s": self._sample_interval(),
+            "sample_interval_s": si,
             "source": "qb",
             "stale": stale,
             "server_started_at": _SERVER_STARTED_AT,
         }
+        if stride is not None:
+            interval = stride * si
+            if float(interval).is_integer():
+                interval = int(interval)
+            meta["schema"] = 2
+            meta["stride"] = stride
+            meta["interval_s"] = interval
+        return meta
 
     def _live_tail(self, key: str):
         """采样模块活尾快照(S6 验收追加): 未落盘 buffer 记录 + 开放游程的当轮冻结副本,
@@ -205,23 +284,67 @@ class QbTrafficChartApi:
             return ()
         return tuple(r for r in getattr(tail, "pending_agg", ()) or () if r.kind == kind)
 
-    def _empty(self, window: str) -> dict:
-        """空态(§08): 未启用/无数据 —— points/totals 空数组 + meta(未启用空态先例:
-        /api/traffic/history 的 state=disabled + history=[]); limits 同样恒在(未启用 =
-        记录器同门关闭, 无文件恒 [], 契约形状三域一致)"""
-        return {"points": [], "totals": [], "limits": [], "meta": self._meta(self._grid(window), stale=False)}
+    def _assemble_series_raw(self, key: str, grid: tg.WindowGrid, sample: float):
+        """raw 段窗单系列装配(26-11-18-0037 阶段 1 T1b/T1c-1): 天文件窗(读起点 = 装配
+        消费下界 t0 - si - 回看界, 给足窗首种子 D3 与接缝锚回看 —— 新装配的种子逻辑
+        内建, 窗外前缀只作差分基线不产组点)+ 活尾快照纯槽复原(无持有延伸)按 ts 去重
+        并入磁盘链尾 -> 分组点列缓存(core.traffic_group_cache, 冷态全量装配入缓存 /
+        温态增量推进, 与冷算逐位等价)。返回 (GroupAssemblyResult, blocks, tail_slots)
+        —— blocks/tail_slots 供组端点空态判据(v4_earliest_row_ts 承袭)复用。OSError
+        不在本方法内捕(调用方降级处置, §08)。读窗起点 = 装配消费下界单点
+        group_null_lo(t0, si)(评审 #3: 不在端点侧重 derive t0 - si - 回看界 —— 三处
+        消费面[装配内部/缓存 null_lo/本读窗起点]同源引用, 重 derive 漂移无 fail-fast)。"""
+        read_lo = group_null_lo(grid.t0, sample)
+        days = self.v4cache.read_window(key, read_lo, grid.t1)
+        tail = self._live_tail(key)
+        # 活尾纯槽复原不传 now/max_gap_s(持有延伸分支不得被 raw 路径触发, T1b 接线钉):
+        # 复原在调用方(本方法), 与磁盘链的 ts 去重在缓存锁内(基准 = 磁盘链末槽)
+        raw_tail = v4_live_tail_slots(tail) if tail is not None else ()
+        return self._bucketcache.series_result(key, days, grid, raw_tail, sample)
 
-    def _respond(self, grid: tg.WindowGrid, points: list, totals: list, degraded: bool) -> dict:
+    def _empty(self, window: str) -> dict:
+        """空态(§08): 未启用/无数据 —— points/totals 空数组 + meta(raw 段窗 = 样本分组
+        契约形: schema=2 + stride=1(无装配面, k 兜底 1)+ interval_s = 采样间隔组距标称;
+        未启用空态先例: /api/traffic/history 的 state=disabled + history=[]); limits 同样
+        恒在(未启用 = 记录器同门关闭, 无文件恒 [], 契约形状三域一致)"""
+        grid = self._grid(window)
+        return {
+            "points": [],
+            "totals": [],
+            "limits": [],
+            "meta": self._meta(grid, stale=False, stride=1 if grid.segment == "raw" else None),
+        }
+
+    def _respond(
+        self,
+        grid: tg.WindowGrid,
+        points: list,
+        totals: list,
+        degraded: bool,
+        stride: Optional[int] = None,
+        over_budget: bool = False
+    ) -> dict:
         """装配响应 + last-good 兜底(§08): 读取竞态降级时回上一份成功快照标 stale=true
 
         - degraded 且有 last-good -> 回 last-good(数据最多旧一个请求周期, 前端按 stale
           提示), 不覆盖缓存; limits 同步回 last-good 的(同源快照, 避免限速段与数据
           各自来自不同时刻的两份拼接);
         - degraded 且无 last-good -> 回本次现算(可能残缺/空), stale=true;
-        - 全桶 null = 窗口内无任何观测 -> 空态(无数据, §08);
+        - 无任何观测 -> 空态(无数据, §08)—— 判据两形态分列(26-11-18-0037 评审 #2,
+          「共用同判」不真): agg 定长数组 =「全桶 null」; 样本分组点列 = 空数组(窗内
+          无任何槽/标记 —— 无数据而非断连)。新契约下全窗断连(n 游程覆盖窗)产显式
+          空值点、走非空分支而非空态(§03/E3: 前端停流/断连徽标依赖显式空值点),
+          分组点列元素恒为字典、null 由显式空值点承载;
         - 仅成功响应入 last-good(降级响应绝不覆盖上一份好快照);
         - limits 字段(plan 26-10-12-0535 D3″)三作用域同源附加 —— 空态/全 null 响应同样
           携带(数据真空 ≠ 限速未知, 记录起点在窗口内时图面仍可出限速段)。
+        stride = raw 段窗分组口径 k(26-11-18-0037 §03 meta 契约: schema=2 + stride=k +
+        interval_s 组距标称); agg 段窗不传 = meta 旧六键形(D4: agg 段窗零改动)。
+        over_budget = 装配超预算如实标注(§03 分组口径: 缺口标记数 >= MAX_RAW_POINTS
+        时预算数学不可达, 按 k 上限交付; 26-11-18-0037 评审 #1 接线 —— 之前两端点
+        raw 调用面整体丢弃, 前端永不可见): 仅真值时 meta 携带 over_budget=true
+        (D6 meta 只增不改 —— 缺省形无该键, 旧前端/降级 last-good 分支无感; last-good
+        快照的 meta 已含该键, 降级回放自然承袭)。
         """
         limits = self._limits_list(grid)
         if degraded:
@@ -235,10 +358,23 @@ class QbTrafficChartApi:
                         **good["meta"], "stale": True
                     },
                 }
+        meta = self._meta(grid, stale=degraded, stride=stride)
+        if over_budget:
+            meta["over_budget"] = True
         if not any(p is not None for p in points):
-            payload = {"points": [], "totals": [], "limits": limits, "meta": self._meta(grid, stale=degraded)}
+            payload = {
+                "points": [],
+                "totals": [],
+                "limits": limits,
+                "meta": meta,
+            }
         else:
-            payload = {"points": points, "totals": totals, "limits": limits, "meta": self._meta(grid, stale=degraded)}
+            payload = {
+                "points": points,
+                "totals": totals,
+                "limits": limits,
+                "meta": meta,
+            }
         if not degraded:
             self._last_good[grid.name] = payload
         return payload
@@ -267,9 +403,11 @@ class QbTrafficChartApi:
         """GET /api/traffic/qb/group/{key}: 组系列读侧现算(§04.1; 组不落盘, Σ 成员观测面)
 
         key 与成员集解析同 /api/groups/{key} 通道(decode -> store.groups 查表); 聚合口径
-        (成员求和 / 逐成员差分 / 桶 null 由成员观测面裁决)全部在 core.traffic_grid 纯函数层;
-        raw 段成员链与单系列同口径(窗首种子外扩 + 点位归属归桶一次算定, 26-11-15-1104 F2);
-        不再读全局系列(「借 global 判 null」退役, §05.1/§05.4)。
+        (成员求和 / 逐成员差分 / null 由成员观测面裁决)全部在纯函数层: raw 段窗 =
+        成员逐一过样本分组装配(26-11-18-0037 阶段 1 T1b, 同 tick 采样逐成员点列同构)
+        -> _group_merge_points 按 t 合并 Σ 现算(E6); agg 段窗 = 成员 agg 行合流 -> 旧
+        tg.group_* 三函数(成员观测面裁决承袭); 不再读全局系列(「借 global 判 null」
+        退役, §05.1/§05.4)。
         """
         parse_window(window)
         key = group_key_param(key_text)  # 畸形 key -> 400(同 /api/groups/{key} 通道, 不 500)
@@ -282,10 +420,8 @@ class QbTrafficChartApi:
         degraded = False
         if seg == "raw":
             grid = self._grid(window)
-            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 读文件外扩一个响应桶宽, 窗前样本作首桶差分基线
-            gap_bound = self._tail_gap_bound(grid)
             sample = self._sample_interval()
-            member_obs = []
+            member_res = []
             member_blocks = []
             member_has_tail = []
             # 成员循环一律先取 tuple 快照再迭代(读侧快照纪律, 同 fs.py api_open_path /
@@ -293,45 +429,40 @@ class QbTrafficChartApi:
             # 主循环 grouping_mod._leave_group 会对同一活列表原地 members.remove(hash),
             # 直接迭代遇删除会索引左移跳过一个成员(raw/agg 两段成员循环同规)
             for h in tuple(members):
+                res = None
+                blocks = ()
                 tail_slots = ()
                 try:
-                    mkey = TORRENT_KEY_PREFIX + h
-                    days = self.v4cache.read_window(mkey, seed_t0, grid.t1)
-                    blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
-                    tail = self._live_tail(mkey)
-                    # F4 活尾延伸(仅 raw 段窗): 链端持有限界延伸到请求时刻 —— 尾桶恒有观测,
-                    # 曲线终点恒落判定线(计划 26-11-14-1313; 停滞/断连不延伸, codec 侧裁决)
-                    tail_slots = (
-                        v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=gap_bound) if tail is not None else
-                        ()
-                    )
-                    # F4-3 组图 Σ 成员缓存(26-11-15-1104 S2-2): 成员桶值查表(桶值单调缓存,
-                    # 成员系列键即键面)+ 开放面现算 —— 组聚合 Σ 仍每请求现算(§04.1 纯函数层,
-                    # M×~1ms 无需二级缓存, D5); 成员集变化 = 新成员首请求冷算(组图冷态豁免)
-                    member_obs.append(
-                        tg.v4_grid_obs(
-                            self._bucketcache.series_points(mkey, days, grid, tail_slots, gap_bound, sample), grid
-                        )
-                    )
+                    res, blocks, tail_slots = self._assemble_series_raw(TORRENT_KEY_PREFIX + h, grid, sample)
                 except OSError:
                     degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
-                    blocks = ()
-                    tail_slots = ()
-                    member_obs.append({})
+                member_res.append(res)
                 member_blocks.append(blocks)
                 member_has_tail.append(bool(tail_slots))
             if all(
                 tg.v4_earliest_row_ts(blocks, None) is None and not has_tail
                 for blocks, has_tail in zip(member_blocks, member_has_tail)
             ):
-                # 组从未产过流量(窗内无任何成员块且无成员活尾)-> 空态(§08); 降级时如实标 stale;
-                # limits 仍同源附加(数据真空 ≠ 限速未知, 记录起点在窗口内时限速段照给)
+                # 组从未产过流量(无任何成员块且无成员活尾)-> 空态(§08; v4_earliest_row_ts
+                # 判据承袭); 降级时如实标 stale; limits 仍同源附加(数据真空 ≠ 限速未知,
+                # 记录起点在窗口内时限速段照给)
                 return {
                     "points": [],
                     "totals": [],
                     "limits": self._limits_list(grid),
-                    "meta": self._meta(grid, stale=degraded)
+                    "meta": self._meta(grid, stale=degraded, stride=1),
                 }
+            # 组 Σ 现算(E6): 降级成员按空点列计(旧 member_obs={} 同构); meta.stride =
+            # 成员装配 k 的最大值(同窗同 si 下 k_init 同源, 同构成员恒同 k; 部分数据面
+            # 成员 k 更小 —— 取最大 = 窗内最全成员口径); over_budget = 成员或(任一成员
+            # 超预算即组标注, 26-11-18-0037 评审 #1 —— 成员循环解构面此前整体丢弃)
+            points, totals = _group_merge_points(
+                [r.points if r is not None else () for r in member_res],
+                [r.totals if r is not None else () for r in member_res],
+            )
+            stride = max(r.stride if r is not None else 1 for r in member_res)
+            over_budget = any(r.over_budget for r in member_res if r is not None)
+            return self._respond(grid, points, totals, degraded=degraded, stride=stride, over_budget=over_budget)
         else:
             aggs = []
             live_tails = []
@@ -383,35 +514,25 @@ class QbTrafficChartApi:
     # ---------- 单系列装配(raw / agg 两段合流, §05.3) ----------
 
     def _payload_series(self, key: str, window: str) -> dict:
-        """global/torrent 共用单系列装配: raw 段窗 = 天文件块 -> 点位归属归桶 + 桶速率一次算定
-        (26-11-15-1104 F2; 读文件窗首外扩一个桶宽取窗前差分基线, D3)-> v4_grid_obs 直映;
-        agg 段窗 =
+        """global/torrent 共用单系列装配: raw 段窗 = 天文件 + 活尾槽 -> 样本分组装配
+        (26-11-18-0037 阶段 1 T1b 冷算直连, 窗首种子 D3 由装配消费下界内建)-> 样本分组
+        点列直出(§03 契约); agg 段窗 =
         agg 行直映栅格(all 的栅格由月行数据面定; dl_avg 已是真均值, 不做差分变换) +
         活尾未封口部分行按 epoch 合流(S7, v4_agg_obs_live —— 补 3d+ 图尾真空)。
         OSError(读取竞态)-> degraded, 回退 last-good / 空态标 stale(§08), 不以空态冒充无数据。"""
         seg = tg.WINDOW_SPECS[window][1]
         if seg == "raw":
             grid = self._grid(window)
-            seed_t0 = grid.t0 - grid.interval  # D3 窗首种子: 读文件外扩一个响应桶宽, 窗前样本作首桶差分基线
             try:
-                days = self.v4cache.read_window(key, seed_t0, grid.t1)
-                tail = self._live_tail(key)
-                # F4 活尾延伸(仅 raw 段窗): 链端持有限界延伸到请求时刻 —— 尾桶恒有观测,
-                # 曲线终点恒落判定线(计划 26-11-14-1313; 停滞/断连不延伸, codec 侧裁决)
-                tail_slots = (
-                    v4_live_tail_slots(tail, now=SYSTEM_CLOCK.now(), max_gap_s=self._tail_gap_bound(grid))
-                    if tail is not None else ()
-                )
-                # F4-2 桶值单调缓存(26-11-15-1104 S2-2): 封口桶不可变(T2/T3 定影定义单点
-                # 对齐)按 系列 x 窗 驻留, 命中恒安全; 每请求只折增量槽 + 现算非封口桶
-                points = self._bucketcache.series_points(
-                    key, days, grid, tail_slots, self._tail_gap_bound(grid), self._sample_interval()
-                )
-                obs = tg.v4_grid_obs(points, grid)
+                res, _blocks, _tail_slots = self._assemble_series_raw(key, grid, self._sample_interval())
+                # over_budget 随 GroupAssemblyResult 一并接线(26-11-18-0037 评审 #1:
+                # 单系列解构面此前整体丢弃该字段, §03「标注超预算」半边未落 meta)
+                points, totals, stride = list(res.points), list(res.totals), res.stride
+                over_budget = res.over_budget
                 degraded = False
             except OSError:
-                obs, degraded = {}, True
-            return self._respond(grid, tg.rate_points(obs, grid), tg.series_totals_points(obs, grid), degraded=degraded)
+                points, totals, stride, over_budget, degraded = [], [], 1, False, True
+            return self._respond(grid, points, totals, degraded=degraded, stride=stride, over_budget=over_budget)
         grid = None if seg == "month" else self._grid(window)
         try:
             agg = self.v4cache.read_agg(key)

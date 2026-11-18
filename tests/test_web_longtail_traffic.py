@@ -3,7 +3,7 @@
 
 ## 测试计划(每个测试函数一条)
 ### P1 覆盖率提升轮: webui 运行时与命令长尾
-- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加; F2 改判)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点(桶值 = 桶内样本差分和/覆盖时长一次算定);
+- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加; 26-11-18-0037 T1b 改判)raw 段窗活尾合流 —— 纯活尾(零盘)出实时样本点(k=1 逐样本, 速率 = 样本差分/覆盖);
   磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致
 - test_api_traffic_qb_group_live_tail_member_only: (S6; F2 改判)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空(单记录窗首基线缺失 D4 0 线, 样本落格 b0+30);
   单种端点同享活尾
@@ -60,9 +60,9 @@ from webui_helpers import (
 
 
 def test_api_traffic_qb_global_live_tail_realtime(web_env, monkeypatch):
-    """(S6)raw 段窗活尾合流: 纯活尾(零盘)出实时桶点(不等 flush_interval 落盘);
-    磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏),
-    快照清空后磁盘响应与合流响应逐点一致 —— 图面全程无跳变"""
+    """(S6; 26-11-18-0037 T1b 样本分组契约)raw 段窗活尾合流: 纯活尾(零盘)出实时样本点
+    (不等 flush_interval 落盘); 磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重
+    (快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致 —— 图面全程无跳变"""
     from auto_qb.core.traffic_store import LiveTail, V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
@@ -71,9 +71,9 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env, monkeypatch):
     store = _qb_v4(mgr)
     now = int(time.time())
     # 钉住入口时刻(端点 _grid 现读 traffic_qb.SYSTEM_CLOCK 单点, 换冻结假钟钉一次双边
-    # 生效): 5m 栅格是 [now-300, now) 滚动窗, 不冻时钟则三次请求间跨 30s 桶边界时栅格
-    # 整体滚动, 三次响应逐字节不等。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI
-    # 慢一点就红(生产滚动窗语义正确, 不是产品缺陷; 同坑档 testing/flaky-midnight-daycount.md)。
+    # 生效): 5m 窗是 [now-300, now) 滚动窗, 不冻时钟则三次请求间窗界整体滚动, 三次响应
+    # 逐字节不等。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI 慢一点就红(生产滚动窗
+    # 语义正确, 不是产品缺陷; 同坑档 testing/flaky-midnight-daycount.md)。
     # S3 收敛: 不再进程级 patch stdlib time.time, 改换端点取时单点(与 test_web_traffic_qb 同口径)。
     _freeze_traffic_endpoint_clock(monkeypatch, now)
     base = ((now - 240) // 30) * 30  # 5m 窗内
@@ -96,14 +96,14 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env, monkeypatch):
         return next((p for p in body[seg] if p and p["t"] == t), None)
 
     assert body["meta"]["stale"] is False
-    # (F2 改判)本用例生效间隔 = 设计缺省 2s(桶宽 2): 样本 @b1/b2 落各自 2s 桶 —— 旧 30s
-    # cell 键(= 桶键-30, 覆盖桥接 2s 栅格)随覆盖几何退役; 中间空桶断开 totals 链(不造数),
-    # S6 核心断言(三阶段响应逐点一致)不变
-    assert pt("points", b1) == {"t": b1, "dl": 0, "up": 0}  # 首点基线缺失 D4 0 线
+    # (T1b 改判)本用例生效间隔 = 设计缺省 2s -> 5m 窗预期 150 样本 -> k=1 逐样本: 点 t =
+    # 样本 ts(旧面 2s 桶中间空桶断开 totals 链的形态随桶面退役 —— 无桶面, 逐样本差分
+    # 直落 totals, dt 链连续无断链), S6 核心断言(三阶段响应逐点一致)不变
+    assert pt("points", b1) == {"t": b1, "dl": 0, "up": 0}  # 首样本基线缺失 -> 0 线
     assert pt("points", b2) == {"t": b2, "dl": 33, "up": 10}  # delta(1000, 300)/30s 覆盖
-    assert pt("points", b2 + 30) is None  # 活尾之外无观测(b2 = 末样本所在格)
+    assert pt("points", b2 + 30) is None  # 活尾之外无观测(b2 = 末样本 ts)
     assert pt("totals", b1) == {"t": b1, "dl": None, "up": None}  # 窗首基线缺失
-    assert pt("totals", b2) == {"t": b2, "dl": None, "up": None}  # 空桶断链(不造数)
+    assert pt("totals", b2) == {"t": b2, "dl": 1000, "up": 300}  # 逐样本快照差分(字节守恒: dt 链连续)
     live_body = body
     # flush 落盘(同两记录) + 滞后快照仍重列全部记录: 按 ts 去重, 响应逐点不变
     store.append_records("global", v4_epoch_date_str(b0 + 30), (b0 + 30, 30), recs, (1000, 500))

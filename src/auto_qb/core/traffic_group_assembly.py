@@ -111,7 +111,9 @@ def _slot_null_marks(
 ) -> tuple:
     """槽级 null 标记判定单点(承袭 _V4SeriesFold.fold 的 n 槽判定与块间真空判定, 形态
     改为显式空值点): 判得的标记 t 追加进共享 marks 列表(已按 [t0, t1) 过滤), 返回
-    (marked, last_was_null)。
+    (marked, last_was_null, mark_t) —— mark_t = 本槽判得的标记位置(末个判得者; 无判得
+    = None), 供增量折叠面回写 marked_ts 断连面(旧 _V4SeriesFold.fold 的 marked_ts 语义:
+    凡 null_lo <= t < t1 的标记都置位, 消费观测槽复位; 同秒去重/append 判据不影响置位)。
 
     - 块间真空: 本槽声称覆盖(dt_s)接不住链终值 -> t = int(prev_chain_end); 判定来源
       承袭, 形态改为显式空值点。按槽粒度判定: 块内 dt 链连续(ts - dt_s 恰接前槽), 只在
@@ -126,22 +128,25 @@ def _slot_null_marks(
       发射期窗过滤; 新契约入列面直接按 [t0, t1) 过滤, 链面语义同构)。
     """
     marked = False
+    mark_t: Optional[int] = None
     if prev_chain_end is not None and s.ts - s.dt_s > prev_chain_end + _V4_VACUUM_EPS_S:
         t = int(prev_chain_end)
         if null_lo <= t < t1:
             marked = True
+            mark_t = t
             if t >= t0 and (not marks or marks[-1] < t):
                 marks.append(t)
     if s.obs is None:
         t = int(math.floor(s.ts))
         if null_lo <= t < t1 and not last_was_null:
             marked = True
+            mark_t = t  # 末个判得者胜出(真空后随 n 槽, 与旧面 marked_ts 末次写入同序)
             if t >= t0 and (not marks or marks[-1] < t):
                 marks.append(t)
         last_was_null = True
     else:
         last_was_null = False
-    return marked, last_was_null
+    return marked, last_was_null, mark_t
 
 
 def _pick_stride(n_samples: int, n_marks: int, expected: float) -> tuple:
@@ -155,6 +160,13 @@ def _pick_stride(n_samples: int, n_marks: int, expected: float) -> tuple:
         return max(1, n_samples), True
     k_need = math.ceil(n_samples / (MAX_RAW_POINTS - n_marks)) if n_samples else 1
     return min(max(k_init, k_need, 1), max(1, n_samples)), False
+
+
+def group_null_lo(t0: float, sample_interval_s: float) -> float:
+    """装配消费下界单点(公开): t0 - si - 回看界 —— 差分链消费下界(null 标记判定界/窗外
+    种子 D3 回看给足)与读窗起点(traffic_qb read_window 起点)三处同源引用本函数, 不得
+    各自重derive(漂移无 fail-fast, 评审 #3)。入参须已经 _check_window 校验。"""
+    return t0 - sample_interval_s - _V4_SEAM_LOOKBACK_S
 
 
 def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float) -> GroupAssemblyResult:
@@ -179,14 +191,14 @@ def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float)
     t0, t1, si = _check_window(t0, t1, sample_interval_s)
     slots = tuple(slots)
     _guard_slot_order(slots)
-    null_lo = t0 - si - _V4_SEAM_LOOKBACK_S  # 差分链消费下界(旧 _v4_null_lo 同式, interval -> si)
+    null_lo = group_null_lo(t0, si)  # 差分链消费下界(单点 group_null_lo, 旧 _v4_null_lo 同式)
     # 第一遍(轻扫描): null 标记集 + 窗内样本数 —— 选 k 依据; 标记判定与装配遍共用单点
     marks: list = []
     n_samples = 0
     prev_chain_end = None
     last_was_null = False
     for s in slots:
-        _marked, last_was_null = _slot_null_marks(s, prev_chain_end, last_was_null, null_lo, t0, t1, marks)
+        _marked, last_was_null, _mark_t = _slot_null_marks(s, prev_chain_end, last_was_null, null_lo, t0, t1, marks)
         prev_chain_end = s.ts
         if s.obs is not None and t0 <= s.ts < t1:
             n_samples += 1
@@ -220,7 +232,9 @@ def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float)
             e[2] += share
 
     for s in slots:
-        mark_hit, last_was_null = _slot_null_marks(s, prev_chain_end, last_was_null, null_lo, t0, t1, emit_marks)
+        mark_hit, last_was_null, _mark_t = _slot_null_marks(
+            s, prev_chain_end, last_was_null, null_lo, t0, t1, emit_marks
+        )
         if mark_hit:
             marked = True
         prev_chain_end = s.ts
