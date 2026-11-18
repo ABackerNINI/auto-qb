@@ -159,6 +159,7 @@
   <ul>
     <li>2026-11-18 — W2 认领（分支 26-11-18-0308-e2e-flaky-fixes, 基线 78022b2a）: 取证（两轮失败 trace 已清扫, 纯静态归因）→ 结构修复（轮询隔离 + P1-3 分段计数, 判据零放松）→ 本机多轮全绿 + 红验。其独立归因补出根因 B（轮询 tick 墙钟敏感 + off→on 重开窗 reprobe, 见 §05）与远端根因 A（计数窗口错位）互补 —— 两机制合流后 perf.spec 取超集版（分段清零同远端语义 + 轮询隔离 + OFF_GBR_CEILING 守阵）。</li>
     <li>2026-11-18 — 评审轮 1（2 条全修）: 补 off 侧宽松上限断言（OFF_GBR_CEILING=130, 兜「非窗口化轮次被逐行量高」回归模式, 红验双皮 930/964 红; 300 档实测基线 prism 30 / atlas 64, 3000 档 33/68 验证基线不随 tTotal 变）+ 在途拍收尾注释对齐实际保证（尽力落定非硬保证）。3000 档抽验撞见无关存量红（首访路径指纹 152/158 &gt; 150, pristine 基线同样红）已记未尽事项。</li>
+    <li>2026-11-18 — W4 容器 --full 原始红形态复验（另一 clone, 基线 0acf6acf, 会话 aqb-54659 完整轮 1.5h）: <strong>perf.spec 12 例满额: 8 passed + 4 skip</strong>（skip = :305 行窗口化 / :442 同屏交叉按 300 种子档条件门控双皮跳过, 与红验判据无关）, P1-2/P1-3 A/B 埋点 prism 7.4s / atlas 7.8s 均 passed, 全轮 646 passed / 3 failed / 23 skipped（3 failed 均与本 spec 无关: drawer-content-perf K2 atlas ltFoldSum 61&gt;50ms + settings-backup :227 导入 round-trip 双皮 30s 超时, 后者与本轮早前被杀轮 aqb-18412 的容器红面同点复现）—— 原始两长跑形态之容器 --full 在合流机制上复验绿, 与远端修后验证互证; Windows 全量串行形态本轮未单独复验。</li>
   </ul>
   <p><strong>验证数字（另一 clone 本机, commands run dev.e2e -- e2e/perf.spec.mjs, 默认 300 种子档, 修复后（含评审轮 1 增量）5 轮全绿 8P/0F/4S ≈ 59-60s/轮）</strong>:</p>
   <ul>

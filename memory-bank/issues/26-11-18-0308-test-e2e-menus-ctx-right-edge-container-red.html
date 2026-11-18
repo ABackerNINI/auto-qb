@@ -149,9 +149,16 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-18 — 可写实施 W4 采样归因（分支 26-11-18-0308-e2e-flaky-fixes, 基线 0acf6acf, 产品面零改动）: 阶梯采样三面均<strong>未复现</strong>（明细见下「复验」）, 根因候选（settle 复核链 retries=10 有界预算耗尽, 最终宽落地晚于最后一次钳位）未获证实也未排除 —— 断言面 toPass 轮询 5s 内未收敛才红, 本轮每轮单例仅 6.3-7.3s 收敛稳定。状态维持 <strong>Open</strong> 挂台账待自然复现; 修法候选（_menuFitRefit 改时间预算或宽度变化时重置预算）留档不动。</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-18（可写实施 W4, 分支 26-11-18-0308-e2e-flaky-fixes, 基线 0acf6acf）。阶梯采样三面均未复现:</p>
+  <ol>
+    <li><strong>阶梯 1</strong>（容器 testbed 单 spec 收窄, <code>commands run test.linux-e2e -- --full -- e2e/menus.spec.mjs -g "CTX-fit 右缘" --repeat-each=10 --workers=2</code>）: 双皮共 <strong>20 例全绿</strong>（prism 10 + atlas 10, 1.2m, 单例 6.3-7.3s）。</li>
+    <li><strong>容器 --full 轮 1</strong>（会话 aqb-18412-20261118T074559, 07:46 起跑, 67min 处宿主侧后台任务被外部终止未完跑）: 已推进到 settings-backup 段（失败工件 mtime 实证）, test-results 仅 settings-backup :227 双皮两例, <strong>menus 段零失败工件 = 绿</strong>。</li>
+    <li><strong>容器 --full 轮 2</strong>（会话 aqb-54659-20261118T085607, 完整轮 1.5h = 5524s）: <strong>646 passed / 3 failed / 23 skipped</strong>, menus.spec 40 例满额: 34 ✓ + 6 skip（W5-off 组）, CTX-fit 右缘 prism 6.3s / atlas 6.7s 均 ✓。3 failed 均与本 issue 无关: drawer-content-perf K2 atlas ltFoldSum 61&gt;50ms; settings-backup :227 导入 round-trip 双皮 30s 超时（与已入池的 [26-11-18-0308-settings-backup-gtm-bundle-drift](26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift.html) 轮内 :227 红面同点, 轮 1 同样复现 —— 计时敏感面另案）。</li>
+  </ol>
+  <p>合计曝光次数: 阶梯 1 双皮各 10 遍 + --full 两轮各 1 遍 = 每皮 12 遍全绿。按「2 轮 --full 不复现即挂台账」纪律收口: 状态维持 Open, 待自然复现后再取证, 两条可执行路径（取证时二选一或并用）: ①对「最后一次右缘钳位采用的宽」做推导对比 —— 钳位后右缘 = 视口宽 - 8, 即 视口宽 - boundingBox.x = 钳位宽 + 8（clampAxis 按 视口宽-8-宽 定 x）, 故 <code>钳位宽 = viewport.width - 8 - boundingBox.x</code>, 复现时同步读该推导值与当前 <code>el.offsetWidth</code>, 差 8 即坐实钳位用了过期宽（量测时点宽 &lt; 最终视觉宽）; 注意三皮 .ctx-menu 入场动画均为 drop-in(translateY+opacity, 无 scale), boundingBox.width 与 offsetWidth 恒等, 直接对比两宽不可执行。②复现时在 <code>_menuFitRefit</code> settle 链临时打点, 逐帧记录 (x, 量测宽) 序列, 看最后一次钳位写入与最终落地是否相差 8。</p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
 </section>
