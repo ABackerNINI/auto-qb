@@ -4,7 +4,7 @@
 > 复测时间: 2026-11-19 02:45-03:09(环境2; `real.env` → `real.up` 56590/56589 → `real.guard` 全绿 → `seed_bulk_boot.py` 210 枚 → 验收轮 `--runs 1` → 采样 `--runs 20` → 场终态核验; 非 `real.suite`)
 > 复测 commit: 9a28eebe(plan-26-11-19-0054-sigterm-stall, 含 S0/S1 观测面; 本轮无提交动作)
 
-**Refs:** memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html, memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html
+**Refs:** memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html, memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html, memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md
 
 ## 01 目的与判别面(S0/S1 观测面口径)
 
@@ -12,7 +12,7 @@
 - **stop.polls**(计划 S0): `graceful_stop` 等待期独立 daemon 线程每 0.25s GET `/api/state?rid=-1`(单次超时 2s, 只取状态码不读 body 停机窗最小加压), (offset, ok) 序列进 measure.json `stop.polls`; offset 相对 stopfile touch; 既有 `exit_code`/`stop_s` 键与口径不变(stop_s 终点 = wait 返回时刻, 轮询线程 join 收尾不计入)。
 - **看门狗**(计划 S1): RUNNER 模板 touch stopfile 后 arm `faulthandler.dump_traceback_later(15, file)`; dump 落 `<case>/stop_stack_dump_run<r>_<t0ms>.txt`(**按轮唯一名**, 每轮写自己从未存在过的名字, 截断在结构上不可能命中前轮证据); 正常退出 atexit 删 0 字节占位 —— **「文件存在且非空 == 栈真落过盘」**; arm 失败仅提示不阻断停机。
 - **stop 子树键**: 既有 `exit_code`/`stop_s` + 新增 `touched_epoch`/`polls`/`dump_file`; 超时路径(>40s RuntimeError 报红)报红前把 polls 证据重写进 measure.json, 证据面不因报红丢失。
-- **`dump_file` 键语义(实现单点)**: 键值 = **本轮看门狗武装路径**(若落盘会写哪), 恒为路径串非 null; 「真落过栈」的证据面 = 磁盘非空文件。与计划 §04 S1 行字面「正常轮 dump_file=null」的实现偏差 —— faulthandler API 只收文件对象不收路径, arm 即建 0 字节占位, 「null/非 null」表达不了落盘事件, 故按证据等价处置(键记路径 + 磁盘非空文件作真判据), 未改代码。
+- **`dump_file` 键语义(实现单点)**: 键值 = **本轮看门狗武装路径**(若落盘会写哪), 恒为路径串非 null; 「真落过栈」的证据面 = 磁盘非空文件。计划 §04 S1 行实际字面 = 「正常轮无 dump 文件落盘」—— 磁盘级判据**已满足**(21 轮磁盘 0 dump); 偏差仅在 `dump_file` 键语义层: 该键为 D2 拍板新增, 计划从未承诺键为 null, 而实现上 faulthandler API 只收文件对象不收路径, arm 即建 0 字节占位(atexit 自清), 「null/非 null」表达不了落盘事件, 故键记武装路径 + 磁盘非空文件作真判据(证据等价), 未改代码。
 
 ## 02 环境与造场
 
@@ -43,7 +43,7 @@
 - **退出沿末条 false = 正常停机结构性签名, 不算断流**: 轮询线程设计为 stop_evt 置位后在飞请求收尾即退、最后一条仍入列 —— 对 1.3s 级快停, polls「全 true」结构性不可满足; 判读看存活窗密度, 不看末条。
 - **accept-then-die 变体**: r9/r15/r17 尾条 false 落账 +3.02-3.04s(客户端单次 2s 超时口径)而进程 +1.17-1.24s(1.17/1.24/1.18)已 rc=0 退出 —— poll 在退出前 ~0.1-0.2s 已连上(accept), 响应被进程退出截断, 客户端按自身超时落账, **落账时刻晚于进程死亡**; rc=0 + 完整停机日志排除冻结, **不计断流**。与「2s 稀疏 false → H1」判据文字的边界: 该签名只出现在末条且落账晚于死亡时刻, 非存活窗事件。
 - **dump 判读**: 非空文件 = 栈真落过盘(读主线程首行定挂点); 0 字节 = armed 未 fire, 不作证据(正常轮被 atexit 自清, 磁盘无文件)。
-- **`dump_file` 键 = 武装路径语义**(measure.json 里恒为路径串), 真证据 = 磁盘非空文件 —— 计划字面「正常轮 null」与实现不符已按证据等价处置(§01), 后续轮判读以本节为准。
+- **`dump_file` 键 = 武装路径语义**(measure.json 里恒为路径串), 真证据 = 磁盘非空文件 —— 计划 §04 S1 的判据是磁盘级(「正常轮无 dump 文件落盘」, 已满足: 21 轮磁盘 0 dump), 偏差仅在键语义层(键恒记武装路径; 键为 D2 拍板新增, 计划从未承诺 null), 后续轮判读以本节为准。
 
 ## 06 复发率结论(R5 口径)
 
