@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-settings-backup-import-roundtrip-timeout">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="settings-backup :227 导入 round-trip 刷新后 btBackupInput 30s 不可见, 三形态交叉复现">
 <meta name="issue-summary" content="导入 round-trip 第二次刷新页面后备份输入框 30s 超时: 本机确定性 2 红 + shard 重负载轮 + 容器 --full 两轮同点复现, 与 gtm 桩隔离修复无关(对照轮同败), 计时敏感面候选待采样归因">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0258-test-e2e-settings-backup-import-roundtrip-timeout</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 02:58</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -157,11 +157,14 @@ Runtime.callFunctionOn: session closed
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 02:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+    <li>2026-11-19 07:29 — 收口 Done（commit 7d88fee1 放宽 90s 后复验全绿）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-19 07:29 本机单跑 e2e/settings-backup.spec.mjs 全绿（12 passed / 2.0m；导入 round-trip 两例 :151 prism 18.4s / atlas 17.8s，均在 90s 预算内）。容器面：commit 7d88fee1 实测「容器 e2e 修复前 10/12 红(复验) → 修复后 12/12 绿(3.4m)」——已消失。shard 重负载面：本轮未复验，未覆盖。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法：commit 7d88fee1 —— e2e/settings-backup.spec.mjs 导入 round-trip 用例内 <code>test.setTimeout(90_000)</code>（默认 test 超时 30s → 90s）。该用例双 skin 含两次整页 reload，容器/重负载下纯时间预算面非挂死，与 issue 26-11-19-0230 同因。</p>
+  <p>验证方式：2026-11-19 07:29 本机 <code>commands run dev.e2e -- e2e/settings-backup.spec.mjs</code> 单跑复验，12 passed / 2.0m 零失败，导入 round-trip 两例实测 prism 18.4s / atlas 17.8s。</p>
 </section>
 
 <footer>
