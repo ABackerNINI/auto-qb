@@ -11,9 +11,17 @@ review 之前原样演一遍, 让 review 评到的树已经是闸门绿的。
   3. 闸门: changed = staged + unstaged 中工作区仍存在的路径(与 commit 同口径);
      gates_for 命中 → run_gates 原样执行(并发池 / 分片 / 聚合语义一字不改)。
   4. `when_message` 闸门(配在 review.trace 上): 消息文件(<root>/.git/COMMIT_MSG_AI.txt)
-     不存在 → 打略过行不执行 —— 评审批次 pack 前评审尚未发生, 照跑必红; 文件存在 → 照跑
-     (提前发现忘写 trailer)。commit 侧不受该键影响: commit 在闸门之前就因消息缺失拒跑。
-  5. 输出: 成功一行(「闸门全绿: ...」, 贴进评审记录); 失败 = 一行结果 + 全量逐条明细
+     不存在 → 打略过行不执行 —— 评审批次 pack 前评审尚未发生, 照跑必红; 文件存在 → 照跑:
+     trailer 已写但与实算不符(基漂移/行数错/Skip)在这时提前暴露。commit 侧不受该键影响:
+     commit 在闸门之前就因消息缺失拒跑。
+  5. review.trace 的「待评审」(批内有待评内容而消息尚无任何评审主张; 契约单点见
+     check_review_trace.py 模块头「rc=3 待评审」节)→ 降级为待办行**不计入失败** —— 预跑时刻
+     评审必然尚未发生, trailer 必然不存在, 与真违规不可分的红会让「消息文件先写」的预跑必红,
+     与第 4 条的略过路径自相矛盾(2026-11-19 收口)。机器面 = 输出行首标记
+     `评审留痕[待评审]:`(脚本 rc 恒 3, 但引擎 run.py 把任务失败归一成 rc=1, rc 到不了闸门);
+     其余失败照旧; 待评审项在明细里单列, 全绿结果行缀「另: 评审留痕待评审」。commit 侧不受
+     影响: rc!=0 照拦(评审未做不许提交)。
+  6. 输出: 成功一行(「闸门全绿: ...」, 贴进评审记录); 失败 = 一行结果 + 全量逐条明细
      (预跑是诊断面, 与 commit 取 failures[0] 不同 —— 一次看全, 一轮修完)。
 
 双跑是有意设计(拍板 D3): commit 闸门照旧全跑, 不做绿结果缓存 —— 缓存失效的静默红面
@@ -43,6 +51,15 @@ from _ship_config import (  # noqa: E402
 )
 
 DEFAULT_MESSAGE_REL = Path(".git") / "COMMIT_MSG_AI.txt"
+# review.trace 的「待评审」机器标记(契约单点: check_review_trace.py 模块头「rc=3 待评审」节):
+# 脚本退出码恒 rc=3, 但引擎 run.py 把任务失败统一归一成 rc=1 —— rc=3 到不了闸门, 待评审态由
+# 输出行首标记承载。gate 持同值字面量, 由 test_gate 的跨包钉面防漂移。
+PENDING_TRACE_PREFIX = "评审留痕[待评审]:"
+
+
+def _is_pending_failure(tail: str) -> bool:
+    """失败输出尾里是否含 review.trace 的待评审标记行(2026-11-19 鸡生蛋收口)。"""
+    return any(row.strip().startswith(PENDING_TRACE_PREFIX) for row in tail.splitlines())
 
 
 def run_gate_prerun(steps: list[str]) -> tuple[bool, str, list[str]]:
@@ -100,15 +117,34 @@ def run_gate_prerun(steps: list[str]) -> tuple[bool, str, list[str]]:
     if manual:  # 本仓库配置里没有 auto=false 的闸门, 纯兜底提示(与 commit.py 同款)
         print("人工闸门(未自动执行, 需自行跑): " + " ; ".join(manual))
 
+    # 待评审降级(2026-11-19 鸡生蛋收口, 契约单点见 check_review_trace.py 模块头): 预跑时刻
+    # 评审必然尚未发生 → 「待评未留痕」是流程位置不是缺陷。按行首标记识别(引擎 run.py 把任务
+    # 失败统一归一成 rc=1, 脚本的 rc=3 到不了这里), 降级为待办行不计入失败, 与 when_message
+    # 的略过路径对齐(同一棵树不因消息文件先写而判红); commit 侧 rc!=0 照拦。
+    pendings = [f for f in failures if _is_pending_failure(f[4])]
+    failures = [f for f in failures if not _is_pending_failure(f[4])]
+
     if failures:
         detail: list[str] = []
         for note, cmd, rc, secs_i, tail in failures:
             detail.append(f"  - 「{note}」 (rc={rc}, {secs_i:.1f}s)")
             detail.append(f"    $ {cmd}")
-            detail.extend(f"      {line}" for line in tail.splitlines())
+            detail.extend(f"      {row}" for row in tail.splitlines())
+        for _note, _cmd, _rc, _secs, tail in pendings:
+            detail.append("  - 待评审(预跑不拦, 评审后闭合; commit 照拦):")
+            detail.extend(f"      {row}" for row in tail.splitlines())
         line = (f"闸门预跑失败: {len(failures)} 条未过 —— 逐条处理完重跑 commands run ship.gate; "
                 "绿了再 pack/评审")
         return False, line, detail
+    if pendings:
+        detail = []
+        for _note, _cmd, _rc, _secs, tail in pendings:
+            detail.append("  - 待评审(评审后闭合, commit 照拦) —— 按流程继续: review.pack → 评审 → 写 trailer:")
+            detail.extend(f"      {row}" for row in tail.splitlines())
+        return True, (
+            f"闸门全绿: 命中 {len(hits)} 条, 执行 {ran} 条命令, 总耗时 {secs:.1f}s"
+            f"(略过 {len(skipped)} 条); 另: 评审留痕待评审(评审后闭合) —— 结果行贴进评审记录"
+        ), detail
     return True, (f"闸门全绿: 命中 {len(hits)} 条, 执行 {ran} 条命令, 总耗时 {secs:.1f}s"
                   f"(略过 {len(skipped)} 条) —— 结果行贴进评审记录"), []
 

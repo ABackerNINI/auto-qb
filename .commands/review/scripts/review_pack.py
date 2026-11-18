@@ -3,7 +3,8 @@
 code-review skill 的配套脚本(八节规程见 .agents/skills/code-review/SKILL.md):
 - pack:  基线与 HEAD hash / 评审规模与分档提示(行数 = **闸门实算口径**: 主线逐笔 + 侧分支无
          trailer 提交 + 工作树已跟踪 + 未跟踪可评, 排除面/锚点/实算与提交闸门共用 review_content.py
-         单点 —— trailer `<N> 行` 与 `· 基` 过闸用的就是这一个数; --base ≠ 闸门锚点时打可见警告) /
+         单点 —— trailer `<N> 行` 与 `· 基` 过闸用的就是这一个数; --base 缺省自动现算闸门锚点并
+         回显, 显式给值 ≠ 锚点时打可见警告) /
          基哈希(「base -> 工作树」过滤后 diff 的确定性哈希, 与闸门同源) / 可评文件清单(树差口径,
          --no-renames 与实算同口径: rename 拆 D 旧路径 + A 新路径两行, 另出「改名对」提示行供对账;
          记账类/生成物列进排除面行, 不进清单) / 红线与安全敏感面预警(全量路径, 排除面文件命中也
@@ -16,11 +17,12 @@ code-review skill 的配套脚本(八节规程见 .agents/skills/code-review/SKI
          REFUTE 的发现直接弃, 不复核(幻觉引文是 LLM 评审的头号失效模式)。
 
 用法:
-  python review_pack.py pack  --base <rev> [--root DIR]
+  python review_pack.py pack  [--base <rev>] [--root DIR]
   python review_pack.py check --findings <json文件|-> [--root DIR] [--window N]
 
-退出码: check 0=全部通过 1=存在 REFUTE; 两命令 2=用法/环境/输入错误(缺 --base / 非 git
-仓库 / findings 非 UTF-8 或非法 JSON 等)。
+退出码: check 0=全部通过 1=存在 REFUTE; pack 0=生成(提示面, rc 恒 0/2); 两命令 2=用法/环境/
+输入错误(--base 无效, 或未给 --base 且仓库还没有任何提交 / 非 git 仓库 / findings 非 UTF-8
+或非法 JSON 等)。
 """
 
 from __future__ import annotations
@@ -131,19 +133,30 @@ def _hit_rules(paths: list[str], rules: list[str]) -> list[str]:
 
 def cmd_pack(args: argparse.Namespace) -> int:
     root = _resolve_root(args.root)
-    base = _git(root, "rev-parse", "--verify", args.base).strip()
-    head = _git(root, "rev-parse", "HEAD").strip()
-
-    gen = generated_paths(root)
     # 锚点核对(2026-11-11): 闸门的批次范围恒从最近一条 Review:/Review-Skip: 提交现算; pack 若按
     # 别的 --base 算规模, 与闸门实算必分叉, trailer `<N> 行` 过不了闸 —— 可见警告不拦提交
     # (pack 是提示面, rc=0), 让 agent 当场换锚点重跑。
+    # 2026-11-19 起 --base 可选: 缺省自动现算锚点并回显 —— 与 review.trace 的锚点法同哲学
+    # (agent 手填 hash, 填错就是假账); 显式给值时 ≠ 锚点仍警告。
     anchor = anchor_commit(root)
-    if anchor != base:
-        print(
-            f"[warn] --base {base[:12]} ≠ 闸门锚点 {anchor[:12]}(最近一条 Review:/Review-Skip: 提交) "
-            "-- trailer 的 `<N> 行` 与 `· 基` 都按锚点批实算, 请改用锚点重跑 pack"
-        )
+    if args.base is None:
+        if not anchor:
+            # unborn 仓库(零提交): 锚点探不出 rev(anchor_commit 容忍空串正是为它), 无批可言
+            # —— 用法错, 不猜(闸门 main 对它走「无批跳过」, pack 这边没有可降级的输出面)。
+            print("review.pack: 仓库还没有任何提交且未给 --base —— 无批可言, 不生成评审包")
+            return 2
+        base = anchor
+        print(f"[pack] 批次锚点(自动现算) = {base[:12]}(最近一条 Review:/Review-Skip: 提交; 冷启动无则退 HEAD)")
+    else:
+        base = _git(root, "rev-parse", "--verify", args.base).strip()
+        if anchor != base:
+            print(
+                f"[warn] --base {base[:12]} ≠ 闸门锚点 {anchor[:12]}(最近一条 Review:/Review-Skip: 提交) "
+                "-- trailer 的 `<N> 行` 与 `· 基` 都按锚点批实算, 请改用锚点重跑 pack"
+            )
+    head = _git(root, "rev-parse", "HEAD").strip()
+
+    gen = generated_paths(root)
 
     # 评审规模 = 闸门实算口径(review_content 单点): 主线逐笔 + 侧分支无 trailer 提交 + 工作树已跟踪
     # + 未跟踪可评; 记账类/生成物/二进制不计行。与 trailer `<N> 行` 恒同源, 分档判据也用它。
@@ -362,7 +375,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_pack = sub.add_parser("pack", help="评审包: 基线/分档/文件清单/红线预警")
-    p_pack.add_argument("--base", required=True, help="任务起点 rev(任务第一个 commit 的 parent / 上次收口 commit)")
+    p_pack.add_argument("--base", default=None, help="批次起点 rev(缺省自动现算闸门锚点: 最近一条 Review:/Review-Skip: 提交, 冷启动退 HEAD)")
     p_pack.add_argument("--root", help="仓库根(默认取 cwd 所在仓库)")
 
     p_check = sub.add_parser("check", help="findings 引文逐字校验")

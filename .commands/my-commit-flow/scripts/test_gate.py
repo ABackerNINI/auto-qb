@@ -31,6 +31,12 @@
                                                    不像 commit 只取 failures[0] —— 计划 §03 行为表)
 - test_main_returns_1_on_gate_failure              rc 映射半边: main([]) 实测失败 → rc 1(恒 0 回归
                                                    时结果行用例救不了退出码)(分面 2)
+- test_pending_trace_downgrades_to_green_with_note 待评审降级(2026-11-19): 行首标记识别 → 待办行
+                                                   不拦, 结果行仍绿缀「另: 评审留痕待评审」,
+                                                   commit 侧 rc!=0 照拦(鸡生蛋收口)
+- test_pending_trace_with_real_failure_counts_only_real  待评审不进失败计数, 明细单列(与真失败并存)
+- test_pending_prefix_pinned_across_packages       跨包字面量钉面: gate 的标记字面量 == 产生侧
+                                                   check_review_trace.py 的定义(漂移即红)
 - test_pack_config_passes_config_problems          真实 .my-commit-flow.toml 装载自检: when_message
                                                    新键在 GATE_KEYS 白名单 + bool 校验零 STOP
 - test_when_message_type_invalid_stops             bool 校验半边独立钉住: when_message 写成字符串
@@ -314,6 +320,51 @@ def test_main_returns_1_on_gate_failure(repo, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 1
     assert "闸门预跑失败" in out and "boom-a" in out
+
+
+def test_pending_trace_downgrades_to_green_with_note(repo, monkeypatch, capsys):
+    # 待评审降级(2026-11-19 鸡生蛋收口): 预跑时刻评审必然尚未发生 → 按行首标记识别后降级为
+    # 待办行不拦, 与 when_message 的略过路径对齐(同一棵树不因消息文件先写而判红);
+    # commit 侧 rc!=0 照拦。rc 用 1: 引擎 run.py 把任务失败归一成 rc=1, 真实到达闸门的形态。
+    _patch_changed(monkeypatch, staged=["src/a.py"])
+    _patch_cfg(monkeypatch, gates=[_gate("评审留痕")])
+    spy = _GateSpy(failures=[("评审留痕", "cmd-trace", 1, 1.0, "评审留痕[待评审]: 本批累计 4 行待评未留痕 —— 先跑 code-review skill")])
+    monkeypatch.setattr(gate_mod, "run_gates", spy)
+    _write_msg(repo)
+    rc = gate_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "闸门预跑失败" not in out
+    assert "另: 评审留痕待评审" in out  # 全绿结果行缀待评审提示(仍可贴进评审记录)
+    assert "待评未留痕" in out  # 待评审的理由在明细里可见
+
+
+def test_pending_trace_with_real_failure_counts_only_real(repo, monkeypatch, capsys):
+    # 待评审项不进失败计数(结果行只数真失败), 但明细单列可见 —— 预跑是诊断面, 一轮看全。
+    _patch_changed(monkeypatch, staged=["src/a.py"])
+    _patch_cfg(monkeypatch, gates=[_gate("甲"), _gate("评审留痕")])
+    spy = _GateSpy(
+        failures=[
+            ("甲", "cmd-a", 1, 1.0, "boom-a"),
+            ("评审留痕", "cmd-trace", 1, 1.0, "评审留痕[待评审]: 本批累计 4 行待评未留痕"),
+        ]
+    )
+    monkeypatch.setattr(gate_mod, "run_gates", spy)
+    _write_msg(repo)
+    rc = gate_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "闸门预跑失败: 1 条未过" in out
+    assert "boom-a" in out
+    assert "待评审(预跑不拦" in out
+
+
+def test_pending_prefix_pinned_across_packages():
+    # 跨包字面量钉面: gate 按行首标记识别待评审, 标记的产生侧单点在 check_review_trace.py ——
+    # 两侧字面量漂移会让预跑降级静默失效(待评审被当真失败), 这里把消费侧钉在产生侧上。
+    review_script = PKG.parent / "review" / "scripts" / "check_review_trace.py"
+    src = review_script.read_text(encoding="utf-8")
+    assert f'PENDING_TRACE_PREFIX = "{gate_mod.PENDING_TRACE_PREFIX}"' in src
 
 
 # ------------------------------------------------------------------ 真实包装载自检

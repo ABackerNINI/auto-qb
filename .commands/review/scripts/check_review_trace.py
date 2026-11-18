@@ -35,6 +35,20 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
 > 下限(50 行)已随 26-11-08-1240 D9 退役: 「5 行小改正文写一句 Review: 见报告」不再是无 trailer 义务
 > 的通路 —— 可评行数 >0 就得写全字段 trailer(小提交与修复增量两条政策缝一并闭合, 2026-11-08 拍板)。
 
+## rc=3 待评审(2026-11-19, 预跑鸡生蛋收口)
+
+评审批次时序 = gate 预跑 → pack → 评审 → 写 trailer → commit: 预跑时刻评审**必然尚未发生**, trailer
+必然不存在 —— 「待评未留痕 / 敏感面未评」在这时是**流程位置**而不是缺陷。此前它以 rc=1 表达, 与真违规
+(声明与实算不符 / Review-Skip)不可分, 同一棵树会因消息文件先写(when_message 放行路径失效)而预跑必红,
+与消息文件不存在时的略过路径自相矛盾(26-11-18 另一 clone 实证: 预跑唯一红项就是评审留痕本身)。
+
+现以 rc=3 表达「待评审」: **判红且消息里没有任何评审主张**(无 `Review:` 也无 `Review-Skip:`)。机器面
+有两份, 同源同分支: 脚本退出码 rc=3(直调面 —— 测试/未来消费方), 与输出行首标记
+`评审留痕[待评审]:`(经引擎的消费面 —— run.py 把任务失败统一归一成 rc=1, rc=3 到不了闸门)。
+消费方: ship.gate 预跑按行首标记识别, 降级为待办行不拦(其余红项照拦); ship.commit 侧 rc!=0 照拦
+(评审未做不许提交), 其余消费方按 rc!=0 处理即安全。判定实现单点在 main() 的 rc 映射(消费
+message_text 的同一份文本做结构判定, 不做失败文案字符串匹配)。
+
 ## 计数面
 - 计入: 代码 + 事实性文档(计划/报告/约定/坑档/README/AGENTS.md)
 - 不计入: **记账类**(`memory-bank/tasks/` `active-context/` `testing/baselines/`, 以及
@@ -50,7 +64,8 @@ agent 不用填 hash(填错就是假账), 且天然"连坐": 谁漏评, 那笔�
 `red_lines`(读 my-commit-flow 的闸门配置) ∪ 路径标记词(`state` `credential` `auth` `token`
 `secret` `password`, 与 review_pack 同源)。命中即"不论行数必须评"。
 
-退出码: 0 通过(含无需评审) · 1 未过(一行原因 + 下一步) · 2 用法/环境错误
+退出码: 0 通过(含无需评审) · 1 未过(消息带评审主张但与实算不符 / Review-Skip 等 —— 一行原因 + 下一步)
+· 2 用法/环境错误 · 3 待评审(批内有待评内容而消息尚无任何评审主张, 见模块头「rc=3 待评审」节)
 """
 
 from __future__ import annotations
@@ -111,6 +126,11 @@ GATE_CONFIG_REL = ".commands/my-commit-flow/.my-commit-flow.toml"
 # commit.py 在**合流复跑**那一次之前写下的标记(内容 = 当时的目标 sha, 只作凭据不作判据);
 # 本脚本读到即跳过, 并顺手消费掉(一次性)。见 main() 里为什么不能用环境变量。
 POST_MARKER = ".git/review_trace_post"
+
+# 待评审行的机器标记(契约单点 = 本模块头「rc=3 待评审」节)。引擎 run.py 把任务失败统一归一成
+# rc=1, rc=3 到不了闸门 —— 经引擎的消费方(ship.gate 预跑)按行首标记识别; 直调面按 rc=3 识别。
+# gate.py 持同值字面量, 由 test_gate 的跨包钉面防漂移。
+PENDING_TRACE_PREFIX = "评审留痕[待评审]:"
 
 # 齐平字段(计划 26-11-07-0201 落点 3, D6): trailer 末尾可选的 `· 齐平 <8hex>`(评审时点的远端 tip
 # 前 8 位, 与评审记录交叉可验)。弱校验(R4): 不强制存在、不验 hash 真值 —— 只查格式, 异常打一行
@@ -373,8 +393,15 @@ def main(argv: list[str] | None = None) -> int:
     if ok:
         # v3 契约: 全过即静默(仅记账/生成物这类"本来就没批"的情形也静默; warn 与「未给消息文件」提示是仅有的两处让步)
         return 0
-    print(f"评审留痕: {why}")
-    return 1
+    # rc=3 + 行首标记(模块头「rc=3 待评审」节): 判红且消息里没有任何评审主张(无 `Review:` 也无
+    # `Review-Skip:`)= 评审尚未发生的流程位置, 与真违规(写了主张但与实算不符 / Skip)分开表达。
+    # 结构判定用与 decide 同一份 message 文本, 不做失败文案字符串匹配(文案改动不会破坏分类)。
+    claimed = bool(REVIEW_LINE_RE.search(msg) or SKIP_LINE_RE.search(msg))
+    if claimed:
+        print(f"评审留痕: {why}")
+        return 1
+    print(f"{PENDING_TRACE_PREFIX} {why}")
+    return 3
 
 
 if __name__ == "__main__":

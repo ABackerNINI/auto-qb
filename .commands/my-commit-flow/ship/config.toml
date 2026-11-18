@@ -23,5 +23,5 @@ doc    = "references/pipeline.md"
 [tasks."ship.gate"]
 script = "gate.py"
 when   = "评审批次 pack 前置(code-review skill): sync 之后、pack 之前跑一次 —— 让 review 评到的树已是闸门绿(计划 26-11-11-0408); 红必修完重跑绿才 pack; 凡 pack 必前置(复评轮/接缝终审不豁免)。非评审提交(纯生成物/记账)可选, commit 闸门兜底"
-note   = "结果行: 「闸门全绿: 命中 G 条...」(贴进评审记录) / 「树净, 无闸门可跑」 / 失败一行+逐条明细(预跑是诊断面, 一次看全一轮修完); 清单单点 .my-commit-flow.toml 照搬全部 auto 闸门, commit 闸门照旧双跑兜底(拍板 D3, 不缓存); review.trace 仅消息文件存在才跑否则略过行(when_message); 红线/warn 只打 WARN 不拦"
+note   = "结果行: 「闸门全绿: 命中 G 条...」(贴进评审记录) / 「树净, 无闸门可跑」 / 失败一行+逐条明细(预跑是诊断面, 一次看全一轮修完); 清单单点 .my-commit-flow.toml 照搬全部 auto 闸门, commit 闸门照旧双跑兜底(拍板 D3, 不缓存); review.trace 仅消息文件存在才跑否则略过行(when_message), 跑出 rc=3(待评审: 消息尚无任何评审主张)降级待办行不拦 —— 评审后闭合, commit 照拦(2026-11-19 鸡生蛋收口); 红线/warn 只打 WARN 不拦"
 doc    = "references/pipeline.md"

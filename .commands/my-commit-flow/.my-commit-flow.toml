@@ -194,7 +194,9 @@ when_message = true
 note  = "评审留痕: 可评内容 >0 行(代码+事实性文档)或触安全敏感面即需 `Review:` trailer(含 `· 基`); 新提交写 `Review-Skip:` 判红; 实算恒 0 且无 Review: trailer 才静默; 口径单点见 .commands/review/config.toml 的 review.trace note"
 # when_message(计划 26-11-11-0408): 消息依赖闸门 —— ship.gate 预跑侧在消息文件不存在时
 # 打略过行后摘除(评审批次 pack 前评审尚未发生, 照跑必红); commit 侧不受影响(闸门前就因
-# 消息缺失拒跑)。消息文件存在时预跑照跑 —— 提前发现忘写 trailer。
+# 消息缺失拒跑)。消息文件存在时预跑照跑 —— trailer 已写但与实算不符(基漂移/行数错/Skip)
+# 提前暴露; 尚无任何评审主张的批 rc=3 待评审, 预跑降级不拦(2026-11-19 鸡生蛋收口, 契约
+# 单点见 .commands/review/scripts/check_review_trace.py 模块头「rc=3 待评审」节)。
 
 [[gates]]
 # 空串 = 每次提交都命中(哨兵, 由 gates_for 在 glob 匹配前短路 —— 空串不是 glob, 匹配不到任何路径)。

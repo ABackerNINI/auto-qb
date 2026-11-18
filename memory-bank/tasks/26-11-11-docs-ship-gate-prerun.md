@@ -2,8 +2,8 @@
 
 **Status:** Done
 **Added:** 2026-11-11
-**Updated:** 2026-11-11
-**Summary:** 提交闸门预跑 ship.gate: 提交闸门拎成可单独跑的 ship.gate, 接进评审批次 pack 前置, 让小失误在 review 之前暴露
+**Updated:** 2026-11-19
+**Summary:** 提交闸门预跑 ship.gate: 提交闸门拎成可单独跑的 ship.gate, 接进评审批次 pack 前置, 让小失误在 review 之前暴露; 2026-11-19 扩展: 预跑待评审降级(rc=3+行首标记, 预跑不拦 commit 照拦, 鸡生蛋收口)与 review.pack --base 自动锚点
 **Topics:** docs-ship-gate-prerun
 **Refs:** memory-bank/plans/26-11-11-0408-plan-ship-gate-prerun.html, memory-bank/testing/baselines/26-11-11-0504-ship-gate-prerun.md
 
@@ -48,3 +48,5 @@ ship.gate 闸门预跑怎么落地、怎么接进评审流程、行为边界(树
 ### R1 · 提交落库与引用收口 (2026-11-11)
 
 - ship.commit 落库(`6dedc75b`, 714 行 + trailer 检 7/7 轮 4); 状态翻转(计划/档案翻 Done)与 doc-refs 双向链(计划 ↔ 档案/基线切片)属收口面, 随下一批入库 —— 曾被读成"计划仍 Open", 实为翻转未入库, 本行澄清。
+
+- 2026-11-19 04:43 预跑待评审降级(鸡生蛋收口: rc=3+行首标记, 预跑不拦 commit 照拦)与 review.pack --base 自动锚点; 复评 2 轮零 actionable; 坑档 ops/commands-engine-rc-normalization; 纯工具链机械面不涉真机轨准入
