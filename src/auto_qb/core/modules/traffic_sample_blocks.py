@@ -153,8 +153,15 @@ class _SampleBlocksMixin:
         「处理 z 行时已知末端值」 = 调用方手里这个值)。差分基线推进 + 增量计算(§03.4): 基线为空(重启后首样)只立基线不出增量;
         cur < last 判计数器重置(该点增量记 null + INFO 记录), 绝不产负增量。
         r 记录进 BlockBuffer(v3 §3.1), 随批量 flush 落盘; latest 镜像照常推进。
+
+        事件源捕获(plan 26-11-18-0037 阶段 2): 本 tick 的 r 观测在此单点捕获, closed =
+        封口前的开放游程快照(z 游程被本样本收口 -> 接缝摊配项面; n 游程被收口 -> 断连
+        标记面; 无游程 None)—— 摊配判定在派发点复用读侧 _seam_spread_delta 原语, 口径
+        详见 traffic_sample_events.py 模块 docstring。
         """
         self._round_keys.add(key)
+        closed = self._open_runs.get(key)
+        closed_snap = (closed.kind, closed.start, closed.last_seen, closed.samples) if closed is not None else None
         self._seal_run(key, dl_total, up_total)
         base = self._baselines.get(key)
         if base is None:
@@ -182,6 +189,7 @@ class _SampleBlocksMixin:
             ts,
             ts,
         )
+        self._ev_capture_obs(key, "r", ts, dl_total, up_total, closed_snap)
         return point
 
     def _touch_null_run(self, key: str, ts: float) -> None:

@@ -150,6 +150,10 @@ by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。
 引用, 故与视图发布先后无关)。快照两面: raw 面 = 未落盘记录 + 开放游程槽(v4_live_tail_slots
 复原), agg 面 = 未封口部分行 + 开放游程合成段(_pending_agg_rows <- _open_run_hour_samples,
 26-10-29 起) —— 两面同构, 空闲期都出 0 不出 null。
+流量步进事件源(plan 26-11-18-0037 阶段 2)挂同一发布点: handler 每轮在 _publish_live_tail
+之后调 _publish_traffic_events —— 本 tick 观测差分点 batch 交 ctx.web 注入的 hub 鸭型派发
+(per-scope SSE, §03 (2)), 断连分支只捕获 n(不推数据点), 层级方向与口径详见
+traffic_sample_events.py 模块 docstring。
 
 配置: config.qb_traffic(QbTraffic, 缺省 None = 未启用)。启用/停用与热重载全由采样体入口
 现读判据承担(enabled=true 即时开采、运行期关闭即时短路), 不依赖队列重建相位; 未启用零
@@ -160,7 +164,9 @@ R5 拆分(计划 26-11-02-2342 §07)后的本文件: 保留模块协议说明、
 (`__init__` / 公开入口 / `_publish_live_tail`(读 time) / `_advance_run` 与
 `_append_record`(读 v4_epoch_date_str) / `_recover_aggregates` 与 `_flush_all_series`(读 time));
 常量/数据类/纯助手迁至 traffic_sample_common.py, 聚合域迁至 traffic_sample_agg.py,
-采样/块/刷新域迁至 traffic_sample_blocks.py, 全部原有模块级名字在此重导出。
+采样/块/刷新域迁至 traffic_sample_blocks.py, 流量步进 SSE 事件源迁至
+traffic_sample_events.py(plan 26-11-18-0037 阶段 2: per-tick 观测捕获 + 差分点派发,
+经 ctx.web 注入 hub 鸭型发布, 不 import webui), 全部原有模块级名字在此重导出。
 """
 import logging
 import math
@@ -217,9 +223,10 @@ from .traffic_sample_common import (  # noqa: F401
 )
 from .traffic_sample_agg import _SampleAggMixin, _open_run_hour_samples, _pending_agg_rows
 from .traffic_sample_blocks import _SampleBlocksMixin
+from .traffic_sample_events import _SampleEventsMixin
 
 
-class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
+class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixin, BaseModule):
     """qb_traffic 模块: internal 采样任务自注册 + 两系列采样 + v4 块化批量落盘(S2a)"""
 
     name = "qb_traffic"
@@ -276,6 +283,16 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         # 整体替换引用, Web 线程只读单引用无锁(对齐 ctx.web.set_traffic_view 快照发布
         # 先例; 黄金法则 5 不破 —— 快照只读, 写仍单点在采样调用链内)
         self.live_tail: dict = {}
+        # ---- 流量步进事件源(plan 26-11-18-0037 阶段 2, §03 传输面表(2)) ----
+        # 本 tick 观测捕获(系列键 -> (kind, ts, dl_total, up_total, closed_run)): 捕获点在
+        # 采样调用链(sample_series / _advance_run), 派发点(handler 收尾)整体消费清空;
+        # 事件差分链的观测游标(系列键 -> (ts, dl_total, up_total); r/z 推进, n 不推进 ——
+        # 与读侧 fold prev_slot 同构); z 游程摊配链锚(系列键 -> (anchor_ts, dl_total,
+        # up_total), 读侧 fold run.anchor_ts 等价物 —— 跨封口段持续, r 收口消费清除,
+        # 见 traffic_sample_events._ev_note_z_open)。三者主循环线程独占, 无锁(黄金法则 5)。
+        self._ev_tick_obs: dict = {}
+        self._ev_prev_obs: dict = {}
+        self._ev_z_chain: dict = {}
         # ---- 限速历史记录器(plan 26-10-12-0535 D2) ----
         # 主循环线程独占, _sample_global 顺带观测; data_dir 为空 = 禁用(observe 内防御);
         # dry_run 经 observe 的 persistence_on 旗标短路(与落盘同门)
@@ -335,11 +352,13 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
             logger.debug("流量采样 | qB 断连, 本轮全局记 n 游程槽")
             self._maybe_flush_all(conf, now)
             self._publish_live_tail()
+            self._publish_traffic_events()  # 断连分支无新样本 -> 不推数据点(n 不产点)
             return
         self._sample_global(store.server_state, now)
         self._sample_torrents(store, now)
         self._maybe_flush_all(conf, now)
         self._publish_live_tail()
+        self._publish_traffic_events()  # per-scope 增量派发(§03 (2) 事件源, 随活尾快照同点)
 
     # ---------- 活尾快照发布(S6 验收追加) ----------
 
@@ -406,8 +425,16 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         带 totals 的零样本顺带刷新末端锚点候选(run.last_*, 形态 D); 坐拥实测样本的封口
         路径把手上的 totals 作为末端锚点交 _seal_run(拿不到的形态由游程跟踪值兜底);
         开 z 游程需要 totals 快照(缺失不开, 空闲不出 null 槽), n 游程无此要求。
+
+        事件源捕获(plan 26-11-18-0037 阶段 2): 本 tick 的 z/n 观测在此单点捕获 —— z 型
+        totals = 显式读数, 缺省取游程开启快照(游程内 totals 恒定 —— 被动零样本不重读
+        字段); n 型无观测无 totals。捕获在真实出口(开启拒绝早退不留观测); 本 tick 若同时
+        封口旧游程(换型/跨天/保险闸), 旧游程的槽在其开放期已逐 tick 派发过, closed 恒
+        None 不重发(事件流每系列每 tick 恰一点)。
         """
         run = self._open_runs.get(key)
+        ev_dl = dl_total if dl_total is not None else (run.dl_total if run is not None else None)
+        ev_up = up_total if up_total is not None else (run.up_total if run is not None else None)
         if run is not None:
             if run.kind != kind or v4_epoch_date_str(ts) != v4_epoch_date_str(run.last_seen):
                 # 换型(触发 (2) R2)或 00:00 硬切: 游程不跨型不跨天; 封口用本轮样本读数兜底锚点
@@ -415,7 +442,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
                 run = None
         if run is None:
             if kind == "z" and (dl_total is None or up_total is None):
-                return  # 开 z 游程需要 totals 快照; 缺失/非法不开新游程
+                return  # 开 z 游程需要 totals 快照; 缺失/非法不开新游程(无观测, 事件源不捕获)
             self._open_runs[key] = OpenRun(
                 kind=kind,
                 start=ts,
@@ -426,6 +453,11 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
                 last_dl_total=int(dl_total) if dl_total is not None else 0,
                 last_up_total=int(up_total) if up_total is not None else 0,
             )
+            if kind == "z":
+                # 事件摊配链锚登记(_ev_z_chain): 新段开启不换既有锚(折叠 run 跨封口段连续,
+                # 评审 #1)—— 链缺位才立锚, totals 断链由收口侧匹配校验兜底
+                self._ev_note_z_open(key, ts, ev_dl, ev_up)
+            self._ev_capture_zn(key, kind, ts, ev_dl, ev_up)
             return
         run.last_seen = ts
         run.samples += 1
@@ -434,6 +466,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
             run.last_up_total = int(up_total)
         if run.samples >= ZRUN_CAP_SAMPLES or ts - run.start >= ZRUN_FLUSH_S:
             self._seal_run(key, dl_total, up_total)
+        self._ev_capture_zn(key, kind, ts, ev_dl, ev_up)
 
     def _append_record(self, key: str, rec: V4Sample | V4ZeroRun | V4NullRun, start_ts: float, end_ts: float) -> None:
         """单条 v4 记录进缓冲(§3.1/§2.3 写侧核心 + v4 计划 §01 关块状态机): 块开启 /

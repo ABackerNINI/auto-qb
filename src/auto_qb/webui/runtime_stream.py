@@ -5,7 +5,7 @@ move-only 自 runtime.py 切出(计划 26-11-02-2342 §07 R5), 未改语义; 由
 import logging
 import queue
 import secrets
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from .runtime_common import (
     EVENT_QUEUE_MAX,
@@ -119,6 +119,131 @@ class StreamMixin:
             except Exception:
                 self.notify_dropped += 1
         return hit
+
+    # ---------------------------------------------------------- 流量步进事件(26-11-18-0037 阶段 2)
+
+    def subscribe_traffic_stream(self, scope: str, group_key=None):
+        """登记一个 per-scope 流量步进事件订阅者(Web 线程调用), 返回它的事件队列
+
+        scope = "global" | "torrent:<hash>" | "group:<key>"(与 /api/traffic/qb 三 GET
+        端点的作用域语法一致; torrent: 前缀与存储系列键前缀同构, batch 直取)。组 scope
+        的成员集**不随订阅定死**: 解码键(group_key, store.groups 的 tuple 键)随订阅缓存,
+        成员查表每帧现取 —— 与 GET 读侧「成员集 = 查询时刻 store.groups[指纹键]」同口径
+        (组解散/重组后帧面自动跟随)。队列上限/心跳/退订纪律承袭 /api/events 订阅面。
+        """
+        q = queue.Queue(maxsize=EVENT_QUEUE_MAX)
+        with self._traffic_sub_lock:
+            self._traffic_subs.setdefault(scope, []).append(q)
+            if group_key is not None:
+                self._traffic_group_keys[scope] = group_key
+        # DEBUG: 连接级事件(同 /api/events 订阅日志口径; 排查"没连上/句柄堆叠"调 DEBUG 看)
+        logger.debug(f"WEB 流量步进订阅 +1 scope={scope}(当前 {self.traffic_stream_subscriber_count()})")
+        return q
+
+    def unsubscribe_traffic_stream(self, scope: str, q) -> None:
+        """退订 per-scope 流量步进订阅(Web 线程调用): 队列摘除, 空 scope 连同其组键缓存
+        一并清理(订阅表无死键 —— torrent scope 随浏览面无界增长的内存卫生)。"""
+        with self._traffic_sub_lock:
+            lst = self._traffic_subs.get(scope)
+            if lst is not None and q in lst:
+                lst.remove(q)
+                if not lst:
+                    self._traffic_subs.pop(scope, None)
+                    self._traffic_group_keys.pop(scope, None)
+                    # seq 死键随 scope 一并清理(评审 #4: torrent scope 随浏览面无界残留的
+                    # 内存卫生)。seq 是每连接游标 —— 清零后新连接首帧 seq=1, 语义一致
+                    #(消费端以首帧为基线, 断档检测在基线之后)。
+                    self._traffic_seq.pop(scope, None)
+                    logger.debug(f"WEB 流量步进订阅归零 scope={scope}")
+
+    def traffic_stream_subscriber_count(self) -> int:
+        """当前流量步进订阅队列总数(诊断面)"""
+        with self._traffic_sub_lock:
+            return sum(len(queues) for queues in self._traffic_subs.values())
+
+    def traffic_stream_active(self) -> bool:
+        """是否有任何流量步进订阅者(主循环线程调用): 采样模块据此把「差分点计算 + 派发」
+        整段短路 —— 无人订阅时事件源零计算零派发(链游标照常推进, 订阅者中途加入首帧
+        即真值, 见 traffic_sample_events._publish_traffic_events)。"""
+        with self._traffic_sub_lock:
+            return bool(self._traffic_subs)
+
+    def publish_traffic_batch(self, batch: dict) -> int:
+        """流量步进事件 per-scope 派发(主循环线程, 采样 handler 收尾调用); 返回送达队列数
+
+        batch = {系列键: 差分点 {t, dl, up}}(采样模块本 tick 的新观测; 系列键与 torrent
+        scope 语法同构)。扇出: global / torrent:<hash> 直取 batch(本 tick 无观测的 scope
+        不派帧 —— 静默是停流信号, seq 不虚增); group:<key> 按 _group_merge_points 口径
+        Σ 现查成员(成员此 tick 无点按 0 计不设观测, 全员无观测不派帧 —— R3: 载荷 =
+        scope 聚合显示点, 每 tick 每 scope 恰 1 帧, 绝不 per-torrent 逐成员推)。
+
+        seq 每 scope 单调递增: **派发即占号**(含队列满丢弃)—— 消费端按 seq 断档检测
+        兜底重拉(计划 D9), 丢弃必须留下断档痕迹; 丢弃计数 traffic_notify_dropped 可观测
+        (notify_dropped 同款)。非阻塞(put_nowait), 慢消费者丢事件不 backpressure 主循环
+        (黄金法则 5)。帧对象逐队列新建(隔离面: 各订阅者各得一份拷贝, 点 dict 只读共享)。
+        """
+        hit = 0
+        with self._traffic_sub_lock:
+            if not self._traffic_subs:
+                return 0
+            groups = self._traffic_group_keys
+            for scope, queues in self._traffic_subs.items():
+                pts = self._traffic_scope_points(scope, batch, groups.get(scope))
+                if pts is None:
+                    continue  # 本 tick 该 scope 无真值点: 不派帧不占号(静默 = 停流信号)
+                seq = self._traffic_seq.get(scope, 0) + 1
+                self._traffic_seq[scope] = seq
+                for q in queues:
+                    try:
+                        q.put_nowait({"seq": seq, "scope": scope, "points": list(pts)})
+                        hit += 1
+                    except queue.Full:
+                        self.traffic_notify_dropped += 1
+                    except Exception:
+                        self.traffic_notify_dropped += 1
+        return hit
+
+    def _traffic_scope_points(self, scope: str, batch: dict, group_key) -> Optional[list]:
+        """scope -> 本 tick 该 scope 的显示点列(无真值点回 None); group Σ 口径 =
+        traffic_qb._group_merge_points 的单 tick 形态(成员此 t 无点按 0 计不设观测 /
+        已知向求和未知向按 0 计 / 有观测而全成员该向皆未知 -> 该向 None / 全 None 真值点
+        不设观测)。主循环线程调用(成员查表现取 store.groups, 与 GET 读侧同口径)。"""
+        if scope == "global":
+            p = batch.get("global")
+            return None if p is None else [p]
+        if scope.startswith("torrent:"):
+            p = batch.get(scope)
+            return None if p is None else [p]
+        if scope.startswith("group:") and group_key is not None:
+            members = getattr(getattr(self._host, "store", None), "groups", {}).get(group_key)
+            if not members:
+                return None  # 组解散/清空: 不派帧(静默 -> 前端 GET 重拉得空态, 同 §08)
+            dl = up = 0
+            dl_known = up_known = False
+            has_obs = False
+            t = None
+            for h in tuple(members):
+                p = batch.get("torrent:" + h)
+                if p is None:
+                    continue  # 该成员此 t 无点: 按 0 计, 不设观测(_group_merge_points 同判)
+                if t is None:
+                    t = p["t"]  # 同 tick 采样成员 t 恒同(单点 now), 取首个成员的真值 t
+                if p["dl"] is None and p["up"] is None:
+                    # 全 None 真值点不设观测 —— 事件 batch 无 totals 面(读侧
+                    # _group_merge_points 的同位剔除判据含 totals 面): 单点语义同向
+                    #(无观测), 已知差异由 GET 重拉承载
+                    continue
+                has_obs = True
+                if p["dl"] is not None:
+                    dl += p["dl"]
+                    dl_known = True
+                if p["up"] is not None:
+                    up += p["up"]
+                    up_known = True
+            if not has_obs:
+                return None
+            return [{"t": t, "dl": dl if dl_known else None, "up": up if up_known else None}]
+        return None  # 未知 scope 形态(端点已校验, 防御面): 不派帧
 
     # ------------------------------------------------------------------ 活跃门控
 

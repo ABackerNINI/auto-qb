@@ -31,6 +31,13 @@ logger = logging.getLogger("auto_qb.web")
 # 清单逐个守 —— 闸门挂在全局依赖单点上, 今后新增任何写端点自动进覆盖面
 _WRITE_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
 
+# SSE 端点集合(EventSource 发不出 Authorization 头, 以 ?ticket= 一次性短时票据连流;
+# 消费即删): /api/events(P2 全局事件枢纽)+ /api/traffic/qb/stream(26-11-18-0037
+# 阶段 2 流量步进专用通道, E1 不扩全局枢纽另立端点 —— 票据纪律同一份: 同一签发池
+# POST /api/events/ticket, 单次消费 + TTL, 满额 503 退轮询兜底)。票据挂到集合外路径
+# 不生效也不被误消费(401, 防票据被任意端点白嫖成通行证)。
+_TICKET_STREAM_PATHS = frozenset({"/api/events", "/api/traffic/qb/stream"})
+
 # Host/Origin 白名单的 loopback 种子集 —— **不是**回环判定, 不并入 infra.utils.is_loopback_host
 # 单点(issue 26-11-08-0703 收敛时明析): 它喂的是 Host/Origin 头里的 hostname 字符串(浏览器
 # 控制, "localhost" 这类主机名只会以头字符串形态出现), 走 _hostname_allowed 精确命中/后缀
@@ -178,11 +185,12 @@ def make_require_token(manager):
         # 内容的 WARNING, 保留真实错密钥/探测信号。比较走 compare_digest 防时序侧信道。
         if not request.url.path.startswith("/api"):
             return
-        # SSE(/api/events)用的是 EventSource, **发不出** Authorization 头 —— 前端以带鉴权的
-        # POST /api/events/ticket 换**一次性短时票据**, 这里只认 /api/events 路径上的 ?ticket=
-        # (取即删, 见 WebUIRuntime.consume_event_ticket)。旧 ?token 查询串兜底已删: 长期
+        # SSE(/api/events 与 /api/traffic/qb/stream, 见 _TICKET_STREAM_PATHS)用的是
+        # EventSource, **发不出** Authorization 头 —— 前端以带鉴权的 POST /api/events/ticket
+        # 换**一次性短时票据**, 这里只认集合内路径上的 ?ticket=(取即删, 见
+        # WebUIRuntime.consume_event_ticket)。旧 ?token 查询串兜底已删: 长期
         # 密钥会留在反代/中间层访问日志里, 票据把泄漏面收敛为"用完即弃"(issue 26-09-21-1408 B-01)。
-        if qticket and request.url.path == "/api/events" and manager.web.consume_event_ticket(qticket):
+        if qticket and request.url.path in _TICKET_STREAM_PATHS and manager.web.consume_event_ticket(qticket):
             return
         scheme = "Bearer "
         if not authorization.startswith(scheme):

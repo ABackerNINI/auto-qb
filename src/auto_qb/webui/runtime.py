@@ -247,6 +247,16 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         self._subscribers: list = []
         self._sub_lock = threading.Lock()
         self.notify_dropped: int = 0
+        # ---- 流量步进事件订阅(26-11-18-0037 阶段 2, /api/traffic/qb/stream) ----
+        # per-scope 订阅表(scope -> [队列, ...]) + 组 scope 的解码键缓存(scope ->
+        # store.groups 的 tuple 键, 成员集每帧现查) + 每 scope 帧序号(派发即占号, 含
+        # 队列满丢弃 —— 消费端按 seq 断档兜底重拉, 计划 D9)。写面: Web 线程
+        # subscribe/unsubscribe(锁内), 主循环线程 publish(锁内占号派发)。
+        self._traffic_subs: dict = {}
+        self._traffic_group_keys: dict = {}
+        self._traffic_seq: dict = {}
+        self._traffic_sub_lock = threading.Lock()
+        self.traffic_notify_dropped: int = 0
         # SSE 一次性票据(ticket -> 签发时刻): Web 线程签发/消费, 锁保护(端点跑在线程池)
         self._event_tickets: dict = {}
         self._event_tickets_lock = threading.Lock()
