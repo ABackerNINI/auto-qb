@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="reports-stray-md-skill-portability">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-17-webui-hr-table-grid.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="reports/ 混入 .md 制品: 26-11-17-0010-report-skill-portability.md 违反 HTML 制品守卫(远端 a54213b9 带入)">
 <meta name="issue-summary" content="远端提交 a54213b9(skill 轨道可移植性立项)把 125 行 .md 报告落进 reports/, 违反「计划/报告一律单文件 HTML」口径, test_docs_forms.py::test_plans_reports_have_no_md 红">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-17-0132-docs-reports-stray-md-skill-portability</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-17 01:32</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -119,7 +119,8 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-17 01:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）。实际修法: 由归属 clone 走收编件转 HTML 壳批（转壳 commit <code>94cd9d6e</code> + 白名单清理 commit <code>c334a039</code>），<code>26-11-17-0010-report-skill-portability.md</code> 已转为 <code>.html</code>（正文保真, 件头带收编注记）。验证: 本 clone 复验 2026-11-19 —— <code>reports/</code> 与 <code>plans/</code> 顶层零 <code>.md</code>（仅 <code>attachments/</code> 子目录存档件, 不在守卫范围）; 守卫白名单 <code>ARCHIVE_MD_EXCEPTIONS</code> 已清空（<code>tests/test_docs_forms.py</code>, 机制保留逐件点名）; Windows 侧 <code>commands run test.quick</code> 实测 <strong>6479 passed, 2 skipped</strong>（守卫 <code>test_plans_reports_have_no_md</code> 在内; 数字为 Windows 侧 test.quick 实测, 与 Windows 侧 test.full 基线 6469+6 的差 6 条为收集面差异, 未逐条归因）。</li>
+</ul>
 </section>
 
 <footer>
