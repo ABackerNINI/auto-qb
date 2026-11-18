@@ -187,6 +187,13 @@ for (const skin of SKINS) {
         const saved = vm.rowWin;
         vm.rowWin = ${winOn};
         window.__lt = [];
+        // P1-3 的 gBR 是**整页累计**计数器, 每段 bench 起必须清零: 预算公式
+        // tRows×(rounds+2)+20 只描述窗口化那一段的逐行测高, 而 A 段(关窗口的全量
+        // 替换)本身也会量行 —— 累计读会把 A+B 一起算进 B 的预算。实测 atlas
+        // A 段 64 + B 段 75 = 139 > 130, prism 30+72=102 < 125, 于是只有 atlas
+        // 红(issue 26-11-18-0308-test-e2e-perf-ab-metrics-load-red); 这不是负载
+        // 敏感也不是产品回归, 是量具的计数窗口错位。
+        window.__gbr = 0;
         const ms = [];
         for (let i = 0; i < ${rounds}; i++) {
           vm.lastRid = null;                 // 强制服务端回全量 -> 前端整表替换
@@ -213,6 +220,7 @@ for (const skin of SKINS) {
       /*
        * P1-3: 唯一"按渲染次数"的布局读取是 P1-2 的**逐行测高**(行高不齐, 必须逐行记),
        * 量的是**窗口内**那几十行 —— 判据是"≤ 每轮渲染的行数 + 少量余量", 不是 0。
+       * benchRun 每段起已清零, 此处读到的只是 B 段(窗口化)的计数, 与预算同口径。
        * 预算公式逐字保留: tRows × (rounds + 2) + 20。
        */
       const gbr = await page.evaluate('window.__gbr');

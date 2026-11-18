@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-settings-backup-gtm-bundle-drift">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e: settings-backup gtm 段前提过期 —— 桩环境 gtm 可达后 bundle 含 gtm 段, 8 例确定性红">
 <meta name="issue-summary" content="2026-11-18 复验轮: settings-backup 8 例单跑/全量串行/容器全量均红; spec 前提「gtm 工具不运行 -&gt; bundle.gtm === null + pill 灰显」被 gtm bundle 段上线与桩环境 gtm agent 可达打破 —— 断言/前提漂移待归因回写">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -151,24 +151,26 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查（方向二选一，认领后先取证）：① spec 前提过期 —— gtm 段(26-11-14-0624)上线后 spec 没跟上，修法 = spec 按「gtm 段在场」改断言面；② 产品面回归 —— e2e 桩环境本不该 reachable(_source_status 探测在桩上误判 ready)，修法 = 产品/桩探测面归位。已排除：执行顺序/共享桩污染（单跑即红）；Windows 两形态的 flaky（8/8 恒红）。容器 2/8 覆盖率差异未归因前，不把「flaky 已排除」外推到容器形态。</div>
+  <div class="callout">已定位（2026-11-18 认领后本地取证）：**② 桩环境污染**，既不是 spec 前提过期也不是产品误判。本机存在用户级指针 <code>%LOCALAPPDATA%/global-traffic-monitor/endpoint.json</code>（host 127.0.0.1:6422，token_path 指向本仓库 tools 下 monitor.token），GTM 服务真实可达；产品按设计读整机共享指针探活 -&gt; <code>bundle.gtm</code> 非 null、导入框 gtm pill 可选且默认勾、POST sections 带 gtm、「全不勾选」分支走不到 —— 8 例红全是桩把宿主整机状态漏进来的后果。spec 写的「桩前提: gtm 工具不运行」在桩里本该为真，缺的是隔离：<code>tests/conftest.py</code> 已有 pytest 侧 <code>gtm_spike_isolation</code>，e2e 桩不在 pytest 下，没有等价隔离。已排除：执行顺序/共享桩污染（单跑即 8 红）、Windows flaky（8/8 恒红）。容器 2/8 与本机 8/8 的形态差异本轮未复现，不作归因外推。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p>先归因再动：在 e2e 环境实跑 <code>traffic_monitor._source_status</code> 看 state/reachable 判定值（读哪个 config/state 文件导致 ready），据此在 ①/② 里择一修；若 ①，注意 spec 头部「桩前提」段与 :23/:131/:189 三处注释要同步改口径，别只翻断言。</p>
+  <p>实际修法（对应建议的 ② 桩探测面归位）：<code>scripts/ui_harness.py</code> 新增 <code>_isolate_gtm_discovery(tmp)</code>，在 <code>make_manager</code>/<code>create_app</code> **之前**把 GTM 发现单点 <code>agent.pointer_dir()</code> 重定向到桩私有临时目录 <code>&lt;tmp&gt;/gtm-pointer</code>（目录不存在 =&gt; endpoint.json / deferred.json 都读不到 =&gt; <code>discover()=None</code>，状态回 not_running/not_installed）。不改产品代码、不改 spec 断言、不造假指针、不发 HTTP；用户级 endpoint.json 保持原样。建议原文里「若 ①，spec 头部与三处注释要同步改」不适用 —— 本轮未改 spec 前提，只让它成真。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-18 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-18 认领前 `npx playwright test e2e/settings-backup.spec.mjs --reporter=line` = 4 passed / 8 failed（与 issue 记录一致）；指针隔离后同命令 12 passed（1.9m）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法：`scripts/ui_harness.py` 新增 `_isolate_gtm_discovery(tmp)`，create_app 前把 `agent.pointer_dir()` 重定向到桩临时目录（见 §06）。验证：单跑 12P；与 perf.spec 合跑 24 例 = 20P/4S（工作区 clone1）；全量 @fast 套件 488P/5S/1F，唯一红为 `e2e/main-table-pinned-matrix.spec.mjs:366`（撤掉本轮 harness 改动仍确定性红，既有无关红）。产品代码、spec 断言与用户级 GTM 指针均零改动。</p>
 </section>
 
 <footer>

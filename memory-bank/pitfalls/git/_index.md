@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [cross-clone-absolute-path.md](cross-clone-absolute-path.md) | AI 代理默认 cwd 与绝对路径指向不同 clone: 修复被落到非工作区 clone | 跨clone, 工作区clone, 绝对路径, 默认cwd, 误改其它clone, 多clone并行 |
 | [editing-traps.md](editing-traps.md) | 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一(`sed -i` 把 LF 写成 CRLF, git 侧看不见、cap 侧多算)、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。2026-10-02 起仓库 .gitattributes 统一 LF, 行尾类条目适用范围收窄(见首节)。 | git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠, 幽灵 M, stat 缓存, sed -i, 机械替换, 凭空多出的债务 |
 | [history-integration.md](history-integration.md) | 历史整合(merge/rebase/stash)曾因删除拦截层批量删 `.git/objects` 而被禁 —— 该问题 2026-09-25 已修复, **禁令解除**; 本文件保留作事故档案与恢复手册, 高风险历史整合前仍建议 `cp -a .git <备份>`。**同步一律 `commands run my-commit-flow.sync`(自动快进 / 分叉自动 rebase 保线性), 本文的手工同步配方已退役删除。** | 落后主线要同步, 想跑 git rebase, git merge, 合并, 变基, .git 损坏, 事故恢复 |
 | [message.md](message.md) | 提交信息里的反引号会被 bash 当命令替换; `commit -F -` 的 heredoc 会让 push 静默不执行; 规模数字要当场实测。 | 写提交信息, git commit -m, git commit -F, 提交消息, 规模数字 |

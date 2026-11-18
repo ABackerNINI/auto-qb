@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-perf-ab-metrics-load-red">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e: perf A/B 埋点(atlas P1-2/P1-3)全量长跑两形态红, 负载敏感候选">
 <meta name="issue-summary" content="2026-11-18 复验轮: perf.spec P1-2/P1-3 A/B 埋点(atlas)在 Windows 全量串行与容器 testbed 全量两处红, shard(量具排除面)未覆盖、单跑未验证 —— 长跑负载型候选待采样归因">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0308-test-e2e-perf-ab-metrics-load-red</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -135,24 +135,26 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查。候选: 长跑负载态下 A/B 埋点预算被拖穿（同族先例: dt-live-update longtask 预算 26-11-13-0519、perf W5 固定拍子 26-11-10）。先读两轮 trace 拿实际数字, 再判断是预算面还是真回归。倾向判断: 系统性负载差（两独立形态各红一次且 prism 孪生同轮绿）, 但两形态各仅一次采样, 不作「已排除随机 flaky」结论 —— 待采样收窄。</div>
+  <div class="callout">已定位（2026-11-18 认领后本地取证）：**不是负载敏感，也不是产品回归，是量具的计数窗口错位**。`window.__gbr` 是整页累计的 `getBoundingClientRect` 计数器；P1-3 预算 `tRows×(rounds+2)+20` 只描述 B 段（窗口化）的逐行测高，旧代码在 A 段（关窗口全量替换）与 B 段之间从不清零，把 A 段的行测量一起算进 B 段。临时埋点实测（E2E_TORRENTS=300）：atlas A 段末 64 次 + B 段增量 75 次 = 累计 139 &gt; 预算 130；prism 30 + 72 = 102 &lt; 125 —— 恰好解释「只有 atlas 红、prism 孪生绿」，与长跑负载无关。短跑单跑即可复现红（原单跑未验证，本轮补上）。已排除：产品侧 gBR 回归（B 段增量本身在预算内）、随机 flaky（计数清零后定向连跑两轮全绿）。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p>读 trace 定位越界判据后按 dt-live-update 先例处理: 归一化或按负载档放宽预算（判据零放松语义）, 修法单点记录; 若是真回归转 bug 入池。量具数字进基线口径, 修后重跑全量确认。</p>
+  <p>实际修法（与建议方向不同，故保留建议原文）：不改预算、不放宽阈值，改**计数口径**。`e2e/perf.spec.mjs::benchRun` 每段 bench 开始加 `window.__gbr = 0`（A/B 两段各自独立计数），末尾读取因此只含 B 段，与公式 `tRows×(rounds+2)+20` 同口径；`rounds`、预算公式、P1-2 长任务断言一律不动。代价：零产品改动、零判据放松；A 段计数不再可读（本 spec 无断言依赖它）。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-18 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-18 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-18 认领后短跑即复现（atlas 累计 139 &gt; 预算 130，原 CI 取证 140 &gt; 130），排除「只在长跑出现」；修正计数窗口后 A/B 定向连跑两轮各 2 passed，整 spec 两轮 8 passed / 4 skipped（4 skip = E2E_TORRENTS=300 的 &gt;500 门控）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法：`benchRun` 每段起清零 `window.__gbr`，预算公式/阈值/rounds 零改动（见 §06）。验证：`npx playwright test e2e/perf.spec.mjs --reporter=line` 两轮均 8P/4S；与 settings-backup 合跑 24 例 = 20P/4S（工作区 clone1）。全量 @fast 套件 488P/5S/1F，唯一红为 `e2e/main-table-pinned-matrix.spec.mjs:366`（flux/flat 悬停几何），撤掉本轮 harness 改动后仍确定性红 —— 既有无关红，不属本 issue。</p>
 </section>
 
 <footer>

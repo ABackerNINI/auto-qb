@@ -1046,6 +1046,29 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+def _isolate_gtm_discovery(tmp: str) -> None:
+    """把 GTM 指针发现根重定向到桩私有临时目录 —— 桩前提「工具不运行」不能赌开发者机器状态
+
+    背景(issue 26-11-18-0308-test-e2e-settings-backup-gtm-bundle-drift): GTM bundle 段上线后,
+    `backup._gtm_section` 经 `traffic_monitor._source_status` -> `agent.status()` -> `probe()`
+    -> `discover()` -> `read_pointer()` -> `endpoint_path()` 发现工具; 指针是**用户级平台目录**
+    的整机共享文件(agent.pointer_dir)。本机装过工具时, 桩进程会读到真指针并探活成功 -> 导出
+    bundle 带 gtm 段、导入框 gtm pill 可选 -> e2e 8 例确定性红。产品行为正确, 是**桩污染**:
+    桩本该是"工具缺席"的离线形态, 却漏进了宿主的整机状态(与 tests/conftest.py 的
+    gtm_spike_isolation fixture 同族问题, 只是 e2e 桩不在 pytest 下, 没人替它隔离)。
+
+    做法: 只把 agent 的 `pointer_dir()` 单点指到 <tmp>/gtm-pointer(该目录不存在 =>
+    endpoint.json / deferred.json 都读不到 => discover()=None, status=not_running/not_installed)。
+    不改产品代码、不写假指针、不发 HTTP; 其它 e2e(views.spec 的工具未安装态、gtm-alert 的
+    /api/state 改写面)本就按"桩无工具进程"写断言, 隔离后反而与注释口径一致。
+    """
+    from auto_qb.core.traffic_source import agent as _gtm_agent
+
+    isolated = os.path.join(tmp, "gtm-pointer")
+    _gtm_agent.pointer_dir = lambda: isolated
+    print(f"[harness] GTM 指针发现已隔离: {isolated}(不读用户级 endpoint.json)", flush=True)
+
+
 def _materialize_config(path: str, port: int, skip_check_menu: bool) -> None:
     """给桩物化一份**带当前版本章**的最小合法配置(boot 期 load_config 自校验, 漂移即拒绝启动)
 
@@ -1163,6 +1186,9 @@ def main() -> int:
     actual = sock.getsockname()[1]
 
     tmp = tempfile.mkdtemp(prefix="aqb-harness-")
+    # 桩前提"gtm 工具不运行"必须**由桩自己保证**: 先隔离用户级指针发现, 再建 manager/create_app
+    # (订阅模块构造期就可能读状态) —— 见 _isolate_gtm_discovery docstring。
+    _isolate_gtm_discovery(tmp)
     state_file = os.path.join(tmp, "state.json")
     mgr = make_manager(state_file)
     mgr.client = FakeClient()

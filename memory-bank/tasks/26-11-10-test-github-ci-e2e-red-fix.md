@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-11-10
-**Updated:** 2026-11-10
+**Updated:** 2026-11-18
 **Summary:** 修复 GitHub CI 四组 e2e 既有红 (issue 26-11-07-0326)
 **Topics:** test-github-ci-e2e-red-fix
-**Refs:** memory-bank/issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html
+**Refs:** memory-bank/issues/26-11-07-0326-test-ci-smoke-existing-red-backlog.html, memory-bank/pitfalls/git/cross-clone-absolute-path.md
 
 ## 本篇只回答
 
@@ -58,3 +58,6 @@
 - 遗留事实: `kbd-scroll-band` 在 Windows 本地不复现, 产品侧「下一帧按真实 DOM 补正落点」的修复只能由 Linux CI 下一轮确认 —— 提交后须回看 `smoke (@fast) shard 2/3`。
 
 - 2026-11-10 01:23 认领 26-11-07-0326 并真修 GitHub CI 四组 e2e 既有红 + magnet/wide 过期断言; 全量数字见 kb.baseline; 评审两轮(轮1 修 2 major, 轮2 零 actionable); 坑档 3 条复发; 随本专题入库, 下一轮 Linux CI shard 2/3 需回看
+
+- 2026-11-18 16:33 认领修复 GitHub CI 两则 e2e 恒红: perf A/B 计数窗口错位 + 桩 GTM 指针未隔离; 分面评审零发现, 全绿(见 kb.baseline), 两 issue 翻 Done
+- 本轮踩坑: 首次 `test.full` 直跑撞外部 `TMPDIR` rc=4(testing/tmpdir 复发 10), 清掉环境变量后重跑全绿 —— 原因与复发 3/5/6/7/8 相同, 把前缀留成失败后补救而非第一条命令; 另一度把同类修复落到非工作区 clone, 已逐文件还原并立 git/cross-clone-absolute-path 坑档。
