@@ -4,7 +4,7 @@
 > 基线时间: 2026-11-18 04:45-05:26(环境2; `real.env`→`real.guard`→`real.up`→批量假种子→`run_s0_boot.py --runs 2`→竞态探测轮→微基准落盘; 非 `real.suite`)
 > 基线 commit: 011e1aeb(feat/webui-boot-first-data, 修复前基线; 本轮无提交动作)
 
-**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html
+**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html, memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html
 
 ## 01 环境与造场
 

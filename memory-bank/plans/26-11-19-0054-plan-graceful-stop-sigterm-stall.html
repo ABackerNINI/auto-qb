@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>优雅停偶发 38.75s: 复验判别计划 — 观测面贯穿停机窗口 + faulthandler 看门狗 + 批量采样</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="graceful-stop-sigterm-stall">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-19-0054">
+<meta name="doc-updated" content="26-11-19-0054">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md, memory-bank/issues/26-11-18-2350-bug-graceful-stop-sigterm-stall.html, memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: graceful-stop-sigterm-stall</div>
+<h1>优雅停偶发 38.75s: 复验判别计划 — 观测面贯穿停机窗口 + faulthandler 看门狗 + 批量采样</h1>
+<p class="lede">本篇只回答: issue 26-11-18-2350(优雅停偶发 38.75s)的挂点怎么<b>判别定位</b> —— 复发时两条正交证据自动落盘(停机窗口 WEB 轮询序列 + 全线程栈 dump), 外加批量采样给复发率; 零产品改动, 观测面全在 tests-real。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-19-0054 · <b>doc-updated</b> 26-11-19-0054 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话分析轮(2026-11-19, issue 26-11-18-2350 静态排查结论)+ 用户指令「落成正式计划」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: issue 26-11-18-2350 —— S0 真机取证轮 run2 停机 38.75s(6 样本 1 例, rc=0 优雅收尾齐全); 2026-11-19 静态排查已闭合排除面并把停滞窗口修正为「信号触发 ~12.4s → KeyboardInterrupt 浮出 50.995s」(主线程 ~38.4s 零 eval-loop checkpoint, 判定依据见 issue §05)。</p>
+<p><b>目标</b>: 复发时<b>一拍判定</b>剩余假设 H1/H2(§02), 并拿到挂点栈; 批量采样给出复发率下界。算成 = 判别证据落盘 + 判定结论回写 issue。</p>
+<p><b>设计底线/不变量</b>: ①<b>零 <code>src/</code> 产品改动</b> —— 观测面全在 tests-real 测量工具层; ②停机语义不变 —— 零 taskkill, 优雅停口径 real-machine.md §2.6; ③measure.json 既有键只增不改 —— S0/S3 已入库的基线数字口径不受扰动。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>静态排查结论(2026-11-19, 排除面全量单点在 issue 26-11-18-2350 §05, 此处摘六项)</b>: 排除面 —— stdout/stderr 直写文件句柄(无管道背压)、qB API 有界 (3,10)s 且失败必落日志、GTM 工具面全 urlopen(timeout) 有界、flush_truths/_publish 无阻塞面、210 种子管线(含 re 段)在 ~09.584(gen2 完成点)完成, 早于 touch(~12.4)、纯 Python 主循环(sync_interval 1.5s + ≤0.5s 分段等待)处处是 checkpoint。<b>剩余假设</b>:</p>
+<table>
+  <tr><th>#</th><th>假设</th><th>形态</th></tr>
+  <tr><td>H1</td><td>整机/进程级冻结(磁盘停顿/AV/系统暂停)</td><td>全线程一起冻, 进程内证据完全不可见, 恢复后优雅收尾 —— 与 1/6 形态吻合(奥卡姆)</td></tr>
+  <tr><td>H2</td><td>主线程单个不可中断 C 调用</td><td>具体嫌疑: requests <code>timeout=(3,10)</code> 是 connect/<b>字节间</b>读超时非总时长, qB 忙时涓流响应可静默存活任意久</td></tr>
+  <tr><td>H3</td><td>其他线程持 GIL 的 C 调用拖住全场</td><td>无持有者候选, 存疑</td></tr>
+</table>
+<p><b>痛点</b>: 现有观测面在停机窗口是<b>盲的</b> —— 驱动 <code>graceful_stop</code> touch 后纯 <code>popen.wait(40)</code>(<code>run_s0_boot.py:225</code>, 取证 2026-11-19), 驱动轮询在测量结束即停, 进程内无栈留存; 38s 窗口内零证据(issue §04)。S0/S3 六样本只有 1 例复发, 单轮复验大概率不命中。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>: 把两条正交证据面伸进停机窗口, 复发即判定 —— ①驱动在 stop 等待期继续轮询 WEB(判 H1 全进程冻 vs H2 仅主线程); ②runner 内 faulthandler 看门狗(38s 未退自动落全线程栈 = 挂点直读)。<b>辅线</b>: 批量采样 ≥20 轮给复发率(D4)。<b>落点</b>: 单文件 <code>tests-real/tools/run_s0_boot.py</code>(<code>graceful_stop</code> + 内嵌 RUNNER 模板), 判别字段进 measure.json <code>stop</code> 子树(D2)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S0</td><td><code>graceful_stop</code> 等待期每 0.25s GET /api/state(单次超时 2s), 记 (offset, ok) 序列进 <code>result["stop"]["polls"]</code>; 既有 stop_s/exit_code 键不变</td><td>真机 <code>--runs 1</code> 实跑: measure.json 含 <code>stop.polls</code>, 正常轮 polls 密集无断流(≈4 条/s), stop_s 口径与基线一致</td></tr>
+  <tr><td>S1</td><td>RUNNER 模板在 touch 后 arm <code>faulthandler.dump_traceback_later(15, file=case/"stop_stack_dump.txt")</code>; 进程正常退出自然取消(看门狗随进程终灭, 不需显式 cancel)</td><td>正常轮无 dump 文件落盘(1.3s 级退出 ≪ 15s 阈值); faulthandler arm 调用不抛; 真实触发依赖 S2 复发轮</td></tr>
+  <tr><td>S2</td><td>受控重启测量 ≥20 轮(S0 证据档 §01 同口径造场: 56590 + 210 real-fake 种子重注), 记 stop_s 分布 + polls 判读; 复发轮: 结合 polls(冻结/正常)与栈落点判定 H1/H2 并回写 issue; 全绿: 复发率结论写回, 处置交用户拍板</td><td>issue 26-11-18-2350 §07 落「复验: &lt;时间&gt; &lt;判定/复发率&gt;」行; 判定结论含证据指针(polls 序列 / dump 文件)</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>改动边界</td><td>只改 <code>tests-real/tools/run_s0_boot.py</code>, 零产品改动</td><td>产品侧常驻 faulthandler —— 扩观测面但违反底线①, 不推荐</td></tr>
+  <tr><td>D2</td><td>判别字段落点</td><td>measure.json <code>stop</code> 子树新增 <code>polls</code> 键</td><td>独立 JSON 文件(多一个产物面)</td></tr>
+  <tr><td>D3</td><td>看门狗形态</td><td>标准库 <code>faulthandler.dump_traceback_later(15s)</code>, runner 内 arm</td><td>外部 py-spy dump 循环 —— 需另装依赖, 留作 faulthandler 证据不足时的升级口</td></tr>
+  <tr><td>D4</td><td>采样轮数</td><td>20 轮(若复发率 1/6, 20 轮全绿概率 ≈2.6%, 足以区分「偶发存在」与「基本不复发」)</td><td>10(更快)/40(更强下界)</td></tr>
+  <tr><td>D5</td><td>复发后的处置</td><td>只判定记录, 修法另议另批</td><td>判定为 H2 后立即实施 qB 调用总时长守卫 —— 未经拍板不实施</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>暂无 —— 计划入库 Open, 开工时逐条按 §05 默认确认或改判后回填本表(含日期)。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>20 轮全绿, 复发率观测不到</td><td>真实复发率 ≪ 1/6</td><td>记录复发率结论; S0/S1 判别面常驻 driver —— 生产侧再报「退出卡顿」时直接复用抓证</td></tr>
+  <tr><td>R2</td><td>看门狗 15s 阈值误触发</td><td>正常轮异常慢(&gt;15s)</td><td>正常样本 stop_s ≤1.3s, 余量 ~10 倍; 误报只是多一份栈文件, 不污染测量键</td></tr>
+  <tr><td>R3</td><td>停机窗口轮询干扰停机</td><td>轮询给 WEB 加压</td><td>0.25s 与测量期同粒度, WEB 线程独立于主循环; polls 只在 stop 窗口采集</td></tr>
+  <tr><td>R4</td><td>环境造场遗漏</td><td>210 种子 S3 后已清, 直接采样=空库无效轮</td><td>按 S0 证据档 §01 流程重放(real.up → 批量注种 → real.guard 全绿 → 采样)</td></tr>
+  <tr><td>R5</td><td>H1/H2 证据仍不可分辨</td><td>polls 正常但栈无产品嫌疑点(或反之)</td><td>如实写「证据不足以区分」; H2 内部再分层(涓流响应 → qB 端侧取证), 不硬下结论</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-19-0054</span> 初版: 2026-11-19 分析轮产出 —— issue 26-11-18-2350 静态排查(排除面闭合 + 停滞窗口修正 12.4→50.995)之后, 用户授权「落成正式计划」; 三步分期 S0 观测面贯穿 / S1 faulthandler 看门狗 / S2 ≥20 轮采样, D1-D5 待拍板。</li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量快照空 dat 路径未按「取不到」契约特判, 每 refresh_interval 误报文件缺失 WARNING · bug · 计划外问题</title>
+<meta name="issue-slug" content="traffic-dat-empty-path-warning">
+<meta name="issue-stamp" content="26-11-19-0052">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="traffic-dat-empty-path-warning">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="流量快照空 dat 路径未按「取不到」契约特判, 每 refresh_interval 误报文件缺失 WARNING">
+<meta name="issue-summary" content="traffic_source 无有效来源(段缺失/dat_path 空/GTM 指针缺席)时 refresh() 把空路径直塞 read_source_rows, 每 600s 一条「No such file or directory: &#x27;&#x27;」误导性 WARNING, 应按 paths.py 空串契约走「数据源不可得」特判">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>流量快照空 dat 路径未按「取不到」契约特判, 每 refresh_interval 误报文件缺失 WARNING</h1>
+<p class="lede">traffic_source 无有效来源(段缺失/dat_path 空/GTM 指针缺席)时 refresh() 把空路径直塞 read_source_rows, 每 600s 一条「No such file or directory: &#x27;&#x27;」误导性 WARNING, 应按 paths.py 空串契约走「数据源不可得」特判</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-19-0052-bug-traffic-dat-empty-path-warning</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 00:52</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core/traffic_source + modules/traffic_snapshot_mod</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">优雅停 38s 排查轮(26-11-18-2350)顺带发现</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>优雅停 38s issue(<code>26-11-18-2350</code>)的静态排查顺带发现(2026-11-19): 计划 26-11-18-0259 S0 真机取证轮的产品日志里, 每轮启动后约 0.7s 固定出现一条流量快照 WARNING, 且失败路径为<b>空串</b>。测量派生配置(<code>tests-real/.work/s0boot/config.yml</code>)<b>没有 traffic_source 段</b>: <code>source_enabled</code> 对缺段按「未配置」处理恒 True, provider 缺省落 <code>traffic_monitor</code>, <code>dat_path()</code> 取 <code>traffic_monitor.dat_path</code> 得 "" —— 空路径被原样塞进 <code>open()</code>。生产默认形态(未配流量来源)同理。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code>2026-11-18 04:45:03,649 [WARNING] auto_qb.core.modules.traffic_snapshot_mod: 流量快照 | 读取流量数据失败(): [Errno 2] No such file or directory: ''   (run1)
+2026-11-18 04:45:09,365 [WARNING] auto_qb.core.modules.traffic_snapshot_mod: 流量快照 | 读取流量数据失败(): [Errno 2] No such file or directory: ''   (run2)</code></pre>
+  <p>契约原文(<code>paths.py</code> docstring, 取证 2026-11-19): 「<code>dat_path(config)</code> → 当前生效来源的 dat 文件路径<b>(空 = 取不到; 调用方决定报错口径)</b> —— 取数唯一入口」; <code>tool_dat_path</code>: 「指针缺失/字段空 -&gt; ""」。即空串是<b>合法返回值</b>, 报错口径归调用方 —— 而 <code>refresh()</code> 没有实现这半边契约。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>traffic_source 来源解析为空的任一形态: ①段整体缺失(缺段默认 enabled)②<code>traffic_monitor.dat_path</code> 留空 ③provider=<code>global_traffic_monitor</code> 且 GTM 发现指针缺席 —— 且总开关未显式 false</td></tr>
+    <tr><td>影响范围</td><td>每 <code>refresh_interval</code>(默认 600s)一条误导 WARNING(文案把「来源未配置/工具缺席」说成「文件读不到」); 快照 <code>reasons.code=dat_missing</code> + 文案「流量数据读取失败」对前端同样误导; 数据面正确(stale 落地, 不崩不停表)</td></tr>
+    <tr><td>严重度</td><td class="wr">低(排障噪音/文案失真; 用户按报错去查一个不存在的文件会白费功夫)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/traffic_source/paths.py</code> :71(取证 2026-11-19 00:52)· <code>dat_path</code> 空串契约 · grep: <code>空 = 取不到</code> / <code>def dat_path</code></li>
+    <li><code>src/auto_qb/core/modules/traffic_snapshot_mod.py</code> :235/:245(取证时点)· <code>refresh</code> 的 <code>read_source_rows</code> 调用点与 WARNING · grep: <code>读取流量数据失败</code></li>
+    <li><code>src/auto_qb/core/traffic_source/reader.py</code> :38(取证时点)· <code>read_source_rows</code> 的 OSError 分类 · grep: <code>CODE_DAT_MISSING</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">调用侧缺分支: <code>paths.dat_path()</code> 的空串契约只写了「调用方决定报错口径」, <code>refresh()</code> 未特判 <code>if not dat_path</code>, 空路径与「文件真丢了」共用 <code>dat_missing</code> 一套文案与 code —— 缺的是消费侧分支, 不是 paths 层语义。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向: <code>refresh()</code> 在 <code>read_source_rows</code> 前特判空路径 —— 不读盘, 发布 <code>source=stale</code> + 专门 code(如 <code>source_missing</code>); <b>人读文案复用现成单点</b> <code>paths.unavailable_reason()</code>(paths.py:100, docstring「让运行期报错直接指到该改哪里」, 已被 <code>rules/expr/env.py:198</code> 复用 —— 不另造第二份文案口径; 该分支实际只覆盖「未配置/GTM 指针缺席」两形态, 关源在 <code>refresh()</code> 入口 :228 已提前 return), 日志降 DEBUG 或改为一次性 WARNING。备选(不推荐): paths 层返回三态结构区分「关源/未配置/有路径」 —— 改契约面, 波及曲线模块等全部调用方, 收益不成比例。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-19 00:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-19-0052-bug-traffic-dat-empty-path-warning.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

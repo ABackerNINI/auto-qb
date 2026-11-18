@@ -9,7 +9,7 @@
 <meta name="issue-stamp" content="26-11-18-2350">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="graceful-stop-sigterm-stall">
-<meta name="doc-refs" content="memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md">
+<meta name="doc-refs" content="memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md, memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html, memory-bank/tasks/26-11-19-backend-graceful-stop-stall.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="优雅停偶发 38.75s: SIGTERM 后主线程长时未到收尾(疑似阻塞 C 调用, 挂点未定位)">
@@ -122,29 +122,31 @@
 
 <section id="s4">
   <h2><span class="no">§04</span>定位锚点</h2>
-  <p class="hint">挂点未定位(停滞段 38s 窗口进程零日志输出、无栈留存; 停机收尾日志在 stdout/全量日志有留存)。以下为入口面 grep 锚(取证 2026-11-18, 行号会漂移, 靠符号与 grep 重新定位):</p>
+  <p class="hint">挂点未定位(停滞窗口内进程零日志输出、无栈留存; 停机收尾日志在 stdout/全量日志有留存)。<b>停滞窗口修正(排查 2026-11-19)</b>: 待查窗口是 <b>04:45:12.4→50.995</b>(信号触发 → KI 浮出), 不是 09.365 起 —— 09.4→12.4 的静默是 <code>sync_interval 1.5S</code> 无变化轮的正常空转(零日志是常态); 信号触发点 = touch(≈12.35, 由 run1 标定驱动「测量结束→touch」固定延迟 ~2.8s 反推) + watcher 轮询 0.2s。以下为入口面 grep 锚(取证 2026-11-18, 行号会漂移, 靠符号与 grep 重新定位):</p>
   <ul>
     <li><code>src/auto_qb/cli.py</code>(取证时点)· SIGTERM 入口 → KeyboardInterrupt 转换 · grep: <code>SIGTERM</code> / <code>KeyboardInterrupt</code></li>
     <li>主循环异常/收尾 catch 面 · <code>src/auto_qb/core/qbmanager.py</code>(取证时点 :714/:717 邻域)· grep: <code>except Exception</code> + 主循环收尾段</li>
-    <li>测量驱动侧 stopfile 机制 · <code>tests-real/tools/run_s0_boot.py</code> · grep: <code>stopfile</code> / <code>stop_info</code> / <code>raise_signal</code></li>
+    <li>测量驱动侧 stopfile 机制 · <code>tests-real/tools/run_s0_boot.py</code>(取证 2026-11-19: <code>graceful_stop</code> touch 后纯 <code>popen.wait(40)</code> :225 邻域; spawn stdout/stderr 直写文件句柄, 无管道背压面) · grep: <code>stopfile</code> / <code>stop_info</code> / <code>raise_signal</code></li>
     <li>relocate 停机窗口 · grep: <code>relocate</code> + 停机日志措辞「停止」「relocate」</li>
+    <li>排查轮新增锚(2026-11-19): qB 客户端超时形态 · <code>src/auto_qb/core/qbclient.py</code> :22 <code>REQUESTS_TIMEOUT=(3, 10)</code>(connect/字节间读超时, 非总时长 —— 涓流响应可静默存活任意久) · grep: <code>REQUESTS_TIMEOUT</code>; 主循环分段等待 · <code>qbmanager.py</code> :107 <code>_wait_next</code>(≤0.5s 分段, checkpoint 密集) · grep: <code>STOP_POLL_INTERVAL</code></li>
   </ul>
 </section>
 
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
-  <div class="callout">待查(未排除任何假设)。观察推断仅供开工参考: stopfile 写入 → 退出之间主线程 ~38s 未进收尾(最终收尾日志齐全), 形态疑似阻塞在某个 C 调用(网络/文件句柄/锁); 挂点未定位, 停滞段(04:45:09.365→50.995)进程零日志输出、无栈留存。</div>
+  <div class="callout"><b>静态排查一轮已闭合(2026-11-19, 证据 = tests-real/.work/s0boot/ 留存产物; 排除面全量以本节为准, 判别方案见复验计划 26-11-19-0054 §02/§04)</b>: 硬判定 = 「停止」的 <code>LogRecord.created</code>(asctime 取记录创建时刻非写盘时刻)= 50.995 ⇒ KI 实际浮出 50.995, 此前主线程零 eval-loop checkpoint ~38.4s; 信号触发 ~12.4-12.6(watcher 0.2s 轮询)。已排除: stdout/stderr 管道背压(驱动 Popen 直写文件句柄)、qB API 单调用挂死(有界 (3,10)s 且失败必落日志)、GTM 工具面(tool_client 全 urlopen(timeout) 有界, 订阅在 daemon 线程)、flush_truths/_publish 阻塞(空 pending 直 return / 无锁单引用)、管线 re 灾难回溯(210 种子管线含 re 段在 ~09.584 gen2 完成点收尾, 早于 touch ~12.4)、logging 锁阻塞(被 LogRecord.created 时间戳证伪)、KI 在 watcher 线程误投递(stderr 全空)。<b>剩余假设</b>: H1 整机/进程级冻结(磁盘停顿/AV/系统暂停 —— 进程内证据完全不可见, 奥卡姆, 1/6 形态吻合) &gt; H2 主线程单个不可中断 C 调用(具体嫌疑 = qB 忙时涓流响应 defeating 字节间读超时, 见 §04 锚) &gt; H3 其他线程持 GIL 的 C 调用(无持有者候选, 存疑)。判别与抓证方案见复验计划。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
-  <p>待定。方向: ①认领后先复验 —— 受控重启测量场景多次采样 <code>stop_info.stop_s</code>(S0/S3 同款工具), 确认是否仍复现; ②复现时抓主线程栈(faulthandler.dump_traceback_later 或 py-spy dump 形态)定位 38s 窗口挂点; ③定位后再议修法(本报告不实施)。</p>
+  <p>待定(挂点未定位, 不实施)。方向沿用原三条, 已细化为复验计划 <code>memory-bank/plans/26-11-19-0054-plan-graceful-stop-sigterm-stall.html</code>(Open, D1-D5 待拍板): ①复验增强 —— <code>graceful_stop</code> 等待期每 0.25s 继续轮询 WEB(polls 进 measure.json stop 子树): 复发时轮询<b>持续正常</b> = 主线程单点阻塞(H2), 轮询<b>一起冻结</b> = 整进程冻结(H1), 一拍判定; ②runner 内 <code>faulthandler.dump_traceback_later(15s)</code> 看门狗 —— 38s 未退自动落全线程栈, 挂点直读; ③≥20 轮批量采样给复发率下界。三步全部只改 <code>tests-real/tools/run_s0_boot.py</code>(零产品改动); 判定回写本件 §07。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 23:50 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-19 00:54 — 静态排查回写(状态仍 <strong>Open</strong>): 停滞窗口修正为 04:45:12.4→50.995(信号触发→KI 浮出; LogRecord.created 硬判定), 排除面闭合七项, 剩余假设 H1/H2/H3 排序; 复验判别计划 26-11-19-0054 入库(观测面贯穿停机窗口 + faulthandler 看门狗 + ≥20 轮采样, 零产品改动), 执行待显式开工</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
