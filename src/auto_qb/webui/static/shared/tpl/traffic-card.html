@@ -175,10 +175,14 @@
                    aria-hidden="true"><use href="#i-chevron"></use></svg>
               <span class="bh-t">第 {{ i + 1 }} 条曲线</span>
               <span class="hb-badge on">{{ $root.cfgCurvePeriod(i).period || '—' }}</span>
+              <!-- period 改值(计划 26-11-18-0801 D10): @input 逐键写树照旧; @change(失焦/回车)
+                   提交时整段重排(config_editor_curve.js cfgCurvePeriodCommit), 重排不挂逐键 ——
+                   v-for 下标 key, 逐键重排会让焦点行数据换条 -->
               <input class="hb-input hb-mono" style="width:110px" :value="$root.cfgCurvePeriod(i).period || ''"
                      placeholder="DAY / MONTH / 7D"
                      @click.stop
-                     @input="$root.cfgSetPath($root.cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
+                     @input="$root.cfgSetPath($root.cfgCurvePeriodPath(i).concat(['period']), $event.target.value)"
+                     @change="$root.cfgCurvePeriodCommit($event)">
               <span class="hb-dim">上传 {{ $root.cfgCurvePoints(i, 'upload_curve').length }} 档 ·
                 下载 {{ $root.cfgCurvePoints(i, 'download_curve').length }} 档</span>
               <span style="margin-left:auto">

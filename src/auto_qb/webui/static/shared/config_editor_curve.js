@@ -50,11 +50,91 @@ Object.assign(window.CONFIG_EDITOR.methods, {
     cfgCurvePeriodPath(i) {
       return [...this.cfgCurvePath(), "curves", i, "curve"];
     },
+    /* JS 排序键复刻 —— Python 单点在 src/auto_qb/core/curves.py 的 period_sort_key(计划
+     * 26-11-18-0801 D4/D12, 两侧注释互指): 归一化后 day=(0,) < {N}D=(1,N) 按 N 数值比较
+     * (2D < 10D, 非字典序) < month=(2,) 恒最后。别名口径与 Python normalize_period 一致
+     * (DAY/D/1D -> day; MONTH; N>=1 的 ND)。非法 period 返回 null(对应 Python 抛
+     * ValueError), 调用方按 D11 整段放弃, 不部分重排。返回数组模拟 Python 元组, 字典序
+     * 比较见 _cfgCurveKeyCmp; 改键序必须两侧同步。
+     * 精度上限(评审 nit, 接受该边界不做 BigInt): N 经 parseInt 按 float64 解析, >2^53 天
+     * 不现实 —— 超界 N 的草稿序可与后端规范序分叉(保存一次即被后端归一)。
+     */
+    _cfgCurvePeriodSortKey(period) {
+      // 非 string 一律 null(与 Python 语义等价): YAML 可达的非字符串标量经 Python str() 后
+      // 不可能命中别名/ND 模式, 故 typeof 门 == period_sort_key 对非字符串抛 ValueError。
+      // 不能用 String() 强转 —— 树内 period 为数组(如 ['DAY'])时 String(['DAY'])==='DAY'
+      // 会误解析出 day 键, 而 Python 侧抛 ValueError -> GET 面整段放弃排序(D8), 前端若照常
+      // 重排/定位插入即两侧策略分叉(D11)。
+      if (typeof period !== "string") return null;
+      const s = period.trim().toUpperCase();
+      if (s === "DAY" || s === "D" || s === "1D") return [0];
+      if (s === "MONTH") return [2];
+      const m = s.match(/^(\d+)D$/);
+      if (m && parseInt(m[1], 10) >= 1) return [1, parseInt(m[1], 10)];
+      // 全角数字分叉(评审 nit, 接受该边界不做 Unicode 数字类): Python \d 匹配 Unicode 数字
+      // 且 int() 可解析('７D' -> (1,7) 合法, GET 面正常排序), JS \d 仅 ASCII -> 此处返回 null
+      // 走 D11 放弃 —— 前端更保守, 只少排不错排, 保存一次即被后端归一自愈。
+      return null;
+    },
+    /* 排序键字典序比较(模拟 Python 元组比较): 逐元素比, 短键缺位视为最小(键分量恒非负) */
+    _cfgCurveKeyCmp(a, b) {
+      for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] === undefined ? -1 : a[i];
+        const y = b[i] === undefined ? -1 : b[i];
+        if (x !== y) return x - y;
+      }
+      return 0;
+    },
     cfgCurveAddPeriod() {
-      const list = [...this.cfgCurveList(), { curve: { period: "1D" } }];
+      const list = [...this.cfgCurveList()];
+      const item = { curve: { period: "1D" } };
+      // 新增定位插入(D9, 计划 26-11-18-0801): 按天数定位(默认 1D -> day 键 -> 插最前),
+      // 否决尾部追加。D11: 任一既有 period 解析不了 -> 放弃定位退回尾部追加(与 GET 面
+      // _sort_tree_curve_periods 的 D8 整段放弃同策略)。
+      const key = this._cfgCurvePeriodSortKey(item.curve.period);
+      const keys = list.map((it) => this._cfgCurvePeriodSortKey(it && it.curve ? it.curve.period : undefined));
+      let at = list.length;
+      if (key !== null && keys.every((k) => k !== null)) {
+        at = 0;
+        while (at < list.length && this._cfgCurveKeyCmp(keys[at], key) <= 0) at++;
+      }
+      list.splice(at, 0, item);
       this.cfgSetPath([...this.cfgCurvePath(), "curves"], list);
-      // 新曲线顺手展开(默认折叠是给已有条目的, 新加的下一步就是编辑它)
-      this.cfg.openCurves = { ...this.cfg.openCurves, [list.length - 1]: true };
+      // 新曲线顺手展开(默认折叠是给已有条目的, 新加的下一步就是编辑它); openCurves 按
+      // 实际插入下标记录, 插入点之后的条目序号后移 —— 展开态跟着条目身份保住
+      const open = {};
+      for (const [k, v] of Object.entries(this.cfg.openCurves)) {
+        const idx = Number(k);
+        open[idx >= at ? idx + 1 : idx] = v;
+      }
+      open[at] = true;
+      this.cfg.openCurves = open;
+    },
+    /* period 输入 @change(失焦/回车)提交: 整段重排 + openCurves 按条目身份跟随搬移
+     * (计划 26-11-18-0801 D10)。逐键重排被否决 —— v-for 是下标 key(traffic-card.html),
+     * 重排后焦点行数据换条, 继续键入会写错条目; 故 @input 逐键写树照旧不动, 重排只挂
+     * 提交时机。D11: 任一 period 解析不了 -> 整段放弃重排(树保持 @input 写下的原序)。
+     */
+    cfgCurvePeriodCommit(event) {
+      const list = [...this.cfgCurveList()];
+      const keys = list.map((it) => this._cfgCurvePeriodSortKey(it && it.curve ? it.curve.period : undefined));
+      if (keys.some((k) => k === null)) return;
+      const order = keys.map((k, idx) => ({ k, idx }));
+      order.sort((a, b) => this._cfgCurveKeyCmp(a.k, b.k));  // Array.sort 稳定(ES2019+); 键唯一时无歧义
+      if (order.every((o, pos) => o.idx === pos)) return;  // 已是规范序: 不动, 免无谓重排抖展开态
+      this.cfgSetPath([...this.cfgCurvePath(), "curves"], order.map((o) => list[o.idx]));
+      // 展开态按条目身份搬移(参照 cfgCurveRemovePeriod 的序号搬移模式): 旧下标 o.idx -> 新下标 pos
+      const open = {};
+      for (let pos = 0; pos < order.length; pos++) {
+        const v = this.cfg.openCurves[order[pos].idx];
+        if (v !== undefined) open[pos] = v;
+      }
+      this.cfg.openCurves = open;
+      // 回车提交路径收口(评审 minor): change 触发时焦点仍在原输入框(下标 key 复用同一 DOM
+      // 节点), 重排后该框显示的是另一条的 period, 继续键入会写进错条目 —— 提交成功重排后
+      // 主动 blur, 提交触发收敛为失焦单语义(blur 触发的提交此处是 no-op; 双重 change 即使
+      // 发生也无害: 二次提交遇已规范序即早退, 且 blur 对值未再变的输入框不会重发 change)。
+      if (event && event.target && typeof event.target.blur === "function") event.target.blur();
     },
     cfgCurveRemovePeriod(i) {
       const list = [...this.cfgCurveList()];

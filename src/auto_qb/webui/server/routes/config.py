@@ -18,7 +18,7 @@ def _sort_tree_curve_periods(tree: dict) -> None:
 
     编辑器工作对象 = 磁盘原始树(read_tree 保磁盘顺序), 仅 loader 排序到不了 UI —— GET 面
     也排一次, 编辑器打开即有序。键序单点在 core.curves.period_sort_key(day < ND按N < month),
-    前端 JS 复刻版为后续批次(落地时注释互指)。
+    前端 JS 复刻版已落 config_editor_curve.js 的 _cfgCurvePeriodSortKey(注释互指)。
 
     失败策略(D8 拍板, 保守默认): 任一 period 解析失败(抛 ValueError, 含非字符串等怪值)或
     树形不符预期(缺段/段非字典如手改成标量/缺 curves/条目非字典) -> **整段放弃排序, 原样
