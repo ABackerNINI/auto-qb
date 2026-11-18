@@ -9,6 +9,13 @@
 唯一优雅路径 = 进程内 signal.raise_signal(SIGTERM) —— 本脚本生成 stopfile 看门 runner,
 收尾 touch stopfile 触发; **全程零 taskkill**。
 
+停机窗口观测面(计划 26-11-19-0054 S0/S1): graceful_stop 等待期由独立 daemon 线程每 0.25s
+GET WEB /api/state 记 (offset, ok) 序列(measure.json 的 stop.polls, 判 H1 全进程冻 vs H2
+仅主线程卡); runner 看门狗在 touch 后 15s 仍未退时落全线程栈, 落盘名按轮唯一
+(<case>/stop_stack_dump_run<r>_<t0ms>.txt —— 每轮写自己从未存在过的名字, 截断在结构上
+不可能, 任何轮落过的非空栈证据永不因后续轮丢失; 文件存在 == 栈真的落过盘, 未 fire 的
+空占位由 runner 退出时自清)。
+
 测量口径: measure_boot_first_data.run_measurement(t0=spawn 双时钟, 轮询 --interval, 缺省 0.15s)。
 每轮产物: <case>/run<r>.measure.json(时间线) + <case>/run<r>.logslice.txt(产品日志切片,
 起点 = 本轮 Popen 前的日志文件长度 —— 含本轮启动至测量结束, **停机段在切片外**) + 汇总
@@ -28,7 +35,10 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -44,15 +54,41 @@ WEB_PORT_LO, WEB_PORT_HI = 39000, 39999  # 与 lib/app.py 同段(避开主/副�
 WORK_ROOT = (HERE.parent / ".work").resolve()  # case 目录白名单根(越界拒跑, 防覆盖红线文件)
 
 RUNNER = """\
-import os, signal, sys, threading, time
+import atexit, faulthandler, os, signal, sys, threading, time
 from auto_qb import cli
-# argv: <脚本> <配置> <stopfile>; stopfile 先 pop, 否则 cli argparse 报 unrecognized
+# argv: <脚本> <配置> <stopfile> [dump文件]; stopfile 与尾参(dump)都要在 cli.main 前弹出,
+# 否则 cli argparse 报 unrecognized; dump 缺省 = stopfile 同目录固定名(独立运行调试形态)
 stopfile = sys.argv.pop(2)
 cfg = sys.argv[1]
+DUMP_FILE = sys.argv.pop() if len(sys.argv) > 2 else os.path.join(
+    os.path.dirname(os.path.abspath(stopfile)), "stop_stack_dump.txt")
+_dump_f = None  # 看门狗落盘句柄; arm 成功才有值
+
+def _cleanup_empty_dump():
+    # 看门狗未 fire 的正常退出会留 0 字节占位文件(dump_traceback_later 只收文件对象/fd, 不收
+    # 路径, arm 即建) -> 删掉, 保持「stop_stack_dump.txt 存在 == 栈真的落过盘」的取证语义
+    global _dump_f
+    try:
+        if _dump_f is not None:
+            _dump_f.close()
+        if os.path.exists(DUMP_FILE) and os.path.getsize(DUMP_FILE) == 0:
+            os.unlink(DUMP_FILE)
+    except OSError:
+        pass
 
 def _watch():
+    global _dump_f
     while not os.path.exists(stopfile):
         time.sleep(0.2)
+    # 看门狗(计划 26-11-19-0054 S1): touch 后 15s 仍未退 -> 落全线程栈(挂点直读)。落盘名由
+    # 驱动按轮唯一传入, 防跨轮截断丢证据(评审 blocker); 正常轮 1.3s 级退出远小于 15s 不会
+    # 写栈; 进程退出看门狗随进程终灭, 不需显式 cancel。arm 失败仅提示, 不阻断停机流程。
+    try:
+        _dump_f = open(DUMP_FILE, "wb")
+        atexit.register(_cleanup_empty_dump)
+        faulthandler.dump_traceback_later(15, file=_dump_f)
+    except Exception as exc:
+        print(f"[runner] faulthandler arm failed: {exc!r}", file=sys.stderr, flush=True)
     signal.raise_signal(signal.SIGTERM)  # 进程内触发 handler -> KeyboardInterrupt -> 优雅退出(§2.6)
 
 threading.Thread(target=_watch, daemon=True).start()
@@ -152,6 +188,9 @@ def setup_case(case: Path, qb_port: int) -> tuple[Path, int]:
             f"case 目录复用核验失败: meta.qb_port={meta.get('qb_port')} != 本次 --qb-port {qb_port} "
             f"—— 换 --case-dir 或显式传同一 qb-port"
         )
+        # runner 每轮刷新(纯 RUNNER 模板派生, 幂等): 模板演进(如 26-11-19-0054 S1 看门狗)后
+        # 复用旧 case 目录也能拿到最新 runner; 配置仍只写一次(web 口径以 meta 为准)
+        (case / "runner_s0.py").write_text(RUNNER, encoding="utf-8")
         return cfg_path, int(meta["web_port"])
     if cfg_path.is_file():
         raise SystemExit(f"[FAIL] {cfg_path} 已存在但无 s0_meta.json 伴生 —— 非本工具产物, 拒写; 换 --case-dir")
@@ -168,6 +207,17 @@ def setup_case(case: Path, qb_port: int) -> tuple[Path, int]:
     runner.write_text(RUNNER, encoding="utf-8")
     meta_path.write_text(json.dumps({"web_port": web_port, "qb_port": qb_port}, ensure_ascii=False), encoding="utf-8")
     return cfg_path, web_port
+
+
+def stop_dump_file(case: Path, run_no: int, t0_epoch: float) -> Path:
+    """本轮 runner 看门狗的落盘文件名(按轮唯一, 经 argv 传给 runner)。
+
+    名字含轮号 + spawn 毫秒时间戳: 每轮写自己从未存在过的名字, "wb" 截断在结构上不可能
+    命中任何前轮证据, atexit 自清也只清本轮 0 字节占位 —— 任何轮落过的非空栈证据永不因
+    后续轮丢失(评审 blocker 修复); 跨次调用(轮号重启)靠 t0ms 区分, 归属 run<r> 由构造精确。
+    旧版固定名(stop_stack_dump.txt)遗留件新轮永不触碰。
+    """
+    return case / f"stop_stack_dump_run{run_no}_{int(t0_epoch * 1000)}.txt"
 
 
 def boot_once(
@@ -189,7 +239,11 @@ def boot_once(
     t0_epoch = time.time()
     t0_mono = time.monotonic()
     popen = subprocess.Popen(
-        [str(PY), str(case / "runner_s0.py"), str(cfg), str(stopfile)],
+        [str(PY),
+         str(case / "runner_s0.py"),
+         str(cfg),
+         str(stopfile),
+         str(stop_dump_file(case, run_no, t0_epoch))],
         cwd=str(ROOT),
         stdout=out_f,
         stderr=err_f,
@@ -221,21 +275,123 @@ def boot_once(
     return result, popen
 
 
-def graceful_stop(case: Path, popen: subprocess.Popen, *, timeout: float = 40.0) -> dict:
-    """touch stopfile -> runner 进程内 raise SIGTERM -> cli 优雅退出; 超时即报红停手(不降级强杀)。"""
+# 停机窗口 WEB 轮询(plan 26-11-19-0054 S0): 间隔与测量期同粒度(plan R3), 单次超时 2s
+POLL_INTERVAL_S = 0.25
+POLL_TIMEOUT_S = 2.0
+
+# 绕 HTTP_PROXY: 127.0.0.1 不走代理(measure_boot_first_data 同款)
+_NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _poll_web_once(url: str, timeout: float) -> bool:
+    """单次 GET <url>/api/state?rid=-1: 拿到 2xx 即 True; 非 2xx/异常/超时一律 False。
+
+    只取响应头状态不读 body —— 停机窗口最小加压(plan R3); rid=-1 恒回传当前已发布代
+    (measure_boot_first_data 同口径), 带 rid 只影响回传代际, 不影响「WEB 是否响应」判定。
+    """
+    try:
+        req = urllib.request.Request(f"{url}/api/state?rid=-1", method="GET")
+        with _NO_PROXY_OPENER.open(req, timeout=timeout) as resp:
+            return 200 <= resp.status < 300
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def _poll_web(url: str, t0_mono: float, polls: list, stop_evt: threading.Event) -> None:
+    """停机窗口 WEB 轮询(daemon 线程体, plan 26-11-19-0054 S0): 每 0.25s 一发, 单次超时 2s。
+
+    polls 追加 [offset_s, ok]: offset = 该次请求落定(响应头到达或失败)相对 t0_mono(stopfile
+    touch)的秒数, ok = 单次超时内拿到有效 HTTP 响应。判读: offset 密集(~4 条/s)且 ok 全
+    True = WEB 活着(H2 仅主线程卡); 大段断流/连续 False = 全进程冻(H1)。stop_evt 置位后
+    当前在飞请求收尾即退, 最后一条仍入列。
+    """
+    while not stop_evt.is_set():
+        started = time.monotonic()
+        ok = _poll_web_once(url, POLL_TIMEOUT_S)
+        polls.append([round(time.monotonic() - t0_mono, 3), ok])
+        stop_evt.wait(max(0.0, POLL_INTERVAL_S - (time.monotonic() - started)))
+
+
+def _dump_stop_polls_evidence(
+    measure_path: Path, touched_epoch: float, timeout: float, polls: list, dump_file: Path | None = None
+) -> bool:
+    """超时路径证据落盘(S0 设计要求第2条): polls 序列重写进 measure.json 的 stop 子树, 不因报红丢失。
+
+    boot_once 落盘版没有 stop 子树(main 成功路径才连 stop 重写), 此处补写不影响既有键语义;
+    尽力而为 —— 落盘失败只提示并返回 False(供超时文案据实措辞, 不指向落盘文件), 不掩盖
+    随后的超时报红。
+    """
+    evidence: dict = {"timed_out": True, "timeout_s": timeout, "touched_epoch": round(touched_epoch, 3), "polls": polls}
+    if dump_file is not None:
+        evidence["dump_file"] = str(dump_file)
+    try:
+        data: dict = {}
+        if measure_path.is_file():
+            data = json.loads(measure_path.read_text(encoding="utf-8"))
+        data["stop"] = evidence
+        measure_path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"[stop][证据] 超时轮 polls({len(polls)} 条)已写 {measure_path} 的 stop 子树")
+        return True
+    except (OSError, ValueError) as exc:
+        print(f"[stop][红] polls 证据落盘失败({exc!r}) —— 内存序列: {polls}")
+        return False
+
+
+def graceful_stop(
+    case: Path,
+    popen: subprocess.Popen,
+    *,
+    url: str,
+    timeout: float = 40.0,
+    measure_path: Path | None = None,
+    dump_file: Path | None = None
+) -> dict:
+    """touch stopfile -> runner 进程内 raise SIGTERM -> cli 优雅退出; 超时即报红停手(不降级强杀)。
+
+    等待期由独立 daemon 线程轮询 WEB /api/state(plan 26-11-19-0054 S0)—— 主线程保持
+    popen.wait(timeout) 原样, stop_s 口径不被轮询扭曲(终点取 wait 返回时刻, 轮询线程 join
+    收尾不计入)。正常路径返回 dict 带 polls/dump_file 键(main 连 stop 子树落盘); 超时路径在
+    报红前把 polls 证据重写进 measure_path 的 stop 子树(证据面不因报红丢失), 报红文案据实
+    措辞 —— 落盘失败时指向驱动 stdout 的内存序列输出而非落盘文件。
+    """
     (case / "stop.now").write_text("stop", encoding="utf-8")
     t = time.time()
+    t0_mono = time.monotonic()
+    polls: list = []
+    stop_evt = threading.Event()
+    poller = threading.Thread(target=_poll_web, args=(url, t0_mono, polls, stop_evt), daemon=True)
+    poller.start()
     try:
         rc = popen.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
+        stop_evt.set()
+        poller.join(timeout=5.0)  # 等在飞请求(单次<=2s)收尾, 证据保留最后一条
+        dumped = (
+            _dump_stop_polls_evidence(measure_path, t, timeout, polls, dump_file) if measure_path is not None else None
+        )
+        if dumped:
+            hint = f"停机窗口轮询证据已落 {measure_path}(stop.polls); "
+        elif dumped is not None:
+            hint = "停机窗口轮询证据落盘失败 —— polls 序列已原样打印在驱动 stdout 的 [stop][红] 行; "
+        else:
+            hint = ""
         raise RuntimeError(
-            f"产品进程 {popen.pid} 优雅退出超时({timeout}s) —— 按纪律不强制杀; "
+            f"产品进程 {popen.pid} 优雅退出超时({timeout}s) —— 按纪律不强制杀; {hint}"
             "请人工核查(real-machine.md §2.2: 不降级 taskkill)"
         ) from None
+    done = time.time()  # stop_s 终点 = wait 返回时刻(join 收尾不计入)
+    stop_evt.set()
+    poller.join(timeout=5.0)
     for f in (popen.stdout, popen.stderr):
         if f is not None:
             f.close()
-    return {"exit_code": rc, "stop_s": round(time.time() - t, 2)}
+    return {
+        "exit_code": rc,
+        "stop_s": round(done - t, 2),
+        "touched_epoch": round(t, 3),
+        "polls": polls,
+        "dump_file": str(dump_file) if dump_file is not None else None,
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -269,9 +425,15 @@ def main(argv: list[str] | None = None) -> int:
             case, cfg, web_port, r, interval=args.interval, timeout=args.timeout, fetch_timeout=args.fetch_timeout
         )
         time.sleep(args.quiesce)
-        stop_info = graceful_stop(case, popen)
-        result["stop"] = stop_info
         out_path = case / f"run{r}.measure.json"
+        stop_info = graceful_stop(
+            case,
+            popen,
+            url=result["url"],
+            measure_path=out_path,
+            dump_file=stop_dump_file(case, r, result["t0_epoch"])
+        )
+        result["stop"] = stop_info
         out_path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")  # 连 stop 一起落盘
         fr = result.get("first_response")
         ne = result.get("first_nonempty", {})
