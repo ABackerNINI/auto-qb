@@ -4,6 +4,8 @@
 > 复测时间: 2026-11-18 08:16-08:17(环境2; `real.env`→实例核验→`real.seed.list`→标准轮×2→探测轮×1→`real.seed.rm` 清种; 未跑 `real.guard`——避免 pause 改掉 S0 同口径的 stalledUP)
 > 复测 commit: e16527ab(feat/webui-boot-first-data, 含 S1 提前发布 + S2 守阵; 本轮无提交动作)
 
+**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html
+
 ## 01 环境与造场(沿用 S0 留存, 复测前后核对)
 
 - 环境2(C盘机), `real.env` 确认: 主 56589 / 副 56590, 均活(实测 `connection_status=firewalled`, §2.4 合规口径); 主实例 56589 全程 0 种子未动。

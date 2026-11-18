@@ -1,14 +1,13 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `config-validation-test-input.md` … `fake-server-reuse-bind.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `consecutive-port-run.md` … `fixed-port-test-collision.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [config-validation-test-input.md](config-validation-test-input.md) | 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 123` 读成 `"123"`、`enabled: true` 读成 `"true"`; ②`_strip_none` 在进 `validate_config` 之前**剥掉 `""` 与 `None`**(含**列表项**)。于是「`_check_str_list` 的第 N 项不是字符串」这类**类型分支**, 用标量(`123`)或空串(`''`)当列表项**根本进不去** —— 前者已是合法字符串, 后者被 `_strip_none` 提前删掉(列表还非空 → 不报错), 测试会「写对了断言却拿不到错误」。要打到该分支, 列表项必须是**嵌套容器**(如 `- [x]` / `- {}`), 它既不是字符串、也不会被 `_strip_none` 删。 | 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串, 类型分支进不去, 断言拿不到错误, YAML 输入构造, 列表项类型 |
 | [consecutive-port-run.md](consecutive-port-run.md) | 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。**守阵用例本体同理**: 控制流断言不得架在真实端口底板上(issue 26-11-10-0456)。 | 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh excludedportrange, 守阵用例假红, 断言写死重试次数, 真实端口底板, 纯合成 socket |
 | [corpus-capture.md](corpus-capture.md) | `scripts/qb_capture.py` 实施时实测的一批坑 —— 代理、rid 序列、秒分辨率时钟、伪名化撞车、判据空壳。 | 抓语料, 脱敏, qb_capture, 代理, rid, 伪名化, 等价类判据, 红验, argparse |
 | [corpus-fs-mock.md](corpus-fs-mock.md) | 脱敏要连"藏在 .gz 里的第二层 key"一起做; 窗口合并必须按序推进; 回放 config 的 tracker 段不能只信权威映射。 | 语料回放, disk.json, fs mock, 窗口合并, tracker 段, 脱敏 key, 反查表, group_exact |
@@ -24,3 +23,5 @@
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
 | [fake-seed-injection.md](fake-seed-injection.md) | 大批量注入 qB 假种子(压测/测量库形)三坑合档 —— ①qB 默认入库逐种子校验 ~1s/种, 3000 种 = 45 分钟, 必须 skip_checking; ②手搓注入变体「配方漂移」三处全坏(漏 payload 数据文件 = 全组 missingFiles + 漏 announce = 永不归组 + leech 等不到 seeder)而脚本不报错(rc 只看成员数); ③首同步风暴丢归组的根因是「成员缺 announce 永不自愈」, 风暴只是放大器 —— 全员自带 announce 后风暴不丢归组。 | 批量注入, 假种子, 测量库形, skip_checking, missingFiles, 永不归组, 首同步风暴, 归组, tracker 匹配, 注入配方, inject.py, 压测库, 真机轨, stalledUP |
 | [fake-server-reuse-bind.md](fake-server-reuse-bind.md) | 测试里自起回环 HTTP 假服若用裸 `ThreadingHTTPServer`, 它继承 `HTTPServer.allow_reuse_address = 1`(SO_REUSEADDR) —— Windows 上允许抢绑已监听端口, `-n 8` 并行下两把假服可能 bind(0) 到同一端口, 连接被递给别人的假服/已关闭的 socket ⇒ 客户端 ConnectionError(被中止) 假红。修法单点: `tests/_test_ports.py::http_server`(独占 bind, 对齐生产 `_EndpointServer` 口径), tests/ 下禁裸实例化。 | ThreadingHTTPServer, 假服, 双绑, SO_REUSEADDR, allow_reuse_address, ConnectionError, 回环 HTTP, 并发假红, http_server 单点, 独占 bind |
+| [fakeclock-migration-missed-forms.md](fakeclock-migration-missed-forms.md) | 把多套旧假钟批量迁到统一假钟(tests/clock.py)时, 按类名/替换表机械改最易漏两类形态 —— 直接调用旧假钟实例的 `clock()` 方法形(新假钟 API 是 `now()`/`monotonic()`, 类名相同但方法名不同), 与绕过属性、位置参数直构旧类的构造位(如 `_FixedClock(t0)`); 漏改位在替换轮里测试照绿(该用例没跑到旧 API), 拖到后续轮才假红。 | 假钟迁移, 旧假钟, tests/clock.py, clock() 调用形, 位置参数直构, 直构位, _FixedClock, 迁移漏改, 裸取时残留, 批量替换 |
+| [fixed-port-test-collision.md](fixed-port-test-collision.md) | 测试夹具不覆盖「固定端口 + 连号候选表」的服务端口(`HrChannelConfig.discovery_port` 模型默认 **18788**, 候选表 18788/18789/18790 也是写死的), `-n 8` 并行下多个 worker 同时绑、再叠加本机**真实实例常驻**(2026-10-16 netstat 实测 PID 19168 占着 18788)⇒ 三个候选全被占 ⇒ `HrDiscoveryServer.start()` 记一条 WARNING「候选端口全部被占」⇒ 污染「生命周期消息只记 INFO」类断言, 表现为**偶发判红**(取决于真实实例在不在 + worker 调度)。修法: 夹具显式 `discovery_port=0`(0 = 关闭发现, `_build_discovery` 直接返回 None), 没有候选表就没有碰撞面。 | 加 hr runtime 测试, 发现端口, discovery_port, 固定端口, 18788, 并行偶发红, WARNING 污染 INFO 断言, caplog 断言偶发, 端口被占, 真实实例占端口, xdist 端口冲突, make_config |

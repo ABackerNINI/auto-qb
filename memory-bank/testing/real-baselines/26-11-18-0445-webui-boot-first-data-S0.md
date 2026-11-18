@@ -4,6 +4,8 @@
 > 基线时间: 2026-11-18 04:45-05:26(环境2; `real.env`→`real.guard`→`real.up`→批量假种子→`run_s0_boot.py --runs 2`→竞态探测轮→微基准落盘; 非 `real.suite`)
 > 基线 commit: 011e1aeb(feat/webui-boot-first-data, 修复前基线; 本轮无提交动作)
 
+**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html
+
 ## 01 环境与造场
 
 - 环境2(C盘机), `QBT_REAL_ENV` 未设按 EXE 探测; **主实例 56589 本轮未用于产品连接**(本测产品连副实例); `real.up` 后 `real.guard` 全绿: 56589 pid=2036 / 56590 pid=13136, 均 vv5.2.3 `firewalled`(§2.4 已核非 disconnected), 真实种子 0。

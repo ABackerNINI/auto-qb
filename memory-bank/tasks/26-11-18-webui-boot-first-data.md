@@ -1,11 +1,11 @@
 # 26-11-18-webui-boot-first-data — 重启后 WebUI 首份数据 5-15s: 立项分析(根因链取证 + grilling 拍板 + 提前发布计划)
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-11-18
 **Updated:** 2026-11-18
-**Summary:** 重启后 WebUI 首份数据 5-15s: 立项分析 + S0 真机取证(根因链两形态实测坐实) + S1 提前发布 + S2 守阵补齐 + S3 真机验收落地(空窗收缩为一拍, 硬判据全 PASS)
+**Summary:** 重启后 WebUI 首份数据 5-15s 已修: S1 启动首轮提前发布(apply_sync 落库后即发基础视图), S3 真机验收探测轮空窗 1.49s→0.050s 收缩为一拍, 硬判据 flat/singles/shows ≤2s 三轮全 PASS; groups 第二跳残差承接 issue 26-11-18-0259-perf-first-round-grouping-files-serial(Open 待排期)
 **Topics:** webui-boot-first-data
-**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html
+**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/pitfalls/testing/playwright-testignore-negation.md
 
 ## 本篇只回答
 
@@ -61,7 +61,7 @@
 
 - S1 完成: `qbmanager._refresh_torrents` 在 `apply_sync` 落库后、`need_validate` 分支前插入启动首轮提前发布点 —— 判据 = **落库前 capture `store.rounds_applied == 0`**(纯内存计数: `__init__` 置 0 / `_apply` 每轮自增单点 / 不落盘 / `reset_runtime` 不清 ⇒ 热重载 L2 / qB 重启补 / 重连全量轮均 >0 零行为变化; 不依赖种子数)。发布复用同一 **on_sync_line hook**(`host.run_sync_line(False)` → webui `flush_views` → `_publish_locked`, P2 守阵禁直驱表现层), 不新增锁/线程/配置键; `force=False`(首个主循环发布前不存在未取走版本, "已取走"门控恒可过); 提前发布失败吞异常记 WARNING 不打断首轮管线(权威发布在管线结束既有路径 —— 归组经 `group_key_migrations` 登记 → full 理由触发第二跳; grouping 关闭且无 HR/规则写标签的形态第二跳无迁移理由、靠下一变更轮自愈, site 列可能滞留至该轮, 已知代价面)。单测: 新文件 `tests/test_webui_boot_first_publish.py` 4 用例(管线中即有含落库数据的基础代+site=Unknown 证早于 full_round / 竞态空代不跳过 / 非启动轮零行为变化 / 失败不打断管线) + 既有守阵 `test_p2a_sync_line_flush_propagates_to_host` 按新契约更新(启动首轮恰两次 [False, True]); 相关子集 6 批 38 文件全绿(qbmanager/webui-delta/store/views/grouping/sync/episodes/modules_p5/ui/checking/local_qb/ascii/config/actions/hr), 全量 test.full 留 S2(数字见 kb.baseline)。dry-run 语义核实: flush 路径无 dry_run 门, 提前 fire 与现状同机制(web 未启/无请求 → is_active False → 不发布); 计划外观察(只报告): dry-run/首轮提前 fire 会让 OpsModule 跳检备份对账提前约 1 拍触发(对账自身按进程幂等, 重加路径无 dry_run 门系既有面)。
 
-- 2026-11-18 06:13 R2
+- 2026-11-18 06:13 S1 提前发布落地: apply_sync 落库后插启动首轮发布点(落库前 rounds_applied==0 判据), 经 on_sync_line hook 复用发布单点, 4 单测钉核心语义, 相关子集全绿
 
 ### R3 · S2 守阵补齐 (2026-11-18)
 
@@ -76,3 +76,7 @@
 - S3 完成(产品代码零改动, HEAD e16527ab)。环境2 副实例 56590 沿用 S0 留存的同一批 210 枚 real-fake(复测前后核对 210/210 stalledUP 零扰动; 未跑 real.guard 免 pause 破坏口径), S0 同款工具受控重启三次: 标准轮 ×2(显式 `--interval 0.25 --fetch-timeout 10`) + 探测轮 ×1(`0.03/0.1`), case 目录换新 `s3boot`/`s3boot-race`(S0 产物原样保留)。**对比判定: 修复命中** —— 标准轮数字与 S0 同量级(flat/singles/shows 1.081/1.092s 首响应即含数据, groups 第二跳 1.859/1.871s, 该形态 S1 本就不改变); **探测轮(试金石): 竞态仍可复现(首响应 0 行空代 +0.891s), 但空窗从 S0 的「持续到 gen2 +2.421s ≈1.49s 全空」收缩为 0.050s 一拍 —— 基础代(flat 210/singles 210 超集/shows 105/groups 0)落库后立即发布(+0.941s), groups 完整代 +2.187s 补齐, 代际恰三跳(空→基础→完整)**; S1 超集使探测轮停条件可满足(S0 同场景 150s error 收场不复存在)。硬判据 flat/singles/shows ≤2s 三轮全 PASS; groups 第二跳记录数字并回写 issue ②(残差窗 [检测到新增→完整代] = 0.538/0.611/0.653s, 与 S0 0.596/0.506/0.734s 同量级 —— S1 提前发布不移动管线, files 串行残差原样=issue ② 代价面)。管线窗 [WEB up→检测到新增] = 0.504/0.501/0.703s 与 S0 吻合; path_map 自检段照旧 no-op, issue ③ 无新增面未回写。种子清理(用户已拍板): `real.seed.rm --all --yes` 清 210 枚连数据, qB 归零核对。三轮优雅停 rc=0(1.19/1.05/1.23s), S0 run2 的 38.75s 停机异常未复发(仍只报告不入池)。证据 `testing/real-baselines/26-11-18-0821-webui-boot-first-data-S3.md`; 计划 HTML 未动(收口统一处理)。
 
 - 2026-11-18 08:26 S3 真机验收完成: 修后复测(标准轮×2+探测轮×1, S0 同口径同批 210 种子)对比判定修复命中 —— 探测轮空窗从 S0 的持续到 gen2(1.49s)收缩为 0.050s 一拍(基础代落库后立即发布), 硬判据 flat/singles/shows ≤2s 三轮全 PASS, groups 第二跳 1.859/1.871/2.187s 记录并回写 issue ②; 种子已清(qB 归零)
+
+- 2026-11-18 23:10 收口终态: 计划 26-11-18-0259 与档案翻转 Done(S0-S3 四步全落地, 四笔提交 601b9494/e073e718/e16527ab/6ddfafc4, S3 验收硬判据全 PASS, 探测轮空窗 1.49s->0.050s), 计划 doc-refs 补 S3 证据档双向声明, 新坑 pitfalls/testing/playwright-testignore-negation.md 入档(testIgnore 负模式非白名单, 隔离走 testMatch)
+
+- 2026-11-18 接缝终审处置: S0 提交消息 groups 上界 2.47 系 2.421 转抄误(提交固化不改写), 该数字权威 = S0 证据档 §03 表格, 后续引用一律从证据档誊写

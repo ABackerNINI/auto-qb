@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `commands-wrapper-from-python.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `config-validation-test-input.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -24,3 +24,4 @@
 | [cmd-guard-real-fake-count.md](cmd-guard-real-fake-count.md) | 真机开工自检 `real.guard`(runner.cmd_guard 路径)调 qB API 时没传 skip_tags 过滤, 我方 real-fake 假种子被计入「真实种子 N 个」并被暂停 —— guard 输出形似「现场被别人污染」, 实为自家种子; real.seed 内部那次 guard 调用传了 skip_tags 所以显示 0, 两处输出互相矛盾是本坑最快判别。 | cmd_guard, skip_tags, real-fake, 真实种子, guard 计数, guard 暂停, 真机开工, real.guard |
 | [commands-e2e-arg-passthrough-three-dashes.md](commands-e2e-arg-passthrough-three-dashes.md) | `commands run test.linux-e2e` 想只跑单个 spec / 加 playwright 过滤参数时, 一层 `--` 不够 —— 三个 `--` 由引擎 argparse(REMAINDER)、引擎 `_extra` 前导剥离、任务脚本 `_parse_args` 手写拆分各吃一个, playwright 一层不吃; 且 `--grep` 值含 `\|` 在引擎 `shell=True` 拼串处(任务脚本之前)就被 /bin/sh 当管道解析。 | commands run 透传, 三连 --, test.linux-e2e 单 spec, e2e 单用例重跑, playwright 透传参数, --grep 不生效, grep 竖线, -- -- --, --full 透传, 任务自有旗标 |
 | [commands-wrapper-from-python.md](commands-wrapper-from-python.md) | python 脚本里 `subprocess.run(["commands", "run", ...])` 必 FileNotFoundError(WinError 2) —— commands wrapper 是 bash 侧脚本, 不在 Windows CreateProcess 的可执行体解析范围内; 命令行能跑 ≠ 子进程能跑。 | subprocess, commands wrapper, WinError 2, FileNotFoundError, 造种脚本 |
+| [config-validation-test-input.md](config-validation-test-input.md) | 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 123` 读成 `"123"`、`enabled: true` 读成 `"true"`; ②`_strip_none` 在进 `validate_config` 之前**剥掉 `""` 与 `None`**(含**列表项**)。于是「`_check_str_list` 的第 N 项不是字符串」这类**类型分支**, 用标量(`123`)或空串(`''`)当列表项**根本进不去** —— 前者已是合法字符串, 后者被 `_strip_none` 提前删掉(列表还非空 → 不报错), 测试会「写对了断言却拿不到错误」。要打到该分支, 列表项必须是**嵌套容器**(如 `- [x]` / `- {}`), 它既不是字符串、也不会被 `_strip_none` 删。 | 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串, 类型分支进不去, 断言拿不到错误, YAML 输入构造, 列表项类型 |

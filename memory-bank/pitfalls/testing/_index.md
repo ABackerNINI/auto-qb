@@ -12,11 +12,11 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `commands-wrapper-from-python.md` | 16 |
-| [2](_index-2.md) | `config-validation-test-input.md` … `fake-server-reuse-bind.md` | 16 |
-| [3](_index-3.md) | `fakeclock-migration-missed-forms.md` … `harness-is-stub-server.md` | 16 |
-| [4](_index-4.md) | `harness-save-flow.md` … `mutants-mirror-dirty-worktree.md` | 16 |
-| [5](_index-5.md) | `mutants-shared-mirror.md` … `playwright-teardown.md` | 16 |
-| [6](_index-6.md) | `poll-last-round-race.md` … `sandbox-tempfile-cwd-fallback.md` | 16 |
-| [7](_index-7.md) | `sandbox-tool-cache.md` … `test-lock-path-injection.md` | 16 |
-| [8](_index-8.md) | `test-plan-docstring-sections.md` … `xdist-worker-global-snapshot.md` | 16 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `config-validation-test-input.md` | 17 |
+| [2](_index-2.md) | `consecutive-port-run.md` … `fixed-port-test-collision.md` | 17 |
+| [3](_index-3.md) | `flaky-midnight-daycount.md` … `headless-prefers-light-theme-gate.md` | 17 |
+| [4](_index-4.md) | `heredoc-cjk-punct-js-syntax.md` … `mutation-revert-git-checkout.md` | 17 |
+| [5](_index-5.md) | `mutmut-mtime-race-stale-trampoline.md` … `qb-profile-nic.md` | 17 |
+| [6](_index-6.md) | `qb-tags-multi-split-strip.md` … `sidefx-diagnostic-probe.md` | 17 |
+| [7](_index-7.md) | `sidefx-import-time-temp-roots.md` … `tmpdir.md` | 17 |
+| [8](_index-8.md) | `tool-mode-coverage.md` … `xdist-worker-global-snapshot.md` | 10 |

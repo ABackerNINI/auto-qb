@@ -7,10 +7,10 @@
 <title>重启后 WebUI 首份数据 5-15s(首轮管线挡发布): 提前发布方案</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-boot-first-data">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-18-0259">
-<meta name="doc-updated" content="26-11-18-0800">
-<meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md">
+<meta name="doc-updated" content="26-11-18-2308">
+<meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md, memory-bank/testing/real-baselines/26-11-18-0821-webui-boot-first-data-S3.md, memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>重启后 WebUI 首份数据 5-15s(首轮管线挡发布): 提前发布方案</h1>
 <p class="lede">本篇只回答: 重启后 WebUI 首份数据 5-15s 怎么修 —— 根因是重启后首个<b>含落库数据</b>的视图代要等首轮数据管线整条跑完才发布(请求触发的提前发布只能拿到落库前的空代), 修法是「启动首轮 apply_sync 落库后立即发布基础视图」; 归组 files 串行与挂载点探测两个管线重活不入本计划(已入池两条 issue 独立排期)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-18-0259 · <b>doc-updated</b> 26-11-18-0800 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-18-0259 · <b>doc-updated</b> 26-11-18-2308 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话「auto-qb 重启后 WEBUI 刷新后主界面要 5-15 秒才出现(约 210 种子)」问答轮根因分析(取证 2026-11-18) + 两轮 grilling D1-D11 拍板(2026-11-18) + 用户指令「立项分析, grilling and then create a plan」
 </div>
 
@@ -156,6 +156,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-18-0259</span> 初版: 会话问答轮根因分析(排除面桩实测 + 根因链取证) → 用户指令「立项分析, grilling and then create a plan」→ 两轮 grilling 11 问拍板(D5/D10 用户改判) → 计划入库 Open。S0-S3 待显式开工。</li>
   <li><span class="tag">R1 · 26-11-18-0800</span> S2 落地按实测改写 tracker 错误原因语义: 取数器挂任务线(module.on_task_line), 不在第二跳内补齐、晚一代(ver 逐代 +1); 守阵 tests/test_webui_boot_first_publish.py 钉实际行为。同轮 playwright.config.mjs 增 boot-first 轮隔离(E2E_BOOT_FIRST=on 时 testMatch 白名单只剩 e2e/boot-first-two-hop.spec.mjs, 防矩阵轮误跑全套件假红)</li>
+  <li><span class="tag">R2 · 26-11-18-2308</span> 收口终态: S0-S3 四步全部落地(四笔本地提交 601b9494/e073e718/e16527ab/6ddfafc4), S3 真机验收硬判据全过(flat/singles/shows 首份数据 &lt;=2s 三轮 PASS, 探测轮空窗 1.49s-&gt;0.050s 收缩为一拍), groups 第二跳残差承接 issue 26-11-18-0259-perf-first-round-grouping-files-serial(Open 待排期); S3 判据『回写两条 issue』终态 = 仅 ② 落实, ③(pathmap)经 S3 评估无新增面未回写(见 S3 档 §05)</li>
 </ul>
 
 </div>

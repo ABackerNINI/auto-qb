@@ -1,14 +1,16 @@
 # webui-boot-first-data
 
 > 摘要: 立项轮: 根因链闭环(排除面桩实测: /api/state 冷52ms/资产链0.4s/渲染面百毫秒级均非瓶颈; 真根因=重启首轮全量管线挡首次发布: apply_sync+path_map自检+归组files逐种子单发210次+冲突检查, 窗口期dirty初始True首请求抢先发空代(runtime.py:112), 含数据代等管线完) + grilling 两轮11问拍板D1-D11(D5改判②③入池issue两件 / D10改判S0只走real-machine轨道不取生产数字) + 计划26-11-18-0259入库Open(S0-S3待显式开工) + 档案立档; 零代码改动
-> 最后活动: 2026-11-18 08:26
+> 最后活动: 2026-11-18 23:10
 
 **R0(2026-11-18 03:03):** 立项轮: 根因链闭环(排除面桩实测: /api/state 冷52ms/资产链0.4s/渲染面百毫秒级均非瓶颈; 真根因=重启首轮全量管线挡首次发布: apply_sync+path_map自检+归组files逐种子单发210次+冲突检查, 窗口期dirty初始True首请求抢先发空代(runtime.py:112), 含数据代等管线完) + grilling 两轮11问拍板D1-D11(D5改判②③入池issue两件 / D10改判S0只走real-machine轨道不取生产数字) + 计划26-11-18-0259入库Open(S0-S3待显式开工) + 档案立档; 零代码改动
 
 **R1(2026-11-18 04:57):** S0 真机取证完成: 环境2副实例56590+210枚假种子受控重启2轮+竞态探测1轮, 分视图首份数据实测(标准轮flat/singles/shows≈spawn+1.1s首响应, groups=gen2≈spawn+1.6~1.9s; 探测轮命中0行空代), 管线时间窗与微基准回填两条issue基线, 证据real-baselines/26-11-18-0445
 
-**R2(2026-11-18 06:13):** R2
+**R2(2026-11-18 06:13):** S1 提前发布落地: _refresh_torrents 在 apply_sync 落库后插启动首轮发布点(落库前 rounds_applied==0 判据), 经 on_sync_line hook 复用发布单点, 4 单测钉核心语义, 相关子集全绿
 
 **R3(2026-11-18 07:26):** S2 守阵补齐: 单测补缺(6 用例) + e2e 冷启动两跳(--boot-first 模式) + 静态守阵全绿 + test.full 全绿(数字见 kb.baseline 本切片)
 
 **R4(2026-11-18 08:26):** S3 真机验收完成: 修后复测(标准轮×2+探测轮×1, S0 同口径同批 210 种子)对比判定修复命中 —— 探测轮空窗从 S0 的持续到 gen2(1.49s)收缩为 0.050s 一拍(基础代落库后立即发布), 硬判据 flat/singles/shows ≤2s 三轮全 PASS, groups 第二跳 1.859/1.871/2.187s 记录并回写 issue ②; 种子已清(qB 归零)
+
+**R5(2026-11-18 23:10):** 收口终态: 计划 26-11-18-0259 与档案翻转 Done(S0-S3 四步全落地, 四笔提交 601b9494/e073e718/e16527ab/6ddfafc4, S3 验收硬判据全 PASS, 探测轮空窗 1.49s->0.050s), 计划 doc-refs 补 S3 证据档双向声明, 新坑 pitfalls/testing/playwright-testignore-negation.md 入档(testIgnore 负模式非白名单, 隔离走 testMatch)
