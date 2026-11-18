@@ -14,4 +14,4 @@
 
 - **触发**: 真机/集成用例用 tests-real `AppProc` 的 plain `p.stop()`(popen.terminate)停产品进程, 或按「terminate 留孤儿持锁」旧机制句推导停法(为防孤儿选 sentinel/taskkill /T 等)。
 - **判别**: 旧句与实测相反 —— 片B(26-11-18-0425 切片 §03.2-1, 评审 R16 现场探针 + RM04-22 两遍证据): 当前 uv trampoline 下 stub 死**连带真解释器终止**(job-object 连带), 无孤儿持锁; 旁证 = RM04-22 遍 1 plain stop 后遍 2 同 case 全新 boot 成功。plain stop 的真实行为面: **外部 terminate 非优雅** —— 退出码恒 1、finally 不跑、state 不优雅落盘。同 case 再启动秒退(rc=1 零日志)+ wait_web 撞追加式日志旧行假阳的实发归因是**未停净的存活进程(中断轮次)**, 不是 stop 孤儿。
-- **处置**: 受控停一律 **sentinel 通路**(start_bypass_app, 进程内 SIGTERM)或 `graceful_after` 自发 SIGTERM(RM04-06 预热先例)—— 理由是 **rc 可断言 + 优雅落盘**, 不是防孤儿; 需要模拟崩溃/断电才用 `kill()`(taskkill /F /T, /T 保留无害)。AppProc.kill docstring 的「只杀启动器会留下孤儿进程继续持锁」为同款旧机制句, 属批次外待办(记档案待 scope-guard 处置, 2026-11-19 收口轮不动代码)。
+- **处置**: 受控停一律 **sentinel 通路**(start_bypass_app, 进程内 SIGTERM)或 `graceful_after` 自发 SIGTERM(RM04-06 预热先例)—— 理由是 **rc 可断言 + 优雅落盘**, 不是防孤儿; 需要模拟崩溃/断电才用 `kill()`(taskkill /F /T, /T 保留无害)。AppProc.kill docstring 的「只杀启动器会留下孤儿进程继续持锁」为同款旧机制句, 已修(2026-11-19, issue 26-11-19-0642-docs-appproc-kill-docstring-stale-mechanism): docstring 改本条新口径(非优雅三事实 + 孤儿证伪), /T 保留无害。

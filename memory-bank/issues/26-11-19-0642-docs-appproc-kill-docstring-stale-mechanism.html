@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="appproc-kill-docstring-stale-mechanism">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="AppProc.kill docstring 旧机制句: terminate 留孤儿已被 uv trampoline 实测证伪">
 <meta name="issue-summary" content="tests-real/lib/app.py AppProc.kill docstring 仍载「terminate 只杀 venv 启动器会留孤儿真解释器」, 片B 现场探针(stub 死后子进程连带终止)+RM04-22 两遍证据双重证伪; pitfalls/testing/bg-process-cleanup.md 已补实测条, docstring 未同步">
 <style>
@@ -91,13 +91,14 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0642-docs-appproc-kill-docstring-stale-mechanism</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 06:42</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
 </div>
 
 <section id="s1">
   <h2><span class="no">§01</span>现象</h2>
   <p>AppProc.kill docstring 载「只杀启动器会留下孤儿进程继续持锁」(逐字)—— uv venv trampoline 下实测证伪: stub 进程死后真解释器子进程连带终止(job-object), 孤儿不成立(片B 评审 R16 现场探针 + RM04-22 遍 1 plain stop → 遍 2 同 case 全新 boot 成功双证)。pitfalls/testing/bg-process-cleanup.md 已补实测条, docstring 未同步。</p>
+  <p><strong>实际修法</strong>(2026-11-19): docstring 改新口径 —— 外部强杀非优雅三事实(rc 恒 1 / finally 不跑 / state 不优雅落盘) + 受控停走 sentinel 通路(start_bypass_app)或 start(graceful_after=...) 自发 SIGTERM、stop() 本体即外部 terminate 同属非优雅, 孤儿机制证伪(uv trampoline job-object 连带终止)与 /T 保留无害并引坑档; 三事实+孤儿证伪与 §03 建议一致, 受控停通路按坑档处置行口径(评审 R1 major 修正, 初稿误归 stop())。坑档 bg-process-cleanup.md 的「批次外待办」尾句同步改「已修」。tests-real/rm04_relocate 旁注本就是新口径, 未动。验证: grep <code>留下孤儿</code> 全仓仅剩坑档引文与异义命中。</p>
 </section>
 
 <section id="s2">
@@ -117,7 +118,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 06:42 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

@@ -246,8 +246,13 @@ class AppProc:
     def kill(self) -> None:
         """强杀整棵进程树(taskkill /F /T): 模拟崩溃/断电, 用于验「锁会不会被永久占住」
 
-        **必须带 /T**: venv 的 `Scripts/python.exe` 是启动器, 真解释器是它的子进程 ——
-        只杀启动器会留下孤儿进程继续持锁, 用例就会"测了个寂寞"(还以为在验崩溃恢复)。
+        外部强杀非优雅: 退出码恒 1、finally 不跑、state 不优雅落盘。受控停走
+        sentinel 通路(start_bypass_app, 进程内 SIGTERM)或 start(graceful_after=...)
+        自发 SIGTERM —— 理由是 rc 可断言 + 优雅落盘, 不是防孤儿; stop() 本体即
+        外部 terminate, 同属非优雅路径。
+        孤儿机制已证伪: uv venv trampoline 下 stub 死连带真解释器终止(job-object),
+        无孤儿持锁(片B 26-11-18-0425 §03.2-1 + RM04-22 两遍, 见
+        pitfalls/testing/bg-process-cleanup.md); /T 保留无害。
         """
         if not self.alive():
             return

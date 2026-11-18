@@ -23,7 +23,7 @@
 |---|---|---|
 | 1 | **只碰白名单实例**: 双环境主/副端口+镜像路径前缀(单点 `tests-real/lib/env_registry.py`, `real.env` 可查) | `real.guard` 越界退出码非 0, 无 `--force` |
 | 2 | **只允许 `real-fake` 假种子, 真实 PT 种子禁入**(2026-11-04 已清退真实种子, 不得代造) | guard 前置 pause-all + 2s 看门狗, 违规≥3 中止本轮 |
-| 3 | **生产配置零触碰**: 只用 `tests-real/config/*.yml` 派生配置 | guard 撞仓库根 `config.yml` 拒跑 |
+| 3 | **生产配置零触碰**: 配置由 `tests-real/lib/app.py` 的 `write_config()` 渲染派生(case 目录内, data_dir 落 case) | guard 撞仓库根 `config.yml` 拒跑 |
 | 4 | **不动其它 qB**: 杀/起前核镜像路径 | guard 前后进程比对, 新增/消失即报告 |
 | 5 | **不挂闸门**: `ship.*` 链上出现 `real.*` 即缺陷, 立即回滚 | 人 |
 

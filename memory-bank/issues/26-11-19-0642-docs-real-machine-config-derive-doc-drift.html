@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="real-machine-config-derive-doc-drift">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="real-machine.md 约束3 配置派生口径漂移: tests-real/config/*.yml 路径不存在">
 <meta name="issue-summary" content="规程单点写「配置只用 tests-real/config/*.yml 派生」, 该目录从无 .yml; 真实机制是 tests-real/lib/app.py write_config() 渲染派生(case 目录内, data_dir 落 case)">
 <style>
@@ -91,13 +91,14 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0642-docs-real-machine-config-derive-doc-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 06:42</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
 </div>
 
 <section id="s1">
   <h2><span class="no">§01</span>现象</h2>
   <p>规程单点 memory-bank/testing/real-machine.md 约束 3 写「生产配置零触碰: 只用 tests-real/config/*.yml 派生配置」—— 该目录当前为空缺, git 历史从未有过 .yml; 真实派生机制是 tests-real/lib/app.py write_config() 把 CONFIG_TEMPLATE 渲染进 case 目录(data_dir 落 case)。引用路径不存在, 照文档找配置会扑空。</p>
+  <p><strong>实际修法</strong>(2026-11-19): real-machine.md 约束 3 行改「配置由 tests-real/lib/app.py 的 write_config() 渲染派生(case 目录内, data_dir 落 case)」, 与 §03 建议及 0636 计划 R2 口径逐字对齐, 机检列不变。验证: grep <code>tests-real/config</code> 全仓仅剩历史 plans/baselines/tasks/issues 档案(历史记录不改)。</p>
 </section>
 
 <section id="s2">
@@ -117,7 +118,9 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 06:42 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
