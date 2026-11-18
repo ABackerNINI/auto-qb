@@ -50,6 +50,9 @@ def period_sort_key(value: Any) -> Tuple[int, ...]:
       ValueError, 由调用方捕获决定放弃该次排序。
     - ND 的 N 按数值比较(2D < 10D), 非字典序; month 恒最后且不按当月实际天数参与比较
       (28-31 天波动会导致重排翻转, 破坏幂等)。
+    - 已接受边界(详注在 JS 复刻版注释): 全角数字 Python \d + int() 可解析('７D' -> (1,7)
+      合法)而 JS \d 仅 ASCII -> JS 返回 null 走 D11 放弃, JS 更保守只少排不错排; N 超 2^53
+      的 float64 精度仅 JS 面存在, 超界 N 的草稿序可与后端规范序分叉, 保存一次被后端归一自愈。
     - 前端 JS 复刻版: webui/static/shared/config_editor_curve.js 的 _cfgCurvePeriodSortKey
       (注释互指, 计划 26-11-18-0801 S4 已落地)。
     """
