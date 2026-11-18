@@ -128,7 +128,20 @@
 #   0.5-0.7s); 对照: tests-real/lib/qb._call 无连接复用口径 × 210 = 3.660s(17.43ms/次) ——
 #   每次新建 TCP 是连接开销上限, 与本件「单次 10-30ms」估值同口径; 产品 requests 客户端
 #   连接复用后单次 ~2.1ms。
-# 证据单点: memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md §04</code></pre>
+# 证据单点: memory-bank/testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md §04
+#
+# ---- S3 真机验收回填(2026-11-18 08:16, 计划 26-11-18-0259 S3, 修后 e16527ab 含 S1 提前发布, 同批 210 种子同口径) ----
+# S1 提前发布不移动管线: files 单发 210 次 + post 冲突检查 + flush 发布段原样, 本件残差代价面不变。
+# groups 第二跳时刻(修复后, t0=spawn, 轮询粒度 ±interval): 1.859s(标准 run1) / 1.871s(标准 run2) /
+#   2.187s(竞态探测轮) —— 基础代(flat 210/singles 210 超集/groups 0)在落库后立即(+0.941s), groups
+#   仍由管线结束完整代补齐: groups 与 flat 的时刻差 = 0.778s / 0.779s / 1.245s(探测轮的差含 full_round
+#   尾段 0.592s, 非 files 段)。
+# 残差窗 [检测到新增种子(日志锚点) → 完整代 HTTP 观测] = 0.538s / 0.611s / 0.653s —— 与 S0 修复前
+#   (0.596/0.506/0.734s)同量级, 印证该段未被 S1 改动, files 串行占主体(S0 微基准 files×210=0.445s
+#   口径不变)。groups 提速仍由本件承接。
+# 探测轮形态(修后): 空代(首请求早于落库) → 基础代(+0.050s, S1 提前发布) → 完整代(+2.187s) ——
+#   「空窗持续到管线结束」已消灭, 本件残差只剩 groups 第二跳本身。
+# 证据单点: memory-bank/testing/real-baselines/26-11-18-0821-webui-boot-first-data-S3.md §04/§05</code></pre>
 </section>
 
 <section id="s3">
@@ -174,6 +187,7 @@
   <ul>
     <li>2026-11-18 02:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-18 04:57 — S0 真机取证回填基线数字（计划 26-11-18-0259 S0，修复前基线 011e1aeb）：files 单发 <strong>210 次</strong>；管线内段总耗时（起点日志锚点，终点 HTTP 观测 ±轮询粒度）= <strong>0.596s / 0.506s / 0.734s</strong>（两轮重启 + 竞态探测轮）；产品同款客户端微基准 files×210 = <strong>0.445s（2.12ms/次）</strong>，无连接复用口径 ×210 = 3.660s（17.43ms/次，连接开销上限）。状态维持 <strong>Open</strong>。证据：testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md</li>
+    <li>2026-11-18 08:21 — S3 真机验收回填修后数字（计划 26-11-18-0259 S3，修后 e16527ab 含 S1 提前发布，同批 210 种子同口径）：groups 第二跳时刻 <strong>1.859s / 1.871s / 2.187s</strong>（标准两轮 + 探测轮，t0=spawn）；残差窗 [检测到新增种子 → 完整代] = <strong>0.538s / 0.611s / 0.653s</strong>，与 S0 修复前同量级 —— S1 提前发布只提前基础代、不移动管线，本件 files 串行残差原样保留，groups 提速仍由本件承接。状态维持 <strong>Open</strong>。证据：testing/real-baselines/26-11-18-0821-webui-boot-first-data-S3.md</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>

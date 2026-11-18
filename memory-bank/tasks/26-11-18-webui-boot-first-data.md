@@ -3,7 +3,7 @@
 **Status:** Open
 **Added:** 2026-11-18
 **Updated:** 2026-11-18
-**Summary:** 重启后 WebUI 首份数据 5-15s: 立项分析 + S0 真机取证(根因链两形态实测坐实) + S1 提前发布 + S2 守阵补齐落地(S3 真机验收待做)
+**Summary:** 重启后 WebUI 首份数据 5-15s: 立项分析 + S0 真机取证(根因链两形态实测坐实) + S1 提前发布 + S2 守阵补齐 + S3 真机验收落地(空窗收缩为一拍, 硬判据全 PASS)
 **Topics:** webui-boot-first-data
 **Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html
 
@@ -39,7 +39,7 @@
 | S0 | real-machine 环境重启取证(各视图首份数据时刻 + 管线时间窗) | Done(2026-11-18, 基线 `testing/real-baselines/26-11-18-0445-webui-boot-first-data-S0.md`) |
 | S1 | 启动首轮提前发布(apply_sync 后插发布点) | Done(2026-11-18) |
 | S2 | 守阵(单测/e2e/test.full) | Done(2026-11-18, 数字见 kb.baseline 本切片) |
-| S3 | 真机验收(修复前后对比, 数字回写 issue②) | Open |
+| S3 | 真机验收(修复前后对比, 数字回写 issue②) | Done(2026-11-18, 证据 `testing/real-baselines/26-11-18-0821-webui-boot-first-data-S3.md`) |
 
 ## 进度日志
 
@@ -70,3 +70,9 @@
 - 2026-11-18 07:40 R3: 单测 6 用例(S1 面 + S2 补缺: 两代派生字段/错误原因任务线补齐/delta 两代兼容) + e2e 冷启动两跳 spec(--boot-first 模式可观测方案) + 静态守阵全绿 + test.full 全绿(数字见 kb.baseline 本切片), 产品代码零改动
 
 - 2026-11-18 07:26 S2 守阵补齐: 单测补缺(6 用例) + e2e 冷启动两跳(--boot-first 模式) + 静态守阵全绿 + test.full 全绿(数字见 kb.baseline 本切片)
+
+### R4 · S3 真机验收 (2026-11-18)
+
+- S3 完成(产品代码零改动, HEAD e16527ab)。环境2 副实例 56590 沿用 S0 留存的同一批 210 枚 real-fake(复测前后核对 210/210 stalledUP 零扰动; 未跑 real.guard 免 pause 破坏口径), S0 同款工具受控重启三次: 标准轮 ×2(显式 `--interval 0.25 --fetch-timeout 10`) + 探测轮 ×1(`0.03/0.1`), case 目录换新 `s3boot`/`s3boot-race`(S0 产物原样保留)。**对比判定: 修复命中** —— 标准轮数字与 S0 同量级(flat/singles/shows 1.081/1.092s 首响应即含数据, groups 第二跳 1.859/1.871s, 该形态 S1 本就不改变); **探测轮(试金石): 竞态仍可复现(首响应 0 行空代 +0.891s), 但空窗从 S0 的「持续到 gen2 +2.421s ≈1.49s 全空」收缩为 0.050s 一拍 —— 基础代(flat 210/singles 210 超集/shows 105/groups 0)落库后立即发布(+0.941s), groups 完整代 +2.187s 补齐, 代际恰三跳(空→基础→完整)**; S1 超集使探测轮停条件可满足(S0 同场景 150s error 收场不复存在)。硬判据 flat/singles/shows ≤2s 三轮全 PASS; groups 第二跳记录数字并回写 issue ②(残差窗 [检测到新增→完整代] = 0.538/0.611/0.653s, 与 S0 0.596/0.506/0.734s 同量级 —— S1 提前发布不移动管线, files 串行残差原样=issue ② 代价面)。管线窗 [WEB up→检测到新增] = 0.504/0.501/0.703s 与 S0 吻合; path_map 自检段照旧 no-op, issue ③ 无新增面未回写。种子清理(用户已拍板): `real.seed.rm --all --yes` 清 210 枚连数据, qB 归零核对。三轮优雅停 rc=0(1.19/1.05/1.23s), S0 run2 的 38.75s 停机异常未复发(仍只报告不入池)。证据 `testing/real-baselines/26-11-18-0821-webui-boot-first-data-S3.md`; 计划 HTML 未动(收口统一处理)。
+
+- 2026-11-18 08:26 S3 真机验收完成: 修后复测(标准轮×2+探测轮×1, S0 同口径同批 210 种子)对比判定修复命中 —— 探测轮空窗从 S0 的持续到 gen2(1.49s)收缩为 0.050s 一拍(基础代落库后立即发布), 硬判据 flat/singles/shows ≤2s 三轮全 PASS, groups 第二跳 1.859/1.871/2.187s 记录并回写 issue ②; 种子已清(qB 归零)
