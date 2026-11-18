@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>e2e settings-backup 导入 round-trip 容器环境确定性失败 · test · 计划外问题</title>
+<meta name="issue-slug" content="e2e-settings-backup-container-fail">
+<meta name="issue-stamp" content="26-11-19-0230">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-settings-backup-container-fail">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-18-webui-curve-period-sort.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="e2e settings-backup 导入 round-trip 容器环境确定性失败">
+<meta name="issue-summary" content="settings-backup.spec.mjs 导入还原后 reload 等整组迁移块 30s 超时, 容器内双皮肤确定性红; Windows 侧另有 8/12 红因本机真实 gtm 工具响应违反桩前提; 三层对照实验实锤与 S4 改动无关">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>e2e settings-backup 导入 round-trip 容器环境确定性失败</h1>
+<p class="lede">settings-backup.spec.mjs 导入还原后 reload 等整组迁移块 30s 超时, 容器内双皮肤确定性红; Windows 侧另有 8/12 红因本机真实 gtm 工具响应违反桩前提; 三层对照实验实锤与 S4 改动无关</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-19-0230-test-e2e-settings-backup-container-fail</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 02:30</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">e2e(settings-backup.spec.mjs / testbed 容器)</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">S4 实施子代理(计划 26-11-18-0801, 经主会话入池)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>发现场景: 计划 26-11-18-0801 S4 批(commit ae588e66)跑全量 e2e @fast 子集取基线时,<code>commands run test.linux-e2e</code>(Docker testbed 容器 auto-qb-testbed)352 例中 3 失败,其中本件 2 例(prism/atlas 双皮肤各 1)为<strong>确定性红</strong>——同位置同超时,与连跑顺序无关。</p>
+  <p>失败点: <code>e2e/settings-backup.spec.mjs</code> 的「导入 round-trip」用例——还原导入后 reload 等「整组迁移」块 30s 超时。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>三层对照实验(取证 2026-11-19,S4 批实施期间,容器内三跑):</p>
+  <pre><code>1) 单独跑(无新 spec、无盘面污染)        → 仍红(同位置超时)
+2) HEAD 暂存 S4 批全部改动后跑           → 仍红(排除改动面)
+3) 与新 spec 连跑                        → 复现同位置红(排除交互污染)</code></pre>
+  <p>结论: 容器环境<strong>既有失败</strong>,与 S4 批改动无关(对照实验由实施子代理完成,主会话未复跑)。</p>
+  <p>另: Windows 侧同 spec 12 例中 8 红,根因是<strong>本机有真实 gtm 工具在响应</strong>——导出 bundle 的 gtm 段非 null,违反该 spec 的桩前提「gtm 不运行 → 段为 null」;属本机环境因素(装了真实 gtm 的开发机都会撞),非代码缺陷。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>容器内跑 settings-backup.spec.mjs「导入 round-trip」用例即必现(双皮肤);Windows 侧需本机装有真实 gtm 工具才触发另外 8 例红</td></tr>
+    <tr><td>影响范围</td><td>仅该 spec 的导入 round-trip 断言块;不污染其它 spec(连跑对照 3 已证);不进基线口径(计划 26-11-12-0152 明示: e2e 数字不进基线、锚 Windows 侧)</td></tr>
+    <tr><td>严重度</td><td>中——挡住该 spec 在容器环境的可信绿,妨碍以容器跑全量 e2e 判收;主线 pytest 基线不受影响</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>e2e/settings-backup.spec.mjs:147</code>(取证 2026-11-19)·「导入 round-trip」用例起点 · grep <code>导入 round-trip</code></li>
+    <li><code>e2e/settings-backup.spec.mjs:222</code>(取证 2026-11-19)· 还原导入后 reload 等「整组迁移」等待块(30s 超时处) · grep <code>整组迁移</code> 或 <code>reload</code></li>
+    <li>桩前提声明位: 该 spec 头注「gtm 不运行 → 段为 null」· grep <code>gtm</code>(Windows 侧 8/12 红的违前提点)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">待查（已排除：S4 批改动面、spec 间连跑交互污染 —— 三层对照实验；容器侧根因未查，Windows 侧根因已明确 = 本机真实 gtm 在响应，违反桩前提）</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向(仅方案,不在本报告实施):</p>
+  <ul>
+    <li>容器侧: 开工先复验仍在;查「导入还原后 reload → 整组迁移」在容器环境的时序/触发面与宿主差异(超时 30s 是否够、迁移是否真被触发);候选 = 修等待条件或修迁移触发链,代价小-中。</li>
+    <li>Windows 侧: 给该 spec 加真实 gtm 环境免疫力——检测到 gtm 在响应时显式 skip(带环境说明)或测试前置里隔离 gtm;候选代价小,但「skip」会降低该机覆盖率,取舍待开工时拍板。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-19 02:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-19-0230-test-e2e-settings-backup-container-fail.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

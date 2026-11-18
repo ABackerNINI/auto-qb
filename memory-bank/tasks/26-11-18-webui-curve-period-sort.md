@@ -5,7 +5,7 @@
 **Updated:** 2026-11-19
 **Summary:** grilling 四轮 13 问拍板 D1-D12; S1-S5 全部落地(排序键 helper/后端两层/前端+e2e)+ S5 收尾(docs 单点回写/真机判定纯桩可验/全量绿见 kb.baseline)
 **Topics:** webui-curve-period-sort
-**Refs:** memory-bank/plans/26-11-18-0801-plan-webui-curve-period-sort.html
+**Refs:** memory-bank/plans/26-11-18-0801-plan-webui-curve-period-sort.html, memory-bank/issues/26-11-19-0230-test-e2e-settings-backup-container-fail.html
 
 ## 本篇只回答
 
