@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-refactor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-15-2340">
-<meta name="doc-updated" content="26-11-17-0450">
+<meta name="doc-updated" content="26-11-19-0603">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-refactor.md, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/issues/26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html, memory-bank/issues/26-11-14-0401-bug-relocate-absence-offline-deletion-hole.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-11-0553-bug-webui-relocate-pair-row-height.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/issues/26-11-17-0156-feat-relocate-cancel-guide-ui.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>relocate 结构重构: 单活任务模型 + 判定单点 + 接口显式化</h1>
 <p class="lede">本篇只回答: 整组移动(relocate)子系统如何从结构上终结「补丁打补丁」循环 —— 单活任务模型、路径判定单点、跨模块接口显式化的分期重构方案, 以及 grilling 全部拍板(D1-D10)与预计修复 issue 清单。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-15-2340 · <b>doc-updated</b> 26-11-17-0450 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-15-2340 · <b>doc-updated</b> 26-11-19-0603 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-15 会话: 双只读子代理分析(结构面 + 45 issue 病因面) → grilling 三轮问答 + 两轮用户修正 → 全拍板立项; 用户要求「预计修复 issues 一并写入文档, 后续人工复验; 每条配 real 测试」
 </div>
 
@@ -140,15 +140,15 @@
 
 <h3>3.6 预计修复清单(写入文档供人工复验; 每条配 real 测试, 修复前红 → 修复后绿)</h3>
 <table>
-  <tr><th>Issue</th><th>处置</th><th>real 测试(复现失败模式)</th><th>本批状态(R1 · 26-11-17 回写; 翻灯留人工复验)</th></tr>
-  <tr><td><code>26-11-07-0528</code> 撤销断粮语义未定稿</td><td>D4/D6 定稿后关闭</td><td>真机: 链式迁移 A→B→C 后撤销活任务, 断言旧路径仍解析、数据/路径未动</td><td class="good">D4/D6 定稿落地(S1/S2); 真机 A→B→C 撤销 PASS(acc1)</td></tr>
-  <tr><td><code>26-11-10-0326</code> 终态任务永远留账</td><td>3.4 分级保留落地关闭</td><td>真机: 批量搬迁 &gt;20 组, 断言成功滚出、失败保留; 手动清空后全消</td><td class="good">分级保留落地(S3 done 滚 20/失败取消永留/清空历史); 真机批量 PASS(acc3)</td></tr>
+  <tr><th>Issue</th><th>处置</th><th>real 测试(复现失败模式)</th><th>本批状态(R1 · 26-11-17 回写 → R3 · 26-11-19 真机复验轮翻灯; issue 已逐条翻 Done)</th></tr>
+  <tr><td><code>26-11-07-0528</code> 撤销断粮语义未定稿</td><td>D4/D6 定稿后关闭</td><td>真机: 链式迁移 A→B→C 后撤销活任务, 断言旧路径仍解析、数据/路径未动</td><td class="good">D4/D6 定稿落地(S1/S2); 真机复验 PASS(RM04-22, 26-11-17~19 轮)已关</td></tr>
+  <tr><td><code>26-11-10-0326</code> 终态任务永远留账</td><td>3.4 分级保留落地关闭</td><td>真机: 批量搬迁 &gt;20 组, 断言成功滚出、失败保留; 手动清空后全消</td><td class="good">分级保留落地(S3 done 滚 20/失败取消永留/清空历史); 真机复验 PASS(RM04-24, 26-11-17~19 轮)已关</td></tr>
   <tr><td><code>26-11-10-0638</code> 探测阻塞主循环</td><td>第二批刀4 关闭(并轨 2350)</td><td>真机: FS 不可达时发起探测, 断言主循环 tick 停摆 &lt; 单步预算</td><td class="wr">第二批 S6, 本批未动</td></tr>
-  <tr><td><code>26-11-13-0535</code> 删链门漏祖先方向</td><td>刀2 候选面修复关闭</td><td>真机: 构造祖先方向依赖, 断言删链门计数命中(修复前该场景误清零)</td><td class="good">刀2 两半边修复落地(S4 chain_gate_hits + qbapi 候选面); 真机 PASS(acc4)</td></tr>
-  <tr><td><code>26-11-13-0711</code> 直搬形态绕过删链门</td><td>刀2 形态分流修复关闭</td><td>真机: direct 形态收尾窗注入依赖, 断言不被顶进删链门</td><td class="good">刀2 direct 分流修复落地(S4); 真机 PASS(acc4)</td></tr>
-  <tr><td><code>26-11-14-0401</code> 停机期删除证据不计数</td><td>刀1 生命周期账统一后按评估处置(修复或披露口径维持)</td><td>真机: 停机期删成员再启动, 断言闭账行为符合定稿语义</td><td class="wr">本批未显式处置, 待评估</td></tr>
-  <tr><td><code>26-11-05-0420</code> 零搬移假成功</td><td>闸门面部分修复; 根因(下载器磁盘名语义)真机复验后定终态</td><td>真机: 磁盘名错位样本, 断言闸门拦截(修复前假成功)</td><td class="wr">闸门面部分修复; 本批未显式触达, 待真机复验定终态</td></tr>
-  <tr><td><code>26-11-11-0553</code> 组键换键窗口占位失真</td><td>刀1 展示投影统一时顺带</td><td>浏览器 e2e: 换键瞬间行高占位断言</td><td class="good">e2e 钉扎落地(S3 relocate-key-change-pad spec 先红后绿)</td></tr>
+  <tr><td><code>26-11-13-0535</code> 删链门漏祖先方向</td><td>刀2 候选面修复关闭</td><td>真机: 构造祖先方向依赖, 断言删链门计数命中(修复前该场景误清零)</td><td class="good">刀2 两半边修复落地(S4 chain_gate_hits + qbapi 候选面); 真机复验 PASS(RM04-25 A 腿+单测表驱动, 26-11-17~19 轮)已关</td></tr>
+  <tr><td><code>26-11-13-0711</code> 直搬形态绕过删链门</td><td>刀2 形态分流修复关闭</td><td>真机: direct 形态收尾窗注入依赖, 断言不被顶进删链门</td><td class="good">刀2 direct 分流修复落地(S4); 真机复验 PASS(RM04-25 B 腿通路级钉扎+谓词面单测+RM04-28 链路, 26-11-17~19 轮)已关</td></tr>
+  <tr><td><code>26-11-14-0401</code> 停机期删除证据不计数</td><td>刀1 生命周期账统一后按评估处置(修复或披露口径维持)</td><td>真机: 停机期删成员再启动, 断言闭账行为符合定稿语义</td><td class="good">真机复验 PASS 终态已定(RM04-27 闭账三态符合 728d6ac8 定稿语义, 26-11-17~19 轮)已关</td></tr>
+  <tr><td><code>26-11-05-0420</code> 零搬移假成功</td><td>闸门面部分修复; 根因(下载器磁盘名语义)真机复验后定终态</td><td>真机: 磁盘名错位样本, 断言闸门拦截(修复前假成功)</td><td class="good">真机复验 PASS 终态已定(RM04-26 闸门拦截成立·深层孪生, D2 预案未触发, 26-11-17~19 轮)已关</td></tr>
+  <tr><td><code>26-11-11-0553</code> 组键换键窗口占位失真</td><td>刀1 展示投影统一时顺带</td><td>浏览器 e2e: 换键瞬间行高占位断言</td><td class="good">e2e 钉扎落地(S3 relocate-key-change-pad spec 先红后绿); 真机复验 PASS(RM04-15 适配后绿, e2e 轨, 26-11-17~19 轮)已关</td></tr>
 </table>
 <h4>已修完但复发风险高的区域(real 测试钉扎, 防重构回归)</h4>
 <table>
@@ -206,6 +206,7 @@
   <li><span class="tag">R0 · 26-11-15-2340</span> 初版: 2026-11-15 会话 grilling(D1-D10 全拍板) + 双子代理分析(结构 7418 行 / 45 issue 归类)落盘; 认领 8 个 Open issue(双向补链), 并轨 26-11-10-2350 探测异步化计划(其状态同步 Superseded); 任务档案 26-11-15-backend-relocate-refactor。</li>
   <li><span class="tag">R1 · 26-11-17-0152</span> 第一批(S1-S4)落地: 六笔提交 f0004ef9(S1a 单活核心)/785ad5ae(S1b 改道退役+迁移器)/dae75d34(S2 撤销不搬回+三段 guide 通道下发)/df15af5f(S3 生命周期账统一)/3692616c(S4 判定单点)/cd786499(收尾追修: 启动期接管面写穿+补测 5 条); 分批评审与接缝终审全过(发现全修零 actionable, 轮次与数字见任务档案 R1 段); 真机验收 4 项 PASS(链式 A→B→C 撤销/迁移器/分级保留/闸门面, 证据 tmp-analysis/acc-reloc-single/); §03.3 补 S2 偏离注记(「上界面」降级, UI 消费面入池 <a href="../issues/26-11-17-0156-feat-relocate-cancel-guide-ui.html">26-11-17-0156</a>); §03.6 补「本批状态」列(翻灯留人工复验); §04-S4 判据回写「grep 无第二份语义实现」口径; 基线切片落位(见 kb.baseline; 覆盖率闸门未达, 缺口点名在切片); 内核级通用隐患(qbmanager.run reload 在 start_all 后丢启动期 state 写, relocate 发病点已由 cd786499 写穿规避)经裁决入池 <a href="../issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html">26-11-17-0214</a>。第二批 S5/S6 待开工。</li>
   <li><span class="tag">R2 · 26-11-17-0450</span> 为合流远端推进(origin/develop=3840ba10, 含 2e2ffe1f columns_grid 行窗口化), 本专题 8 笔提交被 rebase 线性重放, hash 全部改写。映射表(旧→新): f0004ef9→33d7f850 / 785ad5ae→ca820f5f / dae75d34→1f3f88a7 / df15af5f→1fad4fce / 3692616c→0df84475 / cd786499→24e8d063 / 11fc721d→4040c93d / 0c0caab3→2b78e9d7。df15af5f' 解 columns_grid 冲突(双方语义共存), 两追加修折进 1fad4fce: columns_grid 冲突解新写注释直接以 ASCII 编号书写(其一/其二/其三, test_ascii_symbol_guard 圈号计数归零)、test_webui_static_r4_node_batteries 桩补 filteredGroups(可实证于该 diff)。上文 R0/R1 中的旧 hash 为当时实测原值, 不回改; 追溯一律按本映射表换算。 二次 rebase(2026-11-17, origin/develop=12ff9a1e, review.pack rename 口径面)后再改写, 上表为终值; test_docs_forms 白名单该面终由上游 ARCHIVE_MD_EXCEPTIONS 承担(带特例在场守卫), 我方重复实现于合流中弃用。</li>
+  <li><span class="tag">R3 · 26-11-19-0603</span> 真机复验轮(2026-11-17~19, 执行计划 <a href="26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">26-11-17-0636</a>, 分支 relocate-rm-r2 tip 3bef94ae)完成: §03.6 清单面 —— <b>13 条新增耐久用例</b>(RM04-22~34, acc 面 6 + E 面 7)编写+耐久遍全 PASS(片B 4/4 · 片C 4/4 · 片D 9 正式遍 · 片E 4+2 · 片F 6 · 片G 6 正式遍)+ <b>现有 21 条回归</b>(RM04-01~21)片A 初判 3P/18F → <b>片A-fix 18 条适配</b>后 19P/1F/1S(FAIL=RM04-05 L490 环境前置·用户拍板记账, SKIP=RM04-13 前提钉死)—— 全程产品回归 0 / 产品代码零改动, 片级记账与逐遍证据在 testing/real-baselines/ 八份切片(26-11-17-0756 起至 26-11-19-0505); §03.6「本批状态」列按翻灯结果更新: 0528/0326/0535/0711/0553/0420/0401 七条真机复验 PASS 已关(issue 正文逐条补实际修法/验证方式/测试数字, 状态翻 Done), 0638 不变(第二批 S6 未开工); 升档 5 条(RM04-20 升 L3 + RM04-24/25/30/33 新建即 L3); 每片断轮全为测试侧造法, 执行期评审轮 R10/R11/R16/R19/R23/R26/R30/R31/R34 修复后重跑全绿闭环; 新入池 26-11-18-0315(链浮窗健壮性, Open)。第二批 S5/S6 仍待开工, 本计划状态维持 Open。</li>
 </ul>
 
 </div>

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-form-aware-gates">
 <meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 成员收缩判据: 停机期删除(证据仅现于全量轮差集)永不计数, 成员不收缩 job 恒悬挂">
 <meta name="issue-summary" content="R4 收缩判据为防 qB 重启加载窗误删采用证据锚定(增量轮删除证据才计数); 删除发生在观察窗外时证据只出现在全量轮差集被整拍弃用, 其后增量轮恒静默缺席不计数, §02「成员删除无收敛」在该时机原样保留; 用户拍板入池披露维持现状">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-14-0401-bug-relocate-absence-offline-deletion-hole</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-14 04:01</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -152,11 +152,13 @@ if bool(getattr(store, "need_validate", True)):
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-14 04:01 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-18（relocate 重构第一批落地后的真机复验轮）: §01「停机期删除证据不计数 → job 恒悬挂」已被 728d6ac8 定稿的恢复确认账闭账链消解 —— 停机期删除经重启后恢复确认账在 3 拍内闭账, 不再悬挂（RM04-27 真机实证, 见下方修复后补充）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际终态与修法</strong>（2026-11-18 真机复验轮, RM04-27, 切片 <a href="../testing/real-baselines/26-11-18-2308-real-rm04-sliceD.md">26-11-18-2308-real-rm04-sliceD</a> 片D）: 0636 计划标注的「待评估」现已定 —— <strong>闭账行为符合 728d6ac8 定稿语义（收缩/闭账/摘要行三态）⇒ 关</strong>。修法落点未走 §06 的 (a)/(b) 两个候选方向, 而是重构第一批新行为链（commit 728d6ac8「已删成员闭账三态判据+停机计数摘要一行」+ 1de5420e/8316ea56 恢复确认账）: 停机期删除的证据经「重启 → 恢复确认账开账（已下发恢复 N 个成员, 待快照回流确认）→ 被删成员快照回流确认失败 → 3 拍闭账（恢复账收缩）」通路<strong>计数</strong>, §01 病灶「证据只现于全量轮差集被整拍弃用、其后恒静默缺席不计数」不再导致 job 恒悬挂; 披露面按「宁悬挂勿误删」维持（闭账前 job 相位 armed 不动/hashes 保留被删成员/reason 非 members_gone, 误收缩防线未松动）。<strong>验证方式</strong>: RM04-27 停机期删除闭账复验真机用例（耐久三遍全 PASS 74.2s/74.4s/104.4s + R23 修后重跑 3 遍全 PASS 72.9s/104.8s/72.9s, 唯一断轮=测试侧日志锚按想象格式落刀、当轮修为计数等价断言）—— 全链: 注入 failed/armed_at==0 账 → 启动对账重入武装 → 双实例优雅下线 + daemon 改写 → 停机摘除 fastresume+torrent(+.bak 三件) → 重启后披露面钉扎 → 恢复账开账 → 3 拍闭账（「成员已删除, 恢复账闭账: 1 个(4de4466d…)」+ resume_hashes 收缩为幸存者 + 幸存成员 stalledUP 健康/别名在）+ 停机计数摘要一行（「relocate | 停机: tag_failures=0 resume_failures=0」）—— 728d6ac8 三态判据真机全绿。<strong>测试数字</strong>: 全量权威见 <code>commands run kb.baseline</code>（产品回归 0）。</p>
 </section>
 
 <footer>

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-fastresume-finalize">
 <meta name="doc-refs" content="memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板">
 <meta name="issue-summary" content="supersede 改道态下撤销前任会把共享数据 C→A 搬回而后任仍指向 C(成员断粮); 现仅 cancel_chain 同目标护栏最小面, 前任撤销完整语义(拦/级联/清账出口)待定稿">
 <title>链式再迁移态撤销前任的语义未定稿: supersede 改道后撤销方向三选一待拍板 · question · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-07-0528-question-relocate-supersede-cancel-semantics</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-07 05:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core/relocate</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">0808 收尾遗留(用户裁决入池)</div></div>
     </div>
@@ -186,11 +186,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-07 05:28 — 入池，状态 <strong>Open</strong>（0808 计划收尾遗留，用户裁决按标准档入池，供未来计划或拍板）</li>
-    </ul>
+      <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-18（relocate 重构第一批落地后的真机复验轮）：原病灶通路已随撤销语义重做整体移除 —— 撤销不再「搬回」，断粮形态不复现（RM04-22 真机实证，见下方修复后补充）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际定稿与落法</strong>（relocate 重构第一批 D4/D6 定稿，随 S1a 单活任务模型 + S2 撤销语义重做落地，计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a>）：撤销语义重做为「撤销不搬回」—— 撤销活任务不再把共享数据从 dst 搬回 src（§01 断粮通路整体移除）：数据与下载器路径逐字未动、半搬数据留新位置、只删自己已建的链接，继承别名不删不撤；回执经三段式 guide 通道下发（后果/半途警示/手动处置推荐）。已收官前任（superseded）不可单独撤销或删除：cancel 被 gate=cancel_terminal 拒，且无独立删除路由（POST 探测 404/405 双态口径）。<strong>与 §06 建议三方向的对照</strong>：未走方向②级联回退与方向③受控清账出口，按「方向①最小面 + 数据不动的出口指引（guide 三段）」定稿 —— 建议原文保留留痕；改道理由：真机复验证明「不搬回 + guide 告知」已消除断粮风险，级联/清账出口无必要，且方向②落在已证伪的「搬后回滚无法恢复成员服务」邻域。</p>
+    <p><strong>验证方式</strong>：RM04-22 链式续迁收官+撤销不搬回真机用例（耐久两遍全 PASS，首跑 94.78s / 复验 94.43s；A→B armed 后同组发起 B→C：旧任务三证收官[journal 即时相位 superseded+superseded_by / state 账面 / 日志「续迁即收官」]→ plan.inherited 移交 → 旧路径 A/B 经 chain 端点与文件系统双证解析到 C（链中无 B 中间跳）→ 撤销两投[无 confirm 回 cls=confirm+guide 三段齐备 / confirm=true 落 cancelled]→ qB save_path/root_path/content_path 与 fastresume 逐字未动 + C 数据 sha1 未动 + 自建链接删除而继承别名不删不撤 + 旧任务 cancel 被 cancel_terminal 拒）。guide 三段为 API 通道结构化断言（consequence 非空 / halfway 含「半途撤销警示」/ manual 非空串列表；UI 消费面不入真机，入池 <a href="26-11-17-0156-feat-relocate-cancel-guide-ui.html">26-11-17-0156</a> 另案）。</p>
+    <p><strong>测试数字</strong>：全量权威见 <code>commands run kb.baseline</code>；真机切片 <a href="../testing/real-baselines/26-11-18-0425-real-rm04-sliceB.md">26-11-18-0425-real-rm04-sliceB</a>（片B，产品回归 0）。</p>
   </section>
 
   <footer>

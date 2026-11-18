@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-form-aware-gates">
 <meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 删链门/D16 候选面对祖先 save_path 形态漏判: 组外种子内容根覆盖 src 时依赖漏计且带文件删除不拦">
 <meta name="issue-summary" content="组外种子 save_path 为 job.src 祖先且内容根恰覆盖 src 时候选面收不到: 删链门漏计依赖(收尾删别名后断粮), D16 不拦其带文件删除(可穿链接删 dst 数据); 现状既有洞, 计划 26-11-13-0448 §07 已披露">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0535-bug-relocate-ancestor-savepath-blindspot</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 05:35</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">backend/relocate</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -161,11 +161,13 @@ hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=job.src))</code></p
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 05:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-18（relocate 重构第一批 S4 落地后的真机复验轮）：祖先格已进候选面，原「依赖误清零 → 收尾删别名断粮」形态不复现（RM04-25 A 腿真机实证，见下方修复后补充）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（relocate 重构第一批 S4 删链门候选面修复, 计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a>）: 按 §06 推荐方向「补候选面而非改判据」落刀 —— 候选面加祖先格（组外种子 save_path 为 <strong>job.src 严格父目录</strong>且内容根恰覆盖 src; 前缀/等值两格结构性不命中, 命中即证祖先格）, 命中种子进入同一交集判据（删链门计依赖 / D16 拦带文件删除）。<strong>验证方式</strong>: ①真机 RM04-25 A 腿（耐久两遍全 PASS, 首跑 158.91s / 复验 158.07s）: dir_alias 组 armed 后加祖先跨种种子 → 删光成员 → R4 收缩 → 空集核验顺 VERIFY → 删链门<strong>依赖计数命中</strong>（日志「删链门依赖未清(1 个)」+ 磁盘账 reason=chain_deps）+ junction 保留 + 种子经 junction 可读（sha1 对照）→ 删账面 → 依赖清零收尾 done/finalized; ②单测表驱动 <code>test_chain_gate_deps_ancestor_savepath_grid</code>（前缀/等值/祖先三格红绿记录: 修复前祖先格误清零红, 修复后绿）联合钉扎。<strong>测试数字</strong>: 全量权威见 <code>commands run kb.baseline</code>; 真机切片 <a href="../testing/real-baselines/26-11-18-0648-real-rm04-sliceC.md">26-11-18-0648-real-rm04-sliceC</a>（片C, 产品回归 0）。</p>
 </section>
 
 <footer>

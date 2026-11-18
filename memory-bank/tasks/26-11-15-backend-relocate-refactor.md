@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-11-15
-**Updated:** 2026-11-17
-**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机验收 4 项 PASS + 基线切片; 第二批 S5/S6 待开工
+**Updated:** 2026-11-19
+**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机复验轮(26-11-17~19, 计划 0636 七片执行完毕: 21 条回归适配 + 13 条新增耐久用例全 PASS, 产品回归 0)+ issue 七条翻 Done; 第二批 S5/S6 待开工
 **Topics:** backend-relocate-refactor
-**Refs:** memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html, memory-bank/pitfalls/backend/startup-state-write-reload-discard.md, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html
+**Refs:** memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html, memory-bank/pitfalls/backend/startup-state-write-reload-discard.md, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html, memory-bank/pitfalls/testing/state-file-lag-and-journal-absence.md, memory-bank/pitfalls/testing/restart-transient-and-offline-cmd-window.md
 
 ## 本篇只回答
 
@@ -64,3 +64,15 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 - 2026-11-17 为合流远端推进(origin/develop=3840ba10, 含 2e2ffe1f columns_grid 行窗口化), 本专题 8 笔提交被 rebase 线性重放, hash 全部改写。映射表(旧→新): f0004ef9→33d7f850 / 785ad5ae→ca820f5f / dae75d34→1f3f88a7 / df15af5f→1fad4fce / 3692616c→0df84475 / cd786499→24e8d063 / 11fc721d→4040c93d / 0c0caab3→2b78e9d7。 二次 rebase(origin/develop=12ff9a1e)后再改写, 上表为终值; 白名单机制终由上游 ARCHIVE_MD_EXCEPTIONS 承担, 我方重复实现于合流中弃用。
 - df15af5f' 解 columns_grid 冲突(双方语义共存), 两追加修(ASCII 圈号/stub filteredGroups)折进 1fad4fce。上文 R1 段引用的旧 hash 为当时实测原值, 不回改, 追溯按本映射表换算。
 - 树同一性核实(git diff --stat 逐对): 每对旧→新 hash 的树差 = 远端推进面(36 files, +2437/-71: columns_grid.js 行窗口化、webui static scan 测试面、skill-portability 文档面等), 我方各笔提交内容不变; 两基线切片(26-11-17-0159/26-11-17-0319)的实测数字继续有效。
+
+### R2 · 真机复验轮 (2026-11-17 ~ 11-19)
+
+- **执行面**: 计划 26-11-17-0636(§01 五项验收)七片(片A~G)全部执行完毕; 分支 relocate-rm-r2(本地), 末片 HEAD 3bef94ae。片级记账单点 = testing/real-baselines/ 八份切片: 26-11-17-0756(片A) → 26-11-18-0240(片A-fix) → -0425(片B) → -0648(片C) → -2308(片D) → 26-11-19-0102(片E) → -0330(片F) → -0505(片G)。
+- **三态汇总**: 现有 21 条回归(RM04-01~21)片A 初判 3P/18F(测试基建形态过时, 四族工单) → 片A-fix 18 条适配后 **19P/1F/1S**(唯一 FAIL = RM04-05 L490 负向腿 QBT_REAL_SMALL_TARGET 环境前置, 用户拍板记账 FAIL; 唯一 SKIP = RM04-13 前提钉死); RM04-20 升 L3 负向腿落地。**13 条新增耐久用例**(RM04-22~34, acc 面 6 + E 面 7)逐片编写+耐久遍全 PASS(片B 4/4 · 片C 4/4 · 片D 9 正式遍 · 片E 4 正式+R26 修后 2 · 片F 6 正式遍 · 片G 6 正式遍); 升档 5 条(RM04-20 升 L3 + RM04-24/25/30/33 新建即 L3)。**全程产品回归 0 / 产品代码零改动**; 每片断轮二分全为测试侧造法/锚缺陷(当轮修再跑全绿); 执行期评审轮 R10/R11(片A-fix)→R16(片B)→R19(片C, 0711 声明收窄)→R23(片D)→R26(片E, probe_phase 实证坐实)→R30/R31(片F)→R34(片G)修复后重跑全绿闭环。
+- **issue 翻灯结果**: 26-11-07-0528(撤销断粮语义)/26-11-10-0326(终态留账)/26-11-13-0535(删链门祖先)/26-11-13-0711(direct 绕过)/26-11-11-0553(换键占位, e2e 轨)/26-11-05-0420(零搬移)/26-11-14-0401(停机期删除)七条翻 **Done**(正文逐条补实际修法/验证方式/测试数字); 0420/0401 终态已定(RM04-26 真机闸门拦截成立·深层孪生, D2 预案未触发 / RM04-27 闭账三态符合 728d6ac8 定稿语义); 26-11-10-0638 不在本轮保持 Open; 新入池 26-11-18-0315(链浮窗健壮性, 片A-fix §3.3 暴露, Open 待认领)。
+- **坑档蒸馏**: 新立 `pitfalls/testing/state-file-lag-and-journal-absence.md`(磁盘账 30S 迟滞只配终态等待 + journal armed 相位恒无文件, 过程断言取数面单点; 片C/E/F 三处实证, 片G 零复发)+ `pitfalls/testing/restart-transient-and-offline-cmd-window.md`(账面 rewritten 毫秒瞬态轮询不可观测[合并与 VERIFY 同拍] + 下线窗命令回执被 urllib3 重试预算阻塞 ~29s/次须放宽 90s; 片E 实锤); `pitfalls/ops/seed-clean-vs-evidence.md` **复发+1**(片E `--dir rm04` 整树清掉历史证据层 22 份, 增量面 = --dir 前先 ls 盘点非本轮所建目录 + case 根旧惯例是历史证据沉积层; 未命中 = 路由没到/读档未连线; 片F/G 盘点纪律零复发); `pitfalls/testing/bg-process-cleanup.md` 补实测结论(「terminate 只杀启动器留孤儿」片B R16 现场探针证伪: uv trampoline stub 死连带真解释器, plain stop 真问题是非优雅退出非孤儿)。
+- **证据归档说明**: 逐遍证据在 tests-real/.work/(gitignored, 逐案 evidence 带时刻戳防覆写); **片E 起证据落点变更** = repo 外 `rm04-sliceE-evidence-archive\`(189 份, 片F/G 同款归档), 片A 既有 prev-run-archive 归档层; .work 顶层多片证据目录受证据闸保护在盘。
+- **批次外待办**(本轮零代码改动, 转主会话/用户): ①AppProc.kill docstring「只杀启动器留孤儿」旧机制句 —— 片B 已证伪, 结论入 bg-process-cleanup 坑档, 代码句待 scope-guard 处置; ②深形态添加卷剩余取数面(片F RM04-31: precheck_add 卷剩余 scope_hit 恒 None, 是否改取数面属产品裁量)报用户决定是否入池; ③real-machine.md:26 约束 3 的 tests-real/config/*.yml 同款漂移(规程单点既有问题, 0636 §10 R2 遗留)报用户裁决。
+- 2026-11-19 05:54 真机复验轮文档收口: test.full 全量绿(分支 tip 3bef94ae, 数字见 kb.baseline)、issue 七条翻灯、两计划回写(0636 §10 R3 + §03.4 RM04-25 卡「dst 祖先」口误勘误[权威口径 = 旧根严格父目录, 片C 已按此落刀]; 2340 §03.6 状态列翻灯 + §10 R3)、坑档四件、基线切片落位、本档案 R2 段。接缝终审随主会话收口轮执行; 提交由主会话统一走 ship.commit(本收口轮不提交)。
+
+- 2026-11-19 06:20 真机复验轮收口: 计划 0636 七片执行完毕(21 回归适配 19P/1F/1S + 13 新增耐久用例全 PASS, 产品回归 0), issue 七条翻 Done(0528/0326/0535/0711/0553/0420/0401), 两计划回写(0636 R3+勘误 / 2340 状态列+R3), 坑档新立 2 + 复发+1 + 孤儿证伪, 基线切片落位, 档案 R2 段; 第二批 S5/S6 待开工

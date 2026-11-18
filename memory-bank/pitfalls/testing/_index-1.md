@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 1/5
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `annotations-lazy-eval.md` … `drift-audit-web-consumer-blindspot.md`(共 26 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `annotations-lazy-eval.md` … `engine-pack-dir-injection.md`(共 27 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -34,3 +34,4 @@
 | [dev-webui-config-regen-wipe.md](dev-webui-config-regen-wipe.md) | `commands run dev.webui` 每次启动都从 CONFIG_TMPL 无条件重生成派生配置(不 diff 不保留), 上一阶段经 PUT /api/config 落盘到派生配置的键(如 relocate.bt_backup)被静默冲掉, WEB 端口也重新 OS… | dev.webui, dev_webui, CONFIG_TMPL, 重生成配置, PUT 落盘被冲, 端口漂移, 端口重分配, WEB 端口, 多阶段真机, 派生配置 |
 | [docker-id-truncation.md](docker-id-truncation.md) | `docker images --format {{.ID}}` 与 `docker ps --format {{.Image}}`(镜像已无 tag 时)默认输出**截短 12 位** ID, 而 `docker container inspect --format {{.Im… | docker images ID, docker ps Image, 截短, 12 位, sha256, --no-trunc, 镜像比对, 活面, 悬空, 误列候选 |
 | [drift-audit-web-consumer-blindspot.md](drift-audit-web-consumer-blindspot.md) | 真机片漂移体检若只按产品模块 glob 核对面, 会漏掉用例实际消费的 WEB 端点/store 形态 —— 形态类漂移(字段改引用式/加键)单测全绿、产品零回归, 只有真机面炸; RM04 片A 实测: 体检判「需改造 0」, 实跑 18/21 用例过时。 | 漂移体检, 漂移排查, 体检 glob, WEB 读面, 数据消费面, members hash 引用式, P-02, 用例过时, 需改造预判, 真机体检 |
+| [engine-pack-dir-injection.md](engine-pack-dir-injection.md) | commands 引擎注入的 COMMAND_FLOW_PACK_DIR 指向 task 所在包, 包内测试要真实配置必须钉 PKG | COMMAND_FLOW_PACK_DIR, 包测试, ConfigMissing, load_config, 钉 PKG, 外置配置, test_commit 夹具 |

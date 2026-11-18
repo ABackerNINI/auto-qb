@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="real-rm04-relocate-refactor-verify">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-17-0636">
-<meta name="doc-updated" content="26-11-17-0719">
+<meta name="doc-updated" content="26-11-19-0603">
 <meta name="doc-refs" content="memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html, memory-bank/tasks/26-11-15-backend-relocate-refactor.md, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/issues/26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-14-0401-bug-relocate-absence-offline-deletion-hole.html, memory-bank/testing/real-machine.md, memory-bank/testing/real-baselines/26-11-14-0635-real-relocate-form-gates-p4.md, memory-bank/testing/real-baselines/26-11-12-0229-real-relocate-bt-backup-retest.md, memory-bank/testing/real-baselines/26-11-11-0042-real-RM04-21.md">
 <style>
   :root {
@@ -72,7 +72,7 @@
 <h1>RM04 relocate 重构真机复验分步实施计划</h1>
 <p class="lede">本篇只回答: relocate 重构第一批(S1-S4)落地后, RM04 片的真机实测怎么跑 —— 漂移体检结论 / acc1-4 + E1-E9 + 0420 + 0401 逐项映射到用例 / 拆片排期 / issue 翻灯 / 验收判据。执行轨纪律单点在 <code>memory-bank/testing/real-machine.md</code>(§06 定期排期七步, 本计划覆盖其中 1/2/4 步)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-17-0636 · <b>doc-updated</b> 26-11-17-0719 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-17-0636 · <b>doc-updated</b> 26-11-19-0603 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「对 relocate 重构第一批做测试qb真机实测, 测完更新关联 issue 状态」; 拍板已定: 全量口径(acc1-4 复验 + E1-E9 口径复跑 + 0420/0401 欠账项), FAIL 留证不修(scope-guard 口径); 真机一律走 tests-real/ 真机轨专用测试实例, 生产 qB 与生产 config.yml 绝对不碰<br>
   <b>执行分支</b> <code>relocate-rm-r2</code>(纯本地), 本计划撰写时 HEAD <code>946bd2e7</code> · <b>预算</b> 7 个半天片(A~G, 见 §04)
 </div>
@@ -189,7 +189,7 @@
   <tr>
     <td><b>RM04-25</b> 删链门候选面: 祖先方向(0535)+ direct 分流(0711)+ 同名依赖账(E3 并腿), 三腿(test_rm04_chain_gate_candidates.py)</td>
     <td class="wr">L3(新建即 L3: 0711/E3 腿带负向对照)</td>
-    <td>①0535 腿: 构造祖先方向依赖(组 A 的 save_path 是组 B 迁移 dst 的祖先目录), 断言删链门依赖计数命中(<code>chain_gate_hits</code>/依赖账可见)、别名正确保留 —— 修复前该场景误清零; ②0711 腿: 单成员 direct 形态收尾窗注入依赖(组外种子与成员文件共享物理文件), 断言<b>不被顶进删链门</b>、迁移正常 done; ③E3 腿: armed 态添加同名同内容跨种种子 → confirm(场景 2 文案「与成员别名链接同名/经链接共享同一份物理数据」)→ 确认后其文件清单与链接相交 → 删链门计依赖(别名正确保留)→ 删除该种子账面 → 依赖清零 → 收尾恢复 done</td>
+    <td>①0535 腿: 构造祖先方向依赖(组外种子 save_path 为<b>迁移 src(旧根)的严格父目录</b>且内容根恰覆盖 src —— 权威口径 issue 26-11-13-0535 §01; R3 勘误: 本卡原文「组 A 的 save_path 是组 B 迁移 dst 的祖先目录」系口误, dst 方向构不成删链门依赖, 片C 已按 src 祖先口径落刀), 断言删链门依赖计数命中(<code>chain_gate_hits</code>/依赖账可见)、别名正确保留 —— 修复前该场景误清零; ②0711 腿: 单成员 direct 形态收尾窗注入依赖(组外种子与成员文件共享物理文件), 断言<b>不被顶进删链门</b>、迁移正常 done; ③E3 腿: armed 态添加同名同内容跨种种子 → confirm(场景 2 文案「与成员别名链接同名/经链接共享同一份物理数据」)→ 确认后其文件清单与链接相交 → 删链门计依赖(别名正确保留)→ 删除该种子账面 → 依赖清零 → 收尾恢复 done</td>
     <td><b>前置</b>: 环境1(R: 在), 副实例空库, real-fake。<b>副作用</b>: 2-3 次真搬迁 + 组外种子若干 + 一条同名依赖种子的添加/删除。<b>回滚</b>: real-fake 删净、case/RAM 树删净、别名 lstat 复核零残留。<b>失败判据</b>: 祖先依赖计数为 0(误清零复发); direct 被顶进删链门或误删链接; 同名添加零 confirm 直通(误放行)或确认后不计依赖; 删依赖种子后收尾仍卡(依赖账不清零)。</td>
   </tr>
   <tr>
@@ -351,6 +351,7 @@
   <li><span class="tag">R0 · 26-11-17-0636</span> 初版: 只读分析子代理 SA-T1 按真机轨 §06 定期排期七步的 1/2/4 步产出(定片 RM04 / 漂移体检 / 分步计划); 体检结论 = 用例面零漂移 + 产品面 14 commits 有命中(判据变 5 / 新行为 8 / 纯重构 1), 基线按「从首轮重来」口径全量复跑; 覆盖映射 21 现成 / 0 改造 / 6 新增 + E-harness; 排期 3 半天片; 翻灯映射 5 关 + 2 按结果定终态 + 0638 不在本轮。执行(第 3/5/6/7 步)待用户排期。</li>
   <li><span class="tag">R1 · 26-11-17-0642</span> 用户拍板 D1/D2/D3 回写: D1 = E1-E9 <b>全沉淀耐久用例</b>(原推荐 harness 方案作废留痕, §03.2 重写)—— E 面与 acc 面合并去重后新增 13 条(RM04-22~34; E1 并入 RM04-28/29, E3 并入 RM04-25 三腿, E2/E4/E5/E6/E7/E8/E9 各立一条), E 面用例逐条补四行契约用例卡(§03.4); 13 条触发拆片线, 排期重切为 <b>7 个半天片</b>(片A 回归档不变 + 片B/C/E/F/G 各 2 条、片D 3 条, §04 重写); D2/D3 按推荐预案落 §03.3/§06。doc-updated → 26-11-17-0642。</li>
   <li><span class="tag">R2 · 26-11-17-0719</span> 提交前评审回写(合并批次 716 行, 派发 2: R1 代码面 + R2 文档面, 引文校验 11/11 过检, blocker 0): 文档面 9 条(4 major + 5 minor)全修 —— §2.1 基线判定改写(<b>4b69ed4f/7f93de58 实证 merge-base 非祖先 rc=1、703ceb6c 本 clone 解析不到, 三条均不得背书</b>)、§2.2/§2.3 数字重立(src/auto_qb 112 commits / RM04 glob 命中 19, 主会话逐字复跑验证; 补漏判 5 提交: 075dd418[v7→v8 迁移链, 判据变]/24e97439[启动对账重推相位, 判据变]/84db10ba+c18a1b73[recycle daemon W1a/W1b, 新行为]/3ab876a7[纯重构], §2.3 分类账改为判据变 7+新行为 10+纯重构 2)、「用例面零漂移」改口径(仅 v8 迁移链适配类改动 075dd418/3bfe31bb)、acc 证据参照改指任务档案 R1 段(scratch 目录已清理)、配置派生改 write_config() 口径、RM04-25 卡补文件名、片表 2 条/片表述自洽化(片D 3 条)、§08 升档口径钉死(7 片合并计为一轮)+ §04/meta 残留「3 片」旧值同步改 7 片。代码面 2 条 minor(闸序描述与代码颠倒)已修(scripts/port_kill.py docstring + pitfalls/ops/port-kill-prod-instance.md)。遗留: real-machine.md:26 约束 3 的 tests-real/config/*.yml 同款漂移系规程单点既有问题, 不在本批, 报用户裁决。</li>
+  <li><span class="tag">R3 · 26-11-19-0603</span> <b>真机复验轮执行完毕收口</b>(七片全部执行, 片级记账 = testing/real-baselines/ 26-11-17-0756 / 26-11-18-0240[片A-fix] / -0425[片B] / -0648[片C] / -2308[片D] / 26-11-19-0102[片E] / -0330[片F] / -0505[片G]): <b>三态汇总</b> —— 片A 现有 21 条初判 3P/18F(测试基建形态过时)→ 片A-fix 18 条适配后 <b>19P/1F/1S</b>(唯一 FAIL = RM04-05 L490 负向腿 QBT_REAL_SMALL_TARGET 环境前置, 用户拍板记账 FAIL; 唯一 SKIP = RM04-13 前提钉死; RM04-20 升 L3 负向腿落地), 片B~G 新增 13 条(RM04-22~34)耐久遍全 PASS(片B 4/4 · 片C 4/4 · 片D 9 正式遍 · 片E 4 正式+R26 修后 2 · 片F 6 正式遍 · 片G 6 正式遍)—— §01 五项验收全部达成; <b>升档 5 条</b>(RM04-20 升 L3 + RM04-24/25/30/33 新建即 L3, §08 口径满足); <b>产品回归 0 / 产品代码零改动</b>, 每片断轮二分全为测试侧造法/锚缺陷(当轮修再跑全绿); <b>执行期评审轮次</b>(修复→重跑闭环): R10/R11(片A-fix)→ R16(片B)→ R19(片C, 0711 声明收窄)→ R23(片D)→ R26(片E, probe_phase 实证坐实)→ R30/R31(片F)→ R34(片G); <b>issue 翻灯</b>: 0528/0326/0535/0711/0553/0420/0401 七条 Done(0420/0401 终态已定: RM04-26 拦截成立、RM04-27 闭账符合 728d6ac8 定稿语义), 0638 不在本轮保持 Open; 新入池 26-11-18-0315(链浮窗健壮性, 片A-fix §3.3 暴露, Open 待认领); D2 BLOCKED 预案未触发(RM04-26 真机路径); 证据归档 repo 外 rm04-slice*-evidence-archive\(片E 起证据落点变更, 片A/B/C/D 证据在盘 tests-real/.work/); 坑档蒸馏 2 新立 + seed-clean 复发+1 + 孤儿机制句证伪改写(片B R16 实锤)。§03.4 RM04-25 卡「dst 祖先」口误勘误(权威口径 = 旧根严格父目录, issue 26-11-13-0535)。接缝终审随主会话收口轮执行(跨批接缝面, 不在本条重评已评代码)。</li>
 </ul>
 
 </div>

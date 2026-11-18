@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-terminal-jobs-no-exit">
 <meta name="doc-refs" content="memory-bank/plans/26-11-10-0721-plan-relocate-startup-reconcile.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 终态 job 永久留账无清理出口, state.json relocate.jobs 无界增长">
 <meta name="issue-summary" content="终态 job(done/failed/cancelled)永久留在 state.json 的 relocate.jobs, 无清理/归档出口, 长期部署无界增长 —— state.json 膨胀 + jobs_view 界面列表无界; 修复方向: 终态账保留策略或归档出口, 保留「失败现场可见」语义">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-10-0326-feat-relocate-terminal-jobs-no-exit</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-10 03:26</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -114,13 +114,16 @@
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>给终态账加保留策略或归档出口(终态 N 天后移出 relocate.jobs, 或按条数滚动清理), 取舍时保留「失败现场可见」语义(jobs_view 注释: 失败现场要交人处理) —— 策略形态待认领时定。</p>
   <p class="callout"><strong>进展批注</strong>（2026-11-11, 计划 26-11-10-0721 S5 收窄, G5⑤ 拍板「收窄保留」）: 启动对账机制已落地 —— failed 账每次启动按物理现状对账重推, armed_at==0(重入配额未用)且物理已完成的翻案重入既有收尾链自愈到 done(由此获得一条自动出口), 真失败/配额已用保守保持 failed; 但本件诉求本体未解: done/cancelled/真 failed 仍永久累积, state.json 的 <code>relocate.jobs</code> 与 <code>jobs_view()</code> 无界增长依旧(§03 方向的保留策略/归档出口仍无), 状态维持 <strong>Open</strong>。</p>
+  <p class="callout"><strong>修复后补充</strong>（2026-11-18~19, relocate 重构第一批 S3 生命周期账统一落地 + RM04-24 真机复验, 计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a>）: 终态分级保留落地 —— done 账按产品常量 <code>DONE_HISTORY_KEEP=20</code> 滚动保留（更老的自动滚出、最老先出, §01「只进不出」的无界增长出口关闭）, 失败/取消账分级保留（不被成功滚出冲掉, 保留「失败现场可见」语义）, 「清空历史」（带 confirm）为失败/取消账唯一清理入口; 被接管旧任务随整链消亡、不占 20 计数。<strong>实际落法</strong>与 §03 建议对照: 没走「按天数归档」, 按条数滚动（与建议第二形态一致）+ 分级保留; <strong>验证方式</strong>: RM04-24 批量终态分级保留真机用例（新建即 L3, 耐久两遍全 PASS, 首跑 222.46s / 复验 222.92s）: 21 组 direct 真搬迁 → done 账恰 20 条（第 1 组最老先出, LIFO 即红）+ 停机注入 failed 账 / 第 22 组 cancel 账 / 被接管对（续迁即收官 superseded）在滚出发生时全部幸存 + 「清空历史」无 confirm 必拒（路由层同步回 cls=confirm 零 enqueue, 磁盘账逐字未动 —— L3 负向对照）+ confirm=true 后全消（cleared=24, remaining=0）。<strong>测试数字</strong>: 全量权威见 <code>commands run kb.baseline</code>; 真机切片 <a href="../testing/real-baselines/26-11-18-0648-real-rm04-sliceC.md">26-11-18-0648-real-rm04-sliceC</a>（片C, 产品回归 0）。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-10 03:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-form-aware-gates">
 <meta name="doc-refs" content="memory-bank/plans/26-11-13-0448-plan-relocate-form-aware-gates.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="direct 无别名形态收尾窗深层添加绕过 confirm 弹窗但顶进删链门前缀面">
 <meta name="issue-summary" content="R1 形态感知分流只扩 dir/file 两形态; direct 形态收尾窗维持恰等 src 旧面, src 下深层路径添加不弹窗却落进删链门前缀依赖面, 与本计划修掉的覆盖洞同类">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-13-0711-bug-relocate-direct-form-deep-add-hole</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-13 07:11</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -158,11 +158,13 @@ if sp and (under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-13 07:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p>TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-18（relocate 重构第一批 S4 落地后的真机复验轮）：direct 形态已短路出删链门前缀面，原「深层添加顶进删链门前缀依赖面」形态不复现（RM04-25 B 腿真机实证，见下方修复后补充）。</p>
   <h3>修复后补充</h3>
-  <p>TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（relocate 重构第一批 S4, 计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a>; <strong>声明经评审 R19 收窄</strong>）: 按 §06 方向 (b) 落刀 —— direct 形态 finalize 的删链门短路（0711b 短路谓词 + armed 分流; direct 无别名即无链可删, 组外落点不顶进删链门前缀依赖面）, 不走方向 (a) 的弹窗扩面; <strong>声明收窄说明</strong>: direct 单成员在线通路 stage=link 即 <code>_finish_direct</code> 收口, 不进 armed/rewritten、到不了删链门 —— 真机面能钉的是 direct 通路整体行为（通路级钉扎, 对「direct 被重新拉回 armed 链」的通路级复合回归红）, 0711b 短路谓词与 armed 分流由<strong>谓词面单测</strong>钉扎, 两层各司其职。<strong>验证方式</strong>: ①RM04-25 B 腿（真机, 耐久两遍全 PASS, 切片 26-11-18-0648 片C）: 单成员 direct 搬迁 + 组外种子等值面（X2a）与前缀面共享物理文件（X2b）全程在场 → 迁移正常 done(reason=direct) + 全程零「删链门依赖未清」+ 磁盘账零 chain_deps + 添加预检 cls=ok 零 confirm + 组外种子不被动; 与 A 腿构成同位对照（同为组外种子落旧根作用域, 目录级计依赖 / direct 不计 = 形态感知分流通路级证词）。②RM04-28 E2 链路（真机, 切片 26-11-19-0102 片E, 2 正式遍 + R26 修后 2 遍全 PASS, 合计 4 遍）: armed 态异名添加预检 cls=ok 零 confirm → finalize-now 全链 → rewritten 态预检复探 cls=ok → 删链门豁免（组外异名在场依赖清零）→ done —— 修复面在 file_links 通路同向成立。<strong>测试数字</strong>: 全量权威见 <code>commands run kb.baseline</code>; 真机切片 <a href="../testing/real-baselines/26-11-18-0648-real-rm04-sliceC.md">26-11-18-0648-real-rm04-sliceC</a> / <a href="../testing/real-baselines/26-11-19-0102-real-rm04-sliceE.md">26-11-19-0102-real-rm04-sliceE</a>（产品回归 0）。</p>
 </section>
 
 <footer>

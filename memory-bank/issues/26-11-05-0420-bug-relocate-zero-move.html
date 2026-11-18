@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-zero-move">
 <meta name="doc-refs" content="memory-bank/plans/26-11-05-0546-plan-relocate-zero-move-fix-stress.html, memory-bank/plans/26-11-05-0808-plan-relocate-fastresume-finalize.html, memory-bank/tasks/26-11-05-backend-relocate-fastresume-finalize.md, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功">
 <meta name="issue-summary" content="搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败">
 <title>整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0420-bug-relocate-zero-move</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 04:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">relocate / transfer / qbapi</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">用户报告 · AI 取证</div></div>
     </div>
@@ -183,12 +183,14 @@
       <li>2026-11-05 04:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-05 05:52 — 用户指派认领(压测轮)，状态 <strong>In Progress</strong>；压测计划 26-11-05-0546-plan-relocate-zero-move-fix-stress</li>
       <li>2026-11-05 06:56 — 压测完成(E0-E3 全部 14 项， 计划 §08)，<strong>建议修法整案不采纳</strong>(用户拍板： relocate 整组迁移功能待完全重构)，状态回 <strong>Open</strong> 待重构排期；本 issue 与压测计划作为重构输入</li>
-    </ul>
+      <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+      <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
     <h3>复验</h3>
     <p>2026-11-05 05:52 认领压测轮 —— 代码锚点全部仍在(仅 relocate_exec.py 下发段 791→816 行漂移);测试 qB(36596, 3 枚同内容异 infohash 假种子, R 盘)重演 F2 配方:setLocation 归位后 0.4s 内共享文件全部物理挂 .!qB(ok=0/qBext=4),T1 账面声明名 prog=1.00 与磁盘错位,自动触发态为 checkingResumeData —— <strong>仍复现</strong>。压测计划:<a href="../plans/26-11-05-0546-plan-relocate-zero-move-fix-stress.html">26-11-05-0546-plan-relocate-zero-move-fix-stress</a></p>
     <p>压测结论(2026-11-05 07:00, E0-E3 全部 14 项实测, 见计划 §08):<strong>🔴 建议修法 5 的 G5 配方(两步纯改名复位、三项约束全守)对生产冻结形态不成立</strong> —— 冻结有两变体:形态 G(完成位 true)两步成立;形态 F(生产/checkingResumeData 路径, 完成位 false)下 <code>makeActualPath</code> 对未完成文件恒挂 .!qB,API 层(renameFolder/renameFile)无法摘后缀,唯一通路是完整哈希 recheck 或 skip_check 重加(各违背约束③/②)。其余关键发现:同卷瞬搬 8ms 无 moving 态、真搬(paused 也有)全程有 moving 态、搬迁先预分配 dst 全尺寸(dst_size 不可作进度证据)、零搬移 35s 无 moving+dst 恒 0(30s 快败信号成立, 现行 10min 的 1/20)、同组修复必须按内容根去重+recheck 先行、组外共享者在改名窗口中重启会 rejected、单文件/多根形态 API 无修复通路。修法分流待拍板 D4(计划 §05)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际终态与修法</strong>（2026-11-18 真机复验轮, RM04-26, 切片 <a href="../testing/real-baselines/26-11-18-2308-real-rm04-sliceD.md">26-11-18-2308-real-rm04-sliceD</a> 片D）: 2026-11-05 压测轮拍板「整案不采纳待完全重构」的排期已兑现（relocate 重构第一批, 计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a>）—— 0636 计划标注的「待真机复验定终态」现已定: <strong>拦截成立 ⇒ 关</strong>。修法落点为 0546 闸门面（源侧三态收集面, relocate_plan <code>_source_three_states</code>: store 声明名 × 磁盘 stat）, 假成功通路被闸门前置拦截（不再走「静默零搬移 → 10min 停滞看门狗」通路）。<strong>验证方式</strong>: RM04-26 磁盘名错位复验真机用例（耐久三遍全 PASS, 16.7s/15.0s/16.9s）—— 病灶态真机<strong>终态等价构造成功</strong>: 真种子带数据落 R: 校验完成做种（账面声明裸名/prog==1.0/无 error）→ 测试侧把声明文件逐个改名为 <code>声明名.!qB</code>（<strong>深层路径孪生</strong>, 与生产冻结形态同终态; 构造通路论证单点在用例 docstring, 事故侧 qB 自演变 0.4-1.2s 竞态窗依赖时序不复演）→ 闸门拦截 status=error、拦截文案含<strong>深层孪生相对路径</strong>（rm04c26pack/data/f0.bin.!qB = 0546 机制1 源侧三态收集面深层路径补漏在岗, §01「只扫内容根顶层漏拦」已闭）、summary blocked=1/started=0 + 零副作用（「迁移发起」delta=0/dst 未创建/job 账空/孪生名原样）+ 对照组正常放行（form=direct + job_id + final done/direct, 闸门不误拦健康组）。D2 BLOCKED 预案（双环境造不出 ⇒ mock 单测降级）<strong>未触发</strong>。<strong>测试数字</strong>: 全量权威见 <code>commands run kb.baseline</code>（产品回归 0）。</p>
   </section>
 
   <footer>

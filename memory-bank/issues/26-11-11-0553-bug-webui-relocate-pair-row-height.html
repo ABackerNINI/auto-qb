@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-relocate-display">
 <meta name="doc-refs" content="memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="辅种页整组移动后行高塌陷/移动行文字显示不全(双排保存路径嫌疑, 待复现)">
 <meta name="issue-summary" content="用户报整组迁移后移动行行高塌陷文字被裁; 桩上四皮肤实测双排 A→B 渲染几何全部健康且主表无行高约束机制, 稳态无法复现 —— 已排除双排本身, 记录证据链与真实缺口(组键换键后窗口占位失真)供复发时对照">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-11-0553-bug-webui-relocate-pair-row-height</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-11 05:53</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -161,11 +161,13 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-11 05:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-19 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-18（relocate 重构第一批落地后的真机复验轮）：§05 已证实的真实缺口（换键占位失真）已按「键替换时沿用旧键实测值」修法关闭, e2e 钉扎先红后绿在案（见下方修复后补充）; 原报「行高塌陷/文字显示不全」现象本身未复现（§02 四皮肤桩上全健康）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（relocate 重构第一批 S3 顺带面, 计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a> §03.6）: 按 §06 建议其一「键替换时沿用旧键实测值」落刀 —— <code>columns_grid._measureRowH</code> 键集过渡携带: 消失键（孤儿, 带实测高）与新出现且未实测的键在两侧待领池间确定性配对（两侧各恰一个才配, 多孤儿/多新键 = 歧义维持 est 兜底不猜; 池条目带 TTL 防删除组的高度被无关新组误领）, 换键落定后新键拿到旧键实测高度、不经 est 兜底。<strong>验证方式</strong>（e2e 轨, 不涉真机 —— 占位/滚动总高是 DOM 渲染面, 0636 计划 §03.1 拍板）: e2e spec <code>e2e/relocate-key-change-pad.spec.mjs</code> 先红后绿取证（2026-11-16: 修复前末条「换键携带」断言 15s 超时判红, 修复后 1 passed; 判别力门控 E2E_TORRENTS&gt;=400 手工抬档, <code>E2E_TORRENTS=400 commands run dev.e2e -- e2e/relocate-key-change-pad.spec.mjs</code>）; RM04-15 可见性皮肤弹层真机用例 UI 脚本整层适配后绿（rel-pair 双排展示度量 contained 断言保留, 行高等值断言随徽标退役 —— pair 双排天然高于单排, 实测 53 vs 44; 切片 <a href="../testing/real-baselines/26-11-18-0240-real-rm04-sliceA-fix.md">26-11-18-0240-real-rm04-sliceA-fix</a> run8）。<strong>测试数字</strong>: 全量权威见 <code>commands run kb.baseline</code>（产品回归 0）。</p>
 </section>
 
 <footer>
