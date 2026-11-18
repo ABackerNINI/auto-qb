@@ -69,3 +69,5 @@ Linux 测试端 Docker testbed 改造(计划 [26-11-12-0152-plan-linux-testbed-d
 - 2026-11-13 00:41 S5 清扫执行完毕(数字见「S1–S5 实测」节, 无代码产物); S6 回写半落盘: 坑档 `pitfalls/testing/attachments/patching-local-linux-repro.md`「Docker 等价复现」节改写为 testbed 常驻容器配方(WSL/docker run 留痕降级为历史)→ AGENTS.md 命令注记补 linux 三面(test.linux-env/test.linux/test.linux-e2e + mutants.* 容器化)→ 计划 26-11-12-0152 转 Done(变更记录 R7; §04 S2 覆盖率闸口径钉准: 闸=conftest COVERAGE_FLOOR_OTHER=99.0 常量单点, 98.5 为 2026-11-05 提升第三轮前旧值)→ issue 26-11-12-0053 补复验与实际修法后转 Done → `.commands/test/config.toml` test.linux-e2e note 数字单点指针改指本档案(对齐 mutants 双锚写法)。基线切片 + test.full 全量 + kb.index + 最终提交归 T6b。
 
 - 2026-11-13 01:24 S6 测试+基线半: 补回 S4 坑档历史条目判别字段(条目三字段守卫拦下的回归)后 test.full 全量绿(见 kb.baseline), 基线切片入库并双向补链, kb.index 重建; 提交归主会话
+
+- 2026-11-19 蒸馏回填(自切片 26-11-12-0102-recycle-obs-os-name-pin): 2026-11-12 Linux 容器复现轮计划外发现 test_webui_static_r4_* node 电池在无 node 容器里「声明跳过」实为硬断言(当时用户裁决不入池, 此处仅留痕); test.linux 超时与镜像缺口已入池 issue 26-11-12-0053(本档案主线, 已闭环)。

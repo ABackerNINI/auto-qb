@@ -6,7 +6,7 @@
 **Summary:** 退役目录指路残留 7 处全仓清零 + src/ 文本子进程 UTF-8 钉死 5 处(守卫扫描面纳入 src/) + qB 5.x 存储类型注释口径两处对齐; 两批入库 771f262d/807ad38d, 零行为代码改动
 **Topics:** backend-stale-ref-utf8-pin
 
-**Refs:** memory-bank/issues/26-11-07-1216-bug-port-kill-subprocess-encoding.html, memory-bank/pitfalls/ops/console-encoding.md, memory-bank/pitfalls/docs/drift.md, memory-bank/active-context/26-11-12-0127-stale-ref-utf8-pin.md, memory-bank/testing/baselines/26-11-12-0135-stale-ref-utf8-pin.md
+**Refs:** memory-bank/issues/26-11-07-1216-bug-port-kill-subprocess-encoding.html, memory-bank/pitfalls/ops/console-encoding.md, memory-bank/pitfalls/docs/drift.md, memory-bank/testing/baselines/26-11-12-0135-stale-ref-utf8-pin.md
 
 ## 本篇只回答
 
