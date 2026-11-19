@@ -24,16 +24,22 @@
 
 qbapi 口径: 全部 qB 调用走 ctx.api(QbApi Facade 既有透传方法 torrents_add(文件方式)/
 torrents_recheck/torrents_set_location/torrents_delete(delete_files=True)/torrents_info
-(tag= 过滤)), 本文件不裸散 client 调用、不新建连接方式。
+(tag= 过滤)), 本文件不裸散 client 调用。S1 探测异步化(计划 26-11-10-2350, 风险表钉死处置)
+新增的探测线程连接不在此口径豁免面之外: probe_thread_ctx 经 new_client 全新构造 qB client
+(不共享主循环单例 Session)后仍包 QbApi 门面 —— 连接构造单点在 probe_thread_ctx, 调用面
+纪律不变。
 """
 import hashlib
 import hmac
 import os
+import queue
 import secrets
 import shutil
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from types import SimpleNamespace
+from typing import Any, Callable, Iterable, Optional
 
 from ...infra import clock
 from ...infra import file_access
@@ -49,10 +55,19 @@ PROBE_READ_TIMEOUT_S = 10.0  # 证读预算: 种子可见 + recheck 进 1.0
 PROBE_WRITE_TIMEOUT_S = 10.0  # 证写预算: setLocation 后 dst 出现一致文件且 src 消失
 PROBE_CLEANUP_TIMEOUT_S = 5.0  # 清理预算: deleteFiles + 轮询种子消失
 PROBE_POLL_INTERVAL_S = 0.25  # 轮询间隔(报告 §11.2 实测口径)
+# pending 条目超龄线(T3 启动清扫判据, 风险表 S1 行兜底面): 探测预算上界(证读 10 + 证读
+# 轮询 10 + 证写 10 + 清理 5 = 35s, 另加 qB HTTP 超时 connect 3/read 10)x 裕度 ~3 => 120s。
+# 超过它仍无 verdict 的 pending 条目按「线程死/verdict 丢失」清条目并记审计 —— 清扫接线
+# 归 T3, 本常量与条目 ts 字段(relocate_mod.probe_pending_append)是其容器与常量位。
+PROBE_PENDING_MAX_AGE_S = 120.0
 
 # 探测结论合法取值(与 relocate_mod._PROBE_STATUSES 对齐)
 STATUS_PASSED = "passed"
 STATUS_FAILED = "failed"
+
+# runner 合成 verdict 的稳定判语(线程内逃逸异常/线程侧连接构造失败; env=True 不缓存,
+# T3 重放遇 blocked 终止自动链防自环, 下次真实触发再试)
+PROBE_RUNNER_CRASHED_REASON = "runner_crashed"
 
 
 @dataclass
@@ -410,6 +425,197 @@ def run_probe(ctx: Any, src: str, dst: str) -> ProbeResult:
         # e. 清理(所有出口都走): deleteFiles -> 轮询种子消失 -> rmtree 两侧临时目录(本机侧)
         _cleanup(api, probe_hash, (local_src_dir, local_dst_dir), evidence)
 
+
+# ---------- 异步探测 runner(S1 基础设施, 计划 26-11-10-2350 §03/§06 D1/D3/D4/D9; 并轨 26-11-15-2340 刀4) ----------
+#
+# 主线(拍板 D1): run_probe 本体零改动原样进 daemon 线程; 结论经线程安全结果队列回主循环
+# (D9, on_task_line 消费 —— T3 接线); 全局单飞(D3); 优雅退出不 join(D4, daemon=True, 残留
+# 交 sweep_probe_residue)。本节是纯基础设施: 接线前不改变任何既有调用行为(_ensure_probe
+# 仍同步调 run_probe, T2 才改造)。
+# 线程纪律(pitfalls/backend/concurrency.md「主循环线程是唯一修改队列/state_file 的线程」):
+# 探测线程只做两件事 —— 跑 run_probe 黑盒 + 把 (指纹, verdict) 投递结果队列; 零 state 写、
+# 零建账、零 setLocation、零共享 store 写(线程侧连接自带全新 TorrentStore)。
+
+
+class ProbeSingleFlight:
+    """全局单飞槽(拍板 D3): 任一时刻至多一个探测在飞
+
+    槽语义: try_acquire 占槽成功 = 探测受理(线程随即启动); 释放只在主循环消费 verdict 时做
+    (T3: 清条目 -> 释放槽 -> kick 下一条) —— 探测线程完成不释放槽。「在飞」窗口 = kick 起到
+    verdict 被消费止, 同指纹合并/等位语义(T2)都落在这个窗口内。槽位变化只发生在主循环线程
+    (try_start 与 verdict 消费都是主循环面), 锁不承载跨线程协调, 只防将来误用。
+    """
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._in_flight: Optional[str] = None
+
+    def try_acquire(self, fingerprint: str) -> bool:
+        """空闲则占槽并记在飞指纹返回 True; 已被占(不论指纹)返回 False 不等待"""
+        with self._lock:
+            if self._in_flight is not None:
+                return False
+            self._in_flight = str(fingerprint or "")
+            return True
+
+    def release(self) -> None:
+        """释放槽(主循环消费 verdict 时调用); 幂等, 本就空闲也无害"""
+        with self._lock:
+            self._in_flight = None
+
+    def in_flight(self) -> Optional[str]:
+        """在飞指纹(空闲返回 None); T2 同指纹合并按它识别「在飞」请求"""
+        with self._lock:
+            return self._in_flight
+
+    def busy(self) -> bool:
+        """槽是否被占(在飞或 verdict 待消费)"""
+        with self._lock:
+            return self._in_flight is not None
+
+
+def probe_thread_ctx(ctx: Any) -> Any:
+    """构造探测线程专用 ctx(S1 风险表钉死处置: 独立 qB client, 不共享主循环单例 Session)
+
+    run_probe 经 ctx 实际触达的面只有 ctx.api(实测 relocate_probe.run_probe 全体: torrents_add/
+    torrents_info/torrents_recheck/torrents_set_location/torrents_delete + client 非空检查),
+    线程侧按最小面重建: new_client 全新构造 qbittorrentapi Client(自带独立 requests Session)
+    + 全新 TorrentStore(零共享可变面, 探测线程零 store 写)+ QbApi 门面(维持「qB 调用全走
+    Facade」纪律)。QbApi 不注入 ctx —— D16 删种拦截的派生查询经 ctx.relocate 现取, 线程侧
+    不读共享 relocate 派生面(拦截判定空根集放行; 探针种子本就在 D16 豁免面内, 语义一致)。
+
+    qbittorrent 连接配置缺失 => client=None => run_probe 按 api_unavailable 环境性失败收口
+    (与主循环同语义)。延迟导入: qbapi 经 modules 包聚合点回依本文件族, 包初始化环只能在
+    调用期解(kick 在运行期调用, 不在 import 期)。
+    """
+    from ..qbapi import QbApi  # 延迟导入: qbapi -> modules.__init__ -> relocate_mod -> 本文件 的包环
+    from ..qbclient import new_client
+    from ...torrents import TorrentStore
+    qb_conf = getattr(getattr(ctx, "config", None), "qbittorrent", None)
+    client = new_client(qb_conf) if qb_conf is not None else None
+    return SimpleNamespace(api=QbApi(client, TorrentStore(), None))
+
+
+class ProbeRunner:
+    """探测 runner(D1/D3/D9): run_probe 黑盒的线程化封装 + 全异常合成 verdict + 单飞槽互斥
+
+    两个执行形态:
+    - try_start(生产路径): 单飞槽空闲则占槽并起 daemon 线程(立即返回, 不等待); 槽被占返回
+      False, 调用方按等位/同指纹合并语义处理(T2)。线程体 = 线程侧独立连接构造(probe_thread_ctx)
+      + run_probe 本体 + 全异常捕获合成 failed verdict(env=True 不缓存) + 投递结果队列。
+      受理即兑现: 不存在「kick 成功但 verdict 永不到」(线程侧连接构造失败/线程启动失败
+      同样合成 verdict), 残余只有进程退出 —— pending 条目带 ts, 重启清扫按
+      PROBE_PENDING_MAX_AGE_S 兜底(T3 接线)。
+    - run_inline(注入路径): 与线程体同款执行面但同步内联执行, verdict 直接返回、不投递队列、
+      不碰槽 —— 既有同步语义(跑完即得结论)经它保留(T2 的注入 seam, 对齐
+      test_relocate_exec_probe_gate._stub_run_probe 的既有替身形态)。
+
+    协作面全部可注入: queue(结果队列)/slot(单飞槽)/thread_ctx_factory(线程侧 ctx 构造)/
+    probe_fn(run_probe 调用点)。缺省用模块级单例 PROBE_VERDICT_QUEUE/PROBE_SLOT 与本模块
+    run_probe(调用期解析); 测试注入空队列与独立槽互不污染, probe_fn 传 lambda 转发可配合
+    既有「monkeypatch 模块内 run_probe 名」的替身形态。
+    """
+    def __init__(
+        self,
+        *,
+        queue: Optional[queue.Queue] = None,
+        slot: Optional[ProbeSingleFlight] = None,
+        thread_ctx_factory: Optional[Callable[[Any], Any]] = None,
+        probe_fn: Optional[Callable[[Any, str, str], ProbeResult]] = None,
+    ) -> None:
+        self._queue = queue if queue is not None else PROBE_VERDICT_QUEUE
+        self._slot = slot if slot is not None else PROBE_SLOT
+        self._thread_ctx_factory = thread_ctx_factory or probe_thread_ctx
+        self._probe_fn = probe_fn or run_probe
+
+    def try_start(self, ctx: Any, fingerprint: str, src: str, dst: str) -> bool:
+        """单飞槽空闲则占槽起 daemon 线程返回 True; 槽被占返回 False(调用方等位/合并)
+
+        主循环线程调用(黄金法则#5: 线程的启动与 state/pending 的读写都只在主循环面)。
+        线程零 state 写: run_probe 只消费线程侧独立 ctx.api(probe_thread_ctx 自建)。
+        受理即兑现(与类 docstring 同一不变量): 占槽后 Thread 构造/.start() 失败(OS 线程
+        资源耗尽等)时槽已占但无线程无 verdict —— 当场释放槽并按线程体同款合成 runner_crashed
+        verdict 投递队列, 仍返回 True(受理成立, 结论经队列兑现, 槽位不永久占用直到重启)。
+        """
+        if not self._slot.try_acquire(fingerprint):
+            return False
+        try:
+            threading.Thread(
+                target=self._thread_body,
+                args=(ctx, fingerprint, src, dst),
+                name="relocate-probe",
+                daemon=True,  # D4: 优雅退出不 join, 探测中途残留交 sweep_probe_residue 启动清扫
+            ).start()
+        except Exception as e:  # noqa: BLE001 - 线程起不来(RuntimeError can't start new thread 等)也必须兑现 verdict
+            # 不收 BaseException: 本 try 跑在主循环线程面, KeyboardInterrupt/SystemExit 落在 .start() 上须原样传播
+            # (捕获面收窄与线程体 _execute 的 BaseException 不同: 那边是 daemon 线程, 没人接逃逸异常)
+            logger.warning(
+                f"relocate | probe runner: 探测线程启动失败({e!r}) —— 释放单飞槽并合成 failed verdict"
+                f"(reason={PROBE_RUNNER_CRASHED_REASON}, env=True 不缓存)"
+            )
+            self._slot.release()
+            try:
+                self._queue.put(
+                    (
+                        str(fingerprint or ""),
+                        ProbeResult(
+                            STATUS_FAILED, PROBE_RUNNER_CRASHED_REASON, True, {
+                                "method": "e1",
+                                "error": str(e)
+                            }
+                        )
+                    )
+                )
+            except Exception as put_err:  # noqa: BLE001 - 投递失败(MemoryError 等现实失败面)只能留痕
+                # 不收 BaseException: 本 put 同跑在主循环线程面, KeyboardInterrupt/SystemExit 落在 put 上须原样传播
+                # (捕获面收窄与线程体投递的 BaseException 不同: 那边是 daemon 线程, 没人接逃逸异常)
+                logger.error(
+                    f"relocate | probe runner: verdict 投递失败({put_err!r}) —— 指纹 {fingerprint} "
+                    "的结论丢失, pending 条目交重启超龄清扫(槽已当场释放)"
+                )
+        return True
+
+    def run_inline(self, ctx: Any, fingerprint: str, src: str, dst: str) -> ProbeResult:
+        """与线程体同款执行面, 同步内联执行: 返回 verdict, 不投递队列不碰槽
+
+        fingerprint 参数只为与 try_start 同形(注入面替换时调用点零改动); 内联同步形态没有
+        异步世界的「第二通道」, 结论经返回值交付, 调用方走既有同步语义(T2)。
+        """
+        return self._execute(ctx, src, dst)
+
+    def _execute(self, ctx: Any, src: str, dst: str) -> ProbeResult:
+        """线程侧连接构造 + run_probe 黑盒调用; 任何逃逸异常合成 failed verdict(env=True)
+
+        捕获面到 BaseException: 线程内 SystemExit 等非常规逃逸同样不得吞 verdict ——
+        「线程死 -> verdict 永不到 -> pending 挂死」是本 runner 存在的第一动因(风险表 S1 行)。
+        合成 verdict env=True(环境性失败不缓存, 与 FS 可达性无关), evidence 带原异常文本;
+        槽的释放与条目清理在主循环消费该 verdict 时照常走(T3), 自动链由防自环规则终止。
+        """
+        try:
+            return self._probe_fn(self._thread_ctx_factory(ctx), src, dst)
+        except BaseException as e:  # noqa: BLE001 - 线程体任何逃逸都必须落到 verdict, 不许吞
+            logger.warning(
+                f"relocate | probe runner: 探测线程内异常({e!r}) —— 合成 failed verdict"
+                f"(reason={PROBE_RUNNER_CRASHED_REASON}, env=True 不缓存)"
+            )
+            return ProbeResult(STATUS_FAILED, PROBE_RUNNER_CRASHED_REASON, True, {"method": "e1", "error": str(e)})
+
+    def _thread_body(self, ctx: Any, fingerprint: str, src: str, dst: str) -> None:
+        """daemon 线程体: _execute + 投递; 投递自身失败只留痕(丢 verdict 的槽位/pending 残留
+        交重启超龄清扫 —— 投递失败是进程级故障, 线程内无自救面)"""
+        verdict = self._execute(ctx, src, dst)
+        try:
+            self._queue.put((str(fingerprint or ""), verdict))
+        except BaseException as e:  # noqa: BLE001 - 进程收尾窗的队列故障: 只能留痕
+            logger.error(
+                f"relocate | probe runner: verdict 投递失败({e!r}) —— 指纹 {fingerprint} "
+                "的结论丢失, 槽位与 pending 条目交重启超龄清扫"
+            )
+
+
+# 模块级单例(生产路径缺省协作面): 槽「全局单飞」(D3), 队列是探测线程 -> 主循环的唯一
+# 跨线程通道(D9)。测试一律注入独立实例, 不消费这两个单例。
+PROBE_SLOT = ProbeSingleFlight()
+PROBE_VERDICT_QUEUE = queue.Queue()
 
 # ---------- 启动残留扫描(R2: 崩溃在 add 之后 delete 之前会留探测种子+文件) ----------
 

@@ -28,7 +28,7 @@ import shutil
 import time
 from dataclasses import replace
 from types import MappingProxyType
-from typing import Optional
+from typing import Any, Optional
 
 from ...config.models import bt_backup_path_of
 from ...infra import relocate_journal
@@ -163,6 +163,128 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         """删单条指纹缓存(指纹变更失效/手动清缓存); 本就没有也返回 False, 幂等"""
         box = self._state_probes()
         return box.pop(fingerprint, None) is not None
+
+    # ---------- 探测意图 FIFO(relocate.probe_pending, S1 异步化基础设施 D6/D7) ----------
+    # 计划 26-11-10-2350 §03/§06: 探测移出主循环后, 迁移意图以 {fingerprint, hashes, src,
+    # dst, origin, ts} 入 state 持久(D7), verdict 消费后按意图重放 relocate_execute 全新鲜
+    # (D6 只存意图不存快照)。读写单点在本组方法 + _state_probe_pending 访问器, 不允许第二份
+    # 路径; 全部只在主循环线程面调用(黄金法则#5: 探测线程零 state 写)。条目极小零资源,
+    # 不设上限(计划 §07: 故障窗口膨胀交 FIFO 恢复后自然清空)。超龄兜底常量在
+    # relocate_probe.PROBE_PENDING_MAX_AGE_S(T3 启动清扫接线)。
+
+    def _state_probe_pending(self) -> list:
+        """state.json 的 relocate.probe_pending 容器(探测意图 FIFO 队列)
+
+        仿 _state_probes 的 setdefault 先例(惰性物化; 上下文缺失返回空 list 不炸): 补键类
+        新容器不走版本链、零迁移 —— 旧 state 无此键, 首次访问物化空 list(不做 state 版本
+        bump, 与 relocate.probes 同口径)。坏箱(非 list, 外部手改/漂移)原位修复为空 list:
+        意图队列必须可写, 坏箱体留着会让 append 当场炸 —— 与 probe_get 的「坏条目留原地」
+        不同, 那是值级容错(覆盖写可修复), 这是箱体级(修复是唯一出路)。
+        """
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        if not isinstance(data, dict):
+            return []
+        relocate = data.setdefault("relocate", {})
+        box = relocate.get("probe_pending")
+        if not isinstance(box, list):
+            box = []
+            relocate["probe_pending"] = box
+        return box
+
+    @staticmethod
+    def _probe_hashes_as_list(value: Any) -> list:
+        """存储值 -> hash 列表(值级容错单点): str 按 [该串] 单 hash、非可迭代按空 list
+
+        条目 hashes 真身被外部改坏(手改/漂移)时, str 值逐字符拆分、非可迭代值抛 TypeError
+        都会从读/合并返回面炸出去 —— 与容器自称的坏形容错面不一致。容错口径与 append 的
+        isinstance 分支对齐(字符串按单 hash), 其余可迭代原样拷贝(副本面忠实不筛不重排)。
+        """
+        if isinstance(value, str):
+            return [value]
+        try:
+            return list(value or [])
+        except TypeError:
+            return []
+
+    def _probe_pending_copy(self, entry: dict) -> dict:
+        """条目副本(hashes 列表单层深拷) —— 调用方改不动队列真身(与 probe_get 副本口径一致)"""
+        copied = dict(entry)
+        copied["hashes"] = self._probe_hashes_as_list(entry.get("hashes"))
+        return copied
+
+    def probe_pending_append(self, fingerprint: str, hashes: Any, src: str, dst: str, origin: str) -> dict:
+        """入队一条迁移意图(队尾; 返回条目副本)
+
+        条目 {fingerprint, hashes, src, dst, origin, ts}: 只存意图不存快照(D6); hashes 去重
+        保序(字符串按单 hash 容错, 空白 hash 丢弃); origin 是触发来源标记("web"/"rule" 形态,
+        容器只透传); ts = 入队 epoch 秒(probe_put.at 同钟面, 超龄兜底判据)。
+        """
+        if isinstance(hashes, str):  # 字符串按单 hash 容错(逐字符拆分是真实 footgun)
+            hashes = [hashes]
+        entry = {
+            "fingerprint": str(fingerprint or ""),
+            "hashes": [str(h) for h in dict.fromkeys(hashes or ()) if str(h or "").strip()],
+            "src": str(src or ""),
+            "dst": str(dst or ""),
+            "origin": str(origin or ""),
+            "ts": int(self._clock.now()),
+        }
+        self._state_probe_pending().append(entry)
+        return self._probe_pending_copy(entry)
+
+    def probe_pending_list(self) -> tuple:
+        """FIFO 顺序返回全部条目副本(坏条目跳过留原地, 与 probe_get 坏形按未命中同口径)"""
+        return tuple(self._probe_pending_copy(e) for e in self._state_probe_pending() if isinstance(e, dict))
+
+    def probe_pending_merge_hashes(self, fingerprint: str, hashes: Any) -> bool:
+        """同指纹合并: 把 hashes 去重并入既有条目(保 FIFO 位不动); 无此指纹返回 False
+
+        合并语义 = 计划 §03: 在飞/等位的同指纹请求把 hashes 并进已有 pending 条目(去重),
+        绝不重复入队(否则重放会重复发起)。真身在队列条目上原地更新(主循环单写线程面)。
+        """
+        fp = str(fingerprint or "")
+        if isinstance(hashes, str):
+            hashes = [hashes]
+        incoming = [str(h) for h in (hashes or ()) if str(h or "").strip()]
+        for entry in self._state_probe_pending():
+            if isinstance(entry, dict) and entry.get("fingerprint") == fp:
+                merged = [
+                    str(h) for h in dict.fromkeys((*self._probe_hashes_as_list(entry.get("hashes")), *incoming))
+                    if str(h or "").strip()
+                ]
+                entry["hashes"] = merged
+                return True
+        return False
+
+    def probe_pending_pop(self) -> Optional[dict]:
+        """弹出队首条目(FIFO 单出口, T3 重放消费面): 队首坏条目(非 dict)丢弃继续, 弹空返回 None"""
+        box = self._state_probe_pending()
+        while box:
+            entry = box.pop(0)
+            if isinstance(entry, dict):
+                return self._probe_pending_copy(entry)
+        return None
+
+    def probe_pending_drop(self, fingerprint: str) -> bool:
+        """按指纹摘除一条 pending(T3 清条目面); 本就没有返回 False, 幂等
+
+        同指纹在队内至多一条(单飞 + 同指纹合并的不变量), 摘首个命中即语义完整。
+        """
+        fp = str(fingerprint or "")
+        box = self._state_probe_pending()
+        for i, entry in enumerate(box):
+            if isinstance(entry, dict) and entry.get("fingerprint") == fp:
+                del box[i]
+                return True
+        return False
+
+    def probe_pending_clear(self) -> int:
+        """整箱清空(T3 超龄清扫面), 返回清掉的条目数(含坏条目, 清扫不留残骸)"""
+        box = self._state_probe_pending()
+        n = len(box)
+        box.clear()
+        return n
 
     def probe_salt(self) -> str:
         """读指纹盐(只读面): state 无盐返回空串, 绝不在读路径生成/持久化
