@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 引入前端构建工具链的优劣势评估(暂缓) · question · 计划外问题</title>
+<meta name="issue-slug" content="webui-build-toolchain">
+<meta name="issue-stamp" content="26-11-20-0726">
+<meta name="issue-type" content="question">
+<meta name="doc-topic" content="webui-boot-first-data">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0727-plan-webui-boot-first-data.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 引入前端构建工具链的优劣势评估(暂缓)">
+<meta name="issue-summary" content="对比构建工具链(Vite/webpack)与运行时查询参数指纹+immutable: 前者正确性与细粒度缓存更优但与动态脚本加载机制冲突、改造面大; 后者零依赖、改动集中、根治重启后 ETag 重验。2026-11-20 拍板暂缓构建工具链, 先做推荐方案">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· question</div>
+<h1>WEBUI 引入前端构建工具链的优劣势评估(暂缓)</h1>
+<p class="lede">对比构建工具链(Vite/webpack)与运行时查询参数指纹+immutable: 前者正确性与细粒度缓存更优但与动态脚本加载机制冲突、改造面大; 后者零依赖、改动集中、根治重启后 ETag 重验。2026-11-20 拍板暂缓构建工具链, 先做推荐方案</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-20-0726-question-webui-build-toolchain</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 07:26</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>在给 issue 26-11-20-0553（109 个静态请求串行放大首屏 10.5s）做修复方案 grilling 时，第 4-5 问触及「缓存指纹怎么表达」：候选里有引入前端构建工具链（Vite / webpack / esbuild）做内容哈希文件名，也有零构建的运行时查询参数方案。用户要求把构建工具链的优劣写明再拍板（2026-11-20 07:17 起），于是把这次方案选型的评估独立留痕：暂时不做构建工具链，先走运行时方案。</p>
+  <p>这不是缺陷，而是<b>方向二选一的决策记录</b>——记下当时的事实、权衡与结论，避免将来有人重新捡起这个方向时又把调查做一遍。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">取证 2026-11-20 07:17-07:25，源码检索 + 真机桩数据 + 浏览器注入实验原文。</p>
+<pre><code># 事实 1 —— 项目当前无构建工具链
+src/auto_qb/webui/static/{atlas,prism,console,flux}/index.html: 每套硬编码 &lt;script src="/shared/boot.js"&gt;
+  + 内联 &lt;script type="application/json" id="tpl-manifest"&gt; (四套手工维护)
+grep: 有 package.json（仅 Playwright e2e 脚本:test:e2e / :fast / :perf-serial, 无 vite/webpack/esbuild 构建脚本）
+     无 vite.config.* / webpack.config.*; 无 dist 产物目录  => 结论「无前端构建工具链」成立
+
+# 事实 2 —— 109 个请求由 boot.js 在运行时从清单动态拼出, 非静态可分析
+boot.js:81  fetch(part.src, ...)      part.src 来自 mf.parts (JSON 字符串)
+boot.js:124 el.src = src              src 来自 mf.scripts (JSON 字符串)
+  => 打包器做静态依赖分析时看不见这些路径 -> 这 81 个脚本不会被打包/哈希
+
+# 事实 3 —— 测试钉死精确静态路径 (改造面代理指标)
+tests/test_web_api_core.py::test_static_assets_disable_heuristic_cache
+  钉死 /atlas/style.css /shared/app.js /shared/boot.js /console/css/components.css 等 = "no-cache"
+tests/test_webui_static_skins_skin.py: 四皮肤 manifest/脚本装配一致性 + 根相对资源存在性
+
+# 事实 4 —— 并发保序实验 (与构建工具链无关的独立验证)
+tests-real/.work/browserboot/parallel_script_probe.cjs:
+  串行链 8x100ms -> 867ms; 批量插入 + async=false -> 117ms; 两者执行序都是 0..7
+
+# 事实 5 —— 真机桩: 瓶颈在服务端每请求 TTFB, 非连接/传输
+tpl 资源 connect=0, download=2-3ms, ttfb=54-166ms; 109 请求串行 x ~96ms = 10.5s</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>不是运行时触发，是方案选型：是否为了缓存指纹与打包收益，给项目引入一套前端构建流程</td></tr>
+    <tr><td>影响范围</td><td>若上构建：四套皮肤目录、内联 manifest、boot.js 装载器、部署流程、CI、开发者工作流、全部钉死路径的测试基线；启动耗时链路本身</td></tr>
+    <tr><td>严重度</td><td>低-中：当前不用构建也能解决根因（运行时方案够用）；但方向一旦选错，返工面覆盖整个前端交付链</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/boot.js:72</code>（取证 2026-11-20 07:17）· <code>nextPart()</code> 动态 fetch · grep 关键词 <code>nextPart</code></li>
+    <li><code>src/auto_qb/webui/static/shared/boot.js:119</code> · <code>nextScript()</code> 动态插脚本 · grep 关键词 <code>nextScript</code> / <code>el.async</code></li>
+    <li><code>src/auto_qb/webui/server/static_ui.py:46</code> · <code>StaticFiles(html=True)</code> 直接服务源码目录 · grep 关键词 <code>StaticFiles</code></li>
+    <li><code>src/auto_qb/webui/server/static_ui.py:48</code> · <code>_static_no_cache</code> 全量 no-cache 中间件 · grep 关键词 <code>no-cache</code></li>
+    <li><code>tests/test_web_api_core.py</code> · <code>test_static_assets_disable_heuristic_cache</code> · grep 关键词 <code>heuristic_cache</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（方案选型结论）</span></h2>
+  <p>两条路线都能解决同一个病（重启后 ETag 重验 + 串行放大），差别在代价与副作用：<b>构建工具链把指纹做在部署前的产物里，运行时方案把指纹做在启动时的 URL 里</b>。对本项目的决定性事实是——81 个脚本是运行时从 JSON 清单动态拼出来的，打包器做静态依赖分析看不见它们，要上构建就必须把装载器改成走打包器 manifest（等于重写 boot.js），风险直接压在首屏链路上；而构建工具链的独有优势（CDN 兼容、按文件细粒度失效、压缩合并）在本地部署、无 CDN、病在延迟不在体积的场景里要么不成立，要么超出需求。</p>
+  <div class="callout">2026-11-20 07:25 拍板（grilling Q4-Q8 按推荐）：<b>暂缓构建工具链</b>，先做运行时方案（查询参数指纹 + 并发化）。构建工具链留作未来若上 TypeScript / 压缩合并 / CDN 时的演进方向，届时本 issue 是现成的调查底稿。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>优劣势对比（本 issue 核心）</h2>
+
+  <h3>构建工具链 · 优势</h3>
+  <ol>
+    <li><b>正确性久经考验</b>：内容哈希写进文件名是行业事实标准（MDN 首选），缓存边界天然精确——文件名不变永久命中，变了才失效。</li>
+    <li><b>CDN / 老代理兼容性最好</b>：部分中间层对带 query string 的资源缓存行为不一致（有的不缓存带 <code>?</code> 的请求），文件名哈希无此问题。<span class="hint">（本项目本地部署无 CDN，这条当前不适用。）</span></li>
+    <li><b>按文件粒度失效</b>：改一个 JS 只有它的 URL 变，其余继续命中缓存。</li>
+    <li><b>顺带收益</b>：压缩、合并、tree-shaking、sourcemap、体积监控。</li>
+    <li><b>产物不可变可审计</b>：<code>dist/</code> 是快照，回滚 = 切回旧产物目录。</li>
+  </ol>
+
+  <h3>构建工具链 · 劣势（对本项目的具体代价）</h3>
+  <ol>
+    <li class="bad"><b>改造面伤筋动骨</b>：81 脚本 + 28 分片 + 四套手工皮肤 + 内联 manifest + CSS/字体全要交给构建器；现有测试大量钉死精确路径，产物名一改全线飘红，等于重写测试基线。</li>
+    <li class="bad"><b>与 boot.js 机制根本冲突</b>：脚本路径来自运行时 JSON 清单字符串，打包器静态分析看不见，81 个脚本不会被打包/哈希；除非把 loader 改成走打包器 chunk manifest——重写 boot.js，风险压到首屏链路。</li>
+    <li class="bad"><b>引入整套工程负担</b>：Node 工具链、lockfile、CI 加 build 步骤、每个开发者本地要构建；本项目是 Python 为主、复制目录即部署。</li>
+    <li class="bad"><b>运维流程变化</b>：升级从「覆盖文件 + 重启」变成「构建 + 部署 dist + 保留旧产物供回滚」。</li>
+    <li class="bad"><b>收益超出需求</b>：压缩/合并/tree-shaking 是额外好处，但本病（串行 × 高 TTFB）用并发化 + 消除重验就够。</li>
+  </ol>
+
+  <h3>运行时方案 · 优势（为什么暂时选它）</h3>
+  <ol>
+    <li class="good"><b>改动面小</b>：boot.js 两处 URL 构造 + 一个哈希函数 + 中间件分流 + HTML 令牌；测试只加两组断言，不动四皮肤手工维护模式。</li>
+    <li class="good"><b>零新增依赖、零构建步骤</b>：不碰 CI、不碰开发者工作流、不碰部署方式。</li>
+    <li class="good"><b>不会人为失误失效</b>：版本号来自内容哈希，忘了手动 bump 也不会读到旧缓存。</li>
+    <li class="good"><b>故障回退一步到位</b>：关掉分流开关立刻回到今天的 no-cache 行为。</li>
+    <li class="good"><b>正好打在根因上</b>：校验请求归零 + 并发化，才够得到 ≤1.5s 门槛。</li>
+  </ol>
+
+  <h3>运行时方案 · 劣势（诚实列全）</h3>
+  <ol>
+    <li class="wr"><b>query string 通用性弱于文件名哈希</b>：CDN 场景是真缺点，本项目无 CDN，风险近似为零。</li>
+    <li class="wr"><b>全树一个版本号，非按文件粒度</b>：任一文件改动，所有资源 URL 一起变、缓存一起失效。换来的是版本一致性——不会出现新旧文件混用这种更隐蔽的故障。</li>
+    <li class="wr"><b>启动时遍历静态树算哈希</b>：几十毫秒一次性成本；要排除日志 / <code>.pyc</code> 之类，否则哈希抖动。</li>
+    <li class="wr"><b>手工复刻，长期维护责任在自己</b>：不是社区标准件，边界情况（新增资源类型、特殊路径字符）要自己兜；好在代码量小、集中在单点。</li>
+    <li class="wr"><b>不带来压缩/合并收益</b>：若将来请求体体积成瓶颈，仍需上构建——但那是另一个问题，不混进这次修复。</li>
+  </ol>
+
+  <h3>演进路径</h3>
+  <p>运行时方案建立的「资源 URL 集中生成」单点是向构建工具链演进的接缝：将来真要上打包器，只需把这个单点从「启动时算哈希 + 查询参数」换成「读构建产物清单 + 文件名哈希」，不必再动装载器结构与皮肤组织方式。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-20 07:26 — 入池，状态 <strong>Open</strong>（方向二选一评估；结论：暂缓构建工具链，先做运行时方案）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>本件为方案选型评估，无运行时复现步骤；若将来重启构建工具链方向，先重跑 §02 事实 2/3（boot.js 动态装载 + 测试路径钉死）确认约束仍在，再决定改造面。</p>
+  <h3>后续补充</h3>
+  <p class="todo">若将来决定上构建工具链，在本件追加「实际采用方案 / 改造清单 / 与当时结论的差异原因」。</p>
+</section>
+
+<footer>
+  26-11-20-0726-question-webui-build-toolchain.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

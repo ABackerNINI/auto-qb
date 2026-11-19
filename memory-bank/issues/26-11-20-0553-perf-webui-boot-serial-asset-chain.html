@@ -9,11 +9,11 @@
 <meta name="issue-stamp" content="26-11-20-0553">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-boot-first-data">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0727-plan-webui-boot-first-data.html">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="WEBUI 静态资源串行加载放大首屏延迟(并发化/长缓存/打包)">
-<meta name="issue-summary" content="boot.js 串行加载 28 分片+81 脚本共约 109 个请求, 稳态首屏约 1.4s; 单请求延迟被线性放大。作为独立优化入池, 经复测非重启 5-15s 主因(硬刷新 1-2s)">
+<meta name="issue-summary" content="boot.js 串行加载 28 分片+81 脚本共 109 请求, 真机逐个 ttfb=54-166ms 线性累加成 10.5s(占首屏 87%), 为重启后 12s 白屏根因; 稳态因连接复用/304 仅 1-2s">
 <style>
   :root {
     --bg: #10151a;
@@ -84,9 +84,9 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· perf</div>
+<div class="kicker">计划外问题（未修）· perf · 根因已坐实</div>
 <h1>WEBUI 静态资源串行加载放大首屏延迟(并发化/长缓存/打包)</h1>
-<p class="lede">boot.js 串行加载 28 分片+81 脚本共约 109 个请求, 稳态首屏约 1.4s; 单请求延迟被线性放大。作为独立优化入池, 经复测非重启 5-15s 主因(硬刷新 1-2s)</p>
+<p class="lede">boot.js 串行加载 28 分片+81 脚本共 109 请求; 真机逐个 ttfb=54-166ms 线性累加成 10.5s, 占重启后 12s 白屏的 87% —— 已由诊断分支桩的逐阶段 dump 坐实为根因（2026-11-20 07:06 更新，见 §08）</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0553-perf-webui-boot-serial-asset-chain</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 05:53</div></div>
@@ -144,7 +144,7 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p>启动链结构: 分片逐个 fetch(等上一个 then 才发下一个) + 脚本 <code>onload</code> 链式逐个插, 109 个请求严格串行, 无并发无预加载; 每个请求的往返延迟累加成首屏时间。<code>no-cache</code> 使刷新时每个资源仍需 ETag 校验往返(304 也占一趟)。</p>
-  <div class="callout">已排除: 不是本次「重启后 5-15s 卡死」的根因 —— 用户本地 ctrl+F5 硬刷新(全量重下静态资源)仅 1-2s, 若是此链为瓶颈硬刷新应同样慢; 重启特有的慢另有根因, 另案追查。</div>
+  <div class="callout">2026-11-20 07:06 更正: 早先「非本次根因」的判断已被真机逐阶段桩推翻 —— 见 §08。当时依据「ctrl+F5 仅 1-2s」排除, 属误判: 稳态下连接复用 + 304 校验使单请求延迟低, 才显快; 重启后 109 个资源逐个回源校验(ttfb 54-166ms), 串行累加成 10.5s。本 issue 现为「重启后 5-15s 白屏」的<b>根因</b>, 原排除段保留作误判留痕。</div>
 </section>
 
 <section id="s6">
@@ -156,11 +156,45 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-20 05:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-20 07:06 — 真机逐阶段桩坐实为「重启后 5-15s 白屏」<strong>根因</strong>: 109 请求串行 × ttfb 54-166ms = 10.5s(87%); 原「非主因」判断作废(见 §08)</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="no">§08</span>根因坐实：真机逐阶段桩（2026-11-20 07:06）</h2>
+  <p>诊断分支 <code>diag/webui-boot-probe-stub</code> 在前端 boot 链插入计时桩(<code>window.__AQBP.dump()</code>), 用户真机(约 210 种子、本地部署、atlas 皮肤)重启后刷新取数。原样贴证据:</p>
+<pre><code># console.table(globalThis.__AQBP.dump()) 关键锚点 (t=从导航开始的绝对 ms, dt=与上一步间隔):
+NAV_responseStart     t=893.6   dt=0
+NAV_responseEnd       t=896.7   dt=3.1
+boot_script_enter     t=1461.6  dt=564.9      # head CSS/JS + 解析
+part_done:topbar      t=1657.6  dt=195.9
+part_done:groups      t=1754.3  dt=96.6
+... (28 分片，每个 dt 30~200ms，无单点跳变) ...
+parts_all_done        t=4208.2
+inject_done           t=4214.0  dt=5.8
+script_done:(81个)    每个 dt 30~210ms，无单点跳变
+app_before_mount      t=11967.8
+vcloak_visible        t=12036.8                # 框架可见 12.0s
+config_public_req     t=12036.3                # 后端 /api 到这一刻才首次发出
+[AQB BOOT PROBE] v-cloak 已卸(框架可见); 框架放行点 @ 未到达
+
+# 单请求分解 console.table(...resource...filter(tpl).slice(0,6)):
+f              connect  ttfb  download  total
+topbar.html    0        81    2         85
+groups.html    0        54    2         60
+torrents.html  0        106   3         113
+shows.html     0        166   2         171
+ctx-menus.html 0        63    3         68
+settings.html  0        162   3         168
+# => connect=0(连接复用, 非建连/代理问题), download=2-3ms(传输正常), 全部耗时在 ttfb=54-166ms(服务端每请求响应)</code></pre>
+  <p>分段汇总: 28 分片串行 2,747ms(98ms/片) + 81 脚本串行 7,754ms(96ms/脚本) = <b>10,500ms, 占首屏 12,037ms 的 87%</b>; HTML TTFB 894ms(7%) + head 565ms(5%) + Vue mount 69ms(1%)。对照本地无头浏览器: 分片 4ms/片、脚本 5ms/脚本, 框架可见约 0.9s —— 同一条链, 单请求延迟差约 20 倍, 被 109 次串行线性放大。</p>
+  <p><b>为什么 ctrl+F5 反而快</b>: 稳态下连接复用 + ETag 校验走 304(无响应体), 单请求延迟低; 重启后缓存状态冷、109 个资源逐个回源算 ETag, 才暴露线性放大。这条曾被用来排除本 issue, 实为误判。</p>
+  <p><b>后端无罪</b>: <code>config_public_req</code> 在 12.036s(框架可见那一刻)才首次发出, <code>/api/state</code> 更早不在链上 —— 「首轮数据管线挡发布」的方向彻底排除。</p>
+  <p><b>修法方向收敛</b>: ttfb 高来自 <code>static_ui.py::_static_no_cache</code> 的 <code>Cache-Control: no-cache</code> 强制每次 ETag 重验 + <code>StaticFiles</code> 每请求 stat/读文件。治本 = 静态资源内容指纹化文件名 + <code>immutable</code> 长缓存(109 次校验请求归零), 配套保留 <code>index.html</code>/manifest 的 no-cache 以防升级后旧缓存; 治标 = 分片 <code>Promise.all</code> 并发 + 脚本并发预取。指纹化必须同步解决「升级后不加载旧文件」的兼容性(当初 no-cache 的立项目的)。</p>
 </section>
 
 <footer>

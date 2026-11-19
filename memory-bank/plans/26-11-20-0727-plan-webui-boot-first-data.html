@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 重启后首屏白屏根治：静态资源并发化 + 查询参数指纹长缓存</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-boot-first-data">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-20-0727">
+<meta name="doc-updated" content="26-11-20-0727">
+<meta name="doc-refs" content="memory-bank/issues/26-11-20-0553-perf-webui-boot-serial-asset-chain.html,memory-bank/issues/26-11-20-0726-question-webui-build-toolchain.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-boot-first-data</div>
+<h1>WEBUI 重启后首屏白屏根治：静态资源并发化 + 查询参数指纹长缓存</h1>
+<p class="lede">本篇只回答：怎么把「重启后 109 个静态请求串行 + 每次 ETag 重验」造成的 10.5s 首屏空白，分两期根治到框架可见 ≤1.5s；为什么不直接上构建工具链，见 issue 26-11-20-0726。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-20-0727 · <b>doc-updated</b> 26-11-20-0727 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-18 首轮修复未果 → 2026-11-20 真机逐阶段桩坐实根因（issue 26-11-20-0553 §08）→ 成熟方案调研 + 批量插入保序实验 + grilling 三轮 8 问拍板（D1-D8）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>目标</b>：真机（约 210 种子、本地部署、重启后首次刷新 WebUI）框架可见——<code>#app</code> 的 <code>v-cloak</code> 卸除、导航栏/状态栏出现——从今天约 12s 降到 <b>≤1.5s</b>；P1 单独上线后的中间目标 ≤3s。</p>
+<p><b>不变量（改完必须仍成立）</b>：</p>
+<ol>
+  <li>模板按清单顺序注入；全部成功后才放行脚本；任一失败仍走 <code>fail()</code> 可读占位 + 重新加载按钮（boot.js 现有契约，D8 确认不改）。</li>
+  <li>脚本执行顺序 = 清单顺序（顶层 <code>const</code> 与依赖顺序依赖它，不能用 <code>type=module</code> 改作用域）。</li>
+  <li>升级后绝不让用户拿到旧的 <code>app.js</code>/<code>style.css</code>——这是当年 no-cache 中间件要防的事，长缓存不能把它丢掉。</li>
+  <li>诊断桩只留在独立分支 <code>diag/webui-boot-probe-stub</code>，不进 develop；后端 API 不进首屏关键路径。</li>
+  <li>四套皮肤（atlas / prism / console / flux）装配保持一致。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>今天</b>：<code>boot.js:72 nextPart()</code> 逐个 fetch 28 个模板分片（then 链串行）；<code>boot.js:119 nextScript()</code> 逐个插入 81 个脚本（<code>async=false</code> + onload 链串行）。<code>static_ui.py:48 _static_no_cache</code> 给所有非 API 响应加 <code>Cache-Control: no-cache</code>，每个资源每次都要 ETag 校验往返。</p>
+<pre><code># 真机桩（2026-11-20 07:06, 约 210 种子, 本地部署, atlas）:
+28 分片串行 2,747ms + 81 脚本串行 7,754ms = 10,500ms = 首屏 12,037ms 的 87%
+单请求分解: connect=0  download=2-3ms  ttfb=54-166ms  -> 瓶颈在服务端每请求响应
+config_public_req 出现在 12,036ms（框架可见那一刻）-> 后端 API 不在关键路径
+本地同链无头浏览器: 分片 4ms/片, 脚本 5ms/片, 框架可见约 0.9s -> 单请求延迟差约 20 倍
+
+# 批量插入保序实验 (parallel_script_probe.cjs):
+8 个脚本 x 100ms -> 串行链 867ms, 批量插入 117ms, 执行序都是 0..7</code></pre>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>：两期，先并发化再指纹化；每期独立可上线、独立可回退（D1）。</p>
+<h3>P1 · 并发化（治标，先上）</h3>
+<ul>
+  <li><b>分片</b>：<code>Promise.all</code> 并发 fetch 全部 28 个分片，结果按清单 index 归位后再拼接注入——顺序与「全部成功才注入」不变；每请求保留独立 10s AbortController，任一失败 <code>fail()</code>。</li>
+  <li><b>脚本</b>：用 <code>link rel=preload as=script</code> 并行预取全部 81 个（<b>只用 preload，不用 fetch</b>——P1 阶段中间件仍全量 no-cache，fetch 预取后再插 <code>&lt;script src&gt;</code> 会二次 ETag 重验，破坏「每脚本只一次网络请求」判据；preload 可被后续 script 复用缓存），全部成功后按清单顺序批量插入 <code>async=false</code> 脚本；任一失败在插入任何脚本之前 <code>fail()</code>。这样既并行掉 TTFB，又守住 D8 的 fail-fast。</li>
+  <li><b>落点</b>：仅 <code>src/auto_qb/webui/static/shared/boot.js</code> 一处，四套皮肤共用，一处改动四套受益。</li>
+</ul>
+<h3>P2 · 指纹化 + 长缓存（治本，达成 ≤1.5s）</h3>
+<ul>
+  <li><b>版本源</b>：应用启动时计算 <code>static/</code> 树的内容哈希 V（只算静态源码扩展名，排除日志 / <code>.pyc</code>），缓存内存（D5）。</li>
+  <li><b>HTML</b>：四套 <code>index.html</code> 的 head 资源写成 <code>?v=__AQB_V__</code> 并注入 <code>window.AQB_V</code>；服务端替换令牌，HTML 自身保持 <code>no-cache</code>（D4）。</li>
+  <li><b>装载器</b>：<code>boot.js</code> 集中给分片/脚本 URL 追加 <code>?v=V</code>（已有 query 则用 <code>&amp;v=</code>），对应 D4 的「集中追加」。</li>
+  <li><b>缓存分流</b>：带当前 V 的静态响应发 <code>public, max-age=31536000, immutable</code>；裸路径 / 无 v / <code>/api/*</code> 维持 <code>no-cache</code>（D6）。</li>
+  <li><b>测试</b>：<code>test_static_assets_disable_heuristic_cache</code> 拆成「裸路径 → no-cache」与「带 v → immutable」两组；补哈希稳定性、令牌替换、URL 追加、四皮肤一致性。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>期 / 步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>P1-1 分片并发</td><td>boot.js 分片改 Promise.all + index 归位拼接</td><td>28 请求并发发起（相邻启动间隔 &lt;5ms）；注入顺序与清单完全一致；注入一个失败分片仍进 fail()</td></tr>
+  <tr><td>P1-2 脚本并发</td><td>并行预取 + 全部成功后按序批量插入</td><td>81 请求并发且每脚本只 1 次网络请求；执行序 0..80；注入一个 404 时任何脚本执行前就 fail()</td></tr>
+  <tr><td>P1-3 回归</td><td>四皮肤 + 210 种子 harness + 真机复测</td><td>test.quick 全绿；四皮肤框架可见；真机 ≤3s</td></tr>
+  <tr><td>P2-1 版本源</td><td>启动算静态树哈希 + HTML 令牌替换</td><td>改任一静态文件后 V 变、不改 V 稳定；四套 HTML 都成功替换</td></tr>
+  <tr><td>P2-2 URL + 分流</td><td>boot.js 追加 ?v=；中间件按 v 分流缓存头</td><td>带 v 响应 immutable；裸路径 no-cache；/api 不受影响</td></tr>
+  <tr><td>P2-3 测试改造</td><td>拆精确路径断言 + 升级演练</td><td>升级前后 V 变化、旧 URL 不再被引用；test.full 全绿</td></tr>
+  <tr><td>P2-4 真机验收</td><td>重启后刷新，外部 Playwright 探针量 v-cloak 卸除</td><td><b>框架可见 ≤1.5s</b>；静态重验请求为 0（HTML 除外）；页面功能与升级路径无回归</td></tr>
+</table>
+<p class="aside">验收探针走浏览器原生 <code>performance</code> + 外部 DOM 轮询，不往 develop 注入任何桩（D3）。分期门槛：P2 未上线前不得把 ≤1.5s 当作已达成。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling Q1-Q8 已全部拍板（见 §06）。触发重开的条件：P1 真机仍 &gt;3s，或 P2 的 immutable 在真机上出现升级后旧缓存事故。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>问题</th><th>结论</th><th>日期 / 来源</th></tr>
+  <tr><td>D1</td><td>修复节奏</td><td>分两期：P1 并发化，P2 指纹化 + 长缓存；各自独立上线/回退</td><td>2026-11-20 · Q1</td></tr>
+  <tr><td>D2</td><td>验收门槛</td><td>真机框架可见 ≤1.5s（P1 中间 ≤3s）</td><td>2026-11-20 · Q2</td></tr>
+  <tr><td>D3</td><td>诊断桩归属</td><td>只在 diag/webui-boot-probe-stub，不合并进 develop</td><td>2026-11-20 · Q3</td></tr>
+  <tr><td>D4</td><td>版本载体</td><td>URL 查询参数 <code>?v=</code>，由 boot.js 集中追加 + HTML 令牌</td><td>2026-11-20 · Q4</td></tr>
+  <tr><td>D5</td><td>版本来源</td><td>启动时算静态树内容哈希并注入 HTML，无构建、无手工 bump</td><td>2026-11-20 · Q5</td></tr>
+  <tr><td>D6</td><td>immutable 范围</td><td>只给带 v 的静态资源；HTML / 裸路径 / API 维持 no-cache</td><td>2026-11-20 · Q6</td></tr>
+  <tr><td>D7</td><td>计划范围</td><td>一份计划两期，不拆两份</td><td>2026-11-20 · Q7</td></tr>
+  <tr><td>D8</td><td>并发语义</td><td>只并发 fetch；保序、全有或全无注入、fail-fast、10s 超时不变</td><td>2026-11-20 · Q8</td></tr>
+</table>
+<p class="aside">用户 2026-11-20 07:19「按推荐」一次确认 Q4-Q8；Q1-Q3 由前一轮「按推荐」确认。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>脚本失败语义变化</td><td>批量插入后某个脚本 404，后续脚本可能仍执行</td><td>「并行预取全部成功后再插入」把失败挡在执行前；验收专门注入 404 验证</td></tr>
+  <tr><td>版本号抖动</td><td>日志 / <code>.pyc</code> 等非静态文件混进哈希</td><td>只算 <code>static/</code> 下白名单扩展名；加哈希稳定性测试</td></tr>
+  <tr><td>query string 缓存通用性</td><td>将来引入 CDN，中间层不缓存带 <code>?</code> 的请求</td><td>本地部署当前无此问题；真发生时转 issue 26-11-20-0726 走文件名哈希演进</td></tr>
+  <tr><td>全树单版本号失效面大</td><td>改一个文件导致全部资源 URL 变化</td><td>升级是低频事件，换来版本一致性（无新旧文件混用）；升级演练验收</td></tr>
+  <tr><td>并发瞬时压力</td><td>109 个请求同时打到服务端</td><td>本地单用户场景可接受；若出现压力，加有限并发窗口（如 12 并发）仍远快于串行</td></tr>
+  <tr><td>诊断桩误入 develop</td><td>合并分支时带上 <code>__AQBP</code> 桩</td><td>D3 分支隔离；验收在 develop 上 grep <code>__AQBP</code> 为零</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-20-0727</span> 初版：来源为 grilling 三轮 8 问拍板 + issue 26-11-20-0553 §08 真机证据 + issue 26-11-20-0726 构建工具链对比；要点为两期方案、D1-D8、≤1.5s 验收与分期门槛。</li>
+</ul>
+
+</div>
+</body>
+</html>
