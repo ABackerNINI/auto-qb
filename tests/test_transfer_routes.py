@@ -26,6 +26,11 @@ pitfalls/testing/web-auth-test-forms.md: 缺省 TestClient 形态非 loopback, �
 - test_transfer_run_slow_target_does_not_block_command_line: 慢目标桩(find_torrent
   阻塞)下命令线程不被占住 —— 转移命令 exec_ms < 500(CMD_SLOW_MS 埋点口径, 验证
   等待在 worker), 回执延后; 放行后批次照常齐写回执
+- test_web_stop_sequence_with_inflight_verify_does_not_block: web 停止序列整段不阻塞
+  (S4/S5 验收「关停 < N s, 不 join, Event 即时醒」) —— 慢目标在途验证钉在 find 闸上,
+  WebUIModule.stop()(center.stop -> 订阅注销 -> 服务退出位)秒级内完成; 关停面若退化成
+  join worker(在途验证等满闸超时 10s)本用例当场红; 在途结论 stop 后照常回灌但回执不写
+  (主循环不再 drain 即作废, D4a), 全程零删源
 - test_transfer_test_route_and_drain: test 路由空/缺失 target_id 400 不入队(T2a2); 目标不存在 400 不入队; 未启用目标可测
   (只要求存在, 设置页先行测连通); drain 成功 -> ok truth={info}; 适配器抛
   TransferAdapterError -> error 回执回显文案
@@ -388,6 +393,49 @@ def test_transfer_run_slow_target_does_not_block_command_line(tmp_path, monkeypa
     mgr.web.consume_commands()
     rec = mgr.web.results[cmd_id]
     assert rec["status"] == "ok" and rec["truth"]["results"][0]["状态"] == "成功", rec
+
+
+def test_web_stop_sequence_with_inflight_verify_does_not_block(tmp_path):
+    """web 停止序列整段不阻塞钉面(S4/S5 验收「关停 < N s, 不 join, Event 即时醒」):
+    慢目标在途验证钉在 find_torrent 闸上时, WebUIModule.stop() 整段(center.stop() ->
+    订阅注销 -> 服务退出位, 生产序列逐字)秒级内完成 —— 关停面若退化成 join worker
+    (在途验证要等满闸超时 10s), 本用例当场红; 在途结论 stop 后照常回灌, 但主循环不再
+    drain -> 回执不写(作废面, D4a), 全程零删源(源不误删)"""
+    mgr = _drain_manager(tmp_path, TARGET_A)
+    mgr.client.torrents["HA"] = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)
+    gate = threading.Event()
+    finds: list = []
+
+    class SlowFindAdapter:
+        def add_torrent(self, data, fields, skip_check):
+            return AddResult.added("目标已受理")
+
+        def find_torrent(self, infohash):
+            finds.append(infohash)
+            gate.wait(timeout=10.0)  # 在途验证钉住: worker 阻塞在这里(唯一能拖住 join 的点)
+            return {"hash": infohash, "state": "stoppedUP"}
+
+    mgr.web.transfer_center._adapter_factory = lambda target: SlowFindAdapter()
+    resp = mgr.web.post_command("transfer_run", {"target_id": "目标A", "hashes": ["HA"]})
+    cmd_id = resp["cmd_id"]
+    mgr.web.consume_commands()  # 生产段+递交即返回(递交路径, 回执延后)
+    assert wait_until(lambda: bool(finds), timeout=3.0), "在途验证已进 worker(阻塞在 find 闸)"
+    mod = mgr.host.get("webui")
+    t0 = time.perf_counter()
+    try:
+        mod.stop()  # 整段关停序列: center.stop() 先叫停(Event 即时醒, 不 join)
+        elapsed_s = time.perf_counter() - t0
+        assert elapsed_s < 2.0, f"web 停止序列被在途验证拖住({elapsed_s:.1f}s, 闸超时 10s)"
+        assert mgr.web.transfer_center._stop_event.is_set(), "stop Event 已置位"
+    finally:
+        gate.set()  # 放行在途验证: 结论照常回灌(stop 不拦回灌); 失败路径也不留阻塞线程
+    # 在途结论回灌后主循环不再 drain: 回执不写(作废面, 与今天进程崩溃同形)
+    assert wait_until(lambda: mgr.web.transfer_center._results.qsize() == 1, timeout=3.0)
+    assert cmd_id not in mgr.web.results, "stop 后不再 drain: 回执不写(在途作废)"
+    assert all(c[0] != "delete" for c in mgr.client.calls), "全程零删源(源不误删)"
+    worker = mgr.web.transfer_center._worker
+    worker.join(timeout=2.0)  # 测试侧 join 仅作收尾: worker 已被 stop Event 放行, 秒级自然退出
+    assert not worker.is_alive(), "worker 已被 stop Event 即时醒退出"
 
 
 def test_transfer_test_route_and_drain(web_env, tmp_path, monkeypatch):
