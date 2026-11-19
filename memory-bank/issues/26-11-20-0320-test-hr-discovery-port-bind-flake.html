@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>hr_discovery bind 失败用例并行形态环境性 flake(连号端口抢占 WinError 10048) · test · 计划外问题</title>
+<meta name="issue-slug" content="hr-discovery-port-bind-flake">
+<meta name="issue-stamp" content="26-11-20-0320">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="hr-discovery-port-bind-flake">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="hr_discovery bind 失败用例并行形态环境性 flake(连号端口抢占 WinError 10048)">
+<meta name="issue-summary" content="test_runtime_discovery_bind_failure_keeps_data_endpoint 在并行(-n 8)/全量次轮两度偶红: 连抢 8 个连号端口 3 轮全败, WinError 10048, 自带 RETRIES=3 仍失败, 隔离重跑恒绿 —— Windows 动态排除段/端口残留占用类环境问题, 与 relocate S5 改动零关联">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· test</div>
+<h1>hr_discovery bind 失败用例并行形态环境性 flake(连号端口抢占 WinError 10048)</h1>
+<p class="lede">test_runtime_discovery_bind_failure_keeps_data_endpoint 在并行(-n 8)/全量次轮两度偶红: 连抢 8 个连号端口 3 轮全败, WinError 10048, 自带 RETRIES=3 仍失败, 隔离重跑恒绿 —— Windows 动态排除段/端口残留占用类环境问题, 与 relocate S5 改动零关联</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-20-0320-test-hr-discovery-port-bind-flake</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 03:20</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>relocate 重构 S5 执行期间（2026-11-20）由两个不同子代理在两轮测试中各撞见一次，同一天、同一用例、同一形态（非隔离全量跑）偶红：</p>
+  <ul>
+    <li><strong>发现 1</strong>（S5-2 实施代理，<code>commands run test.quick</code> 并行 <code>-n 8</code> 形态）：首跑该用例红；隔离复跑两次与第二次全量均绿。</li>
+    <li><strong>发现 2</strong>（S5-3 收尾代理，<code>commands run test.full</code> 第二轮）：该用例红（WinError 10048），第三轮全量绿收数 6495P/6S/0F。</li>
+  </ul>
+  <p>与 relocate S5 改动零关联：本批未触碰 <code>tests/test_hr_discovery.py</code> 与 hr 发现/端口绑定任何代码（S5 全部 diff 见计划 26-11-15-2340 R4）。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">两度红的具体 traceback 原文未留存（证据经子代理报告转述，报告时间 2026-11-20）；认领复验时以现跑原文为准。</p>
+<pre><code>发现 2 转述（S5-3 收尾代理，2026-11-20，test.full 次轮）:
+  1F = test_hr_discovery 连号端口抢占环境性 flake
+      - 连抢 8 个连号端口 3 轮全败
+      - WinError 10048（端口被占）
+      - 测试自带 RETRIES=3 重试仍失败
+      - 非本批改动面, 重跑即绿
+
+记账锚: memory-bank/testing/baselines/26-11-20-0244-relocate-refactor-s5.md
+  中断记账两行（首轮 1F=坑档条目守卫[当轮修复]; 次轮 1F=本件环境性 flake）</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>并行（<code>-n 8</code>）或全量连跑形态下偶发；隔离单跑本会话内未复现过。连号端口批量探测是直接触发面（连抢 8 个连号端口）。</td></tr>
+    <tr><td>影响范围</td><td>仅 <code>tests/test_hr_discovery.py</code> 该用例（测试基建面）；产品代码零关联；会打断全量绿收数，需人工分辨真回归。</td></tr>
+    <tr><td>严重度</td><td class="wr">低 —— 环境性 flake，重跑即绿；但自带 RETRIES=3 在窗口期内仍可能三连败，真实失败窗口不小。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>tests/test_hr_discovery.py:733</code>（取证 2026-11-20 03:20）· <code>def test_runtime_discovery_bind_failure_keeps_data_endpoint</code> · grep: <code>test_runtime_discovery_bind_failure</code></li>
+    <li>重试上限单点: <code>tests/_test_ports.py:25</code> <code>RETRIES = 3</code>（bind(0) 取号次数上限）· 本用例经 <code>test_hr_discovery.py:99</code> <code>from _test_ports import hold_run as _hold_run</code> 间接携带, 本用例体内连抢八位在 <code>:735</code> <code>_hold_run(8)</code>（同型调用另例 :479 属兄弟用例, 非本件）。</li>
+    <li>同文件头部测试计划清单 <code>:51</code> 有该用例条目；文件共 952 行。</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查（已排除：relocate S5 改动面 —— 两度红均与本批 diff 无交集；倾向假设：Windows 动态排除端口段 / 前轮残留占用导致连号段批量 bind 失败，<strong>未证实</strong>）</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>待定。方向候选（未调查，仅备选）：①连号探测改随机/分段取样，避开 Windows 动态排除段；②RETRIES 重试加退避间隔；③探测端口数与重试参数按平台自适应。认领复验后定方案。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-20 03:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-20-0320-test-hr-discovery-port-bind-flake.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
