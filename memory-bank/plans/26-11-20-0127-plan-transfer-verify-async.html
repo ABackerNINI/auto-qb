@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>transfer_run 验证等待异步化: 目标侧整段进 daemon 线程(结果队列回灌 + 命令线尾部消费)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="transfer-verify-async">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-20-0127">
+<meta name="doc-updated" content="26-11-20-0205">
+<meta name="doc-refs" content="memory-bank/issues/26-11-11-0039-perf-main-loop-blocking-candidates.html, memory-bank/plans/26-10-31-0306-plan-torrent-transfer.html, memory-bank/tasks/26-11-20-backend-transfer-verify-async.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: transfer-verify-async</div>
+<h1>transfer_run 验证等待异步化: 目标侧整段进 daemon 线程(结果队列回灌 + 命令线尾部消费)</h1>
+<p class="lede">本篇只回答: issue 26-11-11-0039 §06.1 行 1 的「transfer_run 验证等待」如何移出主循环——目标侧整段(add→验证→pause)进 daemon 线程,源侧读/门/导出留主循环,结论经队列回灌由命令线尾部消费(删源+回执),消除转移批次期间 N×10s 量级的主循环阻塞。两段回执(即时受理+终态补发)已拍板为后续阶段,不在本计划实施。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-20-0127 · <b>doc-updated</b> 26-11-20-0205 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-20,单轮八问 D1-D8 拍板:Q1-Q4/Q6-Q8 按推荐,Q5 改判「两段回执降为后续阶段」) · 认领 issue 26-11-11-0039-perf-main-loop-blocking-candidates(§06.1 行 1,P1) · 先例:计划 26-11-10-2350(探针异步,已 Superseded 并入 26-11-15-2340 第二批未实施,D1-D10 范式沿用) · 取证基线 <code>a14e1e20</code>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>为什么做</h3>
+<p>issue 0039 行 1:用户点「转移种子」后界面卡几十秒——<code>_cmd_transfer_run</code>(<code>webui/commands.py:178</code>)在主循环线程同步跑完 <code>TransferOrchestrator.run_batch</code>(<code>commands.py:194</code> → <code>orchestrator.py:274</code>),其中 <code>_verify</code>(<code>orchestrator.py:417-447</code>)对目标侧每 0.5s 轮询一次 <code>find_torrent</code>,单种子最多等 10s(<code>verify_timeout=10.0</code>),批内串行 → 一批 N 个的验证等待按 N×10s 量级占住主循环。期间 WEB 点什么都要排队、快照停滞、全部模块任务线同期停。命令面 docstring 自己就把这条认成「已知形态」(<code>commands.py:181-183</code>「验证轮询期间主循环被占用是计划 §03 已知形态」)。</p>
+<h3>做到什么程度算成</h3>
+<ol>
+  <li>转移批次期间主循环可感知时长只剩生产段(每种子 2 次 qB HTTP:读源+导出);慢目标/超时场景下 <code>[cmd] ... 排队 Xms</code> 不再被验证等待拉大(<code>CMD_SLOW_MS=300</code> 埋点,<code>commands_common.py:237</code>);</li>
+  <li>逐种子外部语义(三态结果/失败分类/回执 truth 形状/入参顺序/summary)逐字节不变,前端 transfer_flow <strong>零改动</strong>(waitCmd 超时已随批量放大,<code>transfer_flow.js:326</code>);</li>
+  <li>「验证未成不删源、数据文件永不删」不变量逐条保持(<code>orchestrator.py</code> 模块 docstring 不变量 1/2);删源与回执只在主循环线程;</li>
+  <li>既有 transfer 测试面(test_transfer_orchestrator 43 + test_transfer_adapters 43 + test_transfer_routes 8 + web_commands 用例)语义保留,worker 侧 runner 可注入(测试内联同步执行,不真等)。</li>
+</ol>
+<h3>设计底线/不变量</h3>
+<ul>
+  <li><strong>worker(daemon 线程)零共享态写</strong>:不碰任务队列 / <code>state_file</code> / store 分组索引 / 表现层视图(黄金法则 #5);adapter(独立 Client,<code>adapters/qb.py:156</code> 惰性建,不复用主 qB 连接)由线程独占,不与主循环并发使用;</li>
+  <li><strong>源侧三步只在主循环</strong>:<code>torrents_info</code>/<code>torrents_export</code> 走主 qB 共享 Session(<code>qbapi.py:481/494</code>),<code>torrents_delete</code> 还写 <code>store.remove_torrent</code>(<code>qbapi.py:202-240</code>);</li>
+  <li><strong>结论只经线程安全 handoff</strong>(<code>queue.Queue</code>)回灌,消费(删源/回执/聚合)全在主循环;</li>
+  <li><strong>关停顺序不变</strong>:<code>stop_all → state.save → release</code>(<code>qbmanager.py:756</code> 起 finally);退出不 join worker(daemon);</li>
+  <li><strong>零新增配置键</strong>:<code>verify_timeout=10.0</code>/<code>poll_interval=0.5</code> 维持 orchestrator 构造常量(可注入,<code>orchestrator.py:259-270</code>),validate_config 不动(探针计划 D5 同款)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>现状(取证 2026-11-20,基线 a14e1e20;issue 锚点行号按符号重定位)</h3>
+<ul>
+  <li><strong>入口唯一</strong>:WEB 命令 <code>transfer_run</code>(<code>routes/transfer.py:72</code> 经 <code>_enqueue</code> 投递);规则/其它模块不触发,只有这一条链。</li>
+  <li><strong>执行面</strong>:命令线消费(<code>runtime_commands.py:28 consume_commands</code>)→ <code>_cmd_transfer_run</code>(<code>commands.py:178</code>)同步执行 <code>run_batch</code>(<code>orchestrator.py:274</code>):串行逐种子 <code>_transfer_one</code>——读源(<code>torrents_info</code>,共享 Session)→ 状态门(<code>gate_verdict</code> 纯函数)→ 导出(<code>torrents_export</code>)→ 准备(路径映射/跳检决策,纯函数)→ <code>adapter.add_torrent</code>(目标独立 Client)→ <code>_verify</code>(<code>:417-447</code>:find_torrent 每 0.5s,≤10s,<code>TARGET_ERROR</code> 早退)→ after_state=paused 时 <code>pause_torrent</code> → 删源(<code>torrents_delete</code>+<code>store.remove_torrent</code>)。</li>
+  <li><strong>回执面</strong>:<code>transfer_run</code> 在 <code>DEFERRED_RECEIPT_COMMANDS</code>(<code>commands_common.py:168</code>,handler 自写、drain 不补写),handler 结算后写 truth={<code>results</code>(按入参顺序), <code>summary</code>, <code>target</code>}(<code>commands.py:198-207</code>);等待期间前端 waitCmd 转圈,超时已随批量放大(<code>transfer_flow.js:326</code> 注释自认「单条最坏=export+添加+验证 10s」)。</li>
+  <li><strong>阻塞量化</strong>:验证等待是设计内长等待(每种子 0.5~10s+,N 个串行 N×10s 量级);叠加 HTTP 超时面(源侧与目标侧同 <code>REQUESTS_TIMEOUT=(3,10)</code>)——qB 假死/目标不可达时单种子可到 10s+。issue 0039 §03 判「P1 项单次可占几十秒」。</li>
+  <li><strong>消费挂点现状</strong>:命令线每轮必跑且暂停分支也跑(<code>qbmanager.py:596</code> <code>run_command_line</code> 在暂停判断之前),其返回值 <code>cmd_changed_state</code> 驱动 P0-5 立即补刷新(<code>qbmanager.py:609-613</code>)——drain 的删源可白享这条通路。</li>
+  <li><strong>先例面</strong>:探针异步计划 26-11-10-2350 已把同形态问题(run_probe 三段轮询占主循环)拍板成「daemon 线程 + 结果队列 + 主循环消费」,其 §07 钉过「线程与主循环共享 qB client Session」风险(独立 client 处置)——本计划目标侧 adapter 天然独立,该风险面更小。旧 transfer 计划 26-10-31-0306 D6「串行逐种子」与 orchestrator docstring「不引入线程/并发(D6)」的读法按本计划改道(反指已落 0306 变更记录)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>主线</h3>
+<p>(拍板 D1-D8,见 §06)<code>_transfer_one</code> 拆两段——<strong>生产段留主循环</strong>(读源→门→导出→准备,产出「已结算结果」或「验证作业」),<strong>目标侧整段(add→验证→pause)进 daemon worker</strong>(单线程 FIFO,逐种子 try/except 兜底,结论沿用 <code>TorrentTransferResult</code> 原结构);结果经 <code>queue.Queue</code> 回灌,<code>consume_commands</code> 尾部 drain 消费:验证成功的删源、填批次槽位、批次齐了写回执。主循环空了,回执契约不变(单段终态,truth 逐字节同形),前端零改动。</p>
+<h3>落点(三个组件)</h3>
+<ul>
+  <li><strong>orchestrator 拆分</strong>(<code>transfer/orchestrator.py</code>):生产函数(单种子:读→门→导出→准备 → 返回已结算结果或验证作业 {source_hash, plan, keep_source, after_state, notes})与 worker 侧函数(add→verify→pause,复用既有 <code>_transfer_one</code> 各步与失败分类)抽出;<code>run_batch</code> 保留为「生产+worker 逻辑顺序执行」的参考实现(既有测试与语义锚);纯函数与可注入面(sleep/verify_timeout/poll_interval)全保留。</li>
+  <li><strong>TransferVerifyCenter</strong>(webui runtime 持有):作业队列 + 结果队列 + 单 daemon worker(stop Event 驱动 <code>Event.wait(poll_interval)</code> 可即时醒)+ 批次聚合容器(cmd_id → 槽位数组/剩余计数,主循环单写者);批次=任务分组,多批次自然共存(D3a);worker 循环级全异常捕获→合成 <code>UNEXPECTED</code> 结果回灌(防「线程死→结论永不到→回执挂死」)。</li>
+  <li><strong>命令面接线</strong>(<code>webui/commands.py</code> + <code>runtime_commands.py</code>):<code>_cmd_transfer_run</code> 改跑生产段——全批已结算(无验证作业)→ 现场写回执(<strong>快路径</strong>,行为与今天一致);有验证作业 → 递交 center,回执延后由 drain 写。drain 在 <code>consume_commands</code> 尾部:收全部结果→删源(成功且非 keep_source)→填槽→批次齐写回执;删除并入 <code>cmd_changed_state</code> 返回值(白享 P0-5 补刷新)。</li>
+</ul>
+<h3>分期</h3>
+<p>S1-S6 见 §04;两段回执为后续阶段(D5b,未排期,不在本计划实施)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>S1</td>
+    <td>orchestrator 拆分:生产函数 / worker 侧函数抽出(<code>run_batch</code> 外部语义不变,保留为参考实现);验证作业数据结构定义</td>
+    <td>既有 <code>test_transfer_orchestrator</code> 43 用例全绿(注入内联,零语义变化);生产段各门/快路径判定纯函数新增用例</td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td>TransferVerifyCenter:作业/结果队列 + daemon worker(stop Event)+ drain + 批次聚合;接进 runtime(<code>consume_commands</code> 尾部)</td>
+    <td>单测:回灌结算、槽位聚合、回执按批齐写、多批次 FIFO 共存、stop Event 即时退、worker 全异常合成结果;adapter 独占断言(worker 与主循环不同时调用同一 adapter);同 hash 双批次反序交错用例(后删者静默成功口径钉住,见 D3)</td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td>命令面改造:<code>_cmd_transfer_run</code> 生产段+递交+快路径;drain 删源+回执+<code>cmd_changed_state</code> 并入</td>
+    <td>web_commands 既有用例全绿;快路径(全跳过/全失败批次)回执时机与内容与今天一致;慢目标桩下 <code>[cmd] 排队 &lt; 500ms</code></td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td>关停与告警面:web 停止接线 stop Event;已验证未删清单 WARNING;worker 生命周期日志(递交/结算/丢弃)</td>
+    <td>关停耗时 &lt; N 秒(不 join,Event 即时醒);丢弃清单落日志(hash +「目标已建,源未删」文案);源种子零误删守阵</td>
+  </tr>
+  <tr>
+    <td>S5</td>
+    <td>回归+守阵收口:慢目标桩守阵(排队&lt;500ms / 关停&lt;N s / 逐条回执正确 / 源不误删),全量回归</td>
+    <td><code>commands run test.full</code> 全绿;<code>kb.new baseline --total &lt;实测&gt;</code></td>
+  </tr>
+  <tr>
+    <td>S6</td>
+    <td>回写:issue 0039 行 1 实施留痕(实际修法/验证方式/测试数字);架构文档(<code>main-loop-queue</code>/<code>concurrency</code>)按实现面回写;本计划翻 Done</td>
+    <td><code>kb.check</code>/<code>kb.docmap</code> 过;复评裁决后零 actionable</td>
+  </tr>
+</table>
+<div class="aside"><span class="tag">后续阶段(D5b,未排期)</span> 两段回执:提交即回「已受理 N 个,后台验证中」+ 结算补终态;前端 transfer_flow 配套(受理段渲染 + 终态补发 + waitCmd 语义)。方向已拍板,实施时单独立件或在本计划追加期,不在 S1-S6 内。</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 单轮八问(2026-11-20)全部落拍,结论见 §06。实现细节层(center/worker 的命名与文件落点、批次容器内部结构、S2 drain 写回执的具体方法面)不构成用户决策面,实施时按现状钉死并回写本件变更记录。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>决策点</th><th>结论(2026-11-20,grilling 单轮)</th></tr>
+  <tr>
+    <td>D1</td>
+    <td>修法选型</td>
+    <td><strong>案甲:后台 daemon 线程跑目标侧整段 add→验证→pause</strong>(adapter 批次级创建、仅线程使用)。拒绝案乙(issue 原案 add 留主循环——worker 验证种子 1 与主循环 add 种子 2 并发共用同一 adapter Session);拒绝案丙(相位状态机跨 tick,拆 <code>_transfer_one</code> 黑盒)</td>
+  </tr>
+  <tr>
+    <td>D2</td>
+    <td>生产段归属</td>
+    <td>留主循环同步跑完一批(读源→门→导出→准备);残余占用(N×读+导出 ≈ 百毫秒级/种子)记录在案,后续真遇到再立项,本计划不摊跨 tick</td>
+  </tr>
+  <tr>
+    <td>D3</td>
+    <td>并发治理</td>
+    <td>(a) <strong>不设单飞</strong>:单 worker FIFO,批次=任务分组,多批次自然共存(与今天命令串行的最终语义等价);同 hash 跨批次撞车分两形——<strong>B 生产晚于 A 删源</strong>:生产段门拦(SOURCE_READ_FAILED,诚实失败);<strong>B 生产插在 A 验证期</strong>(反序,B 先入 worker):同目标时 B 侧 add 走「目标已存在」判定的命中形则落跳过(按实测 5.2 形 409→探针兜底成立;未命中响应形如通用 Ok. 判 ADDED 时 B 走完验证落 SUCCESS,终态仍无差);异目标时两批都可验证成功,后删者的删源是<strong>静默无操作</strong>(qB 对未知 hash 回 200、<code>store.remove_torrent</code> pop-None,<code>_delete_source</code> 返 True),回执纯 SUCCESS 无注记——失真面是「无提示的成功」而非误报失败,终态无差:数据文件永不删、源只删一次;若要显式「已由其它批次转移」注记属新增逻辑(删源前 hash 存在性探查),实施时可选。该交错面纳入 S2 验收用例(按实际删源语义钉住)。拒绝显式拒绝/等位受理段(都要新状态或两段回执)</td>
+  </tr>
+  <tr>
+    <td>D4</td>
+    <td>关停语义</td>
+    <td>(a) <strong>退出不 join</strong>:worker daemon,stop Event 让轮询即时醒;在途验证作废、回执不写(前端按放大后超时超时,与今天进程崩溃一致);已验证未删→丢弃删除意图+WARNING 清单(「目标已建,源未删」);验证任务/删除意图<strong>不持久化</strong>(重启不续跑)。拒绝优雅退出补执行删源(往 finally 序列塞路径)与 pending 持久化(转移验证 ≤10s/种子且用户手动发起,不值续跑状态机)</td>
+  </tr>
+  <tr>
+    <td>D5</td>
+    <td>回执形态</td>
+    <td>本期<strong>单段终态回执不变</strong>(truth 形状/顺序/summary 逐字节同形,前端零改动);<strong>两段回执(即时受理+终态补发)拍板为后续阶段</strong>——方向已定,前端要动,实施另行排期(用户改判:原推荐单段不动,两段降后续)</td>
+  </tr>
+  <tr>
+    <td>D6</td>
+    <td>消费挂点</td>
+    <td>命令线尾部(<code>consume_commands</code> 内 drain):每轮必跑、暂停分支也跑(用户命令尾随语义一致);删除并入 <code>cmd_changed_state</code> 白享 P0-5 补刷新。拒绝 on_task_line(为一条链造 module 骨架)与 qbmanager 直调(层次倒挂)</td>
+  </tr>
+  <tr>
+    <td>D7</td>
+    <td>调度粒度</td>
+    <td><strong>串行 FIFO</strong> 逐种子(每种子最多等 10s,批次墙钟时间与今天一致,只是不占主循环);拒绝批内并行轮询(本计划卖点是主循环解放不是提速)</td>
+  </tr>
+  <tr>
+    <td>D8</td>
+    <td>文档回写</td>
+    <td>计划入库即 <code>kb.new --refs</code> 双向补链(issue 0039 / 计划 0306)+ issue 行 1 状态格指针 + 0306 变更记录反指(D6 线程禁令读法改道)</td>
+  </tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr>
+    <td>worker 异常 → 结论永不到 → 批次回执挂死</td>
+    <td>线程被杀 / 解释器异常 / 单种子处理未捕获异常</td>
+    <td>worker 循环级全异常捕获 → 合成 <code>UNEXPECTED</code> 结果回灌(S2);批次容器记入队时刻,drain 对超龄未结算批次按 <code>VERIFY_TIMEOUT</code> 口径兜底结算并记 WARNING(同探针计划「超龄条目」思路,上界 = verify_timeout+裕度 × 串行深度)</td>
+  </tr>
+  <tr>
+    <td>adapter Session 并发使用</td>
+    <td>案乙形态残留(add 在主循环、验证在线程,同 adapter 两线程)</td>
+    <td>案甲下 add 进线程:adapter 批次级创建、仅 worker 调用;S2 隔离断言钉死(主循环不持任何目标 adapter 调用面)</td>
+  </tr>
+  <tr>
+    <td>验证窗口内源被用户手动删/改</td>
+    <td>验证等待期(秒级)用户删源/重命名/recheck</td>
+    <td>删源走既有 <code>torrents_delete</code>(<code>_delete_source</code> 已兜 False+注记,删不存在 hash 不翻已成功结算);门判定在生产段完成,窗口内状态变化不影响已受理种子的验证/删源语义——与今天「验证后删」窗口同形,只是窗口从毫秒级拉长到秒级</td>
+  </tr>
+  <tr>
+    <td>已验证未删源残留(双份做种)</td>
+    <td>验证成功后、drain 删源前进程退出(D4a)</td>
+    <td>丢弃删除意图 + WARNING 清单(hash +「目标已建,源未删,请手动处置」);重启不重放(保守默认:绝不自动删源);残留面与今天「删源失败源已保留」同族,属既有兜底语义</td>
+  </tr>
+  <tr>
+    <td>drain 消费中主循环异常</td>
+    <td>drain 内删源/回执写入抛异常</td>
+    <td>drain 逐结果 try/except,单条失败不影响其余;批次聚合容器是主循环单写者(黄金法则 #5),异常轮次由下轮重试同一槽位,批次计数只由主循环改</td>
+  </tr>
+  <tr>
+    <td>快路径回归(无验证作业批次行为漂移)</td>
+    <td>全跳过/全失败批次误走队列路径</td>
+    <td>S3 快路径判据单点(生产段无验证作业 → 现场结算回执,与今天同步路径同形);web_commands 用例钉回执时机</td>
+  </tr>
+  <tr>
+    <td>CMD_SLOW_MS 仍可能报 WARNING</td>
+    <td>大批次生产段 N×(读+导出) 超 300ms</td>
+    <td>残余已在 D2 记录在案;埋点照报是观测面不是缺陷,真成了痛点按 D2 单独立项</td>
+  </tr>
+  <tr>
+    <td>暂停模式下的删源时机</td>
+    <td>暂停期验证完成,drain 执行删源</td>
+    <td>命令线在暂停分支本就照跑(<code>qbmanager.py:597-602</code> 先命令后 continue),删源是用户已发起命令的尾随动作,语义一致;实施中若发现暂停期删除面需要守卫,按既有命令面口径处置并回写本件</td>
+  </tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-20-0127</span> 初版。来源:会话 grilling(2026-11-20,issue 0039 §06.1 行 1 立项)——单轮八问拍板 D1-D8(七按推荐,Q5 改判「两段回执降为后续阶段」)。要点:案甲目标侧整段进 daemon 线程(adapter 批次级独占)+ 生产段留主循环(残余记录在案)+ 不设单飞单 worker FIFO + 退出不 join 不持久化(丢弃只丢「删」不丢「保」)+ 单段回执契约前端零改动 + 命令线尾部消费(删源白享 P0-5);分期 S1-S6 + 后续阶段(两段回执,未排期)。取证基线 <code>a14e1e20</code>,行号按当日。</li>
+  <li><span class="tag">R1 · 26-11-20-0148</span> 评审修复(R1): D3 补同 hash 跨批次反序交错口径(同目标 qB 去重跳过/异目标后删者失真注记, 终态无差)并纳入 S2 验收用例; 风险表残词「重heck」改 recheck</li>
+  <li><span class="tag">R2 · 26-11-20-0205</span> 评审修复(R2): D3 异目标分支按实际删源语义改写(后删者删源为静默无操作 _delete_source 返 True, 回执无注记纯 SUCCESS; 既有注记仅 torrents_delete 抛异常时出现, store.remove_torrent pop-None 静默), 失真面改判「无提示的成功」; 同目标去重路径加条件括注(5.2 形 409→探针命中成立, 未命中响应形落 SUCCESS 终态仍无差); S2 交错用例钉面同步</li>
+</ul>
+
+</div>
+</body>
+</html>

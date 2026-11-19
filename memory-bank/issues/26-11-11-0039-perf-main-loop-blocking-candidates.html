@@ -9,7 +9,7 @@
 <meta name="issue-stamp" content="26-11-11-0039">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="main-loop-blocking">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/tasks/26-11-20-backend-transfer-verify-async.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
 <meta name="issue-title" content="主循环超 500ms 阻塞治理候选清单（聚合，待排期）">
@@ -203,7 +203,7 @@ finally: self.host.stop_all() -> ctx.state.save() -> self._lock.release()
       <td>单次转移批次从「主循环停几十秒」变成「零等待」。触发频率中低（用户手动发起），但一次卡得最久，且是<strong>拆分面最小</strong>的一项。</td>
       <td>① <code>_delete_source</code> 走主 <code>QbApi.torrents_delete</code> → <code>store.remove_torrent</code>（<code>qbapi.py:214-216</code>），必须留主循环；② 回执别把「还在等」写成 ok，也别丢失「目标已受理但验证失败」的详情（现有回执会保留添加受理信息）；③ 等待要配叫停口，否则关停白等 10s（<code>concurrency.md</code> 第一条）；④ 结论丢失 / 目标侧已建好而源没删，要保住「源保留、数据文件永不删」的语义。</td>
       <td>先定「结论丢失」兜底（按 <code>VERIFY_TIMEOUT</code> 结算，源一律保留）。验：多目标慢响应下 <code>[cmd] 排队 &lt; 500ms</code>；逐条回执结果正确；关停耗时 &lt; N 秒；源种子不被误删。</td>
-      <td><span class="wr">P1</span> · 待排期（未动）</td>
+      <td><span class="wr">P1</span> · <strong>已出正式实施计划，本件只记判断与验收面，待认领开工</strong>（<code>26-11-20-0127</code>，Open；grilling D1-D8 已拍板）</td>
     </tr>
     <tr>
       <td>2</td>
@@ -284,7 +284,7 @@ finally: self.host.stop_all() -> ctx.state.save() -> self._lock.release()
   <ul>
     <li><code>memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html</code> · Open · 探测阻塞原件，§06 两案并列；<strong>已复验并把实施计划挂进 doc-refs</strong>，不再是「两案待裁决」。</li>
     <li><code>memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html</code> · Open · <strong>正式实施计划</strong>：D1 拍板案B（daemon 线程跑完整 <code>run_probe</code>、本体零改动，拒绝案A 相位状态机）、全局单飞 + FIFO 等位、意图重放自动续跑、<code>state.relocate.probe_pending</code> 持久化、web 两段回执、S1–S6 分期；§07 已记「探测线程×主循环共享 qB client」风险并钉独立 client 隔离断言。<strong>§06.1 第 2 项以这份计划为准。</strong></li>
-    <li class="hint">本件 <code>doc-refs</code> meta 留空：认领链守卫要求双向闭环，上述两件属于别的会话的认领链，本件不擅自反向挂接；关联关系在正文列出即可。</li>
+    <li class="hint">本件 <code>doc-refs</code> meta 只挂行 1 的实施计划 <code>26-11-20-0127</code>（2026-11-20 经 <code>kb.new --refs</code> 双向补链）；行 2 的两件属于别的会话的认领链，本件不擅自反向挂接，关联关系在正文列出即可。</li>
     <li><code>memory-bank/plans/26-10-21-1857-plan-skip-check-async-refactor.html</code> · Done · 「让出 + 跨 tick 续跑」范式（11 个目标 66s → 约 250ms，明确不引入 worker 线程）。</li>
     <li><code>memory-bank/architecture/main-loop-queue.md</code> / <code>memory-bank/pitfalls/backend/concurrency.md</code> / <code>memory-bank/architecture/webui.md</code> · 口径来源。</li>
   </ul>
@@ -296,6 +296,7 @@ finally: self.host.stop_all() -> ctx.state.save() -> self._lock.release()
     <li>2026-11-11 00:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-11 00:39 — 聚合清单落档：五条值得做 + 八条排除项 + 通用风险与验收方式；明确不认领、不出计划、不改代码，具体实施等待后续排期。</li>
     <li>2026-11-11 — 评审修复：与计划 26-11-10-2350 拍板 D1 的口径冲突、关联件漏列正式计划、「不提交」措辞、基线推进后的状态漂移标注、CMD_SLOW_MS 定义处归属；本文件随本批提交入库。</li>
+    <li>2026-11-20 — 行 1（transfer_run 验证等待）出正式实施计划 <code>26-11-20-0127</code>-plan-transfer-verify-async（Open，待认领开工）：grilling 单轮 D1-D8 拍板，目标侧整段进 daemon 线程、命令线尾部消费；本件仍是聚合清单、状态保持 Open，行 1 认领以该计划为准。行 2 指针不变（26-11-10-2350 已 Superseded 并入 26-11-15-2340，其反指关系在那边维护）。</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑 §04 锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」；表内行号按「当时」对待，靠符号与 grep 重新定位。</p>

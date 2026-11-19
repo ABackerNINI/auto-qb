@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-0306">
-<meta name="doc-updated" content="26-11-01-0718">
-<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0608-torrent-transfer.md">
+<meta name="doc-updated" content="26-11-20-0131">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0608-torrent-transfer.md, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单</h1>
 <p class="lede">把主 qB 的种子任务原样转移到用户在 WebUI 配置的其它下载器(qB 先行, Transmission 留接口暂不做)——保留分类/标签/保存路径/限速等字段且字段集按目标各配一套; 语义是「移动任务、不动数据」: 转移在后端执行, 前端经四支右键菜单「转移到」触发, 确认弹窗参照删除流四段式。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-0306 · <b>doc-updated</b> 26-11-01-0718 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-0306 · <b>doc-updated</b> 26-11-20-0131 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(26-10-31, 三轮问答 + 风险分析), 用户指令「原样转移种子到其它 qb/tr/其它下载器」
 </div>
 
@@ -204,6 +204,7 @@
   <li><span class="tag">R1 · 26-10-31-0608</span> 实施完成: W1-W5 代码与自动化测试全落地(配置层 transfer targets/执行层 transfer 包+orchestrator/API /api/transfer/run·test/设置页目标编辑器+密码掩码下钻修复 T4.5/四支右键菜单「转移到」+四段式确认弹窗), 全量测试见 kb.baseline 最新切片; 真机验收(真实双 qB 手工转移核对)留待用户</li>
   <li><span class="tag">R2 · 26-11-01-0337</span> 真机验收完成(记录 testing/real-baselines/26-11-01-0244-real-torrent-transfer.md): API 12 项 + UI 9 项, PASS 20/FAIL 1/BLOCKED 1; 不变量六条全守住; 1 bug + 2 enhancement 已入池(26-11-01-0334/0335)</li>
   <li><span class="tag">R3 · 26-11-01-0516</span> 修复后真机再验收(API 12 + UI 11, PASS 23/FAIL 0/BLOCKED 0; TR-05 跳过、TR-09 正斜杠命中、api_key 通路、UI-06c 两分支解锁补验全过; 记录 testing/real-baselines/26-11-01-0516-real-torrent-transfer-r3.md)</li>
+  <li><span class="tag">R4 · 26-11-20-0131</span> 反指 26-11-20-0127: orchestrator docstring D6『不引入线程/并发』读法自该计划起改道 —— 目标侧整段(add→验证→pause)进 daemon 线程、源侧/删源/回执留主循环, 线程面以新计划为准; 本计划 D6『串行逐种子; 失败分类不中断批次』的批次语义不变</li>
 </ul>
 
 </div>
