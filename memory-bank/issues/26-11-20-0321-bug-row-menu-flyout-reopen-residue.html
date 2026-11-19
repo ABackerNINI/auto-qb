@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>行菜单重开路径 flyout 状态残留 · bug · 计划外问题</title>
+<meta name="issue-slug" content="row-menu-flyout-reopen-residue">
+<meta name="issue-stamp" content="26-11-20-0321">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="row-menu-flyout-reopen-residue">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0009-plan-webui-column-style.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="行菜单重开路径 flyout 状态残留">
+<meta name="issue-summary" content="openMenu/openMemberMenu 重开(visible true→true 不触发 watcher)时 subMenu/subTop/subFlip 残留, 新菜单带展开的旧 flyout 与旧钳位偏移; 表头菜单同款已在本批修复, 行菜单两入口仍是既有行为">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>行菜单重开路径 flyout 状态残留</h1>
+<p class="lede">openMenu/openMemberMenu 重开(visible true→true 不触发 watcher)时 subMenu/subTop/subFlip 残留, 新菜单带展开的旧 flyout 与旧钳位偏移; 表头菜单同款已在本批修复, 行菜单两入口仍是既有行为</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-20-0321-bug-row-menu-flyout-reopen-residue</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 03:21</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>WEBUI 列风格切换任务(计划 26-11-20-0009)S2 表头菜单面批次的安全+测试缺口评审(2026-11-20)发现: 表头菜单开着维度 flyout 时右键另一列表头重开, 旧 flyout 状态残留。同构排查证实行菜单两个入口(<code>openMenu</code> / <code>openMemberMenu</code>)存在<strong>同款既有行为</strong>——先于本任务存在, 非本批引入; 表头菜单一条已在该批修复(开层清链), 行菜单两入口按范围守恒未动、入池。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code>评审发现原文(2026-11-20, 引文已经 review.check 逐字过检):
+{"file": "src/auto_qb/webui/static/shared/menu.js", "line": 36, "quote": "this.headMenu = {", "severity": "minor",
+ "claim": "表头菜单开着有维度 flyout 时右键另一列表头重开(visible true→true 无翻转, watcher 不触发), subMenu/subTop/subFlip 残留, 新菜单直接挂着展开的旧 flyout 且钳位偏移按旧位置算, 可探出菜单/视口, hover 前不自愈"}
+
+同构面: menu.js 内 openMenu / openMemberMenu 与 openHeadMenu 同范式 —— 菜单已开(visible true)时再开 = 对象替换, visible 值不变, "menu.visible" 关层 watcher(两入口同写 this.menu, state.js:703)不触发, subMenu/subFlip/subTop 三件残留随新菜单带出。表头菜单侧修复实证(commit e3420f00, openHeadMenu 开层清链 keepSub+subMenu=""+subFlip=false+subTop=-6): 清链后该路径无残留。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>菜单开着且有展开的二级 flyout 时, 在另一行(或另一列)上再次右键重开同一菜单; 与皮肤/配置/数据量无关</td></tr>
+    <tr><td>影响范围</td><td>行菜单(openMenu)与成员行菜单(openMemberMenu)两个入口; 纯视觉毛刺(旧 flyout 挂在新菜单上, 钳位偏移按旧位置算可探出视口), hover 后 scheduleSubClose/keepSub 会自愈</td></tr>
+    <tr><td>严重度</td><td>低(自愈性视觉毛刺, 无功能性破坏)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/menu.js:36</code>(取证 2026-11-20 03:21)· 符号 <code>openHeadMenu</code> · grep 关键词 <code>this.headMenu = {</code> —— 表头菜单对象替换点(其清链已修, 作对照)</li>
+    <li>符号 <code>openMenu</code> / <code>openMemberMenu</code> · grep 关键词 <code>openMenu($event</code>(调用点 groups.html:28; openMenu 定义 menu.js:245 / openMemberMenu :262)—— 行菜单两个开层入口, 同范式待修点</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">根因与表头菜单同款(非猜测, 已由修复实证): 菜单开着(visible true)再次开层 = 上下文对象整体替换, visible 值 true→true 不变, 关层 watcher 不触发; keepSub 的 180ms 挂起收起计时器与 subMenu/subFlip/subTop 三件残留都随新菜单带出。已排除: 模板侧绑定问题(勾选/事件均正常)、_menuPos 取位问题(取位本身正确)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>照表头菜单已修范式平移: 在 <code>openMenu</code> / <code>openMemberMenu</code> 开层取位之后、上下文对象替换之前, 插入与 <code>openHeadMenu</code>(commit e3420f00, menu.js :42-45)同款开层清链 —— <code>this.keepSub(); this.subMenu = ""; this.subFlip = false; this.subTop = -6;</code>(keepSub 必须先于 subMenu="", 次序承重: 先撤挂起收起计时器)。代价约 4 行 × 2 处, 无新增测试(既有守阵无这两入口的方法体钉); 可与表头菜单修法互为回归参照。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-20 03:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-20-0321-bug-row-menu-flyout-reopen-residue.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

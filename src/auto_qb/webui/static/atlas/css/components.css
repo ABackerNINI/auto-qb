@@ -435,12 +435,12 @@
 .member-row.paused .m-state, .member-row.other .m-state { color: var(--paused); }
 .m-hash { color: var(--fg-dim); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 
-/* 进度: 细条+数字(数值盒定宽右对齐, 条长不随文本宽漂移); 条色 = 行状态色 --st(2026-11-02 前恒为 accent) */
+/* 进度: 细条+数字(数值盒定宽右对齐, 条长不随文本宽漂移); 条色 = 行状态色 --st(2026-11-02 前恒为 accent); 列风格谱档(S3)填充改吃 --cs-fill(shared/console_hub.css 档位类注入的色源, 未选谱时无定义回落 --st 链 = 本行原值, 默认态零变化; 本文件行数顶格, 机制说明单点在 shared) */
 .m-progress { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .m-progress .bar { flex: 1 1 auto; height: 4px; min-width: 22px; border-radius: 999px;
   background: var(--surface-2); overflow: hidden; }
 .m-progress .bar > i { display: block; height: 100%; border-radius: inherit;
-  background: var(--st, var(--accent)); }
+  background: var(--cs-fill, var(--st, var(--accent))); }
 .m-progress .val { flex: 0 0 auto; min-width: 4em; text-align: right; font-size: 12px; color: var(--fg-muted); }
 
 /* ---------------- 右键菜单(坐标由 JS 计算并做视口边界吸附) ---------------- */

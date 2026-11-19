@@ -132,6 +132,23 @@ window.AQB_FORMAT = {
     progPct(v) {
       return Math.min(100, v * 100);
     },
+    /* 进度分档(计划 26-11-20-0009 S3/D7/D9): 输入进度百分比(progPct 口径, 0-100), 输出档位号
+     * 0..6 —— 0 = 空端点(0%, 类 csb-0) / 1..5 = 五档(**左开右闭**: (0,20]→1 … (80,100)→5) /
+     * 6 = 终点(100%, 类 csb-t)。边界: 20% 等整点归当档右端(左开右闭, 20 归 1 不归 2 —— Math.ceil
+     * 正好给出该语义); >=100 一律终点档(>100 超界同归终点: progPct 已钳 100, 对端变体的预装
+     * 百分比直入时也兜住); <=0(含负值/NaN/undefined)一律空端点档。类名装配走 progBandClass
+     * (渲染器消费面, 条填充与百分比文字同挂): 类只表档位, 颜色由 CSS 按 html[data-cs-barramp]
+     * 派生映射 —— JS 永不产颜色值(R4); 「跟随状态」档档位类照挂但无任何映射规则, 现状 --st
+     * 链与状态着色一字不动(D7)。 */
+    progBand(p) {
+      if (!(p > 0)) return 0;
+      if (p >= 100) return 6;
+      return Math.ceil(p / 20);
+    },
+    progBandClass(p) {
+      const band = this.progBand(p);
+      return band === 6 ? "csb-t" : "csb-" + band;
+    },
     /* 可用性(FX-26): 两个"没有有效值"的来源都不显示 ——
      * 1. 负数: qB 拿不到 distributed_copies 时给 -1(未连上 tracker / 无 peer 数据), 旧版直接
      *    toFixed 出 "-1.00" 看着像真数值; 2. 暂停中的种子: 没连接就谈不上分布式副本数(与

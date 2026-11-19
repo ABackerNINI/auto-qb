@@ -357,3 +357,202 @@
 .cs-unit.band-heat .cs-uu { color: var(--lime); }
 .cs-unit.band-theme .cs-uu { color: var(--blue); }
 
+/* ==========================================================================
+   列风格引擎 · 进度条两维渲染面(计划 26-11-20-0009 S3/D6/D7/D9)
+   --------------------------------------------------------------------------
+   样式维(barstyle 形状)与颜色维(barramp 档位色)正交, 可同时生效; 色源统一走机制变量
+   --cs-fill(条填充与百分比文字同色, D7): 未选谱(barramp=status)时 --cs-fill 无定义,
+   一切回落皮肤基线(--st 链) = 默认态零视觉变化。渲染器只产档位类 csb-0 / csb-1..csb-5 /
+   csb-t(format.js progBand 单点, 挂条填充 .bar > i 与百分比文字两者), 颜色全部由本段按
+   html[data-cs-barramp] x 档位类派生映射 —— JS 永不产颜色值(R4), 档位→令牌严格照计划
+   §03 谱目录表(D9): 冷熟 indigo/blue/cyan/teal/lime 终点 green; 主题 violet/indigo/blue/
+   cyan/teal 终点 accent-hi; 温度 blue/cyan/teal/lime/warn 终点 error; 彩虹 violet/blue/
+   cyan/lime/pink 终点 green; 0% 空端点恒 --fg-muted(条为空, 文字灰, 跨谱同值, 单独成组)。
+   皮肤参与面只有一处真差异: 皮肤默认填充形态(atlas/prism 常规条 / console/flux LED)各留
+   在皮肤基线规则里(原位改吃 --cs-fill —— `.m-progress .bar > i` 带 background 规则每皮肤
+   恰 1 条的守阵不变), 其余共用族全部收进本段。csb-* 是独立命名空间(R6): 不碰 tone- 与
+   m-pair 既有链, 不与上方 S2 菜单色样 cs-* 段重叠(本段零规则以色样类为选择器)。
+   覆盖四行模型: 组/种子/集(.m-progress)+ 对端变体(.dt07/08/09-prog, 抽屉变体桥); member
+   行(xtpl.html)不挂档位类(D5 排除) —— 无类即无映射, CSS 侧不依赖也不豁免它。
+   ========================================================================== */
+/* ---- 样式维(D6): 显式选档才出规则; 「跟随皮肤」(skin)与缺省不出任何规则 ---- */
+/* LED 方块条: 分段几何照 console 现行移植(段 5px/缝 3px 的 repeating-linear-gradient);
+ * 填充色 = --cs-fill(谱档色, 未选谱回落 --st 链)。特异性 (0,3,2) 高于皮肤基线 (0,2,1),
+ * 且本文件在四皮肤 index.html 里 link 于皮肤 css 之后(双保险) —— 同机理, 显式选常规条
+ * (plain)能压住 console/flux 皮肤的 LED 默认; 对 console/flux 本条是同形态重申(计算值与
+ * 皮肤基线一致, 仅 fallback 从 --green 换 --accent: --st 声明在行元素上恒在, 该 fallback
+ * 无实际生效面)。作用于全部 .m-progress(HR/member 行同模板自然跟随形态维)。 */
+html[data-cs-barstyle="led"] .m-progress .bar > i {
+  background: repeating-linear-gradient(90deg, var(--cs-fill, var(--st, var(--accent))) 0 5px, transparent 5px 8px);
+}
+/* 常规条: 实底填充, 同一色源(压住 console/flux 的 LED 皮肤默认, 机理同上) */
+html[data-cs-barstyle="plain"] .m-progress .bar > i {
+  background: var(--cs-fill, var(--st, var(--accent)));
+}
+/* ---- 颜色维(D7/D9): 谱 x 档 = 4 谱 x 7 档(0/1..5/t), 每档两条面 ----
+ * 条填充面 = 给 .bar > i 注入色源 --cs-fill(填充形态仍由样式维/皮肤基线决定, 故只设变量
+ * 不设 background —— 正交性的全部机关); 文字面 = 百分比文字直接着色(与条同色, D7)。
+ * 0% 空端点恒 --fg-muted(条为空, 文字灰), 跨谱同值, 单独成组; 「跟随状态」(status)不出
+ * 任何映射规则 —— --st 链与百分比状态着色一字不动。填充 setter 不带 .m-progress 容器限定:
+ * .bar > i.csb-N 已被四行模型进度格独占(类名是渲染器单点产物), 对端变体条同样经它取色。 */
+/* 0% 空端点(跨谱同值): 条空(宽 0), 文字灰 —— 压过状态着色(.val 状态规则最高 (0,4,0)) */
+html[data-cs-barramp="cool"] .bar > i.csb-0,
+html[data-cs-barramp="theme"] .bar > i.csb-0,
+html[data-cs-barramp="heat"] .bar > i.csb-0,
+html[data-cs-barramp="rainbow"] .bar > i.csb-0 { --cs-fill: var(--fg-muted); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-0,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-0,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-0,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-0,
+html[data-cs-barramp="theme"] .m-progress .val.csb-0,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-0,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-0,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-0,
+html[data-cs-barramp="heat"] .m-progress .val.csb-0,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-0,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-0,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-0,
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-0,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-0,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-0,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-0 { color: var(--fg-muted); }
+/* 冷熟谱: indigo -> blue -> cyan -> teal -> lime, 100% 终点 green(D9) */
+html[data-cs-barramp="cool"] .bar > i.csb-1 { --cs-fill: var(--indigo); }
+html[data-cs-barramp="cool"] .bar > i.csb-2 { --cs-fill: var(--blue); }
+html[data-cs-barramp="cool"] .bar > i.csb-3 { --cs-fill: var(--cyan); }
+html[data-cs-barramp="cool"] .bar > i.csb-4 { --cs-fill: var(--teal); }
+html[data-cs-barramp="cool"] .bar > i.csb-5 { --cs-fill: var(--lime); }
+html[data-cs-barramp="cool"] .bar > i.csb-t { --cs-fill: var(--green); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-1,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-1,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-1,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-1 { color: var(--indigo); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-2,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-2,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-2,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-2 { color: var(--blue); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-3,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-3,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-3,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-3 { color: var(--cyan); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-4,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-4,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-4,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-4 { color: var(--teal); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-5,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-5,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-5,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-5 { color: var(--lime); }
+html[data-cs-barramp="cool"] .m-progress .val.csb-t,
+html[data-cs-barramp="cool"] .dt07-prog em.csb-t,
+html[data-cs-barramp="cool"] .dt08-prog em.csb-t,
+html[data-cs-barramp="cool"] .dt09-prog em.csb-t { color: var(--green); }
+/* 主题谱: violet -> indigo -> blue -> cyan -> teal, 100% 终点 accent-hi(D9) */
+html[data-cs-barramp="theme"] .bar > i.csb-1 { --cs-fill: var(--violet); }
+html[data-cs-barramp="theme"] .bar > i.csb-2 { --cs-fill: var(--indigo); }
+html[data-cs-barramp="theme"] .bar > i.csb-3 { --cs-fill: var(--blue); }
+html[data-cs-barramp="theme"] .bar > i.csb-4 { --cs-fill: var(--cyan); }
+html[data-cs-barramp="theme"] .bar > i.csb-5 { --cs-fill: var(--teal); }
+html[data-cs-barramp="theme"] .bar > i.csb-t { --cs-fill: var(--accent-hi); }
+html[data-cs-barramp="theme"] .m-progress .val.csb-1,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-1,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-1,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-1 { color: var(--violet); }
+html[data-cs-barramp="theme"] .m-progress .val.csb-2,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-2,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-2,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-2 { color: var(--indigo); }
+html[data-cs-barramp="theme"] .m-progress .val.csb-3,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-3,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-3,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-3 { color: var(--blue); }
+html[data-cs-barramp="theme"] .m-progress .val.csb-4,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-4,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-4,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-4 { color: var(--cyan); }
+html[data-cs-barramp="theme"] .m-progress .val.csb-5,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-5,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-5,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-5 { color: var(--teal); }
+html[data-cs-barramp="theme"] .m-progress .val.csb-t,
+html[data-cs-barramp="theme"] .dt07-prog em.csb-t,
+html[data-cs-barramp="theme"] .dt08-prog em.csb-t,
+html[data-cs-barramp="theme"] .dt09-prog em.csb-t { color: var(--accent-hi); }
+/* 温度谱: blue -> cyan -> teal -> lime -> warn, 100% 也染 error(热度计语义, D9 显式自担) */
+html[data-cs-barramp="heat"] .bar > i.csb-1 { --cs-fill: var(--blue); }
+html[data-cs-barramp="heat"] .bar > i.csb-2 { --cs-fill: var(--cyan); }
+html[data-cs-barramp="heat"] .bar > i.csb-3 { --cs-fill: var(--teal); }
+html[data-cs-barramp="heat"] .bar > i.csb-4 { --cs-fill: var(--lime); }
+html[data-cs-barramp="heat"] .bar > i.csb-5 { --cs-fill: var(--warn); }
+html[data-cs-barramp="heat"] .bar > i.csb-t { --cs-fill: var(--error); }
+html[data-cs-barramp="heat"] .m-progress .val.csb-1,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-1,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-1,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-1 { color: var(--blue); }
+html[data-cs-barramp="heat"] .m-progress .val.csb-2,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-2,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-2,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-2 { color: var(--cyan); }
+html[data-cs-barramp="heat"] .m-progress .val.csb-3,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-3,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-3,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-3 { color: var(--teal); }
+html[data-cs-barramp="heat"] .m-progress .val.csb-4,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-4,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-4,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-4 { color: var(--lime); }
+html[data-cs-barramp="heat"] .m-progress .val.csb-5,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-5,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-5,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-5 { color: var(--warn); }
+html[data-cs-barramp="heat"] .m-progress .val.csb-t,
+html[data-cs-barramp="heat"] .dt07-prog em.csb-t,
+html[data-cs-barramp="heat"] .dt08-prog em.csb-t,
+html[data-cs-barramp="heat"] .dt09-prog em.csb-t { color: var(--error); }
+/* 彩虹谱: violet -> blue -> cyan -> lime -> pink, 100% 终点 green(D9) */
+html[data-cs-barramp="rainbow"] .bar > i.csb-1 { --cs-fill: var(--violet); }
+html[data-cs-barramp="rainbow"] .bar > i.csb-2 { --cs-fill: var(--blue); }
+html[data-cs-barramp="rainbow"] .bar > i.csb-3 { --cs-fill: var(--cyan); }
+html[data-cs-barramp="rainbow"] .bar > i.csb-4 { --cs-fill: var(--lime); }
+html[data-cs-barramp="rainbow"] .bar > i.csb-5 { --cs-fill: var(--pink); }
+html[data-cs-barramp="rainbow"] .bar > i.csb-t { --cs-fill: var(--green); }
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-1,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-1,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-1,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-1 { color: var(--violet); }
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-2,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-2,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-2,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-2 { color: var(--blue); }
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-3,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-3,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-3,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-3 { color: var(--cyan); }
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-4,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-4,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-4,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-4 { color: var(--lime); }
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-5,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-5,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-5,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-5 { color: var(--pink); }
+html[data-cs-barramp="rainbow"] .m-progress .val.csb-t,
+html[data-cs-barramp="rainbow"] .dt07-prog em.csb-t,
+html[data-cs-barramp="rainbow"] .dt08-prog em.csb-t,
+html[data-cs-barramp="rainbow"] .dt09-prog em.csb-t { color: var(--green); }
+/* 对端变体条(dt07/08/09, 抽屉变体桥): 无样式维(恒胶囊常规条), 谱激活时填充改吃 --cs-fill
+ * (档位类 setter 已在同元素注入色源); 未选谱不出规则 —— 皮肤基线固定 --blue 一字不动。
+ * 特异性 (0,3,2) 压过注入基线 `.drawer .dt0X-prog .bar i` (0,3,1) 与 zero 态文字 (0,3,1)。 */
+html[data-cs-barramp="cool"] .dt07-prog .bar > i,
+html[data-cs-barramp="cool"] .dt08-prog .bar > i,
+html[data-cs-barramp="cool"] .dt09-prog .bar > i,
+html[data-cs-barramp="theme"] .dt07-prog .bar > i,
+html[data-cs-barramp="theme"] .dt08-prog .bar > i,
+html[data-cs-barramp="theme"] .dt09-prog .bar > i,
+html[data-cs-barramp="heat"] .dt07-prog .bar > i,
+html[data-cs-barramp="heat"] .dt08-prog .bar > i,
+html[data-cs-barramp="heat"] .dt09-prog .bar > i,
+html[data-cs-barramp="rainbow"] .dt07-prog .bar > i,
+html[data-cs-barramp="rainbow"] .dt08-prog .bar > i,
+html[data-cs-barramp="rainbow"] .dt09-prog .bar > i { background: var(--cs-fill, var(--blue)); }
+

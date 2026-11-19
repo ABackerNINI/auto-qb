@@ -416,13 +416,13 @@
 .m-hash { color: var(--fg-dim); font-size: 12px; }
 
 /* 进度: 分段 LED 填充条(纯 CSS 替换, 不动 JS 数据结构) + mono 百分比
- * 填充色 = 行状态色 --st(2026-11-02; 兜底 --green 的"有量"语义): 0% 时自然无填充, 与轨道的弱反差即"空"态
+ * 填充色 = 行状态色 --st(2026-11-02; 兜底 --green 的"有量"语义): 0% 时自然无填充, 与轨道的弱反差即"空"态; 列风格谱档(S3)填充改吃 --cs-fill(shared/console_hub.css 档位类注入的色源, 未选谱时无定义回落 --st 链 = 本行原值, 默认态零变化; 本文件行数顶格, 说明单点在 shared)
  * 数值盒定最小宽并右对齐: 条吃剩余空间, 盒宽随「100.0%」比「5.2%」变宽时条长会逐行漂移 */
 .m-progress { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .m-progress .bar { flex: 1 1 auto; height: 7px; min-width: 22px;
   background: var(--surface-2); overflow: hidden; }
 .m-progress .bar > i { display: block; height: 100%;
-  background: repeating-linear-gradient(90deg, var(--st, var(--green)) 0 5px, transparent 5px 8px); }
+  background: repeating-linear-gradient(90deg, var(--cs-fill, var(--st, var(--green))) 0 5px, transparent 5px 8px); }
 .m-progress .val { flex: 0 0 auto; min-width: 4em; text-align: right; font: 500 11.5px/1 var(--font-mono); color: var(--fg-muted); }
 
 /* ---------------- 右键菜单(2026-11-04 玻璃化: 半透明底+blur, 替代无 blur 时代的不透明 --bg-pop) ---------------- */

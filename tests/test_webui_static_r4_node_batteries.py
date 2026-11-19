@@ -14,6 +14,7 @@
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + 默认升序非空键默认列首击切降序(用户表 addr/1、Tracker sev/1 缺陷修复; 修复前三击全 no-op)与非默认列/空键三态零误伤 + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
+- test_r4_prog_band_boundaries: S3(计划 26-11-20-0009) —— 进度分档纯函数 progBand/progBandClass(format.js 新增)边界: 编码 0=空端点档/1..5=五档(左开右闭, 20/40/60/80 右闭整点归当档)/6=终点档; 0/0.1/20/20.01/40/40.01/60/60.01/80/80.01/99.9/100 逐点 + 负值/NaN/undefined 归空端点不抛错 + >100 归终点 + 类装配 csb-0/csb-1..csb-5/csb-t 逐档互证 + progPct 钳制联动(>1 比例钳 100 落终点档)
 - test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
   说明不足 2 字单行 —— trim 后计长, 分隔符后连接空格不算门槛/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
@@ -1639,6 +1640,65 @@ def test_r4_format_ladder_family():
     """R5#55: _fmtLadder 梯顶回落 + fmtEta 哨兵 + fmtDuration 三段进位 + fmtPeersQb 缺省"""
     report = _run_probe(_NODE_FORMAT_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
     _assert_battery(report, "format 函数族电池")
+
+
+# S3(计划 26-11-20-0009): 进度分档纯函数 progBand/progBandClass 边界电池 ----------------
+# 沙箱口径与 format 函数族电池同式(format.js 桩 window 后 eval, 取 window.AQB_FORMAT.methods)。
+# 编码(报告口径): 0=空端点档(csb-0) / 1..5=五档(左开右闭) / 6=终点档(csb-t)。
+_NODE_PROG_BAND_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_FORMAT;");
+const M = globalThis.__W2__.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const B = (p) => M.progBand(p);
+const C = (p) => M.progBandClass(p);
+
+// 五档左开右闭: (0,20]/(20,40]/(40,60]/(60,80]/(80,100) —— 右闭整点归当档, 0.1/xx.01 归上档
+ok("0 = 空端点档 0", B(0) === 0);
+ok("0.1 归第 1 档((0,20] 左开端点)", B(0.1) === 1);
+ok("20 归第 1 档(右闭整点, 不进位)", B(20) === 1);
+ok("20.01 归第 2 档(左开)", B(20.01) === 2);
+ok("40 归第 2 档(右闭整点)", B(40) === 2);
+ok("40.01 归第 3 档", B(40.01) === 3);
+ok("60 归第 3 档(右闭整点)", B(60) === 3);
+ok("60.01 归第 4 档", B(60.01) === 4);
+ok("80 归第 4 档(右闭整点)", B(80) === 4);
+ok("80.01 归第 5 档", B(80.01) === 5);
+ok("99.9 仍第 5 档((80,100) 上端不闭)", B(99.9) === 5);
+ok("100 = 终点档 6", B(100) === 6);
+// 超界: 负值/NaN/undefined 归空端点档, >100 归终点档
+ok("负值归空端点档 0", B(-1) === 0 && B(-0.5) === 0);
+ok("NaN/undefined 归空端点档 0(不抛错)", B(NaN) === 0 && B(undefined) === 0);
+ok(">100 超界归终点档 6", B(100.1) === 6 && B(120) === 6);
+// progBandClass 装配: 0->csb-0 / 1..5->csb-1..csb-5 / 6->csb-t(类只表档位, 不产颜色值)
+ok("类装配 0/0.1/80.01/100 -> csb-0/csb-1/csb-5/csb-t",
+   C(0) === "csb-0" && C(0.1) === "csb-1" && C(80.01) === "csb-5" && C(100) === "csb-t");
+ok("类装配右闭整点 20/40/60/80 -> csb-1..csb-4",
+   C(20) === "csb-1" && C(40) === "csb-2" && C(60) === "csb-3" && C(80) === "csb-4");
+ok("progBand 与 progBandClass 全边界逐档互证", [0, 0.1, 20, 20.01, 40, 40.01, 60, 60.01, 80, 80.01, 99.9, 100, 120].every((p) => {
+  const b = B(p);
+  return C(p) === (b === 6 ? "csb-t" : "csb-" + b);
+}));
+// progPct 钳制联动(渲染器真实调用形态, progPct 吃比例): progress>1 的比例经 progPct 钳 100 后落终点档
+ok("progPct(1.2) 钳 100 -> 终点档", B(M.progPct(1.2)) === 6 && C(M.progPct(1.2)) === "csb-t");
+ok("progPct(0) -> 空端点档 / progPct(0.5)=50% -> 第 3 档", B(M.progPct(0)) === 0 && C(M.progPct(0.5)) === "csb-3");
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_r4_prog_band_boundaries():
+    """S3(计划 26-11-20-0009): 进度分档纯函数 progBand/progBandClass(format.js 新增)边界电池
+    —— 编码 0=空端点/1..5=五档(左开右闭)/6=终点; 0/0.1/20/20.01/40/40.01/60/60.01/80/80.01/
+    99.9/100 逐点 + 负值/NaN/undefined 归空端点 + >100 归终点 + 类装配 csb-0..csb-5/csb-t
+    逐档互证 + progPct 钳制联动(>1 比例钳 100 落终点档)"""
+    report = _run_probe(_NODE_PROG_BAND_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
+    _assert_battery(report, "进度分档电池")
 
 
 def test_r4_fx_mount_toast_split_and_rows_ghost():

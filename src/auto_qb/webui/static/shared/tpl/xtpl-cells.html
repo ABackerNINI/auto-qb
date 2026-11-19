@@ -53,11 +53,14 @@
       </div>
       <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ $root.fmtSizeOrDash(g.total_size) }}</div>
       <!-- 辅种扩列(2026-09-28): 组级聚合后端算好。进度 = 组内最高(最完整副本), 复用明细同款进度条 -->
-      <!-- 进度单元格与 torrent/ep(本文件)/member(xtpl.html)三处逐字同(issue 26-10-20-2231 登记
-           不动): 刻意不组件化, 百分比算式已抽 $root.progPct 单点(format.js), 改口径只改那一处 -->
+      <!-- 进度单元格与 torrent/ep(本文件)两处逐字同(member(xtpl.html)刻意不挂档位类, D5 排除;
+           issue 26-10-20-2231 登记不动): 刻意不组件化, 百分比算式已抽 $root.progPct 单点(format.js),
+           改口径只改那一处。档位类 csb-*(S3/D7) = 进度分档, 挂条填充与百分比文字两者(条与文字同色),
+           颜色由 CSS 按 html[data-cs-barramp] 派生映射(console_hub.css) —— 「跟随状态」无映射规则
+           = 现状零变化 -->
       <div v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: $root.progPct(g.progress) + '%' }"></i></span>
-        <span class="val">{{ $root.progPct(g.progress).toFixed(1) }}%</span>
+        <span class="bar"><i :class="$root.progBandClass($root.progPct(g.progress))" :style="{ width: $root.progPct(g.progress) + '%' }"></i></span>
+        <span class="val" :class="$root.progBandClass($root.progPct(g.progress))">{{ $root.progPct(g.progress).toFixed(1) }}%</span>
       </div>
       <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致 -->
       <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !g.eta || g.eta >= 8640000 }">{{ $root.fmtEta(g.eta) }}</div>
@@ -176,8 +179,8 @@
         <span v-if="!$root.mTags(m).length" class="zero"></span>
       </div>
       <div v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: $root.progPct(m.progress) + '%' }"></i></span>
-        <span class="val">{{ $root.progPct(m.progress).toFixed(1) }}%</span>
+        <span class="bar"><i :class="$root.progBandClass($root.progPct(m.progress))" :style="{ width: $root.progPct(m.progress) + '%' }"></i></span>
+        <span class="val" :class="$root.progBandClass($root.progPct(m.progress))">{{ $root.progPct(m.progress).toFixed(1) }}%</span>
       </div>
       <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'seeds') }">{{ $root.cellPeers(m, 'seeds') }}</div>
       <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</div>
@@ -275,8 +278,8 @@
         <span class="state-text">{{ $root.kindText(e.state) }}</span>
       </div>
       <div v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: $root.progPct(e.progress) + '%' }"></i></span>
-        <span class="val">{{ $root.progPct(e.progress).toFixed(1) }}%</span>
+        <span class="bar"><i :class="$root.progBandClass($root.progPct(e.progress))" :style="{ width: $root.progPct(e.progress) + '%' }"></i></span>
+        <span class="val" :class="$root.progBandClass($root.progPct(e.progress))">{{ $root.progPct(e.progress).toFixed(1) }}%</span>
       </div>
       <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
            :title="'最完整版本大小'">{{ $root.fmtSizeOrDash(e.size) }}</div>
@@ -337,7 +340,7 @@
       <div v-else-if="col.key === 'files'" :class="[pfx + '-files', { dimc: !p.files }]"
            :title="p.files ? '对端正在获取的文件(qB files 字段)' : ''">{{ p.files || "—" }}</div>
       <div v-else-if="col.key === 'progress'" :class="[pfx + '-prog', { zero: !p._raw.progress }]" :title="'对端自身进度 ' + p.progress + '%'">
-        <span class="bar"><i :style="{ width: p.progress + '%' }"></i></span><em>{{ p.progress }}%</em>
+        <span class="bar"><i :class="$root.progBandClass(p.progress)" :style="{ width: p.progress + '%' }"></i></span><em :class="$root.progBandClass(p.progress)">{{ p.progress }}%</em>
       </div>
       <div v-else-if="col.key === 'upspeed'" :class="pfx + (occ ? '-occ' : '-spd u')"
            :title="occ ? ('我方发给该对端的即时速度(qB upspeed); 条长 = 占当前上传合计(' + p.upTotalTxt + ')的比重') : '我方发给该对端的即时速度(qB upspeed)'">
