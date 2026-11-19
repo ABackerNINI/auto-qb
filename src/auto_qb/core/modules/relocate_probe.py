@@ -582,6 +582,23 @@ class ProbeRunner:
         """
         return self._execute(ctx, src, dst)
 
+    def verdict_queue(self) -> queue.Queue:
+        """结果队列只读访问(T3 消费面): on_task_line 每拍 get_nowait 至多一条(D9 节流)
+
+        生产缺省 = PROBE_VERDICT_QUEUE 模块单例; 测试经独立 runner 注入隔离。消费面只读
+        不换队列 —— 队列的写入方只有探测线程体(try_start 受理即兑现路径含线程启动失败的
+        合成 verdict), 单一写面不因本访问器破口。
+        """
+        return self._queue
+
+    def slot(self) -> ProbeSingleFlight:
+        """单飞槽只读访问(T3 消费面): 消费按 in_flight() 判槽归属后 release()
+
+        槽的释放只在主循环消费 verdict 时做(类 docstring 不变量), 消费面按 verdict 指纹
+        与 in_flight() 的归属判据决定释放与 kick 下一条(desync 防御面), 不盲放。
+        """
+        return self._slot
+
     def _execute(self, ctx: Any, src: str, dst: str) -> ProbeResult:
         """线程侧连接构造 + run_probe 黑盒调用; 任何逃逸异常合成 failed verdict(env=True)
 

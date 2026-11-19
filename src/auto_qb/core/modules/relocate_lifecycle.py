@@ -44,6 +44,9 @@ class LifecycleMixin:
             # E1 探测崩溃残留扫描(计划 26-11-04-0055 P2-6): add 之后 delete 之前被杀会在用户
             # qB 留探测种子+文件, 启动时按 tag 清理(R2); dry-run 不动手(真写, 与相位机同口径)
             swept = 0 if self._dry_run() else sweep_probe_residue(ctx)
+            # pending 探测意图启动恢复(拍板 D7 重启自动续跑 + 超龄清扫兜底, 计划 26-11-10-2350
+            # T3): 与残留扫描同挂点, 热启用分支(apply)同款对称; dry-run 在方法内自闸不动手
+            self._probe_pending_recover()
             swept_note = f", 启动扫描清理探测残留 {swept} 条" if swept else ""
             # 启动日志只计非终态(issue 26-11-10-0327): _load_jobs 整箱恢复含终态 job, 照抄全量
             # 会让「在途」文案长期部署几乎必然虚高(生产实测报 2 条实际在途 0); 计数走
@@ -130,6 +133,9 @@ class LifecycleMixin:
                 # 才被扫走 —— 热启用即扫, 两分支口径对称。取参走 self._ctx(与 _load_jobs/
                 # 能力重探同款现读路径, apply 无 ctx 形参); dry-run 不动手(真写, 与 start 同判)。
                 swept = 0 if self._dry_run() else sweep_probe_residue(self._ctx)
+                # pending 探测意图启动恢复(与 start() 启用分支同款对称, D7/T3): 热启用接管
+                # 会话后队首意图重 kick 探测, verdict 到达后走消费链自动续跑
+                self._probe_pending_recover()
         detail = "relocate 段已更新(生效配置已缓存" + (", 已重探链接能力" if enabled else ", 未启用不重探")
         if restored:
             # 不写「在途」: _load_jobs 整箱恢复, 计数含终态 job(终态永久留账), 长期部署热启用几乎必然多报
@@ -546,6 +552,10 @@ class LifecycleMixin:
             return
         if self._ctx is None or self._ctx.store is None:
             return
+        # verdict 消费(拍板 D9, 计划 26-11-10-2350 §03 落点段/T3): 先消费结果队列再步进
+        # lifecycle —— 每 tick 至多一条(空队列 O(1) 跳过, 单步预算面), 消费四步(probe_put
+        # -> 重放队首 -> 清条目 -> 释放槽+kick 下一条)与防自环在 _consume_probe_verdict 单点
+        self._consume_probe_verdict()
         for job in self.active_jobs():
             try:
                 self._advance(job)

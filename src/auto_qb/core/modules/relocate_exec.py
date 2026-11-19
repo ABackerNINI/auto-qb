@@ -3,6 +3,7 @@
 拆分(R5)只搬位置: 方法体与 relocate_mod.py 原文件逐字一致。
 """
 import os
+import queue
 from dataclasses import replace
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
@@ -11,7 +12,15 @@ from ...infra import alias_fs, file_access, relocate_journal, utils
 from .. import fastresume
 from . import relocate_proof as rp
 from . import relocate_units as ru
-from .relocate_probe import ProbeResult, ProbeRunner, probe_fingerprint, run_probe
+from .relocate_probe import (
+    PROBE_PENDING_MAX_AGE_S,
+    STATUS_FAILED,
+    STATUS_PASSED,
+    ProbeResult,
+    ProbeRunner,
+    probe_fingerprint,
+    run_probe,
+)
 from ...torrents import TorrentRecord
 from .relocate_units import PROBE_GATE_PROBING_KEY, GroupFacts, RelocateJob, evaluate_group_unit
 from .relocate_common import _LINK_CHUNK, _native, logger
@@ -92,6 +101,209 @@ class ExecMixin:
     # thread_ctx_factory=.., probe_fn=..)隔离全局单飞槽与结果队列(T1 测试口径)。
     _probe_inline: bool = False
     _probe_runner: Optional[ProbeRunner] = None
+
+    # ---------- verdict 消费与 pending 恢复(S3, 计划 26-11-10-2350 §03 落点段「verdict 消费」
+    # / §04 S3 / §06 D9/D7 / §07 风险表; 并轨 26-11-15-2340 刀4) ----------
+    # 消费面只在主循环线程(黄金法则#5): on_task_line 每 tick 调一次 _consume_probe_verdict
+    # (拍板 D9: 先消费后步进, 每 tick 至多一条); 启动/热启用面调 _probe_pending_recover
+    # (超龄清扫 + 队首重 kick)。槽的释放只发生在消费面, 次序钉死 = 清条目 -> 释放槽 ->
+    # kick 下一条; 重放在释放槽之前(此刻槽仍被本指纹占, 防自环的天然屏障)。
+
+    def _active_probe_runner(self) -> ProbeRunner:
+        """现行 runner 解析单点(_ensure_probe 与 T3 消费/恢复面共用): 注入优先, 其次按形态开关
+
+        与 S2 落点段同一语义: _probe_runner 注入位优先(测试隔离面); 缺省按 _probe_inline
+        取内联(既有同步语义的注入 seam)或生产单例 PROBE_RUNNER(异步, 协作面 = 模块级
+        PROBE_SLOT/PROBE_VERDICT_QUEUE)。
+        """
+        if self._probe_runner is not None:
+            return self._probe_runner
+        return PROBE_RUNNER_INLINE if self._probe_inline else PROBE_RUNNER
+
+    def _consume_probe_verdict(self) -> None:
+        """verdict 消费(拍板 D9): 每 tick 至多一条, 空队列 O(1) 返回(单步预算面)
+
+        消费四步(D9 原序, S3 落点段):
+        (1) probe_put 按闸门 D7 原语义写/不写缓存: passed 写; failed env=False 写(evidence
+           补 reason, 与 _ensure_probe 内联收尾同形); failed env=True 不写(下次真实触发重试);
+        (2) 重放队首条目 —— re-invoke relocate_execute 幂等面全新鲜(D6 只存意图不存快照;
+           confirm 面按 relocate_execute 缺省 False: 意图入队本就以「确认已过/不需要」为前提,
+           重放重新过全闸链, 探测窗口内新出现的需确认态停在 confirm 回执, 绝不代用户点头);
+        (3) 清条目 —— probe_pending_pop 队首(= 被 kick 的意图, FIFO kick 序保证); 防自环时
+           即「丢弃条目终止自动链」;
+        (4) 单飞槽释放 -> kick 下一条(主循环只启动线程不等待; pending 空则无事)。
+
+        防自环(§07 风险表第 3 行, T2 注释钉死的天然路径): 重放遇 env=True 失败未缓存 ->
+        _ensure_probe 未命中 -> merge_intent 命中自己条目(no-op)+ try_start False(槽仍被
+        本指纹占) -> 返回「探测中」回执(item[PROBE_GATE_PROBING_KEY]=True) -> 按键识别终止:
+        条目丢弃, 不再重放不再自动链, 下次真实触发(规则 tick/用户)再试。
+
+        槽归属判据(释放/kick 只在槽空闲或被「本 verdict 的已完结探测」占着时做): 重放本身也
+        可能起探测(闸未命中分支的 try_start), 重武装识别用与 probing 解耦的槽跃迁判据 ——
+        「重放前槽空闲且重放后槽被本指纹占」, 重放中途抛异常也同样执行(异常可能落在重放已
+        kick 起探测之后, except 路径丢识别会放跑在飞探测的槽并 kick 下一条 = 双探测并发,
+        D3 破口, 且被弹出的意图沦为孤儿): 重武装时条目保留、槽不动, 待新探测的 verdict
+        正常消费; 槽被异指纹在飞探测占着时同样不释放不 kick(它的 verdict 会驱动下一轮)。
+        盲放会把在飞探测的槽位放跑, 破坏全局单飞(D3)。
+        """
+        runner = self._active_probe_runner()
+        try:
+            fingerprint, verdict = runner.verdict_queue().get_nowait()
+        except queue.Empty:
+            return
+        fingerprint = str(fingerprint or "")
+        # (1) probe_put(闸门 D7 原语义; 分支面与 _ensure_probe 内联收尾三态逐条同形)
+        if verdict.status == STATUS_PASSED:
+            self.probe_put(fingerprint, verdict.status, verdict.evidence)
+            cached = "缓存已写(passed)"
+        elif verdict.status == STATUS_FAILED and not verdict.env:
+            self.probe_put(fingerprint, verdict.status, {**verdict.evidence, "reason": verdict.reason})
+            cached = "缓存已写(failed, FS 不可达方向)"
+        else:
+            cached = "未缓存(env=True, D7 2: 下次真实触发重试)"
+        logger.info(f"relocate | probe verdict 消费: 指纹 {fingerprint[:8]} 结论 {verdict.status}/{verdict.reason}({cached})")
+        slot = runner.slot()
+        inflight_before = slot.in_flight()
+        pending = self.probe_pending_list()
+        head = pending[0] if pending else None
+        replayed = False
+        probing = False
+        re_armed = False
+        if head is not None and str(head.get("fingerprint") or "") == fingerprint:
+            # (2) 重放队首条目(意图重放, relocate_execute 全闸链幂等面全新鲜; 风险表第 5 行:
+            # 探测窗口内组状态已变的过期意图由既有幂等 skip/闸门自然短路, 零新增幂等风险)。
+            # 重放异常不得拖垮任务线也不得让 verdict 已耗而槽永久占用: 照常清条目 + 释放。
+            try:
+                items = self.relocate_execute(
+                    list(head.get("hashes") or ()),
+                    location=str(head.get("dst") or ""),
+                    origin=str(head.get("origin") or "") or "unknown",
+                )
+                probing = any(isinstance(it, dict) and it.get(PROBE_GATE_PROBING_KEY) is True for it in items)
+            except Exception as e:  # noqa: BLE001 - 重放异常=自动链终止(与逐 job 推进同护栏)
+                logger.exception(
+                    f"relocate | probe verdict 重放异常({e}) —— 条目丢弃终止自动链"
+                    f"(缓存已按 D7 处置, 下次真实触发重试; 指纹 {fingerprint[:8]})"
+                )
+            replayed = True
+            # 重武装识别与 probing 解耦(槽跃迁判据, except 路径同样执行, 评审 fix2): 重放中途
+            # 抛异常时其内部的 _ensure_probe 可能已把探测 kick 起来 —— 只认「重放前槽空闲、
+            # 重放后槽被本指纹占」的跃迁事实; 若 except 路径丢识别, 条目被清且下方槽释放判据
+            # 成立 = 把刚 kick 起的在飞探测的槽放跑并 kick 下一条(双探测并发, D3 破口), 被弹出
+            # 的意图沦为孤儿。
+            if inflight_before is None and slot.in_flight() == fingerprint:
+                re_armed = True
+                logger.info(
+                    f"relocate | probe verdict 重武装: 重放已重起探测(槽空闲 -> 本指纹占槽) —— "
+                    f"条目保留待新 verdict 正常消费(指纹 {fingerprint[:8]})"
+                )
+        elif head is not None:
+            # verdict 指纹与队首条目不一致(desync 防御面): 重放会错位(把异指纹意图按本
+            # verdict 的缓存面续跑), 条目不动 —— 它自己的 verdict 若仍在队列会按 FIFO 正常
+            # 匹配消费; 本 verdict 只按 D7 处置缓存。槽归属判据照走(见下)。
+            logger.warning(
+                f"relocate | probe verdict 指纹 {fingerprint[:8]} 与队首条目"
+                f"({str(head.get('fingerprint') or '')[:8]})不一致(重启 desync/孤儿条目形态) —— "
+                "不重放防错位, 队首条目原样保留"
+            )
+        else:
+            logger.warning(f"relocate | probe verdict 指纹 {fingerprint[:8]} 无对应 pending 条目(孤儿 verdict) —— 仅按 D7 处置缓存")
+        if replayed and not re_armed:
+            # (3) 清条目(队首 = 被 kick 的意图, FIFO kick 序保证): 正常消费完成面; 防自环时
+            # 即「丢弃条目终止自动链」
+            self.probe_pending_pop()
+            if probing and not re_armed:
+                logger.warning(
+                    f"relocate | probe verdict 防自环: 重放仍是「探测中」回执(env=True 失败未缓存, D7 2) —— "
+                    f"条目已丢弃终止自动链, 下次真实触发(规则 tick/用户)再试(指纹 {fingerprint[:8]})"
+                )
+        # (4) 单飞槽释放 -> kick 下一条: 只在槽空闲或被「本 verdict 的已完结探测」占着时做
+        # (重武装/异指纹在飞时槽不动, 盲放会破坏全局单飞 D3)
+        inflight_now = slot.in_flight()
+        if inflight_now is None or (inflight_now == fingerprint and not re_armed):
+            slot.release()
+            nxt = self.probe_pending_list()
+            if nxt:
+                runner.try_start(
+                    self._ctx,
+                    str(nxt[0].get("fingerprint") or ""),
+                    str(nxt[0].get("src") or ""),
+                    str(nxt[0].get("dst") or ""),
+                )
+
+    def _probe_pending_recover(self) -> None:
+        """pending 意图的启动恢复(拍板 D7 重启自动续跑 + §07 风险表第 1 行超龄兜底)
+
+        挂点 = start() 启用分支与 apply() 热启用分支(sweep_probe_residue 同款先例, 两分支
+        口径对称): 真进程重启时结果队列必空、单飞槽必空闲、缓存无本批探测的 verdict(未消费
+        即崩), pending 全部条目都是「探测线程随旧进程消亡」的孤儿意图。
+        - 热停用窗守卫: 队列仍有未消费 verdict 或槽仍被占(apply 真->假窗: on_task_line 因
+          conf 闸停消费, 队列/槽冻结, 条目 ts 却在老化)时整段跳过 —— 清扫会把「verdict 已
+          在途」的超龄条目清掉(verdict 变孤儿、迁移意图静默丢失), 交由既有 verdict 的正常
+          消费链接续;
+        - 超龄清扫(> PROBE_PENDING_MAX_AGE_S): verdict 已丢(线程死/verdict 投递失败)的
+          条目清掉并审计留痕; ts 不可解析的坏条目同批清(结构残骸, 不留不挡 FIFO)。只在
+          启动面做, 运行期不扫 —— 在飞探测的条目有鲜活 verdict 将到, 按钟面扫会把好端端的
+          意图清掉(运行期卡死面交下次启动清扫, 与 runner 投递失败留痕的口径一致)。
+        - 重启恢复(D7): 只对队首重 kick 探测(try_start, 槽空闲恒受理)—— verdict 到达后
+          走正常消费链((1)probe_put (2)重放 (3)清条目 (4)释放+kick 下一条)自动续跑整条 FIFO,
+          启动面无需逐条起线程。机制形态钉死为「重 kick」而非「直接重放 relocate_execute」:
+          启动期缓存必无本批 verdict, 重放必进闸未命中分支重新入队+kick, 其「探测中」回执
+          会撞上消费面防自环判别(条目被丢 = 恢复被拆), 且重放链的 blocked/confirm 回执会让
+          条目滞留 pending 而无探测在飞(挂死到下次清扫); 直接 try_start 是最小重武装面,
+          续跑判定全部交给 verdict 后的正常消费链。
+        dry-run 零动手(清扫是 state 写、kick 是真起线程; 与 sweep_probe_residue 同判)。
+        """
+        if self._dry_run():
+            return
+        runner = self._active_probe_runner()
+        slot = runner.slot()
+        vq = runner.verdict_queue()
+        if vq.qsize() > 0 or slot.in_flight() is not None:
+            # 热停用窗守卫(评审 fix1): apply 真->假期间 on_task_line 因 conf 闸停消费, 队列与
+            # 槽冻结而条目 ts 老化 —— 热启用后按钟面清扫会把「verdict 已在途」的超龄条目清掉:
+            # verdict 变孤儿、迁移意图静默丢失(与「运行期不扫」同一理由在热启用边界成立)。
+            # 整段跳过(清扫与重 kick 都不做), 交由既有 verdict 的正常消费链接续(消费面按
+            # 指纹/条目匹配或防御面自愈推进 FIFO)。
+            logger.info(
+                f"relocate | probe pending 启动恢复: 检测到未消费探测状态(队列 {vq.qsize()} 条 verdict / "
+                f"槽在飞 {slot.in_flight()}) —— 跳过超龄清扫与重 kick, 交由既有 verdict 的正常消费链接续"
+            )
+            return
+        now = self._clock.now()
+        box = self._state_probe_pending()
+        kept = []
+        swept = []
+        for entry in box:
+            ts = entry.get("ts") if isinstance(entry, dict) else None
+            fresh = isinstance(ts, (int, float)) and not isinstance(ts, bool) and (now - ts) <= PROBE_PENDING_MAX_AGE_S
+            (kept if fresh else swept).append(entry)
+        if swept:
+            box[:] = kept
+            logger.warning(
+                f"relocate | probe pending 启动清扫: 清除超龄条目 {len(swept)} 条"
+                f"(>{int(PROBE_PENDING_MAX_AGE_S)}s 无 verdict, 线程死/verdict 丢失兜底): " + "; ".join(
+                    f"{str(e.get('fingerprint') or '')[:8]}({e.get('src')}->{e.get('dst')})"
+                    for e in swept if isinstance(e, dict)
+                )
+            )
+        pending = self.probe_pending_list()
+        if not pending:
+            return
+        head = pending[0]
+        fp = str(head.get("fingerprint") or "")
+        if runner.try_start(self._ctx, fp, str(head.get("src") or ""), str(head.get("dst") or "")):
+            logger.info(
+                f"relocate | probe pending 重启恢复: 队首意图重 kick 探测({fp[:8]}: "
+                f"{head.get('src')} -> {head.get('dst')}) —— verdict 到达后走消费链自动续跑, "
+                "其余条目由消费面 kick 下一条接续"
+            )
+        else:
+            # 防御兜底面: 上方守卫保证到达此处时队列空且槽空闲, try_start 恒受理(线程启动
+            # 失败也在受理内合成 verdict 并返回 True) —— 正常不可达, 保留防 runner 替身/未来
+            # 路径破坏前提; 文案按「消费链可能接续」中性表述(评审 fix3), 不再断言「留待清扫」。
+            logger.warning("relocate | probe pending 重启恢复: 单飞槽被占, 队首意图未 kick; "
+                           "若 verdict 仍在队列将由消费链接续, 否则留待下次启动清扫")
 
     # ---------- 搬: 轮询 / 停滞判据 / 长耗时转 watching ----------
 
@@ -1752,9 +1964,7 @@ class ExecMixin:
             }
         # ---- 未命中分支(S2 异步化): 生产=意图入队+单飞 kick+「探测中」回执; 测试经
         # _probe_inline 注入内联(run_inline 同步拿 verdict 走原收尾三态, 语义零漂移)。
-        runner = self._probe_runner if self._probe_runner is not None else (
-            PROBE_RUNNER_INLINE if self._probe_inline else PROBE_RUNNER
-        )
+        runner = self._active_probe_runner()
         if self._probe_inline:
             # 同步内联(既有替身形态的保留通道): run_inline 与线程体同款执行面但同步执行,
             # verdict 经返回值交付(不投队列不碰槽); 以下收尾三态与异步化前逐字一致。
