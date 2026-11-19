@@ -30,6 +30,140 @@ from typing import Any, Callable, Collection, Iterable, Mapping, Optional, Seque
 # infra 不回依 core, 无环)。path_normalize 本体仍是斜杠归一的单一实现, 本文件不复制。
 from ...infra import utils
 
+# ---------------------------------------------------------------- 公共名单(S5-2 接口守卫)
+
+# __all__ = 本文件对外公共 API 的显式名单单点: 族外(qbapi/webui)只准消费名单内公开名,
+# 下划线名一律不进(跨界私有引用由 tests/test_relocate_interface_guard.py P2 判红)。
+# 本文件是 relocate 家族的纯决策层, 顶层非下划线名即公共面, 按区段全量收录(宁可全勿缺:
+# 漏名不会红但会失真); __all__ 只影响 `import *`, 常规 from-import 不受限。
+__all__ = [
+    # 别名形态与预检分流
+    "FORM_DIRECT",
+    "FORM_FILE_LINKS",
+    "FORM_DIR_ALIAS",
+    "FORM_REJECT",
+    "CLS_OK",
+    "CLS_CONFIRM",
+    "CLS_BLOCKED",
+    # 闸门 id(稳定字符串, 前端/测试按 id 消费)
+    "GATE_GONE",
+    "GATE_DISABLED",
+    "GATE_UNFINISHED",
+    "GATE_ALIAS_BUSY",
+    "GATE_INCOMPLETE",
+    "GATE_MOVING",
+    "GATE_TARGET_CONFLICT",
+    "GATE_TARGET_UNKNOWN",
+    "GATE_TARGET_TYPE",
+    "GATE_QB_TEMP",
+    "GATE_SPACE",
+    "GATE_SAME_FS",
+    "GATE_PLATFORM",
+    "GATE_HARDLINK",
+    "GATE_THIRD_PARTY_LINK",
+    "GATE_FORM",
+    "GATE_CANCEL_ALIAS_LEFT",
+    "GATE_AUTO_TMM",
+    "GATE_BACKEND",
+    "GATE_BT_BACKUP",
+    "GATE_NESTED",
+    "GATE_SOURCE_MISSING",
+    "GATE_SOURCE_UNKNOWN",
+    # 相位机与账面版本/保留策略
+    "PHASE_MOVING",
+    "PHASE_WATCHING",
+    "PHASE_MOVED",
+    "PHASE_ARMED",
+    "PHASE_REWRITTEN",
+    "PHASE_DONE",
+    "PHASE_FAILED",
+    "PHASE_CANCELLED",
+    "PHASE_SUPERSEDED",
+    "MODEL_VERSION",
+    "DONE_HISTORY_KEEP",
+    "RESUME_RETRY_MAX",
+    "TERMINAL_PHASES",
+    "FINALIZE_WINDOW_PHASES",
+    "PENDING_TAG_PHASES",
+    "LEGACY_PHASE_MAP",
+    # 展示状态派生
+    "DISPLAY_MOVING",
+    "DISPLAY_PENDING_FINALIZE",
+    "DISPLAY_DONE",
+    "DISPLAY_FAILED",
+    "DISPLAY_CANCELLED",
+    "DISPLAY_SUPERSEDED",
+    "MOVING_PHASES",
+    "PENDING_PHASES",
+    "display_state_of_phase",
+    # 状态/探测判定谓词
+    "is_complete_state",
+    "TAG_PROBE",
+    "is_probe_torrent",
+    # 路径纯函数与到位判定
+    "at_dst",
+    "all_at_dst",
+    "layout_of",
+    # 别名单元计划与组闸门判定
+    "RelocateUnitPlan",
+    "plan",
+    "InheritedAlias",
+    "inherited_entries_of",
+    "RelocateJob",
+    "GroupFacts",
+    "nested_target_on",
+    "evaluate_group",
+    "evaluate_group_unit",
+    "AddFacts",
+    "evaluate_add",
+    # 同卷证明
+    "same_volume_proof",
+    # job 落账与恢复(P3/P6)
+    "job_id_for",
+    "job_to_dict",
+    "job_from_dict",
+    "RelocateSnapshot",
+    "job_rank",
+    "content_root_of",
+    "resolve_physical",
+    # 停滞判据与执行期恢复
+    "STALL_OK",
+    "STALL_WARN",
+    "STALL_FAILED",
+    "stall_verdict",
+    "RECOVER_POLL",
+    "RECOVER_RESUME",
+    "RECOVER_STALLED",
+    "recover_exec_phase",
+    # 收尾窗对账表
+    "ACT_WAIT",
+    "ACT_REBUILD",
+    "ACT_VERIFY",
+    "ACT_ENSURE_DAEMON",
+    "ACT_FAIL_TERMINAL",
+    "ACT_FAIL_SUSPECT",
+    "ACT_FAIL_STALE",
+    "REBUILD_MAX_ATTEMPTS",
+    "REBUILD_BACKOFF",
+    "DAEMON_RESPAWN_BACKOFF",
+    "DAEMON_HEARTBEAT_MAX_AGE",
+    "ensure_daemon_action",
+    "reconcile",
+    # 核验与删链门(S4 后半)
+    "REASON_VERIFY_FAILED",
+    "REASON_CHAIN_DEPS",
+    "REASON_FINALIZED",
+    "REASON_MEMBERS_GONE",
+    "ABSENCE_SHRINK_ROUNDS",
+    "absence_shrink",
+    "under_alias_root",
+    "file_alias_intersects",
+    "alias_roots_of",
+    "relocating_hashes_of",
+    "resuming_hashes_of",
+    "chain_gate_hits",
+]
+
 # ---------------------------------------------------------------- 常量
 
 # 别名形态(与 alias_fs 的链接形态字符串并列使用; 进 state/界面, 不随代码改名)
@@ -101,6 +235,11 @@ MODEL_VERSION = 1
 # 搬迁不得冲掉失败账), superseded 随接管任务整链消亡不经本计数。常量非配置键(保留策略
 # 是产品决策不是用户调参面, 与 REBUILD_MAX_ATTEMPTS 同形态)。
 DONE_HISTORY_KEEP = 20
+# 恢复确认账的补发上界(issue 26-11-14-1744): 机制侧消费在 relocate_lifecycle(退避补发/
+# 穷尽挂账), webui 展示面借同一常数区分「恢复确认中 / 不再补发」。原为 lifecycle 私有名
+# _RESUME_RETRY_MAX(S5-2 跨界私有清除): 展示面 import 下划线名属跨层私有引用, 迁 units
+# 公开名 —— 机制与展示同源一份, 改值只在这里(非配置键, 与 REBUILD_MAX_ATTEMPTS 同形态)。
+RESUME_RETRY_MAX = 3
 TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED, PHASE_SUPERSEDED})
 # 收尾窗口(D16 变更承重): armed/rewritten 期间数据已在新位置、成员经别名做种 —— 此窗口内
 # 往旧根添加非本组种子, 其 save_path 记在旧根, 会成为删链门(等值 OR 前缀)的永久依赖,
@@ -184,6 +323,26 @@ def is_complete_state(rec: Any) -> bool:
         return False
     state = str(getattr(rec, "state", "") or "")
     return state not in _TRANSITION_EXCLUDED_STATES
+
+
+# ---------------------------------------------------------------- 探测种子判定(S5-2 跨界清除)
+
+# 探测种子隔离标签(R1: tag 隔离 + 启动扫描兜底都按它)。定义迁自 relocate_probe(S5-2):
+# qbapi 的 D16 豁免只经 is_probe_torrent 谓词消费, 不再跨界 import probe 取常量; probe
+# 改从本文件取值(relocate_probe 的钉扎测试值不变)。
+TAG_PROBE = "aqb-probe"
+
+
+def is_probe_torrent(rec: Any) -> bool:
+    """探测种子判定(qbapi D16 删种拦截的豁免单点): rec.tags_set 含探测标签 TAG_PROBE
+
+    表达式逐字收编自 qbapi._relocate_delete_blocked 原行内判定(收口评审 #5): 探针是
+    relocate 自造自删的种子, save_path 可能落在活动别名根下, 拦截会让探测清理的
+    deleteFiles 永远失败(探针滞留 qB 每次启动重复告警)—— 按 tag 单判豁免是最小方案
+    (TAG_PROBE 是普通用户标签可被伪造, 伪造者本有 qB WebUI 直删通路, 口径全文见
+    qbapi docstring)。rec 无 tags_set 属性(旧形态替身)按非探针。
+    """
+    return TAG_PROBE in (getattr(rec, "tags_set", None) or frozenset())
 
 
 # ---------------------------------------------------------------- 路径纯函数

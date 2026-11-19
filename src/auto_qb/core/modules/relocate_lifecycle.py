@@ -20,14 +20,14 @@ if TYPE_CHECKING:
 _TAG_RETRY_SECONDS = 30.0
 
 # 恢复确认(issue 26-11-14-1744 (1)+(2))的重试参数: 退避间隔与 _TAG_RETRY_SECONDS 同值同形态
-# (跨拍退避, 绝不在拍内等待); 补发次数另有常数上界 —— 有界穷尽后余量挂账(黄金法则 2:
+# (跨拍退避, 绝不在拍内等待); 补发次数另有常数上界 = ru.RESUME_RETRY_MAX(S5-2 迁 units
+# 公开名: webui 展示面同源消费, 不留跨层私有 import)—— 有界穷尽后余量挂账(黄金法则 2:
 # 保守默认, 不新增配置键)。四个终态出口共用同一预算。
 _RESUME_RETRY_SECONDS = 30.0
-_RESUME_RETRY_MAX = 3
 
 # 已删成员闭账判据(issue 26-11-15-0345): 恢复账上的成员连续 N 拍不在 store(qB 镜像)
 # 才判「真删除」并闭账 —— 快照空窗(1-2 拍)不误闭, _member_stopped「宁挂账勿漏恢复」的
-# 保守原意保留, 三态只放宽给连续确认的真删除。仿 _RESUME_RETRY_MAX 形态: 常量非配置键
+# 保守原意保留, 三态只放宽给连续确认的真删除。仿 ru.RESUME_RETRY_MAX 形态: 常量非配置键
 # (零 validate_config/schema 牵连), 调大调小都在这一处。
 _DELETED_CONFIRM_TICKS = 3
 
@@ -231,18 +231,18 @@ class LifecycleMixin:
         except Exception as e:  # noqa: BLE001 - 恢复失败只记: 数据面未动, 用户可手动恢复
             self._resume_failures += 1
             retries_used = self._resume_retries_of(job)
-            if retries_used >= _RESUME_RETRY_MAX:
+            if retries_used >= ru.RESUME_RETRY_MAX:
                 # 预算已穷尽(生产可达: armed 期穷尽后同 job 再走 _fail 双开账链): 文案如实写
                 # 「不再补发」, 不许承诺一次不会发生的退避补发(评审 26-11-14-1744 nit#5)
                 logger.warning(
                     f"relocate | job {job.job_id}: 恢复成员运行态失败({e}) —— "
                     f"{len(job.resume_hashes)} 个成员仍被暂停, 补发预算已穷尽"
-                    f"({retries_used}/{_RESUME_RETRY_MAX}), 不再补发, 需手动恢复: {', '.join(job.resume_hashes)}"
+                    f"({retries_used}/{ru.RESUME_RETRY_MAX}), 不再补发, 需手动恢复: {', '.join(job.resume_hashes)}"
                 )
             else:
                 logger.warning(
                     f"relocate | job {job.job_id}: 恢复成员运行态失败({e}) —— "
-                    f"{len(job.resume_hashes)} 个成员仍被暂停, 将按退避补发(至多 {_RESUME_RETRY_MAX} 次): "
+                    f"{len(job.resume_hashes)} 个成员仍被暂停, 将按退避补发(至多 {ru.RESUME_RETRY_MAX} 次): "
                     f"{', '.join(job.resume_hashes)}"
                 )
         else:
@@ -305,7 +305,7 @@ class LifecycleMixin:
         """
         jid = job.job_id
         retries = int(job.resume_retries) + 1
-        exhausted = retries >= _RESUME_RETRY_MAX
+        exhausted = retries >= ru.RESUME_RETRY_MAX
         now = self._clock.monotonic()
         try:
             self._ctx.api.torrents_resume(torrent_hashes=list(stopped))
@@ -313,21 +313,21 @@ class LifecycleMixin:
             self._resume_failures += 1
             if exhausted:
                 logger.warning(
-                    f"relocate | job {jid}: 补发恢复失败({e})且补发预算已穷尽({retries}/{_RESUME_RETRY_MAX}) —— "
+                    f"relocate | job {jid}: 补发恢复失败({e})且补发预算已穷尽({retries}/{ru.RESUME_RETRY_MAX}) —— "
                     f"{len(stopped)} 个成员仍被暂停, 余量已记账, 需手动恢复: {', '.join(stopped)}"
                 )
             else:
                 logger.warning(
                     f"relocate | job {jid}: 补发恢复失败({e}) —— {_RESUME_RETRY_SECONDS:.0f}s 后重试"
-                    f"(第 {retries}/{_RESUME_RETRY_MAX} 次): {', '.join(stopped)}"
+                    f"(第 {retries}/{ru.RESUME_RETRY_MAX} 次): {', '.join(stopped)}"
                 )
         else:
             if exhausted:
-                logger.info(f"relocate | job {jid}: 补发恢复已下发({retries}/{_RESUME_RETRY_MAX}), 待快照回流确认")
+                logger.info(f"relocate | job {jid}: 补发恢复已下发({retries}/{ru.RESUME_RETRY_MAX}), 待快照回流确认")
             else:
                 logger.info(
                     f"relocate | job {jid}: 恢复确认未过({len(stopped)} 个成员仍停着), 已补发"
-                    f"(第 {retries}/{_RESUME_RETRY_MAX} 次), 待快照回流确认: {', '.join(stopped)}"
+                    f"(第 {retries}/{ru.RESUME_RETRY_MAX} 次), 待快照回流确认: {', '.join(stopped)}"
                 )
         self._resume_next_try[jid] = now + _RESUME_RETRY_SECONDS
         self._note_resume_state(jid, stopped, retries)
@@ -388,7 +388,7 @@ class LifecycleMixin:
                 continue
             if now < self._resume_next_try.get(job.job_id, 0.0):
                 continue  # 退避窗内(含快照回流窗): 等下一拍, 绝不在拍内等待/重发
-            if job.resume_retries >= _RESUME_RETRY_MAX:
+            if job.resume_retries >= ru.RESUME_RETRY_MAX:
                 # 穷尽后的常驻面: 只收敛账面(变化门在 _note_resume_state), 不再消耗 qB 写
                 if stopped != tuple(pending):
                     self._note_resume_state(job.job_id, tuple(stopped), job.resume_retries)
@@ -396,7 +396,7 @@ class LifecycleMixin:
                     self._resume_exhausted_warned.add(job.job_id)
                     self._resume_failures += 1
                     logger.warning(
-                        f"relocate | job {job.job_id}: 恢复确认穷尽({job.resume_retries}/{_RESUME_RETRY_MAX} 次补发后"
+                        f"relocate | job {job.job_id}: 恢复确认穷尽({job.resume_retries}/{ru.RESUME_RETRY_MAX} 次补发后"
                         f"仍有 {len(stopped)} 个成员停着) —— 不再补发, 余量已记账, 需手动恢复: {', '.join(stopped)}"
                     )
                 continue

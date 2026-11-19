@@ -126,7 +126,7 @@ def test_member_relocate_origin_mover_and_contract(tmp_path):
 
 def test_member_relocate_resume_pending_projection(tmp_path):
     """恢复确认账展示面(issue 26-11-14-1744 (3)): 账字段随 relocate 投影下发, 穷尽/在途可区分"""
-    from auto_qb.core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
+    from auto_qb.core.modules.relocate_units import RESUME_RETRY_MAX
 
     env = relocate_env(tmp_path)
     mod = env.mgr.ctx.relocate

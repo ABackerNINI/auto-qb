@@ -926,7 +926,7 @@ def test_start_job_jobid_reuse_carries_prev_resume_pending(tmp_path, monkeypatch
     verdict = {"cls": "ok", "notes": [], "reasons": []}
     jid = ru.job_id_for("HA", dst, src)
 
-    from auto_qb.core.modules.relocate_lifecycle import _RESUME_RETRY_MAX
+    from auto_qb.core.modules.relocate_units import RESUME_RETRY_MAX
 
     # 上一生命周期: 终态 + 穷尽未恢复余量(D3: 不看 prev 终态, 一视同仁结转);
     # pending 含 HA(现场已停的成员)钉去重面, tag_on=True 钉两账同命中不互斥
@@ -940,7 +940,7 @@ def test_start_job_jobid_reuse_carries_prev_resume_pending(tmp_path, monkeypatch
         phase=ru.PHASE_FAILED,
         resume_hashes=("HA", "HB"),
         resume_pending=("HA", "HB", "HZ"),
-        resume_retries=_RESUME_RETRY_MAX,
+        resume_retries=RESUME_RETRY_MAX,
         tag_on=True,
     )
     item = mod._start_job(recs, dst, facts, verdict, client)

@@ -31,8 +31,7 @@ from qbittorrentapi import (
 from ..infra.utils import mask_tracker_entry
 from ..torrents import TorrentStore
 from . import curves
-from .modules.relocate_probe import TAG_PROBE
-from .modules.relocate_units import chain_gate_hits, file_alias_intersects
+from .modules.relocate_units import chain_gate_hits, file_alias_intersects, is_probe_torrent
 
 logger = logging.getLogger(__name__)
 
@@ -303,7 +302,7 @@ class QbApi:
             sp = str(getattr(rec, "save_path", "") or "") if rec is not None else ""
             if not sp:
                 continue
-            if TAG_PROBE in (getattr(rec, "tags_set", None) or frozenset()):
+            if is_probe_torrent(rec):
                 continue  # 自造探针: 不在 D16 拦截面内(见 docstring)
             for raw_root, job_id, kind, alias_paths in roots:
                 # 候选面单点(chain_gate_hits, 删链门共用): 等值 OR 前缀 + 0535 祖先格

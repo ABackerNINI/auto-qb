@@ -38,10 +38,10 @@ from typing import Any, Iterable
 from ...infra import clock
 from ...infra import file_access
 from .relocate_common import logger
+from .relocate_units import TAG_PROBE  # 探测标签定义迁 units(S5-2): qbapi 豁免只走谓词, 本文件消费面不变
 
 # ---------- 常量单点(计划 §04 P2-5: 每步独立短超时, 总预算收敛; 真机实测常态 ~1.3s) ----------
 
-TAG_PROBE = "aqb-probe"  # 探测种子隔离标签(R1: tag 隔离 + 启动扫描兜底都按它)
 PROBE_DIR_PREFIX = "aqb-probe-"  # 临时子目录固定前缀(D8: 目录隔离不散落; 残留扫描按前缀认领)
 PROBE_FILE_SIZE = 4096  # 探针内容 4KiB(单 piece)
 PROBE_PIECE_LENGTH = 16384  # piece length 16KiB => 1 个 piece

@@ -179,7 +179,7 @@ def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     mod.relocate_execute(["HA"], dst)
-    assert "HA" in mgr.ctx.relocate.relocating_hashes(), "搬迁窗口: 成员在 relocating 派生登记内"
+    assert "HA" in mgr.ctx.relocate.relocating_hashes(), "搬迁窗口: 成员在 relocating 派生窗口内"
     mgr.store.own_writes.clear()  # 自有暂停登记先清掉, 单独验证搬迁窗口闸门
     client.calls.clear()
     r = mgr.ctx.ops.skip_check("HA", source="web")

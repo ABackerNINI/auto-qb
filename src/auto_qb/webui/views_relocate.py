@@ -9,9 +9,9 @@ from typing import Optional, Sequence
 
 from ..core.modules import relocate_units as ru
 # 恢复确认账的补发上界(issue 26-11-14-1744 §06 (3) 展示面): 穷尽态判定单点在账的机制侧
-# (relocate_lifecycle), 这里只借同一常数做「恢复确认中 / 不再补发」的展示区分 —— 不复制
-# 数值(漂移即展示谎报), 上界改名/改值由 test_webui_relocate_visibility 的钉扎兜住。
-from ..core.modules.relocate_lifecycle import _RESUME_RETRY_MAX as RESUME_RETRY_MAX
+# (relocate_lifecycle), 常数以公开名 ru.RESUME_RETRY_MAX 住 units(S5-2: 原跨层私有
+# import _RESUME_RETRY_MAX 已清), 这里只借同一常数做「恢复确认中 / 不再补发」的展示区分
+# —— 不复制数值(漂移即展示谎报), 上界改名/改值由 test_webui_relocate_visibility 的钉扎兜住。
 
 # 相位 -> 展示状态归并已收敛为单点派生函数(I3, 计划 26-11-15-2340 §03.4): 归并表
 # (MOVING_PHASES/PENDING_PHASES)与判定体单点在 units.display_state_of_phase, 本文件
@@ -72,7 +72,7 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
         "resume_pending_count": len(resume_pending),
         "resume_pending_hashes": list(resume_pending),
         "resume_retries": resume_retries,
-        "resume_exhausted": bool(resume_pending) and resume_retries >= RESUME_RETRY_MAX,
+        "resume_exhausted": bool(resume_pending) and resume_retries >= ru.RESUME_RETRY_MAX,
     }
 
 
