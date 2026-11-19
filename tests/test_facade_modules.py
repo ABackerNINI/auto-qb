@@ -13,6 +13,7 @@ run() 启停改 host.start_all/stop_all/_apply_web_config 并入 webui.apply/主
 ## 测试计划
 - test_webui_module_start_semantics: dry-run/未启用无操作; 启用且未在跑 -> 启动; 已在跑幂等跳过
 - test_webui_module_stop_requests_exit_without_wait: 只 handle.stop() 不等线程(原 finally 口径)
+- test_webui_module_stop_calls_transfer_center_stop: transfer 验证中心先叫停(S4, 计划 26-11-20-0127), 顺序 center -> 订阅 -> 服务, 不 join 不阻塞
 - test_webui_module_apply_marks_dirty_on_any_diff: 配置有差异 -> 置脏; 同一对象 -> 不置脏
 - test_webui_module_apply_restarts_only_on_listen_identity_change: web 段非身份字段变化零启停; 身份变化先停旧(等退出)再启新; 关闭时清句柄
 - test_webui_module_loop_hooks: on_command_line 聚合门面结果; on_sync_line 发布视图; on_task_line 预取->发布->索引次序
@@ -81,6 +82,25 @@ def test_webui_module_stop_requests_exit_without_wait():
         mod.stop()
         handle.stop.assert_called_once_with()
         assert not handle.wait.call_args_list, "关停路径不等线程(daemon 随进程终灭), 热重载重启才需要等"
+
+
+def test_webui_module_stop_calls_transfer_center_stop(monkeypatch):
+    """stop: transfer 验证中心先叫停(S4, 计划 26-11-20-0127) —— stop Event 置位即返回,
+    不 join 不阻塞(D4a 退出不 join); 顺序 = center.stop -> 订阅注销 -> 服务退出位"""
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mod = mgr.host.get("webui")
+        order = []
+        real_center_stop = mgr.web.transfer_center.stop
+        mgr.web.transfer_center.stop = lambda: (order.append("center"), real_center_stop())
+        monkeypatch.setattr(mod._subscriber, "stop", lambda: order.append("subscriber"))
+        mgr.web.handle = mock.MagicMock()
+        mgr.web.stop_server = lambda: order.append("server")
+        mod.stop()
+        assert order == ["center", "subscriber", "server"], "关停顺序: 验证中心先叫停, 后拆订阅与服务"
+        assert mgr.web.transfer_center._stop_event.is_set()
 
 
 # ---------- WebUIModule 热重载语义 ----------

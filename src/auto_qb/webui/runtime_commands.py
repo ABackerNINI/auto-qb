@@ -101,9 +101,12 @@ class CommandsMixin:
             pass
         # 命令线尾部(D6, 计划 26-11-20-0127): 消费 transfer 验证中心的回灌结论
         # (收结果 -> 删源 -> 填槽 -> 批次齐写回执; 暂停分支也照跑 —— run_command_line
-        # 在暂停判断之前)。S2 生产路径恒空转(还没有生产者递交作业, 队列恒空, 零行为
-        # 变化); 删源并入 cmd_changed_state(P0-5 补刷新)是 S3 的接线面, 本期不动。
-        self.transfer_center.drain()
+        # 在暂停判断之前)。S3 端口已接真实: 删源 = orchestrator._delete_source(经门面
+        # _transfer_delete_source), 终态回执 = set_result(经门面 _transfer_receipt,
+        # DEFERRED_RECEIPT 语义维持); 删源成功并入返回值(P0-5 立即补刷新) —— 删源改了
+        # qB 种子状态, 与 RESYNC_COMMANDS 同判据。
+        if self.transfer_center.drain():
+            changed = True
         return changed
 
     def _judge_reannounce(self, h: str, baseline: dict, *, t0: float, now: float) -> tuple:

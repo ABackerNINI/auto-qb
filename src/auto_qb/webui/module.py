@@ -156,6 +156,10 @@ class WebUIModule(BaseModule):
         self._subscriber.sync()
 
     def stop(self) -> None:
+        # transfer 验证中心先叫停(S4, 计划 26-11-20-0127): stop Event 即时醒, 不 join 不
+        # 阻塞(D4a 退出不 join) —— stop 后队列余量不再处理、验证轮询等待即时返回; 已验证
+        # 成功但删源未完成的丢弃清单 WARNING 在 center.stop() 内落日志(绝不自动删源)
+        self._manager.web.transfer_center.stop()
         # 先注销订阅再停服务(顺序反了就是「端点已死还要跟工具多跑一轮心跳」);
         # 两段都是非阻塞口径: 订阅注销在有界超时内完成, 服务只置退出位
         self._subscriber.stop()

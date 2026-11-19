@@ -20,6 +20,8 @@
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_run_cmd_driven_sync_not_by_time_keeps_next_sync: tick 到期而同步时间未到的命令轮, 白刷不重设 next_sync_at(619->633; 假时钟直驱)
 - test_run_refresh_gate_reset_beat_observable_window: 补刷新闸(637/642)重设节拍的可观测分歧必须落进用例观察窗内(26-11-05-0200; 假时钟直驱)
+transfer 验证异步化(计划 26-11-20-0127):
+- test_pause_mode_transfer_command_still_consumes_and_drains: 暂停分支下命令线照跑 + transfer 验证中心 drain 照跑(§07 行 8; 先命令后 continue 的既有形态), 删源语义一致
 """
 
 import json
@@ -487,3 +489,59 @@ def test_run_refresh_gate_reset_beat_observable_window(monkeypatch):
         assert sync_times == [t_r2, t_r3, t_r5], sync_times
         assert mgr._task_line.call_count == 0, "轮次表内不得误入任务分支"
         assert mgr._sync_moved.call_count == 2, "正确世界恰 R2/R4 两道闸求值 moved(其余轮 by_time 短路)"
+
+
+def test_pause_mode_transfer_command_still_consumes_and_drains():
+    """暂停分支下命令线照跑 + transfer 验证中心 drain 照跑(计划 26-11-20-0127 §07 行 8 / D6)
+
+    qbmanager 既有形态: run_command_line 在暂停判断之前(先命令后 continue) —— 暂停期用户
+    发起的转移命令照常生产+递交, 命令线尾部 drain 照常删源+写回执(删源语义与未暂停一致);
+    回执落定即停循环(_wait_next 替身观察回执面)。
+    """
+    from types import SimpleNamespace
+
+    from auto_qb.config import TransferConfig, TransferTargetConfig
+    from auto_qb.transfer import TorrentTransferResult, TransferStatus
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), client=FakeClient())
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.main_tick = 0.05
+        mgr.config.web.transfer = TransferConfig(
+            targets=(
+                TransferTargetConfig(
+                    name="目标A", type="qb", base_url="http://127.0.0.1:8081", username="u", password="p", enabled=True
+                ),
+            )
+        )
+        mgr.client.torrents["HA"] = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)
+        # worker 侧替身: 验证立即成功(不真等); 删源走真实端口链(FakeClient.torrents_delete +
+        # store.remove_torrent), 命令线尾部 drain 在主循环线程消费
+        mgr.web.transfer_center._adapter_factory = lambda target: SimpleNamespace()
+        mgr.web.transfer_center._verify_runner = lambda adapter, job: TorrentTransferResult(
+            job.hash, TransferStatus.SUCCESS, "", None
+        )
+        cmd_id = "tr-pause"
+        mgr.web.commands.put(("transfer_run", {"target_id": "目标A", "hashes": ["HA"], "cmd_id": cmd_id}))
+        pause_event = threading.Event()
+        pause_event.set()
+        stop_event = threading.Event()
+        real_wait = _qbm._wait_next
+        state = {"turns": 0}
+
+        def fake_wait(stop_ev, wake_ev, timeout):
+            state["turns"] += 1
+            if cmd_id in mgr.web.results or state["turns"] > 400:
+                return True  # 回执已落(或保险丝) -> 停循环
+            return real_wait(stop_ev, wake_ev, timeout)
+
+        with mock.patch.object(_qbm, "_wait_next", side_effect=fake_wait):
+            mgr.run(dry_run=False, stop_event=stop_event, pause_event=pause_event)
+        assert state["turns"] <= 400, "回执未在暂停循环中落地(保险丝触发)"
+        rec = mgr.web.results[cmd_id]
+        assert rec["status"] == "ok", rec
+        assert rec["truth"]["results"][0] == {"hash": "HA", "状态": "成功", "原因": ""}
+        # 暂停分支下 drain 照跑: 删源语义与未暂停一致(验证成功且未保留源 -> 删源任务)
+        assert ("delete", False) in mgr.client.calls, mgr.client.calls
+        assert "HA" not in mgr.client.torrents, "验证成功未保留源: 源任务已删"
+        assert pause_event.is_set(), "全程暂停未被解除"

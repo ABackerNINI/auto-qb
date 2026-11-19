@@ -19,7 +19,15 @@ from qbittorrentapi import HTTP401Error, HTTP4XXError
 from ..config import Config
 from ..core.traffic_source import paths as traffic_paths
 from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
-from ..transfer import TransferOrchestrator, TransferStatus, TransferAdapterError, create_adapter
+from ..transfer import (
+    TorrentTransferResult,
+    TransferOrchestrator,
+    TransferOutcomeCode,
+    TransferStatus,
+    TransferAdapterError,
+    TransferVerifyJob,
+    create_adapter,
+)
 from ..transfer.adapters import TrDownloaderStub
 
 from .commands_common import (
@@ -178,12 +186,18 @@ class WebCommandsMixin(TorrentsMixin, ConfigMixin, LimitMixin, LogsMixin):
     def _cmd_transfer_run(self, target_id: str = "", hashes=None, keep_source: bool = False, cmd_id: str = ""):
         """WEB UI 命令: 执行一次转移批次(计划 26-10-31-0306 W3) —— 转发 transfer.TransferOrchestrator
 
-        串行逐种子在主循环线程**同步执行**(单一写线程假设; 批量无上限, 验证轮询期间
-        主循环被占用是计划 §03 已知形态, 与整组迁移执行同量级)。逐种子状态门/导出/
-        映射/添加/验证/删源全在 orchestrator(单一出处), 本层只聚合计数; 结果结构
-        TorrentTransferResult.to_receipt() 直出 {hash, 状态(成功/跳过/失败), 原因}。
-        回执形状(经 cmd 通道 truth): {results: [...], summary: {success, skipped, failed},
-        target: 目标名}; 批次不中断(D6), 单种子失败只结算本条。
+        主循环线程只跑**生产段**(读源 -> 状态门 -> 导出 -> 准备, 计划 26-11-20-0127 S3):
+        逐种子状态门/导出/映射/准备全在 orchestrator(单一出处), 本层只聚合与分流; 目标侧
+        整段(添加 -> 验证 -> 暂停)与删源/回执结算移交 web.transfer_center(daemon worker +
+        命令线尾部 drain, 黄金法则 #5 单一写线程保持 —— 消费全在主循环线程)。回执契约
+        不变(单段终态, D5 前端零改动), truth 形状 {results(按入参顺序),
+        summary: {success, skipped, failed}, target: 目标名} 逐字节同形:
+        - 快路径(判据单点 = 生产段无验证作业, 典型 = 全跳过/全失败/空批): 现场写回执,
+          回执时机与内容与今天同步路径逐字节同形(§07 快路径回归);
+        - 递交路径: 已结算结果作槽位初值 + 验证作业经 submit_batch 递交, 回执延后由 drain
+          经回执端口写(cmd_id 关联, handler 不写 —— DEFERRED_RECEIPT 语义维持)。
+        结果结构 TorrentTransferResult.to_receipt() 直出 {hash, 状态(成功/跳过/失败), 原因};
+        批次不中断(D6), 单种子失败只结算本条(逐种子 try/except 与 run_batch 同口径)。
         """
         target, err = self._resolve_transfer_target(str(target_id or ""), require_enabled=True)
         if target is None:
@@ -191,23 +205,46 @@ class WebCommandsMixin(TorrentsMixin, ConfigMixin, LimitMixin, LogsMixin):
                 self._set_web_result(cmd_id, "error", err)
             return
         req = [str(h) for h in (hashes or []) if h]
-        results = TransferOrchestrator(self.api).run_batch(target, req, keep_source=bool(keep_source))
-        summary = {status.value: 0 for status in TransferStatus}
-        for item in results:
-            summary[item.status.value] += 1
-        if cmd_id:
-            self._set_web_result(
-                cmd_id,
-                "ok",
-                truth={
-                    "results": [item.to_receipt() for item in results],
-                    "summary": summary,
-                    "target": target.name
-                },
+        orchestrator = TransferOrchestrator(self.api)
+        entries: List[object] = []  # 入参顺序的混合列(已结算结果 / 验证作业) —— 槽位顺序即它
+        for hash_ in req:
+            try:
+                entries.append(orchestrator.produce_transfer_job(target, hash_, keep_source=bool(keep_source)))
+            except Exception as exc:  # noqa: BLE001 —— D6: 单种子兜底, 批次继续(与 run_batch 同口径)
+                logger.error("transfer: 种子 %s 未预期异常", hash_, exc_info=True)
+                entries.append(
+                    TorrentTransferResult(
+                        hash_, TransferStatus.FAILED, f"未预期异常({exc})", TransferOutcomeCode.UNEXPECTED
+                    )
+                )
+        job_n = sum(1 for item in entries if isinstance(item, TransferVerifyJob))
+        if job_n == 0:
+            # 快路径: 全批已结算(无验证作业) -> 现场写回执, 与今天同步路径逐字节同形
+            results = [item for item in entries if isinstance(item, TorrentTransferResult)]
+            summary = {status.value: 0 for status in TransferStatus}
+            for item in results:
+                summary[item.status.value] += 1
+            if cmd_id:
+                self._set_web_result(
+                    cmd_id,
+                    "ok",
+                    truth={
+                        "results": [item.to_receipt() for item in results],
+                        "summary": summary,
+                        "target": target.name
+                    },
+                )
+            logger.info(
+                f"WEB UI | 转移批次 -> {target.name}({len(req)}个): "
+                f"成功 {summary['success']} / 跳过 {summary['skipped']} / 失败 {summary['failed']}"
             )
+            return
+        # 递交路径: 混列整批递交(已结算结果作槽位初值, 回执延后由 drain 写); 最终三态
+        # 计数在批次齐时由回执端口一侧落日志(center._complete_if_ready)
+        self.web.transfer_center.submit_batch(cmd_id, target, entries)
         logger.info(
-            f"WEB UI | 转移批次 -> {target.name}({len(req)}个): "
-            f"成功 {summary['success']} / 跳过 {summary['skipped']} / 失败 {summary['failed']}"
+            f"WEB UI | 转移批次 -> {target.name}({len(req)}个): 已递交后台验证"
+            f"(生产段已结算 {len(req) - job_n} 个, 验证作业 {job_n} 个)"
         )
 
     def _cmd_transfer_test(self, target_id: str = "", cmd_id: str = ""):

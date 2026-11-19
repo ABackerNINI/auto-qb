@@ -13,10 +13,19 @@ pitfalls/testing/web-auth-test-forms.md: 缺省 TestClient 形态非 loopback, �
   (字符串/dict, issue 26-11-03-0901) / 目标不存在 / 目标未启用 -> 400 且零入队; 合法
   请求 200 入队 cmd=transfer_run, 载荷 {target_id, hashes}(hash 清洗去空 + 去重保序),
   keep_source 提供才透传
-- test_transfer_run_drain_receipt: mock orchestrator, [成功, 跳过, 失败] 混合批次 ->
-  回执 ok, truth.results 逐条 {hash, 状态(中文三态), 原因} 与 orchestrator 分类一致
-  (to_receipt 直出), summary 三态计数; 单种子失败不中断批次(3 条全结);
-  keep_source 透传 run_batch; 目标未启用/在投递-执行之间消失 -> error 回执零执行
+- test_transfer_run_drain_receipt: mock 生产段(produce_transfer_job 全批已结算),
+  [成功, 跳过, 失败] 混合批次走快路径 -> 回执 ok 当轮即写(时机与同步路径一致),
+  truth.results 逐条 {hash, 状态(中文三态), 原因} 与 orchestrator 分类一致
+  (to_receipt 直出), summary 三态计数; 单种子失败不中断批次(3 条全结); 快路径零
+  线程零递交(判据单点 = 生产段无验证作业); keep_source 透传生产段; 目标未启用/
+  在投递-执行之间消失 -> error 回执零执行
+- test_transfer_run_submit_path_mixed_batch: 递交路径(S3) —— 生产段产出混合列
+  (跳过已结算 + 验证作业 + 失败已结算)递交 center, 回执延后到批次齐; 槽位按入参
+  顺序(已结算结果作初值), truth 形状逐字节同形(D5), summary 聚合口径不变;
+  验证成功槽位按 source_hash 删源(qbapi.torrents_delete delete_files=False)
+- test_transfer_run_slow_target_does_not_block_command_line: 慢目标桩(find_torrent
+  阻塞)下命令线程不被占住 —— 转移命令 exec_ms < 500(CMD_SLOW_MS 埋点口径, 验证
+  等待在 worker), 回执延后; 放行后批次照常齐写回执
 - test_transfer_test_route_and_drain: test 路由空/缺失 target_id 400 不入队(T2a2); 目标不存在 400 不入队; 未启用目标可测
   (只要求存在, 设置页先行测连通); drain 成功 -> ok truth={info}; 适配器抛
   TransferAdapterError -> error 回执回显文案
@@ -25,14 +34,26 @@ pitfalls/testing/web-auth-test-forms.md: 缺省 TestClient 形态非 loopback, �
 """
 from __future__ import annotations
 
+import re
+import threading
+import time
+
 import pytest
 
 import auto_qb.webui.commands as commands_module
 from auto_qb.config import TransferConfig, TransferTargetConfig
 from auto_qb.transfer import TransferAdapterError
-from auto_qb.transfer.orchestrator import TorrentTransferResult, TransferOutcomeCode, TransferStatus
+from auto_qb.transfer.adapters import AddResult
+from auto_qb.transfer.orchestrator import (
+    TorrentTransferResult,
+    TransferOutcomeCode,
+    TransferStatus,
+    TransferVerifyJob,
+    _SeedPlan,
+)
 
-from helpers import FakeClient, make_manager
+from clock import wait_until
+from helpers import FakeClient, FakeTorrent, capture_logs, make_manager
 
 # 等价形态常量单点: 请求头名字面量不直接连写赋值符(工作区写入判据误判族, 见
 # memory-bank/pitfalls/ops/agent-write-guard-secret-false-positive.md; 与 test_web_auth 同款)
@@ -193,8 +214,9 @@ def test_transfer_run_route_validation(web_env):
 
 
 def test_transfer_run_drain_receipt(tmp_path, monkeypatch):
-    """drain 级: 逐种子结果与 orchestrator 分类一致(to_receipt 直出), 失败不中断批次,
-    keep_source 透传; 目标未启用/消失 -> error 回执零执行"""
+    """drain 级快路径(生产段全批已结算): 逐种子结果与 orchestrator 分类一致(to_receipt
+    直出), 失败不中断批次, keep_source 透传生产段; 回执当轮即写(与同步路径同形), 零线程
+    零递交; 目标未启用/消失 -> error 回执零执行"""
     mgr = _drain_manager(tmp_path, TARGET_A, TARGET_OFF)
     # 逐种子结果直接用真 orchestrator 结果结构: 分类与回执形态的单一出处
     results = [
@@ -208,9 +230,9 @@ def test_transfer_run_drain_receipt(tmp_path, monkeypatch):
         def __init__(self, qb_api):
             calls.append(("init", qb_api is mgr.api))
 
-        def run_batch(self, target, hashes, keep_source=False):
-            calls.append(("run", target.name, list(hashes), keep_source))
-            return list(results)
+        def produce_transfer_job(self, target, hash_, keep_source):
+            calls.append(("produce", target.name, hash_, keep_source))
+            return next(r for r in results if r.hash == hash_)
 
     monkeypatch.setattr(commands_module, "TransferOrchestrator", FakeOrchestrator)
     rec = _drain(
@@ -232,15 +254,140 @@ def test_transfer_run_drain_receipt(tmp_path, monkeypatch):
     assert truth["results"][1]["状态"] == "跳过" and "已存在" in truth["results"][1]["原因"]
     assert truth["results"][2]["状态"] == "失败" and "导出失败" in truth["results"][2]["原因"]
     assert truth["summary"] == {"success": 1, "skipped": 1, "failed": 1}, truth["summary"]
-    assert ("run", "目标A", ["HA", "HB", "HC"], True) in calls, calls
+    assert ("produce", "目标A", "HA", True) in calls, calls
+    assert sum(1 for c in calls if c[0] == "produce") == 3, calls
+    assert all(c[3] is True for c in calls if c[0] == "produce"), "keep_source 逐种子全量透传生产段"
     assert sum(1 for c in calls if c[0] == "init") == 1, calls
+    # 快路径回归钉面(§07): 判据单点 = 生产段无验证作业 -> 现场写回执, 零递交零线程
+    # (worker 懒启动: 本批未入中心, 恒无线程; 批次容器恒空)
+    assert mgr.web.transfer_center._batches == {}
+    assert mgr.web.transfer_center._worker is None
     # 命令层兜底: 目标未启用 -> error 回执, orchestrator 零执行
     rec2 = _drain(mgr, "transfer_run", {"target_id": "目标B", "hashes": ["HA"], "cmd_id": "tr2"})
     assert rec2["status"] == "error" and "未启用" in rec2["error"], rec2
     # 目标在投递-执行之间消失(热重载窗口) -> error 回执, orchestrator 零执行
     rec3 = _drain(mgr, "transfer_run", {"target_id": "不存在", "hashes": ["HA"], "cmd_id": "tr3"})
     assert rec3["status"] == "error" and "不存在" in rec3["error"], rec3
-    assert sum(1 for c in calls if c[0] == "run") == 1, calls
+    assert sum(1 for c in calls if c[0] == "produce") == 3, calls
+
+
+def test_transfer_run_submit_path_mixed_batch(tmp_path, monkeypatch):
+    """递交路径(S3): 生产段混合列(跳过已结算 + 验证作业 + 失败已结算)递交 center ——
+    回执延后到批次齐, 槽位按入参顺序(已结算结果作初值), truth 形状逐字节同形(D5);
+    验证成功槽位按 source_hash 删源(delete_files=False 恒定, 只删任务)"""
+    mgr = _drain_manager(tmp_path, TARGET_A)
+    mgr.client.torrents["HSRC"] = FakeTorrent(hash="HSRC", state="pausedUP", progress=1.0)
+    job = TransferVerifyJob(
+        hash="HB",
+        source_hash="HSRC",
+        plan=_SeedPlan(
+            data=b"t",
+            fields={
+                "infohash": "HSRC",
+                "save_path": "D:/x"
+            },
+            skip_check=False,
+            degraded_note="",
+            source_hash="HSRC"
+        ),
+        keep_source=False,
+        after_state="keep",
+    )
+    produces: list = []
+
+    class FakeOrchestrator:
+        def __init__(self, qb_api):
+            pass
+
+        def produce_transfer_job(self, target, hash_, keep_source):
+            produces.append((hash_, keep_source))
+            if hash_ == "HA":  # 生产段已结算: 跳过(已存在)
+                return TorrentTransferResult("HA", TransferStatus.SKIPPED, "目标已存在", TransferOutcomeCode.DUPLICATE)
+            if hash_ == "HB":  # 生产段放行: 验证作业
+                return job
+            return TorrentTransferResult(
+                "HC", TransferStatus.FAILED, "源 .torrent 导出失败", TransferOutcomeCode.EXPORT_FAILED
+            )
+
+    monkeypatch.setattr(commands_module, "TransferOrchestrator", FakeOrchestrator)
+    # worker 侧注入: 验证成功(不真等), 其余走真实端口链(删源 = orchestrator._delete_source)
+    mgr.web.transfer_center._verify_runner = lambda adapter, job_: TorrentTransferResult(
+        job_.hash, TransferStatus.SUCCESS, "目标已受理", None
+    )
+    mgr.web.commands.put(
+        ("transfer_run", {
+            "target_id": "目标A",
+            "hashes": ["HA", "HB", "HC"],
+            "keep_source": False,
+            "cmd_id": "tr1"
+        })
+    )
+    mgr.web.consume_commands()
+    assert "tr1" not in mgr.web.results, "递交路径: 回执延后, 生产段完成不当轮写"
+    assert ("HB", False) in produces
+    batch = mgr.web.transfer_center._batches["tr1"]
+    assert batch.remaining == 1, "剩余计数只算验证作业槽位"
+    # 槽位按入参顺序: 已结算结果作初值占位, 验证作业槽位待结论
+    assert batch.slots[0].result is not None and batch.slots[0].result.status is TransferStatus.SKIPPED
+    assert batch.slots[2].result is not None and batch.slots[2].result.status is TransferStatus.FAILED
+    assert batch.slots[1].result is None
+    assert batch.slots[0].keep_source and batch.slots[2].keep_source, "已结算槽位永不删源(未验证成功不碰源)"
+    assert wait_until(lambda: mgr.web.transfer_center._results.qsize() == 1, timeout=3.0)
+    changed = mgr.web.consume_commands()  # 命令线尾部 drain: 删源 + 填槽 + 批次齐写回执
+    assert changed is True, "删源成功并入 cmd_changed_state(D6: 白享 P0-5 立即补刷新通路)"
+    rec = mgr.web.results["tr1"]
+    assert rec["status"] == "ok", rec
+    truth = rec["truth"]
+    assert [r["hash"] for r in truth["results"]] == ["HA", "HB", "HC"], "truth 按入参顺序(D5)"
+    assert truth["results"][0] == {"hash": "HA", "状态": "跳过", "原因": "目标已存在"}
+    assert truth["results"][1] == {"hash": "HB", "状态": "成功", "原因": "目标已受理"}
+    assert truth["results"][2]["状态"] == "失败" and "导出失败" in truth["results"][2]["原因"]
+    assert truth["summary"] == {"success": 1, "skipped": 1, "failed": 1}
+    assert truth["target"] == "目标A"
+    assert mgr.web.transfer_center._batches == {}
+    # 删源走真实端口: 验证成功的 HB 按 source_hash 删, 只删任务(delete_files=False)
+    assert ("delete", False) in mgr.client.calls, mgr.client.calls
+    assert "HSRC" not in mgr.client.torrents, "验证成功未保留源: 源任务已删"
+
+
+def test_transfer_run_slow_target_does_not_block_command_line(tmp_path, monkeypatch):
+    """慢目标桩(S3 验收: [cmd] 排队 < 500ms 口径): find_torrent 慢回的假 adapter 下
+    命令线程不被验证等待占住 —— 转移命令当轮返回(exec 只含生产段, CMD_SLOW_MS 埋点),
+    回执延后; 放行后批次照常齐写回执"""
+    mgr = _drain_manager(tmp_path, TARGET_A)
+    mgr.client.torrents["HA"] = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)
+    release = threading.Event()
+    finds: list = []
+
+    class SlowFindAdapter:
+        def add_torrent(self, data, fields, skip_check):
+            return AddResult.added("目标已受理")
+
+        def find_torrent(self, infohash):
+            finds.append(infohash)
+            release.wait(timeout=10.0)  # 慢目标: 验证轮询被钉住(旧同步路径会把命令占死在这里)
+            return {"hash": infohash, "state": "stoppedUP"}
+
+    mgr.web.transfer_center._adapter_factory = lambda target: SlowFindAdapter()
+    # 走真实投递面(post_command 注入埋点), 排队/执行耗时才进 [cmd] 埋点日志
+    resp = mgr.web.post_command("transfer_run", {"target_id": "目标A", "hashes": ["HA"]})
+    cmd_id = resp["cmd_id"]
+    with capture_logs("auto_qb.webui.runtime") as cap:
+        t0 = time.perf_counter()
+        mgr.web.consume_commands()  # 命令线消费转移命令: 生产段(读源+导出)后即返回
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+    assert elapsed_ms < 500, f"验证等待期间命令线程被占住({elapsed_ms:.0f}ms)"
+    line = next(m for m in cap.messages if "[cmd] transfer_run" in m)
+    wait_ms = float(re.search(r"排队 ([\d.]+)ms", line).group(1))
+    exec_ms = float(re.search(r"执行 ([\d.]+)ms", line).group(1))
+    assert wait_ms < 500 and exec_ms < 500, line
+    assert cmd_id not in mgr.web.results, "验证在途: 回执延后"
+    assert wait_until(lambda: bool(finds), timeout=3.0), "验证作业已进 worker(与命令线程解耦)"
+    release.set()
+    assert wait_until(lambda: mgr.web.transfer_center._results.qsize() == 1, timeout=3.0)
+    mgr.web.consume_commands()
+    rec = mgr.web.results[cmd_id]
+    assert rec["status"] == "ok" and rec["truth"]["results"][0]["状态"] == "成功", rec
 
 
 def test_transfer_test_route_and_drain(web_env, tmp_path, monkeypatch):

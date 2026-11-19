@@ -1,9 +1,10 @@
 """WebUIRuntime 伴生组件: transfer 验证中心(作业/结果队列 + daemon worker + 批次聚合)
 
-计划 26-11-20-0127 S2: transfer 批次的目标侧整段(add -> 验证 -> 暂停)移出主循环。
-生产段(读源 -> 门 -> 导出 -> 准备)仍留主循环(S3 接线), 产出的验证作业(TransferVerifyJob)
-经本中心递交 daemon worker 串行执行(D7 FIFO), 结论经 queue.Queue 回灌, 由命令线尾部
-(consume_commands 尾部调 drain, D6)在主循环线程消费: 删源 -> 填槽 -> 批次齐写回执。
+计划 26-11-20-0127: transfer 批次的目标侧整段(add -> 验证 -> 暂停)移出主循环。
+生产段(读源 -> 门 -> 导出 -> 准备)留主循环(S3 起由命令面 _cmd_transfer_run 接线), 产出的
+验证作业(TransferVerifyJob)与生产段已结算结果(槽位初值, 按入参顺序混列)经本中心递交
+daemon worker 串行执行(D7 FIFO), 结论经 queue.Queue 回灌, 由命令线尾部(consume_commands
+尾部调 drain, D6)在主循环线程消费: 删源 -> 填槽 -> 批次齐写回执。
 
 线程契约(黄金法则 #5, 计划 §01 底线):
 - 主循环线程: submit_batch / drain / 批次聚合容器(单写者); 恒不持有目标 adapter 调用面
@@ -12,11 +13,19 @@
   批次级创建、仅线程使用, 不与主循环共用 Session; 案乙的共用形态被拒绝);
 - 结论只经结果队列回灌; 删源/回执经注入端口, 消费全在主循环线程。
 
+端口(S3 接真实, WebUIRuntime.__init__ 注入):
+- 删源端口 -> 门面 _transfer_delete_source(复用 orchestrator._delete_source: torrents_delete
+  delete_files=False 恒定 + store.remove_torrent; 失败兜 False+注记) —— 「验证未成不删源、
+  数据文件永不删」不变量保持在 orchestrator 单点; stop 置位后删源意图一律丢弃(绝不自动删源);
+- 回执端口 -> 门面 _transfer_receipt(与命令 handler 自写回执同面 set_result, 无 cmd_id 不写)
+  —— transfer_run 在 DEFERRED_RECEIPT_COMMANDS, drain 命令分发层不补写, 终态回执只经本端口。
+
 关停(D4a): 退出不 join —— stop Event 让轮询等待即时醒(Event.wait(poll_interval)):
 空闲等待与在途验证的轮询 sleep 都挂在 stop Event 上, stop 置位后等待即时返回。stop 只
 保证「作业队列余量不再处理」; **在途作业自然结算、结论仍回灌**, 回执是否落取决于主循环
 是否再 drain(进程随即退出时即等效「作废/不写」, 与今天进程崩溃一致); 验证任务/删除意图
-不持久化(重启不续跑)。stop 接进 web 停止序列是 S4, 本期只保证机制存在且即时退。
+不持久化(重启不续跑)。stop 已接进 web 停止序列(WebUIModule.stop, S4), 并在 stop 时枚举
+「已验证成功但删源未完成」的槽位逐条 WARNING(丢弃清单, 见 stop()/_warn_delete_pending)。
 
 回执契约(D5): 单段终态回执形状不变 —— drain 组装的 truth 与命令面 handler 现行
 {results(按入参顺序), summary, target} 逐字节同形, 前端零改动。
@@ -33,7 +42,7 @@ import queue
 import threading
 from dataclasses import dataclass, field, replace
 from itertools import count
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Tuple, cast
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 from ..core.qbclient import REQUESTS_TIMEOUT
 from ..infra.clock import SYSTEM_CLOCK, Clock
@@ -83,11 +92,17 @@ def _unwired_receipt_port(cmd_id: str, payload: dict) -> None:
 
 @dataclass(frozen=True)
 class _QueuedJob:
-    """作业队列条目(worker 侧消费): 批次键 + 目标配置(建批次级 adapter 用) + 验证作业"""
+    """作业队列条目(worker 侧消费): 批次键 + 目标配置(建批次级 adapter 用) + 验证作业
+
+    slot_idx: 该作业在批次槽位数组中的下标(S3: 槽位数组 = 入参顺序混合列, 已结算槽位
+    作初值占位, 结论按此下标落槽 —— 单 worker FIFO 下结论回灌序 = 作业递交序, 显式
+    下标保证交错入参顺序下的槽位对应关系)。
+    """
 
     batch_key: str
     target: "TransferTargetConfig"
     job: TransferVerifyJob
+    slot_idx: int
 
 
 @dataclass
@@ -96,12 +111,17 @@ class _SlotState:
 
     hash 与 source_hash 分置(S1 双 hash 语义): 回执键恒用入参 hash, 删源操作键用源
     maindata hash(与 run_batch 的 _delete_source(stage.source_hash) 同口径)。
+    生产段已结算槽位(S3 槽位初值)source_hash 恒空串且 keep_source 置 True —— 未验证
+    成功路径不碰源(不变量 2), keep_source 闸让它永不进删源分支。
+    source_deleted: 删源意图是否已成功执行(主循环单写者)。None/False = 未删(删源未
+    尝试/端口失败/stop 丢弃), True = 已删 —— stop 丢弃清单的判定面(_warn_delete_pending)。
     """
 
     hash: str
     source_hash: str
     keep_source: bool
     result: Optional[TorrentTransferResult] = None
+    source_deleted: bool = False
 
 
 @dataclass
@@ -109,6 +129,7 @@ class _BatchRecord:
     """批次聚合条目(容器键 -> 槽位数组/剩余计数; 主循环线程单写者, 黄金法则 #5)
 
     批次 = 任务分组(D3a): 多批次自然共存, 与今天命令串行的最终语义等价(单 worker FIFO)。
+    remaining 只计验证作业槽位(已结算槽位随初值入账, 不计)。
     """
 
     key: str
@@ -117,22 +138,24 @@ class _BatchRecord:
     slots: List[_SlotState]
     remaining: int
     enqueued_ts: float  # 入队时刻(仅诊断/日志; 超龄判定走全局 _last_progress_ts 信号)
-    next_arrival: int = 0
     retry: List[Tuple[int, TorrentTransferResult]] = field(default_factory=list)
     receipt_retry: bool = False
 
 
 class TransferVerifyCenter:
-    """transfer 验证中心: 作业/结果队列 + 单 daemon worker + 批次聚合容器(计划 26-11-20-0127 S2)
+    """transfer 验证中心: 作业/结果队列 + 单 daemon worker + 批次聚合容器(计划 26-11-20-0127)
 
     - 作业队列/结果队列: queue.Queue 线程安全 handoff, 结论只经队列回灌, 消费全在主循环;
     - 单 daemon worker: FIFO 逐种子(D7 串行), stop Event 驱动轮询等待(即时醒), 退出不
-      join(D4a); 懒启动 —— 首个批次递交时拉起(本期生产无生产者, 恒不启动, 零空闲线程);
-    - 批次聚合容器: cmd_id -> 槽位数组/剩余计数(主循环单写者), 批次记入队时刻(诊断);
+      join(D4a); 懒启动 —— 首个批次递交时拉起(快路径批次不递交, 不启动, 零空闲线程);
+    - 批次聚合容器: cmd_id -> 槽位数组/剩余计数(主循环单写者), 槽位数组按入参顺序
+      (S3: 已结算结果作槽位初值 + 验证作业混列), 批次记入队时刻(诊断);
       超龄兜底判定走全局「最近结论产出」信号(见 _force_settle_aged);
+    - 删源计数(_deleted_this_drain): 本轮 drain 成功删源的槽位数, drain() 返回值据此并入
+      consume_commands 的 cmd_changed_state(D6, 白享 P0-5 立即补刷新);
     - 可注入面: adapter 工厂 / 验证 runner / 删源端口 / 回执端口 / 时钟 / 超时参数 ——
       测试注入替身, 零新增配置键(黄金法则 #4, verify_timeout/poll_interval 维持
-      orchestrator 构造常量口径)。
+      orchestrator 构造常量口径)。生产默认端口接线见模块 docstring(S3)。
     """
     def __init__(
         self,
@@ -167,6 +190,9 @@ class TransferVerifyCenter:
         # 时刻(空闲间隔不计入), 每次成功填槽刷新 —— 超龄兜底的判定信号(见
         # _force_settle_aged); None = 尚无参照(未递交过任何批次)
         self._last_progress_ts: Optional[float] = None
+        # 本轮 drain 成功删源的槽位数(主循环单写者): drain() 入口清零, _fill_slot 删源
+        # 成功时累加 —— 返回值并入 cmd_changed_state(D6, P0-5 立即补刷新)
+        self._deleted_this_drain = 0
         # ---- worker 线程私面(主循环不读不写) ----
         # 批次级 adapter 缓存: FIFO 下同批作业连续入队(单生产者=主循环), 键变化即批次
         # 边界; 旧引用交给 GC。工厂异常按单种子兜底结算, 不缓存失败(下一作业重试工厂)。
@@ -187,21 +213,39 @@ class TransferVerifyCenter:
 
     # ------------------------------------------------------------------ 主循环侧: 递交批次
 
-    def submit_batch(self, cmd_id: str, target: "TransferTargetConfig", jobs: Sequence[TransferVerifyJob]) -> str:
-        """递交一个批次的验证作业(主循环线程调用; S3 生产段产出作业后调)
+    def submit_batch(
+        self,
+        cmd_id: str,
+        target: "TransferTargetConfig",
+        entries: Sequence[Union[TorrentTransferResult, TransferVerifyJob]],
+    ) -> str:
+        """递交一个批次(S3 生产段产出后调, 主循环线程调用): 已结算结果 + 验证作业按入参顺序混列
 
-        批次聚合容器登记(cmd_id -> 槽位/剩余计数)并记入队时刻, 作业逐条进作业队列
-        (线程安全 handoff)。返回容器键(= cmd_id; 空则合成 anon-N —— 回执仍用原
-        cmd_id, 合成键只为容器唯一性)。jobs 为空属生产段编程错误(空批次应走快路径
-        现场结算, 不入中心), 按 fail-fast 抛 ValueError。
-        已 stop 后递交: 丢弃(WARNING, 返回 "") —— 关停期新批次不入账; 在途作业的语义
-        见 stop()(丢弃清单的日志形态归 S4 精化)。
+        entries = produce_transfer_job 的逐种子产出按入参顺序收集(TorrentTransferResult =
+        生产段已结算终态, 作槽位初值入账不计剩余; TransferVerifyJob = 验证作业, 进作业队列)。
+        批次聚合容器登记(cmd_id -> 槽位数组(= entries 顺序)/剩余计数)并记入队时刻, 作业逐条
+        进作业队列(线程安全 handoff)。返回容器键(= cmd_id; 空则合成 anon-N —— 回执仍用原
+        cmd_id, 合成键只为容器唯一性)。
+        entries 为空 / 含 SUCCESS 状态的已结算条目 / 全部已结算(无验证作业)属命令面编程
+        错误(空批与全批已结算应走快路径现场结算 —— 快路径判据单点在命令面; 已结算条目恒
+        是未验证成功的终态, SUCCESS 必须走 worker 侧结算+删源), 按 fail-fast 抛 ValueError。
+        已 stop 后递交: 丢弃(WARNING, 返回 "") —— 关停期新批次不入账; 在途作业的语义见
+        stop()。
         """
-        job_list = list(jobs)
-        if not job_list:
-            raise ValueError("transfer: submit_batch 收到空作业列表(空批次应走快路径, 不入中心)")
+        entry_list = list(entries)
+        if not entry_list:
+            raise ValueError("transfer: submit_batch 收到空条目列表(空批次应走快路径, 不入中心)")
+        if any(not isinstance(e, TransferVerifyJob) and e.status is TransferStatus.SUCCESS for e in entry_list):
+            raise ValueError(
+                "transfer: submit_batch 收到 SUCCESS 状态的已结算条目"
+                "(已结算条目恒是未验证成功的终态; SUCCESS 必须走 worker 侧结算+删源,"
+                "作槽位初值会被 keep_source 闸静默禁删源)"
+            )
+        jobs = [e for e in entry_list if isinstance(e, TransferVerifyJob)]
+        if not jobs:
+            raise ValueError("transfer: submit_batch 无验证作业(全批已结算应走快路径, 不入中心)")
         if self._stop_event.is_set():
-            logger.warning("transfer: 中心已停止, 批次作业丢弃(cmd_id=%r, %d 个)", cmd_id, len(job_list))
+            logger.warning("transfer: 中心已停止, 批次作业丢弃(cmd_id=%r, %d 个)", cmd_id, len(jobs))
             return ""
         self.start()
         # 超龄判定起点(全局最近结论产出, 见 _force_settle_aged): !必须在登记本批**之前**
@@ -213,20 +257,38 @@ class TransferVerifyCenter:
         if not any(b.remaining for b in self._batches.values()):
             self._last_progress_ts = self._clock.monotonic()
         key = cmd_id if cmd_id else f"anon-{next(self._anon_seq)}"
+        slots: List[_SlotState] = []
+        queued: List[_QueuedJob] = []
+        for entry in entry_list:
+            if isinstance(entry, TransferVerifyJob):
+                slots.append(
+                    _SlotState(
+                        hash=str(entry.hash), source_hash=str(entry.source_hash), keep_source=bool(entry.keep_source)
+                    )
+                )
+                queued.append(_QueuedJob(batch_key=key, target=target, job=entry, slot_idx=len(slots) - 1))
+            else:
+                # 生产段已结算槽位作初值(按入参顺序占位, D5 truth 按入参顺序): 该槽位未经验
+                # 证成功, 不变量 2(不成功路径不碰源)要求永不删源 —— keep_source 置 True 复用
+                # _fill_slot 的删源闸, source_hash 留空(无删源操作键可用)
+                slots.append(_SlotState(hash=str(entry.hash), source_hash="", keep_source=True, result=entry))
         self._batches[key] = _BatchRecord(
             key=key,
             cmd_id=cmd_id,
             target_name=str(getattr(target, "name", "") or ""),
-            slots=[
-                _SlotState(hash=str(j.hash), source_hash=str(j.source_hash), keep_source=bool(j.keep_source))
-                for j in job_list
-            ],
-            remaining=len(job_list),
+            slots=slots,
+            remaining=len(jobs),
             enqueued_ts=self._clock.monotonic(),
         )
-        for j in job_list:
-            self._jobs.put(_QueuedJob(batch_key=key, target=target, job=j))
-        logger.debug("transfer: 批次已递交 %s(%d 个验证作业)", key, len(job_list))
+        for item in queued:
+            self._jobs.put(item)
+        settled_n = len(entry_list) - len(jobs)
+        logger.info(
+            "transfer: 批次已递交后台验证 cmd=%s(验证作业 %d 个%s)",
+            key,
+            len(jobs),
+            f", 生产段已结算 {settled_n} 个随槽位初值" if settled_n else "",
+        )
         return key
 
     def start(self) -> None:
@@ -237,14 +299,67 @@ class TransferVerifyCenter:
         self._worker.start()
 
     def stop(self) -> None:
-        """请求 worker 停止(stop Event 即时醒; 退出不 join —— D4a): S4 接进 web 停止序列
+        """请求 worker 停止(stop Event 即时醒; 退出不 join —— D4a): S4 已接进 web 停止序列
 
-        实际语义(代码即真相, S4 接停止序列时按此钉面): stop 只保证「作业队列余量不再
-        处理」与「所有轮询等待即时返回」; **在途作业自然结算、结论仍回灌**, 回执是否落
-        取决于主循环是否再 drain —— 进程随即退出时才等效「作废/不写」(daemon 线程随进程
-        终灭, 与今天进程崩溃一致)。幂等: 重复调用无副作用。
+        实际语义(代码即真相): stop 只保证「作业队列余量不再处理」与「所有轮询等待即时
+        返回」; **在途作业自然结算、结论仍回灌**, 回执是否落取决于主循环是否再 drain ——
+        进程随即退出时才等效「作废/不写」(daemon 线程随进程终灭, 与今天进程崩溃一致)。
+        幂等: 重复调用无副作用 —— 首次 stop 即落丢弃清单 WARNING(warned-once), 重复
+        stop 不再枚举再记。
+
+        S4 附加面(调用即生效, 不 join 不阻塞):
+        - stop 后任何路径不得删源: _fill_slot 的删源闸检查 stop Event —— 删除意图一律
+          丢弃, 重启不重放(保守默认: 绝不自动删源);
+        - 已验证成功但删源未完成的槽位逐条 WARNING(「目标已建, 源未删, 请手动处置」,
+          D4a/§07 行 4), 见 _warn_delete_pending。在途验证的结论在 stop 之后才回灌,
+          不在本清单(与「回执不写」同族, 进程退出即作废)。
         """
+        if self._stop_event.is_set():
+            return
         self._stop_event.set()
+        self._warn_delete_pending()
+
+    def _warn_delete_pending(self) -> None:
+        """关停丢弃清单(D4a/§07 行 4): 已验证成功但删源未完成的槽位逐条 WARNING
+
+        三个枚举面按槽位互斥(同一槽位的结论只会出现在其中一处):
+        - 容器槽位已填(结论已被 drain 消费): 删源已在填槽前执行过 —— 仅端口返 False
+          (源保留, source_deleted 仍 False)的算「未完成」; 端口返 True 的已删, 不在清单;
+        - 批次重试列表(结算时删源端口抛异常): 删源未完成 —— 等待重试的删除意图一并丢弃;
+        - 结果队列在途(结论已回灌但主循环尚未消费): 删源从未开始 —— 在 mutex 内快照枚举
+          (queue.Queue 内部落锁面, 只读不消费, 不改回灌语义)。!批次不在容器(典型 = 已被
+          超龄兜底结算摘除、真实结论迟回灌)时 keep_source 不可考, SUCCESS 一律保守告警
+          —— 宁多勿漏, 双份做种残留不得逃过本清单。
+        keep_source 槽位与生产段已结算槽位(keep_source 置 True)不在清单 —— 保留源是意图内。
+        """
+        warned = 0
+        for batch in self._batches.values():
+            for slot in batch.slots:
+                if (
+                    slot.result is not None and slot.result.status is TransferStatus.SUCCESS and
+                    not slot.keep_source and not slot.source_deleted
+                ):
+                    logger.warning("transfer: 关停丢弃删除意图 %s: 目标已建, 源未删, 请手动处置", slot.hash)
+                    warned += 1
+            for idx, result in batch.retry:
+                if (
+                    0 <= idx < len(batch.slots) and result.status is TransferStatus.SUCCESS and
+                    not batch.slots[idx].keep_source
+                ):
+                    logger.warning("transfer: 关停丢弃删除意图 %s: 目标已建, 源未删, 请手动处置", result.hash)
+                    warned += 1
+        with self._results.mutex:
+            inflight = list(self._results.queue)
+        for batch_key, slot_idx, result in inflight:
+            if result.status is not TransferStatus.SUCCESS:
+                continue
+            pending = self._batches.get(batch_key)
+            if pending is not None and 0 <= slot_idx < len(pending.slots) and pending.slots[slot_idx].keep_source:
+                continue  # 保留源是意图内(批次在场才可考; 不在则保守告警)
+            logger.warning("transfer: 关停丢弃删除意图 %s: 目标已建, 源未删, 请手动处置", result.hash)
+            warned += 1
+        if warned:
+            logger.warning("transfer: 关停共丢弃删除意图 %d 条(重启不重放, 绝不自动删源)", warned)
 
     # ------------------------------------------------------------------ worker 侧(daemon 线程)
 
@@ -278,6 +393,7 @@ class TransferVerifyCenter:
                     try:
                         self._push_result(
                             item.batch_key,
+                            item.slot_idx,
                             TorrentTransferResult(
                                 item.job.hash,
                                 TransferStatus.FAILED,
@@ -297,7 +413,7 @@ class TransferVerifyCenter:
             result = TorrentTransferResult(
                 item.job.hash, TransferStatus.FAILED, f"未预期异常({exc})", TransferOutcomeCode.UNEXPECTED
             )
-        self._push_result(item.batch_key, result)
+        self._push_result(item.batch_key, item.slot_idx, result)
 
     def _run_job(self, item: _QueuedJob) -> TorrentTransferResult:
         """worker 侧单种子: 取/建批次级 adapter -> orchestrator.run_verify_job(作业进结果出)"""
@@ -321,23 +437,29 @@ class TransferVerifyCenter:
             self._cur_adapter = adapter
         return self._cur_adapter
 
-    def _push_result(self, batch_key: str, result: TorrentTransferResult) -> None:
-        """结论回灌(线程安全 handoff; 消费全在主循环 drain)"""
-        self._results.put((batch_key, result))
+    def _push_result(self, batch_key: str, slot_idx: int, result: TorrentTransferResult) -> None:
+        """结论回灌(线程安全 handoff; 消费全在主循环 drain; 槽位下标随结论携带)"""
+        self._results.put((batch_key, slot_idx, result))
 
     # ------------------------------------------------------------------ 主循环侧: 消费回灌(命令线尾部)
 
-    def drain(self) -> None:
+    def drain(self) -> bool:
         """收结果 -> 删源 -> 填槽 -> 批次齐写回执; 超龄批次兜底结算(主循环线程调用)
 
-        消费挂点 = consume_commands 尾部(D6): 每轮必跑、暂停分支也跑。逐结果 try/except
-        (§07 行 5): 单条失败不影响其余, 异常轮次下轮重试同一槽位; 批次计数只由主循环改。
-        本期(S2)生产路径恒空转 —— 还没有生产者递交作业, 两个队列恒空, 零副作用(保守默认)。
+        返回本轮是否有删源动作成功执行: 删源改了 qB 种子状态, 消费方(consume_commands
+        尾部)据此并入 cmd_changed_state(D6)白享 P0-5 立即补刷新 —— 与命令面的
+        RESYNC_COMMANDS 同判据; 删源失败(端口 False)/stop 丢弃/纯回执不算。
+        消费挂点 = consume_commands 尾部(D6): 每轮必跑、暂停分支也跑 —— run_command_line
+        在暂停判断之前(qbmanager.py:597-602 先命令后 continue 的既有形态)。逐结果
+        try/except(§07 行 5): 单条失败不影响其余, 异常轮次下轮重试同一槽位; 批次计数只
+        由主循环改。
         """
+        self._deleted_this_drain = 0
         self._retry_receipts()
         self._settle_retries()
         self._collect_results()
         self._force_settle_aged()
+        return self._deleted_this_drain > 0
 
     def _retry_receipts(self) -> None:
         """回执端口写失败的批次重写(§07 行 5: 回执写入抛异常 -> 下轮重试)"""
@@ -358,10 +480,14 @@ class TransferVerifyCenter:
                 self._fill_slot(batch, idx, result)
 
     def _collect_results(self) -> None:
-        """收全部回灌结论(单 worker FIFO ⇒ 结果序 = 作业序 = 入参序), 逐条结算"""
+        """收全部回灌结论, 按结论携带的槽位下标逐条结算
+
+        单 worker FIFO ⇒ 结论序 = 作业递交序; S3 槽位数组按入参顺序(已结算槽位作初值),
+        下标由作业条目显式携带(_QueuedJob.slot_idx) —— 混列入参下槽位对应关系不依赖游标。
+        """
         while True:
             try:
-                batch_key, result = self._results.get_nowait()
+                batch_key, slot_idx, result = self._results.get_nowait()
             except queue.Empty:
                 return
             batch = self._batches.get(batch_key)
@@ -369,25 +495,32 @@ class TransferVerifyCenter:
                 # 批次已被兜底结算移除: 迟到结论无槽可落, 丢弃(DEBUG; 兜底回执已给出终态)
                 logger.debug("transfer: 迟到结论丢弃(批次不在容器) %s/%s", batch_key, result.hash)
                 continue
-            idx = batch.next_arrival
-            batch.next_arrival += 1
-            if idx >= len(batch.slots):
-                logger.warning("transfer: 结论多于槽位(不变量破), 丢弃 %s/%s", batch_key, result.hash)
+            if not 0 <= slot_idx < len(batch.slots):
+                logger.warning("transfer: 结论槽位越界(不变量破), 丢弃 %s/%s", batch_key, result.hash)
                 continue
-            self._fill_slot(batch, idx, result)
+            if batch.slots[slot_idx].result is not None:
+                # 重复结论(不变量破): 已有终态的槽位不覆盖, 丢弃并留痕
+                logger.warning("transfer: 重复结论(不变量破), 丢弃 %s/%s", batch_key, result.hash)
+                continue
+            self._fill_slot(batch, slot_idx, result)
 
     def _fill_slot(self, batch: _BatchRecord, idx: int, result: TorrentTransferResult) -> None:
         """单条结算: 成功且未保留源 -> 经删除端口删源 -> 填槽 -> 批次齐写回执
 
         删除失败不翻已成功的转移, 只补注记「源删除失败, 源已保留」(与 run_batch 同
-        口径, issue 26-11-03-0824)。本函数内任何异常(删源端口抛出等)都不填槽 —— 条目
-        进批次重试列表, 下轮 drain 重试同一槽位(§07 行 5); 槽位下标在入队时已定
-        (next_arrival 游标), 重试不改变它与后续结果的槽位对应关系。
+        口径, issue 26-11-03-0824)。stop 置位后删源意图一律丢弃(D4a: 关停绝不删源,
+        丢弃清单由 stop() 落 WARNING), 槽位照常填、回执照常齐(是否落取决于主循环是否
+        再 drain)。本函数内任何异常(删源端口抛出等)都不填槽 —— 条目进批次重试列表,
+        下轮 drain 重试同一槽位(§07 行 5); 槽位下标在递交时已定, 重试不改变它与后续
+        结果的槽位对应关系。
         """
         try:
             slot = batch.slots[idx]
-            if result.status is TransferStatus.SUCCESS and not slot.keep_source:
-                if not self._delete_port(slot.source_hash):
+            if (result.status is TransferStatus.SUCCESS and not slot.keep_source and not self._stop_event.is_set()):
+                if self._delete_port(slot.source_hash):
+                    slot.source_deleted = True
+                    self._deleted_this_drain += 1
+                else:
                     result = replace(result, reason=_join_notes(result.reason, "源删除失败, 源已保留"))
             slot.result = result
             batch.remaining -= 1
@@ -430,6 +563,15 @@ class TransferVerifyCenter:
             batch.receipt_retry = True
             logger.warning("transfer: 批次回执写出失败, 下轮重试 %s: %s", batch.key, exc)
             return
+        # 批次生命周期日志(S4: 结算, 批次口径 —— 逐条结果回执自带, 不逐条刷屏)
+        logger.info(
+            "transfer: 批次结算完成 cmd=%s target=%s: 成功 %d / 跳过 %d / 失败 %d",
+            batch.cmd_id,
+            batch.target_name,
+            summary["success"],
+            summary["skipped"],
+            summary["failed"],
+        )
         self._batches.pop(batch.key, None)
 
     def _force_settle_aged(self) -> None:

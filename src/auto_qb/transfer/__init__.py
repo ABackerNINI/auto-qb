@@ -23,4 +23,7 @@ from .orchestrator import (  # noqa: F401
     TransferOutcomeCode,
     TransferOrchestrator,
     TransferStatus,
+    # TransferVerifyJob(S1 产物, S3 随命令面消费方一并 re-export, 计划 26-11-20-0127):
+    # 生产段 -> worker 侧的验证作业交接结构, 命令面/center 经包面单点导入
+    TransferVerifyJob,
 )

@@ -36,6 +36,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from ..infra.clock import SYSTEM_CLOCK, Clock
+from ..transfer import TransferOrchestrator
 # re-export 供测试经本门面取(commands 拆分后本文件不再直接使用): test_web_longtail_* 五个
 # 文件从这里连同 EVENT_QUEUE_MAX/WEB_RESULT_*/WebUIRuntime 一把导入, 改指向 .commands 动面更大
 from .commands import CMD_SLOW_MS, REANNOUNCE_CONFIRM_TIMEOUT
@@ -94,12 +95,19 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         self.reannounce_background: dict = {}
         # 待推真值(cmd_id -> {cmd, args, ts}); 回执已即时发出, 这里只等真值落地再推事件
         self.truth_pending: dict = {}
-        # ---- transfer 验证中心(计划 26-11-20-0127 S2) ----
+        # ---- transfer 验证中心(计划 26-11-20-0127 S2/S3) ----
         # 作业/结果队列 + 单 daemon worker + 批次聚合容器; 组件与线程契约见
-        # runtime_transfer.py(本门面持有, 主循环单写者)。worker 懒启动(首个批次递交
-        # 时; S3 前无生产者, 恒无线程), stop Event 即时醒 —— 接进 web 停止序列是 S4。
-        # 命令线尾部消费: consume_commands 尾部调 drain(删源/回执端口本期占位, S3 接真实)。
-        self.transfer_center = TransferVerifyCenter(clock=self._clock)
+        # runtime_transfer.py(本门面持有, 主循环单写者)。worker 懒启动(首个批次递交时;
+        # 快路径批次不递交, 不启动), stop Event 即时醒 —— stop 已接进 web 停止序列
+        # (WebUIModule.stop, S4)。命令线尾部消费: consume_commands 尾部调 drain。
+        # 端口 S3 接真实(生产默认, 测试可覆盖): 删源 = _transfer_delete_source
+        # (复用 orchestrator._delete_source), 回执 = _transfer_receipt(与命令 handler
+        # 自写回执同面 set_result)。
+        self.transfer_center = TransferVerifyCenter(
+            clock=self._clock,
+            delete_port=self._transfer_delete_source,
+            receipt_port=self._transfer_receipt,
+        )
         # ---- 视图快照(Web 线程只读, 发布时整体替换) ----
         self.group_view: List[dict] = []
         self.singles_view: List[dict] = []  # 未归组单种子视图
@@ -251,3 +259,27 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         self.err_log_ring: deque = deque(maxlen=WEB_ERR_RING_MAX)
         # 已挂 handler 引用(幂等闸: 已挂不重挂, 照 module.py start() 同款范式)
         self._err_log_handler: Optional[WebErrLogHandler] = None
+
+    # ---- transfer 验证中心的注入端口(计划 26-11-20-0127 S3; 只在主循环线程被调) ----
+
+    def _transfer_delete_source(self, source_hash: str) -> bool:
+        """删源端口: 主循环侧删源, 复用 orchestrator 既有 _delete_source(不变量单点)
+
+        qbapi.torrents_delete(delete_files=False 恒定) + store.remove_torrent 快照摘除,
+        失败兜 False(+「源删除失败, 源已保留」注记由 center._fill_slot 补拼) ——
+        「验证未成不删源、数据文件永不删」不变量保持在 orchestrator 单点; stop 置位后
+        center 不再调到本端口(_fill_slot 删源闸)。api 每次现取(QbApi 对象重连只换
+        内部绑定不换实例), 不缓存引用。
+        """
+        return TransferOrchestrator(self._host.api)._delete_source(source_hash)
+
+    def _transfer_receipt(self, cmd_id: str, payload: dict) -> None:
+        """回执端口: 与命令 handler 自写回执同面(set_result), DEFERRED_RECEIPT 语义维持
+
+        transfer_run 在 DEFERRED_RECEIPT_COMMANDS —— 命令分发层(drain)不补写回执, 递交
+        批次的单段终态回执只经本端口写; 无 cmd_id(无回执消费者)不写, 与 handler 快路径
+        同口径。
+        """
+        if not cmd_id:
+            return
+        self.set_result(cmd_id, "ok", truth=payload)
