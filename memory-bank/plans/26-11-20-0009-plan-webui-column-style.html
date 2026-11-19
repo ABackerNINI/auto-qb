@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 列风格切换(进度条样式/分档色阶/单位色组)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-column-style">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-20-0009">
+<meta name="doc-updated" content="26-11-20-0052">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-20-webui-column-style.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  /* 色样带 (本文档内示意谱表用, 非 WEBUI 令牌) */
+  .sw { display: inline-block; width: 17px; height: 13px; border-radius: 2px; margin-right: 2px; vertical-align: middle; border: 1px solid rgba(255,255,255,.12); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-column-style</div>
+<h1>WEBUI 列风格切换(进度条样式/分档色阶/单位色组)</h1>
+<p class="lede">本篇只回答: 主种子表五维「列风格」(进度条样式 / 进度条颜色 / 速度色阶 / 数值列色阶 / 单位色组)怎么落地 —— 表头右键菜单入口 + localStorage 引擎 + 四皮肤 CSS 映射, 分期 S1–S6。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-20-0009 · <b>doc-updated</b> 26-11-20-0052 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 立项会话 26-11-19/20: 用户提案(五类诉求) + grilling 三轮 19 问全拍板; 取证 = 两轮只读子代理(种子表渲染链取证 + 表头菜单/令牌清单取证)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景与目标</h3>
+<p>用户提案(2026-11-19): WEBUI 列风格切换 —— (1) 进度条可选常规条或控制台式方块条;(2) 进度条颜色可选跟随进度而非种子状态;(3) 下载/上传速度颜色可根据限速设置变化;(4) 剩余时间/分享率/活动时间/最近活动/可用性等数值列参考同类着色;(5) 文件大小/速度单位颜色可选统一或预设几组不同颜色, 覆盖大小/总大小/已下载/上传/下载等全部 B/MiB[/s] 类单位。</p>
+<p>做到什么程度算成: 五个维度各自可从主种子表表头右键菜单切换, 选择立即生效(免刷新、跨标签同步)、随设置备份走; 四皮肤全部呈现一致语义; 默认状态下视觉与现状零差异; 不动 config.yml、不动主循环与状态文件。</p>
+
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>保守默认</b>: 五维默认值全部 = 现状(依次为「跟随皮肤 / 跟随状态 / 跟随现状 / 关 / 统一」), 用户不选 = 零视觉变化、零行为变化。</li>
+  <li><b>零新增令牌</b>: 全部颜色映射走现成令牌; 13 个候选令牌(--indigo/--cyan/--lime/--teal/--pink/--violet/--accent-hi/--fg-muted/--fg/--warn/--error/--green/--blue)已逐皮肤×逐主题核对齐(atlas/console/flux 单 :root; prism 五主题各自提供, tokens.css 仅结构令牌)。</li>
+  <li><b>展示偏好不进 config.yml</b>: 沿既有拍板(D3), 走 localStorage + <code>ui_prefs</code> 登记闸; 配置侧(schema/validate/KNOWN_WEB_KEYS/键面基线)零改动。</li>
+  <li><b>判定单点</b>: 一切分档/拆分判定是 <code>shared/format.js</code> 里的纯函数家族, 不散抄; 着色映射是 CSS(皮肤令牌), JS 只产档位类名, 不产颜色值。</li>
+  <li><b>四皮肤同轮补齐</b>: 新类名四皮肤全部有对应规则(挂件类名→CSS 配对闸); 四皮肤逐字节相同的规则族进 <code>shared/console_hub.css</code> 尾段单点(共用规则族纪律), 真差异留皮肤内。</li>
+  <li><b>纯前端展示面</b>: 不触碰主循环/任务队列/state_file/黄金法则 1–6 的任何假设; 不触碰 <code>config.yml</code> 与 <code>auto-qb-data/</code> 红线。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>进度条</h3>
+<ul>
+  <li>纯 CSS div(span.bar + i 填充), 无 canvas; 骨架同一份四行模型复用(<code>shared/tpl/xtpl-cells.html</code> :58-61 组行 / :178-181 种子行 / :277-280 集行 / :339-341 对端变体)。</li>
+  <li>条色 = <code>var(--st, var(--accent))</code>, --st 由行状态类注入(k-seeding→绿 / k-downloading→蓝 / k-checking→warn / k-moving→violet / k-error→error; prism <code>css/components.css:180-186</code>, atlas views.css:192-198, console components.css:142-148 / flux components.css:143-149); 常规条填充兜底 var(--st, var(--accent)) 仅 atlas/prism, console/flux 的 LED 填充兜底为 var(--st, var(--green))(console components.css:425); 百分比文字另按状态着色。用户无法选「跟随进度」。</li>
+  <li>console/flux 皮肤已是 LED 分段条(<code>repeating-linear-gradient</code>, console components.css:424-425), atlas/prism 只有常规条 —— 方块条无法跨皮肤选择。</li>
+  <li>已知坑档: 数值盒 <code>min-width: 4em</code> 定宽解耦条长(<code>pitfalls/web-ui/progress-bar.md</code>, 守阵 <code>_scan_progress_val_parity</code>) —— 本计划着色不得破坏该几何。</li>
+</ul>
+
+<h3>数值色阶与单位</h3>
+<ul>
+  <li>已有 <code>numTone</code> 两档(<code>shared/format.js:165-168</code>): 值/分母 &lt;0.75 → tone-low(fg-muted), 否则 tone-high(accent-hi); 已挂 dlspeed/upspeed(分母 = 全局 qB 限速单点 <code>shared/dialogs.js:555</code> <code>speedLimitBytes</code>, null=未知/0=不限)、uploaded/downloaded(分母 size)、availability(分母 1)、up_limit/dl_limit。</li>
+  <li>ETA 列无阈值变色(仅 zero 留白); 时间列无着色。ratio/做种时间列<b>已有</b> HR 伴值着色: <code>hr.js:85-96</code> hrRatioClass/hrDurClass 挂在主表种子行模型(xtpl-cells.html:209 ratio 格 / :198 做种时间格; 成员行 xtpl.html:286/296 同挂), atlas/css/views.css:56-57 对 <code>.m-pair.pending/.reached</code> 有真实文字着色 —— 本计划的 D10 语义类不覆盖该 HR 口径(共存规则见 D10/S4)。</li>
+  <li>大小/速度格式化为<b>单一文本节点</b>(「123.45 MiB」不拆数值/单位, <code>xtpl-cells.html:160</code> 等), 单位无法独立着色。格式化单点 <code>shared/format.js</code>(AQB_UNIT_LADDER :13-16, fmtSpeed :35, fmtSize :39, fmtEta :67 哨兵 8640000, fmtRelTime :84)。</li>
+</ul>
+
+<h3>皮肤与令牌</h3>
+<ul>
+  <li>四皮肤 atlas/prism/console/flux(目录即 URL); prism 另有五主题(ocean/galaxy/frost/golden/orbit, <code>html[data-theme]</code>)。</li>
+  <li>令牌名集 parity 硬闸: <code>tests/test_webui_static_skins_skin.py:393</code>(prism 侧取 tokens.css+base.css+themes/* 并集)。</li>
+</ul>
+
+<h3>偏好链先例(本引擎照抄的范式)</h3>
+<ul>
+  <li>时间列口径: 常量+load 单点 <code>shared/app.js:421-434</code>(autoqb_timefmt_v1) → state 注入 <code>shared/state.js:96</code> → 菜单写链 <code>shared/menu.js:74-88</code>(Vue 响应式赋值 + localStorage + toast) → 跨标签 storage 监听 <code>shared/lifecycle.js:321-327</code>(adoptTimeFmt 整份采用)。</li>
+  <li>ui_prefs 登记闸: 任何 <code>autoqb.*</code> 键必须登记 <code>shared/ui_prefs.js:29-80</code> PREF_KEYS/PREF_EXCLUDED 之一, 否则 <code>tests/test_webui_static_ui_prefs.py</code> 红。</li>
+  <li>rowlang 引擎先例: html[data-*] + 纯 CSS + 首帧同步 + 事件派发, 不进 Vue 状态 —— 本引擎取其「顶层属性派生 CSS」思路, 但开关值同时进 Vue 响应式(渲染器分支需要, timeFmt 同款)。</li>
+</ul>
+
+<h3>表头右键菜单(入口落点)</h3>
+<ul>
+  <li>绑定在表壳 &lt;aq-table&gt; 模板逐列 <code>@contextmenu.prevent.stop</code>(<code>shared/tpl/xtpl.html:219</code>), 处理函数 <code>openHeadMenu</code>(<code>shared/menu.js:20-34</code>); 菜单 DOM 是手写 Vue 模板块(<code>shared/tpl/ctx-menus.html:88-121</code>), 现有 4 个功能组(最多 6 个菜单项): 隐藏列 / 排序直达(按列降序/升序两项) / 时间口径(相对/绝对两项, 带 ctx-tick 勾) / 列选择器入口。无按表 allowlist —— 门控都在项级, 新增维度项须加 <code>headMenu.page === 'torrent'</code> 判定。</li>
+  <li>二级 flyout 机制只有行菜单有(<code>ctx-menus.html:54-69</code> + <code>menu.js:294-402</code> openSub 族); 钳位锚死行菜单容器(<code>menu.js:342-343</code> <code>$refs.ctxMenu</code>) —— 复用需把 host ref 参数化。</li>
+  <li>容器共用 <code>.ctx-menu</code>(z100, 高于 .aq-tip z90); HR 全屏模态开着时挂 <code>above-full-modal</code>→z135。</li>
+  <li>既有守阵: <code>test_webui_static_skins_table.py:1089-1103</code>(钉 headMenuSort 方法体)、<code>test_webui_static_dom_panel_dialogs.py:961</code>(菜单状态↔容器 ref 对 + watcher)、<code>test_webui_static_dom_panel_misc.py:435</code>(模板注释锚)、<code>_scan_ctx_sub_width</code>(子面板 min-width 260 互证); e2e 六个右键隐藏列用例按 .ctx-item 文本定位。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>主线</h3>
+<p>新建「列风格引擎」(timeFmt/rowlang 杂交范式): localStorage 单键 <code>autoqb.colstyle.v1</code> 存五维选择 → 启动注入 Vue 响应式 state + 同步写 &lt;html&gt; 五枚 <code>data-cs-*</code> 属性 → 渲染器按响应式状态产<b>档位类名</b>(纯函数单点), CSS 按 <code>data-cs-*</code> 属性派生选择器做<b>颜色/形状映射</b>(令牌) → 菜单写入即改 state+属性, 全链免刷新。</p>
+
+<h3>五维总表(D1/D2/D6/D7/D8/D10/D11 拍板落位)</h3>
+<table>
+  <tr><th>维度(菜单项)</th><th>选项集(循环序)</th><th>默认</th><th>引擎字段</th></tr>
+  <tr><td>进度条样式</td><td>跟随皮肤 / 常规条 / LED 方块条(段数固定照 console 现行)</td><td>跟随皮肤</td><td><code>barstyle</code></td></tr>
+  <tr><td>进度条颜色</td><td>跟随状态 / 冷熟谱 / 主题谱 / 温度谱 / 彩虹谱</td><td>跟随状态</td><td><code>barramp</code></td></tr>
+  <tr><td>速度色阶</td><td>跟随现状 / 冷熟谱 / 主题谱 / 温度谱 / 彩虹谱 / 关</td><td>跟随现状</td><td><code>speedramp</code></td></tr>
+  <tr><td>数值色阶</td><td>关 / 开</td><td>关</td><td><code>numeric</code></td></tr>
+  <tr><td>单位色组</td><td>统一 / 单位淡化 / 单位点缀 / 单位反转 / 分族双色 / 按档·冷熟 / 按档·温度 / 按档·主题</td><td>统一</td><td><code>units</code></td></tr>
+</table>
+
+<h3>分档色阶谱目录(D9, 进度/速度共用, 各维独立选)</h3>
+<table>
+  <tr><th>谱</th><th>五档(低→高)</th><th>100% 终点(进度用)</th><th>&gt;100% 超限(速度用)</th></tr>
+  <tr><td><b>冷熟谱</b></td><td><span class="sw" style="background:#5b6ee1"></span><span class="sw" style="background:#4d8fd6"></span><span class="sw" style="background:#43b3c4"></span><span class="sw" style="background:#3aa88f"></span><span class="sw" style="background:#8fc95c"></span>indigo→blue→cyan→teal→lime</td><td>--green</td><td>--warn</td></tr>
+  <tr><td><b>主题谱</b></td><td><span class="sw" style="background:#9a6dd7"></span><span class="sw" style="background:#5b6ee1"></span><span class="sw" style="background:#4d8fd6"></span><span class="sw" style="background:#43b3c4"></span><span class="sw" style="background:#3aa88f"></span>violet→indigo→blue→cyan→teal</td><td>--accent-hi</td><td>--warn</td></tr>
+  <tr><td><b>温度谱</b></td><td><span class="sw" style="background:#4d8fd6"></span><span class="sw" style="background:#43b3c4"></span><span class="sw" style="background:#3aa88f"></span><span class="sw" style="background:#8fc95c"></span><span class="sw" style="background:#e2a86e"></span>blue→cyan→teal→lime→warn</td><td>--error</td><td>--error</td></tr>
+  <tr><td><b>彩虹谱</b></td><td><span class="sw" style="background:#9a6dd7"></span><span class="sw" style="background:#4d8fd6"></span><span class="sw" style="background:#43b3c4"></span><span class="sw" style="background:#8fc95c"></span><span class="sw" style="background:#d76d9c"></span>violet→blue→cyan→lime→pink</td><td>--green</td><td>--warn</td></tr>
+</table>
+<p class="aside">色板方块是本文档内的谱表示意(取各皮肤令牌的代表性观感), 不是规范色值 —— 规范只认「档位→令牌名」映射(§04 S3/S4 落表); 同一令牌名在四皮肤/五主题取值各自不同, parity 由令牌闸保证。</p>
+<p>固定端点: 进度 0% 恒 <code>--fg-muted</code>(条为空, 文字灰); 速度分母 0(不限)/null(未知) 恒不着色; 速度 0 本就空白显示(fmtSpeedOrDash), 无色调。分档边界左开右闭((0,20%] 为第一档, 20% 归第一档)。选任一谱 = 启用 20% 分档(分档结构固定, 谱只决定颜色); 温度谱是「热度计」语义(进度 100% 也染红), 用户显式选择自担。</p>
+
+<h3>数值列色阶语义(D10)</h3>
+<table>
+  <tr><th>列</th><th>判定</th><th>着色</th></tr>
+  <tr><td>ratio 分享率</td><td>&lt;1.0</td><td><code>--warn</code>(未回本); ≥1.0 → <code>--green</code></td></tr>
+  <tr><td>availability 可用性</td><td>&lt;1.0</td><td><code>--warn</code>; ≥1.0 不着色</td></tr>
+  <tr><td>eta 剩余时间</td><td>&lt;60s 且非哨兵(8640000)</td><td><code>--accent-hi</code>(即将完成)</td></tr>
+  <tr><td>last_activity / seeding_time / time_active</td><td>——</td><td>不做(方向语义弱, 防圣诞树)</td></tr>
+</table>
+
+<h3>单位色组目录(D11, 8 组)</h3>
+<table>
+  <tr><th>#</th><th>组</th><th>映射</th></tr>
+  <tr><td>1</td><td><b>统一</b>(默认)</td><td>单位随数值同色(视觉与现状无差)</td></tr>
+  <tr><td>2</td><td>单位淡化</td><td>单位恒 <code>--fg-muted</code></td></tr>
+  <tr><td>3</td><td>单位点缀</td><td>单位恒 <code>--accent</code></td></tr>
+  <tr><td>4</td><td>单位反转</td><td>数值 <code>--fg-muted</code> / 单位 <code>--fg</code></td></tr>
+  <tr><td>5</td><td>分族双色</td><td>大小族单位 <code>--teal</code> / 速度族单位 <code>--pink</code></td></tr>
+  <tr><td>6</td><td>按档·冷熟</td><td>B <code>--fg-muted</code> / KiB <code>--blue</code> / MiB <code>--cyan</code> / GiB <code>--teal</code> / TiB <code>--lime</code> / PiB <code>--green</code>; 速度族按量级对齐: KiB/s <code>--blue</code> / MiB/s <code>--teal</code> / GiB/s <code>--green</code></td></tr>
+  <tr><td>7</td><td>按档·温度</td><td>B <code>--fg-muted</code> / KiB <code>--cyan</code> / MiB <code>--lime</code> / GiB <code>--warn</code> / TiB <code>--error</code> / PiB <code>--error</code>(封顶); 速度: KiB/s <code>--cyan</code> / MiB/s <code>--lime</code> / GiB/s <code>--warn</code></td></tr>
+  <tr><td>8</td><td>按档·主题</td><td>B <code>--violet</code> / KiB <code>--indigo</code> / MiB <code>--blue</code> / GiB <code>--cyan</code> / TiB <code>--teal</code> / PiB <code>--accent-hi</code>; 速度: KiB/s <code>--indigo</code> / MiB/s <code>--blue</code> / GiB/s <code>--cyan</code></td></tr>
+</table>
+<p>覆盖面: fmtSize/fmtSpeed 两家族的全部列(大小/总大小/已下载/上传/amount_left/上下限/各速度列), 单位梯 B~PiB 与 KiB/s~GiB/s 全量; 零值 dash 形态不拆。状态栏速度组与辅种/追剧页组展开明细行(tpl-aq-member-cells)不在范围(D5)。</p>
+
+<h3>菜单结构(D12/D13)</h3>
+<p>表头菜单根尾部(「显示/隐藏列…」之后)加分隔线 + 5 个维度项, 各自二级 flyout(radio 勾选 <code>ctx-tick</code> 现成模式 + 色样); 复用行菜单 openSub 族, 钳位锚参数化。仅 <code>headMenu.page === 'torrent'</code> 门控显示。</p>
+<pre><code>右键表头 →  隐藏「名称」
+            按列降序 / 按列升序
+            相对时间 / 绝对时间        (既有项, 仅时间列)
+            显示/隐藏列…
+            ────────────────          (新增分隔线, 仅 torrent 页)
+            进度条样式  ▸  ○跟随皮肤  ✓常规条  ○LED方块条[迷你条样]
+            进度条颜色  ▸  ✓跟随状态  ○冷熟谱[六格色带] ○主题谱[…] ○温度谱[…] ○彩虹谱[…]
+            速度色阶    ▸  ✓跟随现状  ○冷熟谱[…] … ○关
+            数值色阶    ▸  ✓关  ○开[三色点]
+            单位色组    ▸  ✓统一  ○单位淡化[样例字] ○单位点缀[…] … ○按档·主题[…]</code></pre>
+<p>色样规格: 色阶谱项 = 六格迷你色带(五档+终点, 纯 CSS, 令牌着色); 单位色组项 = 迷你样例字「1.2 MiB/s」数值/单位按该组映射着色(按档组取 MiB 档示范); 进度条样式项 = 迷你条样(常规=实心 / LED=分段); 数值色阶「开」= 三色点(warn/green/accent-hi); 「跟随/关」类选项无色样。</p>
+
+<h3>分期一览</h3>
+<table>
+  <tr><th>阶段</th><th>内容</th><th>可独立收口</th></tr>
+  <tr><td>S1</td><td>引擎与存储(colstyle.v1 + ui_prefs 登记 + state 注入 + html 属性同步 + 跨标签)</td><td>是</td></tr>
+  <tr><td>S2</td><td>表头菜单面(5 维度项 + flyout + 色样 CSS + openSub 参数化)</td><td>是(S1 后)</td></tr>
+  <tr><td>S3</td><td>进度条两维(样式: 常规/LED; 颜色: 20% 分档×4 谱)</td><td>是(S1 后)</td></tr>
+  <tr><td>S4</td><td>速度色阶(20% 分档 + &gt;100%)与数值列色阶(ratio/availability/ETA)</td><td>是(S1 后)</td></tr>
+  <tr><td>S5</td><td>单位拆分(parts 家族 + 双 span)与 8 色组</td><td>是(S1 后)</td></tr>
+  <tr><td>S6</td><td>测试面收口(守阵同步 + node 电池 + e2e)+ docs 回写 + 基线</td><td>随各批滚动, 末批收口</td></tr>
+</table>
+<p class="aside"><b>配置侧零改动声明</b>: 不新增 config.yml 键, KNOWN_WEB_KEYS / schema groups / models / 键面基线全不动(展示偏好走 localStorage 是既有拍板 D3 的既定口径)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>S1 引擎与存储</h3>
+<ul>
+  <li><code>shared/app.js</code>: 常量 <code>COLSTYLE_STORE_KEY = "autoqb.colstyle.v1"</code> + <code>COLSTYLE_DEFAULTS</code>(五维默认值)+ <code>loadColStyle()</code>(范式抄 timeFmt :421-434; 容错: 解析失败/字段缺失逐字段回落默认)。</li>
+  <li><code>shared/state.js</code>: <code>data.colStyle</code> 注入(范式抄 timeFmt :96); <b>首帧同步</b>: load 先于首渲染(theme/timeFmt 同款, 无 FOUC)。</li>
+  <li>引擎同步单点(新函数, 建议放 <code>shared/ui_prefs.js</code> 或独立 <code>shared/colstyle.js</code>): state↔&lt;html&gt; 五枚 <code>data-cs-barstyle/-barramp/-speedramp/-numeric/-units</code> 属性双向同步, watch colStyle 派发; 变更免刷新即时生效。</li>
+  <li><code>shared/lifecycle.js</code>: storage 监听跨标签同步(范式抄 adoptTimeFmt :321-327, 整份采用幂等)。</li>
+  <li><code>shared/ui_prefs.js</code>: <code>autoqb.colstyle.v1</code> 登记 PREF_KEYS(进备份 bundle)。</li>
+  <li><b>验收</b>: 切换写键→即时生效→跨标签同步; PREF 登记闸绿; 首帧无闪烁(theme 先例同判据)。</li>
+</ul>
+
+<h3>S2 表头菜单面</h3>
+<ul>
+  <li><code>shared/tpl/ctx-menus.html</code>: 表头菜单块尾部(「显示/隐藏列…」后)加分隔线 + 5 维度项(<code>v-if="headMenu.page === 'torrent'"</code>)+ 各维度 <code>.ctx-sub</code> flyout(骨架平移行菜单 :54-69)+ <code>ctx-tick</code> 勾选态 + 色样 DOM。注意六格色带/样例字全部用令牌 class, 不内联色值。</li>
+  <li><code>shared/menu.js</code>: <code>openSub</code> 族钳位锚参数化(:342-343 <code>$refs.ctxMenu</code> → host ref 参数, 行菜单调用点传旧值零行为变化); 新增 <code>headMenuStyle&lt;Dim&gt;(value)</code> 写链(范式抄 headMenuTimeFmt :74-88: 写 colStyle + localStorage + 保持菜单开)。</li>
+  <li><code>shared/state.js</code>: flyout 次级状态只两层, 复用 subMenu/subFlip/subTop, 不加第三层(D12)+ 收起链接线(:220-225/:701); headMenu watcher :721 已含钳位。</li>
+  <li>四皮肤 <code>css/components.css</code>: 色样类规则; 逐字节相同族进 <code>shared/console_hub.css</code> 尾段。四皮肤色样配对的机械保障归 S6 新增「模板类→CSS」守阵(既有挂件闸 <code>_scan_page_class_wiring</code> 只扫 &lt;main&gt; 标签上的挂件类 —— 实际命中 shared/tpl/settings.html 等页壳, 四皮肤 index.html 无 &lt;main&gt; —— 覆盖不到 ctx-menus.html/xtpl-cells.html 片段模板新类)。</li>
+  <li><b>验收</b>: 菜单开合/钳位/勾选/写入; 非 torrent 页(抽屉变体/HR 表)不出现新项; 既有 6 个右键 e2e 不红; 静态守阵(headMenuSort 钉/refs↔watcher 对/模板锚/_scan_ctx_sub_width)绿。</li>
+</ul>
+
+<h3>S3 进度条两维</h3>
+<ul>
+  <li><b>样式维</b>(纯 CSS): <code>html[data-cs-barstyle="led"]</code> 下 <code>.m-progress .bar > i</code> 换 LED 分段底(repeating-linear-gradient 移植, 段数/几何照 console 现行); <code>"plain"</code> 强制常规; 缺省/「跟随皮肤」不出规则(皮肤默认呈现)。共用族进 shared 单点, 皮肤差异段留皮肤内。</li>
+  <li><b>颜色维</b>: 渲染器(行模型单点)按 <code>progPct</code> 产档位类 <code>csb-0..csb-5</code>(0=空端点, 1..5=五档, 100%→csb-t); 类名只表档位, 颜色由 <code>html[data-cs-barramp="&lt;谱&gt;"] .m-progress .bar > i.csb-2 { ... }</code> 派生映射(谱×档 = 4×7 条规则, 共用族单点)。「跟随状态」不出档位映射规则(现状 --st 链不动)。条与百分比文字同色; 组行同口径(同一模板骨架)。</li>
+  <li>分档判定纯函数(<code>format.js</code> 新增, 如 <code>progBand(p)</code>)单点, node 电池钉边界(20% 左开右闭/端点)。</li>
+  <li><b>验收</b>: e2e 真浏览器计算色断言(state-moving.spec 先例逐通道比对); <code>_scan_progress_val_parity</code> 不回归(数值盒定宽几何不动); LED 形态在 atlas/prism 可选且 console/flux 默认不变。</li>
+</ul>
+
+<h3>S4 速度色阶与数值列色阶</h3>
+<ul>
+  <li><b>速度</b>: 渲染器分档判定(<code>speedBand(bytes, limit)</code>, 分母读 <code>speedLimitBytes</code> 单点 dialogs.js:555; limit 0/null → 无类; bytes=0 → 无类本就空白; &gt;1.0 → over 档)产 <code>csp-1..csp-5/csp-over</code>; 「跟随现状」保留 numTone 类链不动, 「关」由 data-cs-speedramp 关闭映射。谱映射 CSS 同 S3 模式。</li>
+  <li><b>数值列</b>: 判定单点 <code>format.js</code> 新增(ratio &lt;1 / availability &lt;1 / eta &lt;60s 且 != 8640000), 产语义类(<code>cst-warn/cst-good/cst-soon</code>); 「关」不出映射规则(=现状不着色)。颜色映射 CSS: <code>--warn/--green/--accent-hi</code> 三条。与既有 HR 伴值类(<code>.m-pair.reached/.pending</code>)同格共存时 HR 伴值优先(既有 HR 口径不被覆盖), D10 类仅作用于无伴值行; node 电池钉共存形态。</li>
+  <li>up_limit/dl_limit 列既有 numTone 挂点不动(D8 口径: 分母不同不混)。</li>
+  <li><b>验收</b>: node 电池钉全部边界(75% 旧档不受扰/20% 新档/over/哨兵 ETA/零与未知分母/ratio=1.0、availability=1.0、eta=60s 三个翻转端点双侧各一例); e2e 无限速形态不染。</li>
+</ul>
+
+<h3>S5 单位拆分与色组</h3>
+<ul>
+  <li><code>shared/format.js</code>: 新增 <code>fmtSizeParts/fmtSpeedParts</code>(返回 {v, u} 或 null=零值 dash 形态不拆), 内部复用 AQB_UNIT_LADDER 单点禁止另抄梯子; 与 fmtSize/fmtSpeed 输出串逐字一致(单点一致性进 node 电池)。</li>
+  <li><code>shared/tpl/xtpl-cells.html</code>: fmtSize/fmtSpeed 家族格改双 span(<code>&lt;span class="cs-v"&gt;123.45&lt;/span&gt;&lt;span class="cs-u"&gt; MiB&lt;/span&gt;</code>, 单位 span 携带前导空格, 与现状串逐字一致); 零值 dash 形态维持原单节点; 拆分恒产(统一组=同色, 视觉与现状无差; 单一代码路径不分支)。四个行模型(组/种子/集/对端)同模板自然继承; 辅种/追剧页组展开明细行(tpl-aq-member-cells)为独立模板, 不纳入(D5)。</li>
+  <li>色组映射 CSS: <code>html[data-cs-units="&lt;组&gt;"]</code> 派生 <code>.cs-u</code>(与按档组的单位档类 <code>csu-KiB... </code> 由 parts 输出携带)着色; 「统一」不出规则。</li>
+  <li>抽屉变体表 rowsFn 预装配串不动(D5 范围外); 状态栏 .sb-spd 不动。</li>
+  <li><b>验收</b>: node 电池(parts≡fmt 串/档类正确); 列宽几何回归(拆分不改变文本总宽, 真浏览器量); e2e 单位色组切换断言; 复制/排序不受影响(排序走 _raw)。</li>
+</ul>
+
+<h3>S6 测试面收口 + docs 回写</h3>
+<ul>
+  <li>静态守阵同步 7 处: <code>test_webui_static_ui_prefs.py</code>(新键登记闸)/<code>test_webui_static_skins_skin.py</code>(挂件类名配对+令牌 parity+_scan_ctx_sub_width 若动)/<code>test_webui_static_skins_table.py</code>(headMenuSort 若动)/<code>test_webui_static_dom_panel_dialogs.py:961</code>(ref↔watcher 对)/<code>test_webui_static_dom_panel_misc.py:435</code>(模板锚)/<code>test_webui_ctx_menu_registry.py</code>(若碰 subMenu 状态消费)/node 电池 <code>test_webui_static_r4_node_batteries.py</code> 新增分档与 parts 族(新增函数同步该文件头部「## 测试计划」清单, 每函数一条)+ 新增「模板类→CSS 配对」守阵(扫 ctx-menus.html/xtpl-cells.html 新增类名在四皮肤+shared 聚合均有定义; 既有挂件闸 <code>_scan_page_class_wiring</code> 只扫 &lt;main&gt; 标签挂件类 —— 实际命中 settings.html 等页壳 —— 覆盖不到片段模板新类)。</li>
+  <li>e2e: 新 spec(菜单开合/切换写键/色样/计算色 × <b>SKINS_ALL 四皮肤</b>; console/flux 默认不变由该 spec 承担)+ 既有回归(column-prefs/views/state-moving/menus + 六个右键隐藏列用例 + statusbar-speed-geometry)。</li>
+  <li>docs 回写: <code>memory-bank/architecture/webui.md</code>(列风格引擎节)+ <code>conventions/webui.md</code>(如涉令牌/共用族纪律)+ 根 README Web UI 节; 基线切片(kb.baseline)。</li>
+  <li><b>真机轨</b>: 免(D14)—— 纯前端渲染面, 桩数据可控状态/进度/限速, 真浏览器 e2e 断言计算色(先例 state-moving.spec 逐通道比对)。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— grilling 三轮 19 问全部拍板完毕(2026-11-20), 结论全量迁 §06; 实施不再有开放决策点。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>结论(2026-11-20 拍板)</th></tr>
+  <tr><td>D1</td><td>开关组织</td><td>五维独立选择器, 不做整体预设包</td></tr>
+  <tr><td>D2</td><td>作用域</td><td>全局引擎(一套选择跨四皮肤共享); 进度条样式默认「跟随皮肤」, 其余四维默认各自现档(跟随状态/跟随现状/关/统一); 免刷新即时生效</td></tr>
+  <tr><td>D3</td><td>入口</td><td>主种子表表头右键菜单(page==='torrent' 门控); 不建设置面板卡</td></tr>
+  <tr><td>D4</td><td>存储</td><td>单键 <code>autoqb.colstyle.v1</code>(JSON+版本), 登记 PREF_KEYS 进备份 bundle</td></tr>
+  <tr><td>D5</td><td>覆盖面</td><td>主种子表(种子行+组行); 集行/对端行同模板自然继承不排除; 辅种/追剧页组展开明细行(tpl-aq-member-cells, xtpl.html:243-316)与抽屉变体表/HR 表/状态栏不纳入(独立模板, 留待需要时另立项)</td></tr>
+  <tr><td>D6</td><td>进度条样式</td><td>跟随皮肤(默认)/常规条/LED 方块条; 段数固定照 console 现行, 不加段数配置</td></tr>
+  <tr><td>D7</td><td>进度条颜色</td><td>跟随状态(默认)/4 色阶谱(选谱即 20% 分档); 0%→fg-muted、100%→谱终点色; 边界左开右闭; 条与百分比文字同色; 组行同口径; 与样式维正交</td></tr>
+  <tr><td>D8</td><td>速度色阶</td><td>跟随现状(numTone 两档, 默认)/4 色阶谱/关; 分母=全局 qB 限速(speedLimitBytes 单点); 0/未知不着色; &gt;100%→谱 over 色; up_limit/dl_limit 挂点不动</td></tr>
+  <tr><td>D9</td><td>色阶谱目录</td><td>4 组共用: 冷熟谱/主题谱/温度谱/彩虹谱(映射表见 §03); 20% 分档结构固定, 谱只换色</td></tr>
+  <tr><td>D10</td><td>数值列色阶</td><td>单维开关 关(默认)/开: ratio &lt;1→warn ≥1→green; availability &lt;1→warn; ETA &lt;1min→accent-hi(哨兵 8640000 排除); 三个时间列不做; 与既有 HR 伴值类(.m-pair reached/pending)同格共存时 HR 优先, D10 类仅无伴值行生效</td></tr>
+  <tr><td>D11</td><td>单位色组</td><td>8 组: 统一(默认)/单位淡化/单位点缀/单位反转/分族双色/按档·冷熟/按档·温度/按档·主题(映射表见 §03); fmtSize/fmtSpeed 家族全单位梯拆数值/单位 span; 零值 dash 不拆</td></tr>
+  <tr><td>D12</td><td>菜单结构</td><td>不做循环项; 表头菜单根尾部 5 个维度项各自二级 flyout(radio ctx-tick); 复用行菜单 openSub 族(钳位锚参数化), 不做三级嵌套</td></tr>
+  <tr><td>D13</td><td>色样规格</td><td>色阶谱=六格迷你色带; 单位色组=迷你样例字「1.2 MiB/s」; 进度条样式=迷你条样; 数值色阶开=三色点; 纯 CSS+现成令牌, 跟随/关类无色样</td></tr>
+  <tr><td>D14</td><td>真机轨</td><td>免 —— 纯前端渲染面, 桩 e2e 真浏览器断言计算色(先例 state-moving.spec)</td></tr>
+</table>
+<p class="aside">拍板轨迹: 第一轮 11 问(Q1-Q11, 26-11-19)→ 用户改出入口=表头右键、进度/速度 20% 一档端点特殊、ETA &lt;1min、单位组扩充; 第二轮 5 问(Q12-Q16, 26-11-20)→ 菜单形态(flyout+循环)与色映射表; 追加轮 → 色阶谱扩 4 组、单位组扩 8 组; 第三轮(Q17-Q19, 26-11-20)→ 循环改 radio 子菜单+色样、根菜单直挂结构。全程「按推荐」收敛。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>R1</td><td>openSub 参数化碰行菜单注册表守阵</td><td>改 <code>menu.js:342-343</code> 钳位锚/复用 subMenu 状态</td><td>只参数化 host ref(行菜单调用点传旧值零行为变化); <code>test_webui_ctx_menu_registry.py</code> + 六个右键 e2e 回归; 不碰注册表数据结构</td></tr>
+  <tr><td>R2</td><td>单位拆分引发列宽/复制/文本串回归</td><td>单文本节点改双 span</td><td>span 内联不改文本总宽(真浏览器量列宽回归); 排序走 _raw 不受扰; parts≡fmt 串一致性进 node 电池; 状态栏/变体表不动</td></tr>
+  <tr><td>R3</td><td>分档类逐行计算开销</td><td>行窗口化大量行每帧产类</td><td>分档=一次整数比较+查表, 量级可忽略; 纯函数单点进 node 电池; 不引入逐行内联 style</td></tr>
+  <tr><td>R4</td><td>谱×档位类名矩阵膨胀</td><td>4 谱×7 档×两维若逐谱产类</td><td>类名只表档位(csb-*/csp-*), 谱由顶层 data-cs-* 属性派生选择器; JS 永不产颜色值</td></tr>
+  <tr><td>R5</td><td>温度谱 100%=error 语义争议</td><td>用户选温度谱后进度全红观感</td><td>显式 opting 已拍板(D9); 默认档恒现状; 文档与菜单色样直接可见(六格色带即预告)</td></tr>
+  <tr><td>R6</td><td>既有着色消费方被误伤</td><td>新分档类名/映射波及 tone-low/tone-high 链与 HR 伴值类(.m-pair reached/pending)</td><td>「跟随现状」档完全不走新类; 新类名独立命名空间(cs-* 家族: csb-/csp-/cst-/csu-/cs-v/cs-u); HR 伴值行 D10 类不生效(优先规则见 D10); 状态栏 .sb-spd 不动</td></tr>
+  <tr><td>R7</td><td>首帧闪烁(FOUC)</td><td>colstyle 晚于首渲染</td><td>load 先于首渲染 + 首帧同步写 html 属性(prism theme/timeFmt 先例同判据, e2e 首帧断言)</td></tr>
+  <tr><td>R8</td><td>跨标签 storage 回环/竞态</td><td>多标签同时切换</td><td>adoptTimeFmt 同款整份采用幂等; 写入端 try/catch 容错(隐私模式降级为会话内生效)</td></tr>
+  <tr><td>R9</td><td>表头菜单项级门控遗漏</td><td>aq-table 全表共用菜单</td><td>新项一律 <code>headMenu.page === 'torrent'</code> 判定; 非 torrent 页 e2e 断言无新项</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-20-0009</span> 初版: 立项会话 grilling 三轮 19 问拍板 D1-D14 全落定; 取证双只读子代理(渲染链/表头菜单与令牌清单); S1-S6 分期入库 Open, 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-20-0052</span> 评审修复轮: 分面评审两轮(正确性/事实面 + 安全/测试缺口面)16 发现全修 —— HR 伴值类事实修正与 D10 共存优先规则 / member 行模型显式纳入 D5 排除 / 行号四处纠错(state.js:96, lifecycle.js:321-327, flux 143-149, console LED 424-425)/ LED 兜底补注 / 令牌计数 12→13 / e2e SKINS_ALL 写死 / 模板类→CSS 新守阵 / node 电池翻转端点与测试计划 docstring 同步 / 措辞收口</li>
+</ul>
+
+</div>
+</body>
+</html>
