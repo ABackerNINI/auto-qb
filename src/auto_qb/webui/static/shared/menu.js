@@ -11,6 +11,18 @@
  * 与 --dur 无关 —— 太长会有"移开了还挂着"的粘滞感, 太短会进不去子面板。 */
 const SUB_CLOSE_DELAY_MS = 180;
 
+/* 列风格五维的中文标签表(计划 26-11-20-0009 S2): 只服务写链 headMenuStyle<Dim> 的 toast 回执
+ * —— 菜单项可见文案与色样的单点在 ctx-menus.html(逐项手写, 不数据驱动), 值域单点 =
+ * app.js COLSTYLE_ENUMS; 这里只是 dim/value -> 文案的查表, 不得长出第二份枚举或第二份菜单项集。 */
+const CS_MENU_LABELS = {
+  barstyle: { name: "进度条样式", opts: { skin: "跟随皮肤", plain: "常规条", led: "LED方块条" } },
+  barramp: { name: "进度条颜色", opts: { status: "跟随状态", cool: "冷熟谱", theme: "主题谱", heat: "温度谱", rainbow: "彩虹谱" } },
+  speedramp: { name: "速度色阶", opts: { current: "跟随现状", cool: "冷熟谱", theme: "主题谱", heat: "温度谱", rainbow: "彩虹谱", off: "关" } },
+  numeric: { name: "数值色阶", opts: { off: "关", on: "开" } },
+  units: { name: "单位色组", opts: { uniform: "统一", dim: "单位淡化", accent: "单位点缀", invert: "单位反转", family: "分族双色",
+    "band-cool": "按档·冷熟", "band-heat": "按档·温度", "band-theme": "按档·主题" } },
+};
+
 window.AQB_MENU = {
   methods: {
     /* ---------------- 表头右键菜单(TBL-05): 按列操作 ----------------
@@ -21,6 +33,16 @@ window.AQB_MENU = {
       event.preventDefault();
       this._markCtxSource(event);
       const pos = this._menuPos(event);
+      /* S2(计划 26-11-20-0009)起表头菜单也挂五维 flyout(与行菜单共用 subMenu 两层状态):
+       * 菜单开着时右键另一列表头 = visible true->true 的对象替换, "headMenu.visible" 关层
+       * watcher 不触发 —— 不在这里清链, 旧 flyout 会原样挂进新菜单(subMenu 残留 = 新菜单
+       * 直接展开着旧面板, subFlip/subTop 残留 = 钳位按旧父项位置算)。开层即收干净(keepSub
+       * 先撤挂起收起, 与 state.js menu.visible 关层清链对偶); 行菜单 openMenu/openMemberMenu
+       * 的同范式重开残留是既有行为, 不在本批顺手改。 */
+      this.keepSub();
+      this.subMenu = "";
+      this.subFlip = false;
+      this.subTop = -6;
       this.headMenu = {
         visible: true,
         x: pos.x,
@@ -89,6 +111,38 @@ window.AQB_MENU = {
     /* 该列是否支持口径切换(模板 v-if 用; 常量在 app.js, 模板读不到顶层 const) */
     headTimeFmtAble() {
       return TIME_FMT_KEYS.indexOf(this.headMenu.key) >= 0;
+    },
+    /* ---------------- 列风格五维写链(计划 26-11-20-0009 S2, D12 radio flyout) ----------------
+     * 表头菜单尾部五个维度项的 flyout radio 写链 —— 范式照抄 headMenuTimeFmt, 两处刻意差异:
+     * 1. **不关菜单**: 五维是"挑完一维还有下一维"的调参面(headMenuTimeFmt 点完即关), 关了就得
+     *    重右键五次; 菜单开着可连续切, 收起走既有路径(点空白/Esc/关层, state.js
+     *    watch headMenu.visible 统一收 subMenu)。
+     * 2. **不自己碰 localStorage**: setColStyle(colstyle.js) 是引擎写入口单点(校验 + 改
+     *    state.colStyle + 落盘 + watch 派发 <html> data-cs-* 属性), 写链只调它。
+     * 点当前值静默返回(不给"已切换"的假反馈, headMenuTimeFmt 同款); 勾选态判据模板直读
+     * colStyle[dim](headMenuTimeFmt 读 timeFmt[key] 同范式, 菜单开着响应式跟手)。 */
+    headMenuStyleBarstyle(value) {
+      this._headMenuStyleSet("barstyle", value);
+    },
+    headMenuStyleBarramp(value) {
+      this._headMenuStyleSet("barramp", value);
+    },
+    headMenuStyleSpeedramp(value) {
+      this._headMenuStyleSet("speedramp", value);
+    },
+    headMenuStyleNumeric(value) {
+      this._headMenuStyleSet("numeric", value);
+    },
+    headMenuStyleUnits(value) {
+      this._headMenuStyleSet("units", value);
+    },
+    /* 五维共用写面。!下划线方法不对模板暴露(Vue 模板编译器不解析下划线前缀标识符) ——
+     * 模板只调上面五个无下划线包装; 回执文案查表 CS_MENU_LABELS(文件顶部)。 */
+    _headMenuStyleSet(dim, value) {
+      if (this.colStyle[dim] === value) return;   // 点当前值: 静默(菜单保持开)
+      if (!this.setColStyle(dim, value)) return;  // 非法 dim/value: 引擎静默拒绝(模板只产枚举值, 理论不可达)
+      const lb = CS_MENU_LABELS[dim];
+      this.toast(`${lb.name}已切换: ${lb.opts[value]}`);
     },
     /* 排序箭头已图标化(i-arrow-up/down sprite), 直接在模板按 sortKey/sortDir 渲染 */
     /* 表头横滚同步自计划 26-10-11-1722 P4 起收敛为 columns.js::syncHeadScroll(ev, page) 单点
@@ -305,7 +359,9 @@ window.AQB_MENU = {
      * 延迟时长只为一件事: 让指针跨过父项与面板之间那 4px 缝隙(.ctx-sub 的
      * left: calc(100% + 4px))—— 同步收起会在过缝瞬间关掉面板, 表现为"鼠标进不去子面板"。
      */
-    openSub(name, ev) {
+    /* hostRef = 所在菜单容器的 ref 名(S2 参数化, 计划 26-11-20-0009, 见 _subFitViewport):
+     * 行菜单调用点传 "ctxMenu"(旧值, 行为零变化), 表头菜单五维 flyout 传 "headMenuEl"。 */
+    openSub(name, ev, hostRef) {
       /* 动态子面板展开即对齐最新目标(计划 26-10-31-0306 T6): 缓存刷新是异步且渲染只读缓存
        * (transfer_flow.js), 面板先按上次缓存显形、拉回后即时更新 —— 不阻塞展开, 失败保持旧值 */
       if (name === "transfer" && typeof this.transferTargetsReload === "function") this.transferTargetsReload();
@@ -318,7 +374,7 @@ window.AQB_MENU = {
       this.subFlip = this._subOverflowsRight(anchor);
       /* 渲染后按**实测**尺寸复核水平方向并钳垂直方向(估宽只管首帧方向,
        * 精确收口在实测 + 二次收口; 机理同主菜单 _menuPos 估 + _menuFit 实测 + _menuFitRefit 收口) */
-      this.$nextTick(() => this._subFitRefit(anchor, name));
+      this.$nextTick(() => this._subFitRefit(anchor, name, hostRef));
     },
     /* 子面板水平方向初判: .ctx-sub 锚在**父项右缘** + 4px 缝(left: calc(100% + 4px)),
      * 判据必须从父项右缘起算 —— 旧实现 _menuOverflowsRight(currentTarget, 200) 从父项
@@ -335,11 +391,15 @@ window.AQB_MENU = {
      * —— 它是父项的 DOM 后代(CTX-05 的 mouseleave 收起语义依赖这一点), 故钳位只做两件事:
      * 1) 水平: 实测宽复核 subFlip(估宽判错的两头都纠: 该翻没翻/不该翻翻了);
      * 2) 垂直: 理想顶 = 父项顶 - 6(.ctx-sub top 基准), 底越视口下缘则整体上移收进
-     *    视口(顶再钳回上缘留白) —— 位移写成相对父项的 top 内联值, 不动 DOM 结构。 */
-    _subFitViewport(anchor) {
+     *    视口(顶再钳回上缘留白) —— 位移写成相对父项的 top 内联值, 不动 DOM 结构。
+     * hostRef = 钳位锚的容器 ref 名(S2 参数化, 计划 26-11-20-0009): 子面板在**哪个菜单容器**
+     * 里就查哪个 —— 行菜单传 "ctxMenu"(旧值, 行为逐位不变); 表头菜单的五维 flyout(S2)传
+     * "headMenuEl"。写死 ctxMenu 时表头菜单的子面板查不到(.ctx-sub 不在其子树, host 为另一
+     * 容器), 钳位静默早退 = 探出视口不收 —— 参数化是复用 openSub 族的硬前提(R1)。 */
+    _subFitViewport(anchor, hostRef) {
       if (!anchor || !anchor.getBoundingClientRect) return;
       const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
-      const host = this.$refs.ctxMenu;
+      const host = this.$refs[hostRef || "ctxMenu"];
       const el = host && host.querySelector ? host.querySelector(".ctx-sub") : null;
       if (!el) return; // 子面板已收起(v-if): 无可钳位
       const rect = anchor.getBoundingClientRect();
@@ -363,15 +423,15 @@ window.AQB_MENU = {
      * instrument 实测钳位时刻 want=495 精确、主菜单 settle 搬移锚点后渲染底缘 893.95>893)。
      * 钳位回写后再排帧按**当前**锚点实测复核; 已对齐时复核幂等(不写回、不重排), 锚点若再动
      * 则最多再补两帧, 有界收敛。rAF 在后台页签不触发 —— 子面板只在可见页签展开, 无此场景。 */
-    _subFitRefit(anchor, name) {
-      this._subFitViewport(anchor);
+    _subFitRefit(anchor, name, hostRef) {
+      this._subFitViewport(anchor, hostRef);
       let retries = 2;
       const settle = () => {
         /* 只复核本轮展开的这个子面板: 已收起/已切到别的父项(本轮 rAF 挂起期间 openSub 又跑过)
          * 都作废 —— 否则会把新子面板按旧锚点误钳一帧(下一轮循环自纠, 但没必要付这一帧) */
         if (this.subMenu !== name) return;
         const flip = this.subFlip, top = this.subTop;
-        this._subFitViewport(anchor);
+        this._subFitViewport(anchor, hostRef);
         if (flip !== this.subFlip || top !== this.subTop) {
           if (retries-- > 0) requestAnimationFrame(settle);
         }
@@ -392,13 +452,13 @@ window.AQB_MENU = {
         this.subMenu = "";
       }, SUB_CLOSE_DELAY_MS);
     },
-    toggleSub(name, ev) {
+    toggleSub(name, ev, hostRef) {
       if (this.subMenu === name) {
         this.keepSub();   // 点开又点关: 撤销可能挂着的收起, 否则 180ms 后又被收一次
         this.subMenu = "";
         return;
       }
-      this.openSub(name, ev);
+      this.openSub(name, ev, hostRef);
     },
     /* FX-14: 打开目标文件夹 —— 路径由**服务端**从自己的快照派生(web.py /api/open-path),
      * 前端只传 kind + 标识: 后端绝不接受客户端传路径(防"任意文件执行"), 且只允许目录/单文件种子的文件。

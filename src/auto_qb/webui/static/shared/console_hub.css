@@ -299,3 +299,61 @@
 }
 .hb-ico.lg { width: 18px; height: 18px; }
 
+/* ==========================================================================
+   列风格引擎 · 表头右键菜单色样(计划 26-11-20-0009 S2/D13)
+   --------------------------------------------------------------------------
+   表头菜单五维 flyout 里各选项的预览样块: 六格迷你色带(色阶谱)/迷你条样(进度条样式)/
+   三色点(数值色阶「开」)/迷你样例字(单位色组)。只服务菜单项展示(S2) —— S3-S5 的渲染面
+   (进度条/速度/数值/单位着色映射)不消费这里任何类。规则族在四皮肤逐字节相同: 颜色一律引用
+   既有令牌(零新增令牌, R4 —— JS/CSS 永不产颜色值), 几何常数与皮肤语言无关, 按「共用规则族
+   纪律」收进本文件尾段单点, 四皮肤 components.css 零新增(真差异集合为空; 日后出现真差异
+   才落回皮肤内)。本文件被四皮肤 index.html 逐一 link(级联序在各自 components.css 之后),
+   下列类定义随聚合面四皮肤俱在(S6「模板类→CSS 配对」守阵按皮肤聚合判定)。
+   cs-* 是独立命名空间(R6): 不碰 tone- 与 m-pair 既有链, 也不与 S5 渲染面的 cs-v/cs-u 与
+   csb- 族/csp- 族/cst- 族/csu- 族档位类重叠 —— 菜单色样是「选项的静态预告」(每项恒显示
+   该选项的效果), 不吃 html[data-cs-*] 派生映射(S3-S5 落地后也不得串色)。
+   ========================================================================== */
+/* 六格迷你色带(色阶谱项): 五档 + 100% 终点, 格序 = 模板里谱表排列(D9), 格色由令牌色类
+ * 逐格指定 —— 模板按谱表写格, 不另设逐谱修饰类(4 谱 x 6 格的选择器矩阵不进 CSS, R4) */
+.cs-ramp { display: inline-flex; width: 56px; height: 12px; flex: none;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); overflow: hidden; }
+.cs-ramp i { flex: 1 1 0; min-width: 0; }
+/* 三色点(数值色阶「开」): warn/green/accent-hi = 数值列色阶的三种语义色预告(D10) */
+.cs-dots { display: inline-flex; gap: 3px; flex: none; }
+.cs-dots i { width: 7px; height: 7px; border-radius: 999px; }
+/* 令牌色类(色带格与三色点共用): 一类一令牌, 模板按谱表/语义排列 —— 不内联色值(D13) */
+.cs-indigo { background: var(--indigo); }
+.cs-blue { background: var(--blue); }
+.cs-cyan { background: var(--cyan); }
+.cs-teal { background: var(--teal); }
+.cs-lime { background: var(--lime); }
+.cs-green { background: var(--green); }
+.cs-violet { background: var(--violet); }
+.cs-pink { background: var(--pink); }
+.cs-warn { background: var(--warn); }
+.cs-error { background: var(--error); }
+.cs-accent-hi { background: var(--accent-hi); }
+/* 迷你条样(进度条样式项): 常规 = 实心填充; LED = 分段填充(段 5px/缝 3px, 几何照 console
+ * 现行 .m-progress .bar > i 的 repeating-linear-gradient) —— 填充取中性 accent: 菜单样块
+ * 不随行状态色(--st 只在表格行上), 预告的是"形状"而非某行的颜色 */
+.cs-bar { display: inline-block; width: 34px; height: 8px; flex: none;
+  background: var(--surface-2); border-radius: var(--radius-sm); overflow: hidden; }
+.cs-bar i { display: block; width: 62%; height: 100%; background: var(--accent); }
+.cs-bar-led i { background: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 8px); }
+/* 迷你样例字(单位色组项): 「1.2 MiB/s」数值/单位按该组映射着色(D11); 修饰类 = 组值
+ * (COLSTYLE_ENUMS.units, 与选项一一对应); 按档组取速度族 MiB/s 档示范(样例单位串即
+ * MiB/s, 按该组速度族映射取色); 分族双色以 MiB(大小族)/s(速度族)双段示范两族颜色;
+ * 「统一」无样例(默认档 = 与现状零差异, 无可预告)。数值 .cs-uv 默认随文本色(--fg),
+ * 只有「反转」组改写数值色。 */
+.cs-unit { display: inline-block; flex: none; font: 11px/1 var(--font-mono);
+  color: var(--fg); white-space: nowrap; }
+.cs-unit.dim .cs-uu { color: var(--fg-muted); }
+.cs-unit.accent .cs-uu { color: var(--accent); }
+.cs-unit.invert .cs-uv { color: var(--fg-muted); }
+.cs-unit.invert .cs-uu { color: var(--fg); }
+.cs-unit.family .cs-uu-sz { color: var(--teal); }   /* 大小族单位(样例里的 MiB 段) */
+.cs-unit.family .cs-uu-sp { color: var(--pink); }   /* 速度族单位(样例里的 /s 段) */
+.cs-unit.band-cool .cs-uu { color: var(--teal); }
+.cs-unit.band-heat .cs-uu { color: var(--lime); }
+.cs-unit.band-theme .cs-uu { color: var(--blue); }
+

@@ -49,11 +49,13 @@
                  去设置」(点击跳 WebUI 设置卡)。
                  hover 与点击均可展开; 移出父项/面板后延迟收起(CTX-05, 180ms 宽限跨过 4px 缝,
                  见 menu.js openSub/keepSub/scheduleSubClose); 子面板钳位在 menu.js
-                 _subFitViewport(估宽只管首帧方向, 精确收口在实测)。子项内容已由注册表渲染层
+                 _subFitViewport(估宽只管首帧方向, 精确收口在实测; 钳位锚 = 所在菜单容器的 ref
+                 名, S2 起参数化 —— 行菜单传 ctxMenu(旧值, 行为零变化), 表头菜单五维 flyout 传
+                 headMenuEl)。子项内容已由注册表渲染层
                  (ctx_menu.js ctxRenderLayer)就地解析成 it.subItems —— 模板不再区分质料。 -->
             <div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" :class="{ open: subMenu === it.subName }" :data-item="it.id"
-                 @mouseenter="openSub(it.subName, $event)" @mouseleave="scheduleSubClose()"
-                 @click.stop="toggleSub(it.subName, $event)">
+                 @mouseenter="openSub(it.subName, $event, 'ctxMenu')" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub(it.subName, $event, 'ctxMenu')">
               <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
               <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
               <div v-if="subMenu === it.subName" class="ctx-sub" :class="{ 'flip-x': subFlip }"
@@ -117,6 +119,187 @@
           <div class="ctx-item" @click="headMenuPicker()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>显示/隐藏列…
           </div>
+          <!-- 列风格引擎五维入口(计划 26-11-20-0009 S2, D3/D12/D13): 主种子表表头菜单尾部
+               分隔线 + 5 个维度项, 各自二级 flyout(radio 勾选, ctx-tick 现成模式)。仅 torrent
+               页(R9 —— aq-table 全表共用本菜单, HR 明细表/抽屉变体头不出现新项); 复用行菜单
+               openSub 族的 subMenu/subFlip/subTop 两层状态(D12 不做三级嵌套), 钳位锚传
+               headMenuEl(S2 参数化, 行菜单调用点仍传 ctxMenu 零行为变化)。勾选态判据直读
+               colStyle[dim](headMenuTimeFmt 范式, 菜单开着响应式跟手), 写链
+               headMenuStyle<Dim>(menu.js)调 setColStyle 引擎单点并保持菜单开。
+               色样(D13, 类名 cs-* 独立命名空间 R6, 规则族单点 shared/console_hub.css 尾段,
+               全令牌着色不内联色值): 色阶谱项 = 六格迷你色带(cs-ramp + 令牌色类, 五档+终点,
+               格序 = D9 谱表); 单位色组项 = 迷你样例字「1.2 MiB/s」(cs-unit, 数值/单位按该组
+               映射着色, 按档组取速度族 MiB/s 档示范; 分族双色以 MiB+/s 双段示范两族);
+               进度条样式项 = 迷你条样(cs-bar, 常规实心 / LED 分段, LED 几何照 console 现行);
+               数值色阶「开」= 三色点(cs-dots: warn/green/accent-hi = D10 三种语义色)。
+               「跟随/关/统一」类默认档无色样 —— 与现状零差异, 无可预告。 -->
+          <template v-if="headMenu.page === 'torrent'">
+            <div class="ctx-sep"></div>
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'cs-barstyle' }"
+                 @mouseenter="openSub('cs-barstyle', $event, 'headMenuEl')" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('cs-barstyle', $event, 'headMenuEl')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pulse"></use></svg><span class="ctx-text">进度条样式</span>
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'cs-barstyle'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
+                   @click.stop @mouseenter="keepSub()">
+                <div class="ctx-item" @click="headMenuStyleBarstyle('skin')">
+                  <span class="ctx-text">跟随皮肤</span>
+                  <svg v-if="colStyle.barstyle === 'skin'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleBarstyle('plain')">
+                  <span class="ctx-text">常规条</span>
+                  <span class="cs-bar"><i></i></span>
+                  <svg v-if="colStyle.barstyle === 'plain'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleBarstyle('led')">
+                  <span class="ctx-text">LED方块条</span>
+                  <span class="cs-bar cs-bar-led"><i></i></span>
+                  <svg v-if="colStyle.barstyle === 'led'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+              </div>
+            </div>
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'cs-barramp' }"
+                 @mouseenter="openSub('cs-barramp', $event, 'headMenuEl')" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('cs-barramp', $event, 'headMenuEl')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-layers"></use></svg><span class="ctx-text">进度条颜色</span>
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'cs-barramp'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
+                   @click.stop @mouseenter="keepSub()">
+                <div class="ctx-item" @click="headMenuStyleBarramp('status')">
+                  <span class="ctx-text">跟随状态</span>
+                  <svg v-if="colStyle.barramp === 'status'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleBarramp('cool')">
+                  <span class="ctx-text">冷熟谱</span>
+                  <span class="cs-ramp"><i class="cs-indigo"></i><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-teal"></i><i class="cs-lime"></i><i class="cs-green"></i></span>
+                  <svg v-if="colStyle.barramp === 'cool'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleBarramp('theme')">
+                  <span class="ctx-text">主题谱</span>
+                  <span class="cs-ramp"><i class="cs-violet"></i><i class="cs-indigo"></i><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-teal"></i><i class="cs-accent-hi"></i></span>
+                  <svg v-if="colStyle.barramp === 'theme'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleBarramp('heat')">
+                  <span class="ctx-text">温度谱</span>
+                  <span class="cs-ramp"><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-teal"></i><i class="cs-lime"></i><i class="cs-warn"></i><i class="cs-error"></i></span>
+                  <svg v-if="colStyle.barramp === 'heat'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleBarramp('rainbow')">
+                  <span class="ctx-text">彩虹谱</span>
+                  <span class="cs-ramp"><i class="cs-violet"></i><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-lime"></i><i class="cs-pink"></i><i class="cs-green"></i></span>
+                  <svg v-if="colStyle.barramp === 'rainbow'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+              </div>
+            </div>
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'cs-speedramp' }"
+                 @mouseenter="openSub('cs-speedramp', $event, 'headMenuEl')" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('cs-speedramp', $event, 'headMenuEl')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg><span class="ctx-text">速度色阶</span>
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'cs-speedramp'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
+                   @click.stop @mouseenter="keepSub()">
+                <div class="ctx-item" @click="headMenuStyleSpeedramp('current')">
+                  <span class="ctx-text">跟随现状</span>
+                  <svg v-if="colStyle.speedramp === 'current'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleSpeedramp('cool')">
+                  <span class="ctx-text">冷熟谱</span>
+                  <span class="cs-ramp"><i class="cs-indigo"></i><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-teal"></i><i class="cs-lime"></i><i class="cs-green"></i></span>
+                  <svg v-if="colStyle.speedramp === 'cool'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleSpeedramp('theme')">
+                  <span class="ctx-text">主题谱</span>
+                  <span class="cs-ramp"><i class="cs-violet"></i><i class="cs-indigo"></i><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-teal"></i><i class="cs-accent-hi"></i></span>
+                  <svg v-if="colStyle.speedramp === 'theme'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleSpeedramp('heat')">
+                  <span class="ctx-text">温度谱</span>
+                  <span class="cs-ramp"><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-teal"></i><i class="cs-lime"></i><i class="cs-warn"></i><i class="cs-error"></i></span>
+                  <svg v-if="colStyle.speedramp === 'heat'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleSpeedramp('rainbow')">
+                  <span class="ctx-text">彩虹谱</span>
+                  <span class="cs-ramp"><i class="cs-violet"></i><i class="cs-blue"></i><i class="cs-cyan"></i><i class="cs-lime"></i><i class="cs-pink"></i><i class="cs-green"></i></span>
+                  <svg v-if="colStyle.speedramp === 'rainbow'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleSpeedramp('off')">
+                  <span class="ctx-text">关</span>
+                  <svg v-if="colStyle.speedramp === 'off'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+              </div>
+            </div>
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'cs-numeric' }"
+                 @mouseenter="openSub('cs-numeric', $event, 'headMenuEl')" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('cs-numeric', $event, 'headMenuEl')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hash"></use></svg><span class="ctx-text">数值色阶</span>
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'cs-numeric'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
+                   @click.stop @mouseenter="keepSub()">
+                <div class="ctx-item" @click="headMenuStyleNumeric('off')">
+                  <span class="ctx-text">关</span>
+                  <svg v-if="colStyle.numeric === 'off'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleNumeric('on')">
+                  <span class="ctx-text">开</span>
+                  <span class="cs-dots"><i class="cs-warn"></i><i class="cs-green"></i><i class="cs-accent-hi"></i></span>
+                  <svg v-if="colStyle.numeric === 'on'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+              </div>
+            </div>
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'cs-units' }"
+                 @mouseenter="openSub('cs-units', $event, 'headMenuEl')" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('cs-units', $event, 'headMenuEl')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg><span class="ctx-text">单位色组</span>
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'cs-units'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
+                   @click.stop @mouseenter="keepSub()">
+                <div class="ctx-item" @click="headMenuStyleUnits('uniform')">
+                  <span class="ctx-text">统一</span>
+                  <svg v-if="colStyle.units === 'uniform'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('dim')">
+                  <span class="ctx-text">单位淡化</span>
+                  <span class="cs-unit dim"><span class="cs-uv">1.2</span><span class="cs-uu"> MiB/s</span></span>
+                  <svg v-if="colStyle.units === 'dim'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('accent')">
+                  <span class="ctx-text">单位点缀</span>
+                  <span class="cs-unit accent"><span class="cs-uv">1.2</span><span class="cs-uu"> MiB/s</span></span>
+                  <svg v-if="colStyle.units === 'accent'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('invert')">
+                  <span class="ctx-text">单位反转</span>
+                  <span class="cs-unit invert"><span class="cs-uv">1.2</span><span class="cs-uu"> MiB/s</span></span>
+                  <svg v-if="colStyle.units === 'invert'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('family')">
+                  <span class="ctx-text">分族双色</span>
+                  <span class="cs-unit family"><span class="cs-uv">1.2</span><span class="cs-uu cs-uu-sz"> MiB</span><span class="cs-uu cs-uu-sp">/s</span></span>
+                  <svg v-if="colStyle.units === 'family'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('band-cool')">
+                  <span class="ctx-text">按档·冷熟</span>
+                  <span class="cs-unit band-cool"><span class="cs-uv">1.2</span><span class="cs-uu"> MiB/s</span></span>
+                  <svg v-if="colStyle.units === 'band-cool'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('band-heat')">
+                  <span class="ctx-text">按档·温度</span>
+                  <span class="cs-unit band-heat"><span class="cs-uv">1.2</span><span class="cs-uu"> MiB/s</span></span>
+                  <svg v-if="colStyle.units === 'band-heat'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+                <div class="ctx-item" @click="headMenuStyleUnits('band-theme')">
+                  <span class="ctx-text">按档·主题</span>
+                  <span class="cs-unit band-theme"><span class="cs-uv">1.2</span><span class="cs-uu"> MiB/s</span></span>
+                  <svg v-if="colStyle.units === 'band-theme'" class="ico ico-sm ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
         </transition>
         <!-- 文件优先级小菜单(详情抽屉内容页签): 复用 .ctx-menu 视觉, 锚定单元格, 视口吸附 -->

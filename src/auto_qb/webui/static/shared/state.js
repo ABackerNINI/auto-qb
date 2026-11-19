@@ -223,7 +223,10 @@ window.AQB_STATE = {
       flagsLoaded: false,
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
       // 队列/TMM/超级做种/强制启动/分享率限制/复制族 都在它里面(见 conventions/webui.md)
+      // S2(计划 26-11-20-0009)起表头菜单的五维 flyout 也走这一组两层状态(D12 不加第三层):
+      // 面板名仍单值互斥, 同一时刻全页面至多开一个子面板(行菜单/表头菜单共用一套收起链)
       subMenu: "",        // "" | "advanced" | "transfer"(「转移到」动态子面板, 计划 26-10-31-0306 T6)
+                          // | "cs-*"(列风格五维 flyout: cs-barstyle/cs-barramp/cs-speedramp/cs-numeric/cs-units)
       subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
       // 子面板垂直位移(相对父项顶的 top 内联值, px): 子面板高(~12 项 ≈ 440px)锚在父项顶
       // - 6px, 父项靠视口下部时底会整段探出屏幕外 —— openSub 展开后实测上移收进视口
@@ -708,7 +711,11 @@ window.AQB_STATE = {
       }
     },
     "headMenu.visible"(v) {
-      if (!v) this._clearCtxSource();
+      if (!v) {
+        this._clearCtxSource();
+        this.keepSub();     // CTX-05: 撤掉挂起的延迟收起(与 menu.visible 关层同款, 否则还会再触发一次)
+        this.subMenu = "";  // S2(计划 26-11-20-0009): 表头菜单也有五维 flyout, 关层一并收起
+      }
     },
     "filePrio.visible"(v) {
       if (!v) this._clearCtxSource();
