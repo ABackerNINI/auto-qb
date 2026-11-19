@@ -94,6 +94,12 @@ window.AQB_STATE = {
       /* FX-28: 各**时间点列**的显示口径 { 列key: "rel" | "abs" } —— 由该列表头右键菜单切换并持久化
        * (见 TIME_FMT_STORE_KEY); 键集合 = TIME_FMT_KEYS, 未登记的列不受影响 */
       timeFmt: loadTimeFmt(),
+      /* 列风格引擎(计划 26-11-20-0009 S1/D4): 主种子表五维「列风格」选择 { barstyle, barramp,
+       * speedramp, numeric, units } —— 键集合 = COLSTYLE_FIELDS, 值域/默认档/容错读在 app.js
+       * COLSTYLE_* 单点; 表头右键菜单写链(S2)经 setColStyle 改这里并落盘, <html> 五枚 data-cs-*
+       * 属性由 colstyle.js 同步单点跟随(见 watch.colStyle)。初值即存储真值(load 先于首渲染,
+       * 无 FOUC, theme/timeFmt 同判据); 默认值 = 现状, 用户不选 = 零视觉变化。 */
+      colStyle: loadColStyle(),
       /* 相对时间时钟(FX-27): 只喂"最近活动"这类相对时间显示(fmtRelTime), 30s 一跳 ——
        * 为什么必须有: 后端 last_activity 按分钟量化且只在**活动发生时**才变, 暂停的种子行对象
        * 长期不变 => Vue 不重渲染 => 相对值会永久停在渲染那一刻("刚刚"挂一整天)。粒度只到分钟,
@@ -783,6 +789,14 @@ window.AQB_STATE = {
     // 而非 AQB_FEEDBACK mixin —— 见文件顶部 WARN(watch 进全局 mixin 会波及子组件实例)。
     errPanelOpen(v) {
       if (v) this._errUnread = 0;
+    },
+    // 列风格引擎(计划 26-11-20-0009 S1): 五维任一变更 -> <html> data-cs-* 属性即时跟随(免刷新;
+    // CSS 消费面 S3-S5 落)。deep 兜 setColStyle 的逐维赋值(对象身份不变), 整份替换(adoptColStyle,
+    // 跨标签/可见性补对齐)同样命中; 写面幂等, 同值重放零视觉副作用。首帧由 lifecycle.js created()
+    // 显式同步(data 初值即存储真值, 不用 immediate 免双写)。
+    colStyle: {
+      handler() { this._colStyleSyncAttrs(); },
+      deep: true,
     },
   },
 };

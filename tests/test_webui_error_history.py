@@ -100,6 +100,8 @@ def test_frontend_error_history_cap_ring() -> None:
 STORAGE_WRITE_BASELINE = {
     "auth.js": 1,  # autoqb_token
     "config_hub.js": 1,  # hub 视图选择
+    "colstyle.js": 1,  # autoqb.colstyle.v1: 列风格五维偏好落盘(setColStyle 写链单点, 计划 26-11-20-0009 S1;
+    #     try/catch 隐私模式降级会话内生效, 键面由双清单守阵 test_webui_static_ui_prefs.py 对账)
     "columns.js": 3,  # 列宽/顺序/隐藏
     "drawer.js":
         4,  # drawerHeight / drawerOpen / drawerTab + 合并开关落盘(dtToggleMerge, W4; W7 恢复后选择层落盘随 dtPersistSel 回 drawer_templates.js)

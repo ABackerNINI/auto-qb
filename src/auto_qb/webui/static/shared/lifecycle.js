@@ -291,6 +291,10 @@ window.AQB_LIFECYCLE = {
     // class 立刻生效(别等下一拍, 否则常驻用户每次开页多闪一帧); aria 态等模板挂上后再同步。
     this._applyKbdPersist(this._kbdPersistStored());
     this.$nextTick(() => this._syncKbdSwAria());
+    // 列风格引擎首帧同步(计划 26-11-20-0009 S1): data() 初值已是存储真值(load 先于首渲染), 这里
+    // 把五维写上 <html> data-cs-* 属性 —— 首帧即终态, 无 FOUC(theme/timeFmt 同判据, R7)。S1 期
+    // 属性挂在 html 上尚无任何 CSS 消费 = 零视觉变化(默认值=现状, 预期), 消费面随 S3-S5 落。
+    this._colStyleSyncAttrs();
     // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
     // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
     this._resizeDebounceTimer = 0;
@@ -325,6 +329,14 @@ window.AQB_LIFECYCLE = {
       if (e.key === TIME_FMT_STORE_KEY) this.adoptTimeFmt();
     };
     window.addEventListener("storage", this._onTimeFmtStore);
+    /* 列风格跨标签同步(计划 26-11-20-0009 S1, F2/R8) —— 与时间口径同一套机制(整份采用存储值,
+     * adoptColStyle 幂等), 但**独立监听**: 三个键的生命周期不同(列集合/显示口径/列风格), 塞进
+     * 同一个监听只会让判据互相纠缠(先例同款理由)。写入方自己收不到 storage 事件 => 无需去重,
+     * 也不会自激。 */
+    this._onColStyleStore = (e) => {
+      if (e.key === COLSTYLE_STORE_KEY) this.adoptColStyle();
+    };
+    window.addEventListener("storage", this._onColStyleStore);
     // FX-27: 相对时间时钟(30s 一跳) —— 见 data.nowSec 注释; 不挂 visibilitychange:
     // 后台标签本来就不会重排渲染, 回到可见时 refresh() 一并刷新, 无需额外开关
     this._clockTimer = setInterval(() => {
@@ -338,6 +350,7 @@ window.AQB_LIFECYCLE = {
       } else {
         this.adoptColState();  // F3: 补漏 —— 标签被冻结 / storage 事件丢失时, 回到可见即对齐一次
         this.adoptTimeFmt();   // 同上(FX-28): 时间口径也在回到可见时补对齐一次
+        this.adoptColStyle();  // 同上(列风格, 计划 26-11-20-0009 S1): 幂等补对齐一次
         if (this.authOk) this.refresh();  // 登出态切回标签不发空 Bearer; R10-01: 判据 = 鉴权模式
       }
     };
@@ -472,6 +485,11 @@ window.AQB_LIFECYCLE = {
     if (this._onTimeFmtStore) {
       window.removeEventListener("storage", this._onTimeFmtStore);
       this._onTimeFmtStore = null;
+    }
+    // 列风格跨标签监听随组件销毁撤掉(计划 26-11-20-0009 S1, 同上, 防热重载后句柄堆叠)
+    if (this._onColStyleStore) {
+      window.removeEventListener("storage", this._onColStyleStore);
+      this._onColStyleStore = null;
     }
     // FX-27: 相对时间时钟随组件销毁撤销(同上, 防热重载后句柄堆叠)
     if (this._clockTimer) {

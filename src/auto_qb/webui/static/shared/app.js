@@ -434,6 +434,45 @@ function loadTimeFmt() {
   return out;
 }
 
+/* 列风格引擎(计划 26-11-20-0009 S1/D4): 主种子表五维「列风格」选择持久化, 单键 JSON+版本。
+ * 五维: barstyle 进度条样式 / barramp 进度条颜色 / speedramp 速度色阶 / numeric 数值色阶 /
+ * units 单位色组 —— 值域(即表头右键菜单的选项循环序, S2 消费)见 COLSTYLE_ENUMS。
+ * 刻意不塞进 COLS_STORE_KEY(另一条生命周期: 全局一份, 不按 page/列分段)/TIME_FMT_STORE_KEY
+ * (按列分段的显示口径) —— 三者读写面互不相干, 混键要多背 read-modify-write(timeFmt 同款理由)。
+ * 默认值全部 = 现状(跟随皮肤/跟随状态/跟随现状/关/统一): 用户不选 = 零视觉变化、零行为变化。
+ * 生效面: state.colStyle(Vue 响应式, state.js 注入) -> <html> 五枚 data-cs-* 属性(colstyle.js
+ * 同步单点) -> CSS 按属性派生颜色/形状映射(S3-S5 落, JS 永不产颜色值, R4)。 */
+const COLSTYLE_STORE_KEY = "autoqb.colstyle.v1";
+/* 各维值域, 顺序 = 菜单循环序, **第 0 项即默认档**(§03 五维总表):
+ *   barstyle  skin(跟随皮肤) / plain(常规条) / led(LED 方块条)
+ *   barramp   status(跟随状态) / cool(冷熟谱) / theme(主题谱) / heat(温度谱) / rainbow(彩虹谱)
+ *   speedramp current(跟随现状) / cool / theme / heat / rainbow / off(关)
+ *   numeric   off(关) / on(开)
+ *   units     uniform(统一) / dim(单位淡化) / accent(单位点缀) / invert(单位反转) /
+ *             family(分族双色) / band-cool(按档·冷熟) / band-heat(按档·温度) / band-theme(按档·主题)
+ */
+const COLSTYLE_ENUMS = {
+  barstyle: ["skin", "plain", "led"],
+  barramp: ["status", "cool", "theme", "heat", "rainbow"],
+  speedramp: ["current", "cool", "theme", "heat", "rainbow", "off"],
+  numeric: ["off", "on"],
+  units: ["uniform", "dim", "accent", "invert", "family", "band-cool", "band-heat", "band-theme"],
+};
+const COLSTYLE_FIELDS = Object.keys(COLSTYLE_ENUMS);
+const COLSTYLE_DEFAULTS = { barstyle: "skin", barramp: "status", speedramp: "current", numeric: "off", units: "uniform" };
+function loadColStyle() {
+  const out = Object.assign({}, COLSTYLE_DEFAULTS);
+  try {
+    const raw = JSON.parse(localStorage.getItem(COLSTYLE_STORE_KEY) || "{}");
+    for (const k of COLSTYLE_FIELDS) {
+      if (COLSTYLE_ENUMS[k].indexOf(raw[k]) >= 0) out[k] = raw[k];
+    }
+  } catch (e) {
+    /* 无存储 / 坏数据: 解析失败/字段缺失/类型不符逐字段回落默认(偏好类读取失败不该影响启动) */
+  }
+  return out;
+}
+
 /* 默认排序: 辅种组按组内**最近添加**时间降序(新补进来的种子最需要被看到);
  * 其它列点击 3 次回到这里(见 setSort 的三态语义)
  */
@@ -956,6 +995,7 @@ app.mixin(window.AQB_POLL);
 app.mixin(window.AQB_VIEW);
 app.mixin(window.AQB_SHORTCUTS);  // 键盘快捷键引擎(计划 26-09-28-0354 W1; data 在 state.js / 监听在 lifecycle.js)
 app.mixin(window.AQB_UI_PREFS);  // 配置备份双钮 + 浏览器偏好 ui_prefs 段(计划 26-11-14-0624 S3; 双清单/collect/apply 在 ui_prefs.js)
+app.mixin(window.AQB_COLSTYLE);  // 列风格引擎(计划 26-11-20-0009 S1): state<->html data-cs-* 属性同步单点 + 菜单写链入口 setColStyle(colstyle.js)
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
 /* 「流量与限速」合并卡(计划 26-10-18-0813 B3): 设置页二级页的一个分区整体抽成组件,
  * 卡内三区(数据来源 / 限速曲线 / 流量图采样)见 shared/tpl/traffic-card.html 头注。

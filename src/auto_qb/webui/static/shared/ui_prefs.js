@@ -61,6 +61,9 @@ const PREF_KEYS = [
   "autoqb_cols_v5",
   /* 时间列显示口径(app.js:406 键, app.js:412 读 / menu.js:71 写) */
   "autoqb_timefmt_v1",
+  /* 列风格五维(app.js COLSTYLE_STORE_KEY 键, app.js loadColStyle 读 / colstyle.js setColStyle 写;
+   * 计划 26-11-20-0009 D4: JSON+版本单键, 全局一份不分段) */
+  "autoqb.colstyle.v1",
 ];
 /* PREF_EXCLUDED: 明确不进 bundle 的存储键(排除面, S4 对账闸的另一半)。 */
 const PREF_EXCLUDED = [
