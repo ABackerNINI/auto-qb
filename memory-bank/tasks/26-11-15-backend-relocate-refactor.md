@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-11-15
-**Updated:** 2026-11-19
-**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机复验轮(26-11-17~19, 计划 0636 七片执行完毕: 21 条回归适配 + 13 条新增耐久用例全 PASS, 产品回归 0)+ issue 七条翻 Done; 第二批 S5/S6 待开工
+**Updated:** 2026-11-20
+**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机复验轮(26-11-17~19, 计划 0636 七片执行完毕: 21 条回归适配 + 13 条新增耐久用例全 PASS, 产品回归 0)+ issue 七条翻 Done; S5 跨模块接口显式化两笔提交落地(a652290f 登记集退役改 RelocateModule 派生查询 / 80d8ea09 常量收口+接口 AST 守卫, 全仓 src 侧 relocate 家族私有名跨界 import 清零, test.quick 6499P/2S/0F); 第二批 S6 待开工
 **Topics:** backend-relocate-refactor
 **Refs:** memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html, memory-bank/pitfalls/backend/startup-state-write-reload-discard.md, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html, memory-bank/pitfalls/testing/state-file-lag-and-journal-absence.md, memory-bank/pitfalls/testing/restart-transient-and-offline-cmd-window.md
 
@@ -35,7 +35,7 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 | S2 | 撤销语义重做: 删搬回+三段式确认文案 | Done(第一批; 「上界面」降级为 API/命令通道下发, UI 消费面另立 issue) |
 | S3 | 生命周期账统一: phase 派生+终态分级保留+双真相收敛 | Done(第一批) |
 | S4 | 路径判定单点: 归一/到位/根内合一+删链门修复 | Done(第一批) |
-| S5 | 跨模块接口显式化: 登记集→查询协议+私有引用清除 | Open |
+| S5 | 跨模块接口显式化: 登记集→查询协议+私有引用清除 | Done(第二批; 守卫 test_relocate_interface_guard.py 承考, 见计划 R4) |
 | S6 | 探测异步化(并轨 2350) | Open |
 
 ## 进度日志
@@ -76,3 +76,5 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 - 2026-11-19 05:54 真机复验轮文档收口: test.full 全量绿(分支 tip 3bef94ae, 数字见 kb.baseline)、issue 七条翻灯、两计划回写(0636 §10 R3 + §03.4 RM04-25 卡「dst 祖先」口误勘误[权威口径 = 旧根严格父目录, 片C 已按此落刀]; 2340 §03.6 状态列翻灯 + §10 R3)、坑档四件、基线切片落位、本档案 R2 段。接缝终审随主会话收口轮执行; 提交由主会话统一走 ship.commit(本收口轮不提交)。
 
 - 2026-11-19 06:20 真机复验轮收口: 计划 0636 七片执行完毕(21 回归适配 19P/1F/1S + 13 新增耐久用例全 PASS, 产品回归 0), issue 七条翻 Done(0528/0326/0535/0711/0553/0420/0401), 两计划回写(0636 R3+勘误 / 2340 状态列+R3), 坑档新立 2 + 复发+1 + 孤儿证伪, 基线切片落位, 档案 R2 段; 第二批 S5/S6 待开工
+
+- 2026-11-20 02:45 S5 跨模块接口显式化两笔提交落地: a652290f(登记集退役+RelocateModule 派生查询三方法, fuse/grouping/ops_skip/qbapi 消费点迁 ctx.relocate 句柄)+80d8ea09(常量收口+接口 AST 守卫, 全仓 src 侧 relocate 家族私有名跨界 import 清零, units 增显式 __all__); 评审两批各 2 轮(10 修/3 修, 引文校验 10/10 与 3/3, 复评零新增); 验收达成: 消费面测试全绿(test.quick 6499P/2S/0F; test.full 6495P/6S/0F, 覆盖率闸门 99.73% 达标), grep 无跨层私有引用由 tests/test_relocate_interface_guard.py 机械承考(真仓 198 文件); 开工拍板三条记计划 §06 D11-D13(全按推荐); 基线切片 26-11-20-0244-relocate-refactor-s5 落位; 第二批 S6 待开工

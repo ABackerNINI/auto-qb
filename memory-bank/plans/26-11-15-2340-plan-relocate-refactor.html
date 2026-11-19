@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-refactor">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-15-2340">
-<meta name="doc-updated" content="26-11-19-0603">
+<meta name="doc-updated" content="26-11-20-0231">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-15-backend-relocate-refactor.md, memory-bank/issues/26-11-07-0528-question-relocate-supersede-cancel-semantics.html, memory-bank/issues/26-11-10-0326-feat-relocate-terminal-jobs-no-exit.html, memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/issues/26-11-13-0535-bug-relocate-ancestor-savepath-blindspot.html, memory-bank/issues/26-11-13-0711-bug-relocate-direct-form-deep-add-hole.html, memory-bank/issues/26-11-14-0401-bug-relocate-absence-offline-deletion-hole.html, memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html, memory-bank/issues/26-11-11-0553-bug-webui-relocate-pair-row-height.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/issues/26-11-17-0156-feat-relocate-cancel-guide-ui.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>relocate 结构重构: 单活任务模型 + 判定单点 + 接口显式化</h1>
 <p class="lede">本篇只回答: 整组移动(relocate)子系统如何从结构上终结「补丁打补丁」循环 —— 单活任务模型、路径判定单点、跨模块接口显式化的分期重构方案, 以及 grilling 全部拍板(D1-D10)与预计修复 issue 清单。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-15-2340 · <b>doc-updated</b> 26-11-19-0603 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-15-2340 · <b>doc-updated</b> 26-11-20-0231 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-15 会话: 双只读子代理分析(结构面 + 45 issue 病因面) → grilling 三轮问答 + 两轮用户修正 → 全拍板立项; 用户要求「预计修复 issues 一并写入文档, 后续人工复验; 每条配 real 测试」
 </div>
 
@@ -167,7 +167,7 @@
   <tr><td>S3</td><td><b>生命周期账统一</b>: phase 派生视图; 终态分级保留(3.4); state/journal 双真相收敛为权威+投影</td><td>重启/崩溃窗/热启用三类边界测试全绿; 终态清理真机验收</td></tr>
   <tr><td>S4</td><td><b>路径判定单点</b>: 归一/到位/根内三类判定并单点; 删链门候选面修复(0535/0711)</td><td>判据盲区两条 real 测试先红后绿; 双 <code>_norm</code> 消失(grep 无第二份)<br><span class="wr">R1 回写(26-11-17): 判据达成口径 = 归一实现单点 <code>ru._norm(path, fold_case=)</code> 成立, <code>ExecMixin._norm</code> 保留为纯委托形(非第二份实现); grep 检查按「无第二份<b>语义实现</b>」核</span></td></tr>
   <tr><td>—</td><td><b>第一批收尾</b>: 分批评审 + 接缝终审 + 基线切片</td><td>test.full 全绿(数字入基线切片); 真机全链验收(E1-E9 口径复跑)PASS; 经人工复验后逐条翻issue</td></tr>
-  <tr><td>S5</td><td><b>跨模块接口显式化</b>: 三登记集 → 命名查询接口; 私有常量跨界清除; qbapi 反向依赖拆除</td><td>fuse/grouping/qbapi/views 消费面测试全绿; grep 无跨层私有引用</td></tr>
+  <tr><td>S5</td><td><b>跨模块接口显式化</b>: 三登记集 → 命名查询接口; 私有常量跨界清除; qbapi 反向依赖拆除</td><td>fuse/grouping/qbapi/views 消费面测试全绿; grep 无跨层私有引用<br><span class="wr">R4 回写(26-11-20): 达成口径 = grep 无跨层私有引用由 <code>tests/test_relocate_interface_guard.py</code> 机械守卫承考(真仓 198 文件); qbapi 对 relocate_units 纯判定层(chain_gate_hits/file_alias_intersects)的 import 依 qbapi.py:329 既有口径不算跨层违例(P4 白名单单点)</span></td></tr>
   <tr><td>S6</td><td><b>探测异步化</b>: 并轨 <code>26-11-10-2350</code> D1-D10 设计</td><td>原计划全部验收判据 PASS + 主循环零阻塞真机断言</td></tr>
 </table>
 <p class="aside"><b>real 测试口径(D10)</b>: 每条预计修复 issue 配一条能复现其失败模式的测试, 修复前红、修复后绿; 能上真机的用真机测试, 纯界面类用浏览器 e2e。测试随对应步骤落地, 清单供后续人工复验。</p>
@@ -188,6 +188,9 @@
   <tr><td>D8</td><td>旧账自动迁移: 在途由启动对账接管跑完, 历史终态转新格式一条不丢</td><td>Q6 推荐</td><td>2026-11-15</td></tr>
   <tr><td>D9</td><td>外部链接登记簿不并入, 重构稳定后单独立项</td><td>Q7 推荐</td><td>2026-11-15</td></tr>
   <tr><td>D10</td><td>real 测试口径: 每条预计修复 issue 配复现失败模式的测试, 修复前红后绿; 真机优先, 纯界面用浏览器 e2e; 清单留人工复验</td><td>Q10 推荐 + 用户要求</td><td>2026-11-15</td></tr>
+  <tr><td>D11</td><td>S5 接口方案取候选 A: 三登记集物理退役 + RelocateModule 派生查询(relocating_hashes()/resuming_hashes()/alias_roots()); 否决 relocate_api.py 函数层与 store 私有化两案</td><td>S5 开工三问(主会话向用户, 全按推荐)</td><td>2026-11-20</td></tr>
+  <tr><td>D12</td><td>私有常量处置取谓词封装 + 公开化搬迁(TAG_PROBE 迁 relocate_units 并 probe 再导出, _RESUME_RETRY_MAX 改名 RESUME_RETRY_MAX 迁 units); 否决最小合规常量搬迁案</td><td>S5 开工三问(主会话向用户, 全按推荐)</td><td>2026-11-20</td></tr>
+  <tr><td>D13</td><td>S4 判定函数(chain_gate_hits/file_alias_intersects 自 relocate_units)保留原样 + units 增显式 __all__: units 为判定单点公共层, qbapi.py:329 既有口径, 不算跨层违例</td><td>S5 开工三问(主会话向用户, 全按推荐)</td><td>2026-11-20</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -207,6 +210,7 @@
   <li><span class="tag">R1 · 26-11-17-0152</span> 第一批(S1-S4)落地: 六笔提交 f0004ef9(S1a 单活核心)/785ad5ae(S1b 改道退役+迁移器)/dae75d34(S2 撤销不搬回+三段 guide 通道下发)/df15af5f(S3 生命周期账统一)/3692616c(S4 判定单点)/cd786499(收尾追修: 启动期接管面写穿+补测 5 条); 分批评审与接缝终审全过(发现全修零 actionable, 轮次与数字见任务档案 R1 段); 真机验收 4 项 PASS(链式 A→B→C 撤销/迁移器/分级保留/闸门面, 证据 tmp-analysis/acc-reloc-single/); §03.3 补 S2 偏离注记(「上界面」降级, UI 消费面入池 <a href="../issues/26-11-17-0156-feat-relocate-cancel-guide-ui.html">26-11-17-0156</a>); §03.6 补「本批状态」列(翻灯留人工复验); §04-S4 判据回写「grep 无第二份语义实现」口径; 基线切片落位(见 kb.baseline; 覆盖率闸门未达, 缺口点名在切片); 内核级通用隐患(qbmanager.run reload 在 start_all 后丢启动期 state 写, relocate 发病点已由 cd786499 写穿规避)经裁决入池 <a href="../issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html">26-11-17-0214</a>。第二批 S5/S6 待开工。</li>
   <li><span class="tag">R2 · 26-11-17-0450</span> 为合流远端推进(origin/develop=3840ba10, 含 2e2ffe1f columns_grid 行窗口化), 本专题 8 笔提交被 rebase 线性重放, hash 全部改写。映射表(旧→新): f0004ef9→33d7f850 / 785ad5ae→ca820f5f / dae75d34→1f3f88a7 / df15af5f→1fad4fce / 3692616c→0df84475 / cd786499→24e8d063 / 11fc721d→4040c93d / 0c0caab3→2b78e9d7。df15af5f' 解 columns_grid 冲突(双方语义共存), 两追加修折进 1fad4fce: columns_grid 冲突解新写注释直接以 ASCII 编号书写(其一/其二/其三, test_ascii_symbol_guard 圈号计数归零)、test_webui_static_r4_node_batteries 桩补 filteredGroups(可实证于该 diff)。上文 R0/R1 中的旧 hash 为当时实测原值, 不回改; 追溯一律按本映射表换算。 二次 rebase(2026-11-17, origin/develop=12ff9a1e, review.pack rename 口径面)后再改写, 上表为终值; test_docs_forms 白名单该面终由上游 ARCHIVE_MD_EXCEPTIONS 承担(带特例在场守卫), 我方重复实现于合流中弃用。</li>
   <li><span class="tag">R3 · 26-11-19-0603</span> 真机复验轮(2026-11-17~19, 执行计划 <a href="26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html">26-11-17-0636</a>, 分支 relocate-rm-r2 tip 3bef94ae)完成: §03.6 清单面 —— <b>13 条新增耐久用例</b>(RM04-22~34, acc 面 6 + E 面 7)编写+耐久遍全 PASS(片B 4/4 · 片C 4/4 · 片D 9 正式遍 · 片E 4+2 · 片F 6 · 片G 6 正式遍)+ <b>现有 21 条回归</b>(RM04-01~21)片A 初判 3P/18F → <b>片A-fix 18 条适配</b>后 19P/1F/1S(FAIL=RM04-05 L490 环境前置·用户拍板记账, SKIP=RM04-13 前提钉死)—— 全程产品回归 0 / 产品代码零改动, 片级记账与逐遍证据在 testing/real-baselines/ 八份切片(26-11-17-0756 起至 26-11-19-0505); §03.6「本批状态」列按翻灯结果更新: 0528/0326/0535/0711/0553/0420/0401 七条真机复验 PASS 已关(issue 正文逐条补实际修法/验证方式/测试数字, 状态翻 Done), 0638 不变(第二批 S6 未开工); 升档 5 条(RM04-20 升 L3 + RM04-24/25/30/33 新建即 L3); 每片断轮全为测试侧造法, 执行期评审轮 R10/R11/R16/R19/R23/R26/R30/R31/R34 修复后重跑全绿闭环; 新入池 26-11-18-0315(链浮窗健壮性, Open)。第二批 S5/S6 仍待开工, 本计划状态维持 Open。</li>
+  <li><span class="tag">R4 · 26-11-20-0231</span> 第二批 S5(刀3 跨模块接口显式化)落地, 两笔提交: a652290f = S5-1 登记集退役+派生查询(store 三登记集与 _sync 写入面及 7 个重算挂点整体退役, RelocateModule 增公开派生查询 relocating_hashes()/resuming_hashes()/alias_roots(), fuse/grouping/ops_skip/qbapi 五个直读消费点迁 ctx.relocate 句柄(getattr None→空集), qbapi 增 ctx 注入(可选参默认 None), 删链门循环改四元组解包旧形 str 登记分支结构性退役(拦截只更保守无放行扩张); 替身收敛 FakeRelocateQueries 单点; 新增 ops_skip 让路专测 3 条 + fuse 摘句柄防御用例 1 条)与 80d8ea09 = S5-2 常量收口+AST 守卫(TAG_PROBE 定义迁 relocate_units 并 probe 再导出, units 增 is_probe_torrent 谓词; _RESUME_RETRY_MAX 改名 RESUME_RETRY_MAX 迁 units(值 3 不动); views_relocate 跨层私有 import 行删除 —— 全仓 src 侧 relocate 家族私有名跨界 import 清零; units 增显式 __all__(顶层公开名 113 个); 新建 tests/test_relocate_interface_guard.py 四判据 AST 守卫 P1-P4 + 反空转); 评审两批各 2 轮: 首轮 10 发现(4 minor 6 nit, 引文校验 10/10)全修 + 首轮 3 minor(守卫红验覆盖缺口, src 面零发现)全修, 复评均零新增; test.quick 6493P(净增 3, 新增 4 退役 1)→ 6499P/2S/0F; 开工拍板三条记 §06 D11-D13(D 候选 A: 三登记集物理退役 + RelocateModule 派生查询 / 谓词封装 + 公开化搬迁 / S4 判定函数保留原样 + __all__, 全按推荐); 验收达成: fuse/grouping/qbapi/views 消费面测试全绿(6499P/2S), grep 无跨层私有引用由 tests/test_relocate_interface_guard.py 机械守卫承考(真仓 198 文件), qbapi 依赖面收在 units 纯判定层(§04-S5 注记); 派生查询结构性退役 derived-registry-sync-points 坑类(登记改派生查询, 派生即最新无挂点可漏, 回归由守卫 P3 判据钉住); 第二批 S6 待开工。</li>
 </ul>
 
 </div>

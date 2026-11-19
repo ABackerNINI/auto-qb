@@ -43,6 +43,7 @@
 ## 模块协作纪律
 
 - **模块之间不互相 import**。需要别人的能力: ①对方是服务 → 经 ctx 现取; ②对方是模块 → 把它需要的公开方法经 ctx 句柄暴露(既有先例: `ctx.notify` 托盘口 / `ctx.trackers.match` / `ctx.maintenance.add_tags` / `ctx.ops.recheck` / `ctx.traffic_snapshot.publish_limit`)。
+- **跨模块查询接口先例(relocate, S5 2026-11-20)**: 模块对外暴露**命名派生查询**而非内部登记集 —— `ctx.relocate.relocating_hashes()` / `resuming_hashes()` / `alias_roots()` 三方法(`RelocateModule` 公开查询, `src/auto_qb/core/modules/relocate_lifecycle.py:166`; 消费方 fuse/grouping/ops_skip 经 ctx 句柄取、qbapi 经构造注入 ctx, 取不到(None)一律回落空集/空元组(随查询返回类型)); 纯判定与常量公共层单点 `src/auto_qb/core/modules/relocate_units.py`(显式 `__all__` 收口公开名, `is_probe_torrent` / `RESUME_RETRY_MAX` 公开面)。守阵 `tests/test_relocate_interface_guard.py`(四判据 AST 守卫: 禁入面/家族私有名/登记名直读/消费面收口)。
 - client 永远**现取** `ctx.api.client`(重连换客户端随 QbApi.bind 同步链), 不缓存引用。
 - 门面模块(webui/hr)经 manager 现取门面对象, 不缓存(测试整对象替换 mgr.web/mgr.hr 时模块自动跟随)。
 - Rule/RuleContext 的宿主面仍是 QbManager(rules 动作消费 manager.store/state/ctx.ops); 换宿主面是 rules 动作层的独立改动面。
