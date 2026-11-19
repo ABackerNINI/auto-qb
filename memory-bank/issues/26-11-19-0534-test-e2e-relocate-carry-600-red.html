@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="e2e-relocate-carry-600-red">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e relocate-key-change-pad 换键携带 600 档稳定红: 新键 15s 内未拿到携带实测高">
 <meta name="issue-summary" content="600 种子档 relocate-key-change-pad 换键携带用例两轮稳定红(修复前基线同红), 300 档被 TORRENTS&lt;400 门控跳过 —— 量具常规档上 0553 携带守阵失效待归因">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0534-test-e2e-relocate-carry-600-red</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 05:34</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -151,11 +151,15 @@ x  1 e2e\relocate-key-change-pad.spec.mjs:37:5 › 组键换键行高携带 flux
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 05:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-19 08:17 仍复现 —— <code>E2E_TORRENTS=600 commands run dev.e2e -- e2e/relocate-key-change-pad.spec.mjs</code> 单跑 <strong>1 failed</strong>(携带断言 15s 超时, <code>_rowHs["group:"+k2]</code> undefined), 与入池两轮同形态。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>归因</strong>(两池快照取证, 临时打点 <code>window.__ROWH_TRACE</code>): 根因 = <strong>桩两处归组口径不一致 + 600 档数据形态组合</strong>, 产品携带面回归排除。 <code>scripts/ui_harness.py</code> 启动段初始归组受 <code>--groups</code> 默认 200 封顶(600 种子只建 Set000-199 共 200 组, 种子 400-599 初始不归组), 而 <code>set_save_path</code> 重建循环不封顶(全部 600 种子配对成 300 组) —— 一次换键调用顺带把 100 个未归组种子成批拆成新组(Set200-299)涌入组键集, 引擎键集 diff 变 +101/-1: ROWH_ORPHANS 正确捕获旧键(h=51.59375), ROWH_FRESH 被 101 个未实测键洪泛(24 个恰在窗内被实测摘除后恒余 77 条窗外键), 配对判据 <code>FRESH.size===1 &amp;&amp; ORPHANS.size===1</code> 按 0553 设计歧义退让, 15s 观察窗内(TTL 30s 未到)携带写点不发生。400 档 <code>min(200, 200)=200</code> 全部种子已归组, diff 恒 -1/+1, 配对成立 —— 与 26-11-16 首红绿取证(400 档)通过、修复前基线同红完全自洽; 引擎两池写入/配对时序全程按设计工作(26-11-02 后演化与本红无关, sig-invalidate 全程未触发)。</p>
+  <p><strong>实际修法</strong>: 桩归组口径统一封顶 —— <code>_set_save_path</code> 重建循环与启动段初始归组同口径, 只 pair 前 <code>min(groups_cap, len//2)</code> 对(<code>groups_cap=args.groups</code> 经 <code>_install_search_refresh_probe</code> 新参传入), 换键重建代键集 diff 回到 -1/+1。</p>
+  <p><strong>验证数字</strong>(全走 task id, 串行): 600 档携带 spec 2 轮 2×<code>1 passed</code>(3.5s/3.6s); 600 档 <code>window-invalidation.spec.mjs</code> 1 轮 <code>6 passed</code>(26.8s, 原始红取证同跑面不伤); 400 档携带 spec 1 轮 <code>1 passed</code>(3.5s); 默认 300 档携带 spec 1 轮 <code>1 skipped</code>(TORRENTS&lt;400 门控行为正常)。</p>
+  <p><strong>可选硬化(未立项)</strong>: 引擎配对判据可按成员 hash 交集确定新键与旧键的对应关系以消除洪泛歧义 —— 属产品行为变更, 应单独立项评估。</p>
 </section>
 
 <footer>

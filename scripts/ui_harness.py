@@ -187,7 +187,7 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
     print(f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done+穷尽账/cancelled)", flush=True)
 
 
-def _install_search_refresh_probe(app, mgr, site_conf) -> None:
+def _install_search_refresh_probe(app, mgr, site_conf, groups_cap: int | None = None) -> None:
     """仅测试用控制端点(plan 26-11-03-0120 P3): 新增/删除一个合成种子
 
     动机: e2e 要验"搜索进行中新增命中种子 -> 一个轮询周期内自动出现在结果里"。真机由 qB
@@ -267,8 +267,14 @@ def _install_search_refresh_probe(app, mgr, site_conf) -> None:
             return {"changed": False, "search_rev": mgr.web.search_rev}
         all_tors = list(mgr.client.torrents.values())
         groups = {}
-        for i in range(0, len(all_tors) - 1, 2):
-            a, b = all_tors[i], all_tors[i + 1]
+        # 归组口径与启动段初始归组同款封顶(groups_cap = args.groups): 种子数超过初始归组
+        # 覆盖面时(E2E_TORRENTS=600, --groups 默认 200), 不封顶的重建会把成批未归组种子
+        # 拆成新组涌入组键集 -> 引擎换键携带面 ROWH_FRESH 被无关新键洪泛, 配对判据歧义
+        # 退让, 换键携带 e2e 稳定红(issue 26-11-19-0534 两池快照取证)。
+        # 哨兵 None = 不封顶(缺省兼容); 传 0 如实封 0 组, 与启动段 --groups 0「不建组」同义。
+        pair_n = len(all_tors) // 2 if groups_cap is None else min(groups_cap, len(all_tors) // 2)
+        for i in range(pair_n):
+            a, b = all_tors[i * 2], all_tors[i * 2 + 1]
             groups[(a.save_path, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
         mgr.store.member_to_key = {h: k for k, hs in groups.items() for h in hs}
@@ -1411,7 +1417,7 @@ def main() -> int:
 
     app = create_app(mgr)
     # 搜索自动更新 e2e 的控制面(plan 26-11-03-0120 P3; 仅回环测试桩, 不进生产)
-    _install_search_refresh_probe(app, mgr, site_conf)
+    _install_search_refresh_probe(app, mgr, site_conf, groups_cap=args.groups)
     if boot_first:
         # 冷启动两跳观测控制面(plan 26-11-18-0259 S2 e2e; 仅回环测试桩, 不进生产)
         _install_boot_first_controls(app, mgr, boot_go, gate)
