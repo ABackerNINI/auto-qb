@@ -4,16 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>e2e: kbd-scroll-band atlas Home/End 几何 shard 形态偶红一次, 待采样 · test · 计划外问题</title>
+<title>e2e: kbd-scroll-band atlas Home/End 几何 shard 形态偶红 · test · 计划外问题</title>
 <meta name="issue-slug" content="e2e-kbd-scroll-band-shard-flake">
 <meta name="issue-stamp" content="26-11-18-0308">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-kbd-scroll-band-shard-flake">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-19-webui-kbd-scroll-band-shard-flake-rescroll.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e: kbd-scroll-band atlas Home/End 几何 shard 形态偶红一次, 待采样">
-<meta name="issue-summary" content="2026-11-18 复验轮: dev.e2e-fast-shard 2/3 闪一次 kbd-scroll-band atlas「Home/End 到首末行不被遮」(pollBand 几何判据), 单轮单例未复现 —— 同族 GitHub runner 前科(26-11-10 已修面), 新形态偶红待采样归因">
+<meta name="issue-summary" content="kbd-scroll-band atlas「Home/End 到首末行不被遮」shard 并发形态偶红; 2026-11-19 采样捕获并归因(初发 scrollTo 被窗口化重渲钳位吞掉, 补正循环只等 DOM ⇒ P1-2 永久放弃), 修法 = 补正循环每帧幂等重发 rescroll + 代际令牌 + 用户滚动退避; 修复后同形态 180/180 绿">
 <style>
   :root {
     --bg: #10151a;
@@ -86,12 +86,12 @@
 
 <div class="kicker">计划外问题（未修）· test</div>
 <h1>e2e: kbd-scroll-band atlas Home/End 几何 shard 形态偶红一次, 待采样</h1>
-<p class="lede">2026-11-18 复验轮: dev.e2e-fast-shard 2/3 闪一次 kbd-scroll-band atlas「Home/End 到首末行不被遮」(pollBand 几何判据), 单轮单例未复现 —— 同族 GitHub runner 前科(26-11-10 已修面), 新形态偶红待采样归因</p>
+<p class="lede">kbd-scroll-band atlas「Home/End 到首末行不被遮」shard 并发形态偶红(同族 GitHub runner 前科 26-11-10 已修面); 2026-11-19 采样捕获并归因 —— 初发 scrollTo 被窗口化重渲钳位吞掉, 补正循环只等 DOM ⇒ P1-2 永久放弃; 修法 = 每帧幂等重发 rescroll + 代际令牌 + 用户滚动退避, 修复后同形态 180/180 绿</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0308-test-e2e-kbd-scroll-band-shard-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 03:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -135,7 +135,7 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查（无现场数字, 先采样）。候选: pollBand 几何判据的等待窗口在 shard 并发负载下不足（同族 2026-11-10 修法补过 seenTs 20s 与跨帧补正, 本次可能是另一条判据/另一窗口）。已排除: 恒红(单轮单例, 仅 shard 形态冒过一次)。</div>
+  <div class="callout">已归因（2026-11-19，现场数字与机制链见 §07 修复后补充）：初发 scrollTo 被窗口化重渲中途的文档高度塌缩吞掉（scrollY 钳到底部残位）→ 切片停在尾部、目标行永不进 DOM → 旧跨帧补正只等 DOM、deadline 到按 P1-2 永久放弃。已排除: 恒红（单轮单例，仅 shard 形态冒过一次）; 等待窗不足（A/B 两档窗宽红率同量级）。</div>
 </section>
 
 <section id="s6">
@@ -149,7 +149,8 @@
   <ul>
     <li>2026-11-18 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-18 06:57 — W3 采样归因轮：3 轮 shard=3 并发形态采样（轮 1 全量三 shard 全并发 / 轮 2-3 grep 钉该例 repeat-each=20/60），该例合计 81 例 0 复现、无 pollBand 现场数字；修法候选留档（产品面 <code>shortcuts_engine.js</code> reveal 1s deadline / 测试面 pollBand 5s→10s 双窗不一致），均未实施。状态保持 <strong>Open</strong>（挂起待自然复现）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p><strong>复验 2026-11-18 06:57（W3 采样归因轮）：已按 shard 形态采样 3 轮，0 复现。</strong></p>
   <ul>
@@ -158,8 +159,20 @@
     <li><strong>轮 3</strong>：同形态 <code>--repeat-each=60</code> —— 20+20+20 = 60 passed 全绿，shard wall 3.3~3.4m。</li>
     <li><strong>合计该例 81 例 0 复现</strong>，pollBand catch 未触发、无现场几何数字；按决策树不改任何代码，挂起待自然复现（复现现场自带 pollBand 裁决数字，届时再归因假设 1/2）。</li>
   </ul>
-  <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <h3>修复后补充（2026-11-19）</h3>
+  <p><strong>复现与归因（先于修法达成）</strong>：本会话以同形态（shard=3 全并发 + grep 钉该例 repeat-each=60）采样即捕获稳定复现 —— 修复前两轮合计 <strong>240 例 39 红</strong>（产品面 deadline 5s 轮 15/120、回退 1s 的 A/B 轮 24/120，红率同量级 ⇒ 窗宽无关，同时排除「放宽 deadline 引入回归」）。失败签名与入池轮一致（<code>光标未到极值行, 光标行=未渲染</code>），且补了 vm 现场取证（三失败现场数字一致）：</p>
+<pre><code>kb=torrent:…12b (i=299)   kbCursor 正确指向首行(Home 链路正常)
+f0=…12b  n=300  pre=301   filteredTorrents[0] 同行, 前缀和完好(P1-2 退避未触发)
+kbInDom=false  r0=i=25/24  rn=26/25   渲染切片仍停在列表尾部
+sy=18232 / 20054          scrollY 钳在底部残位(End 落定位附近)</code></pre>
+  <p><strong>根因</strong>（候选 1 的机制变体，已钉死）：Home 的 <code>scrollTo(0, 首行y)</code> 发出后，窗口化重渲中途文档高度塌缩，scrollY 被浏览器<strong>钳到底部残位</strong>；切片按残位继续渲染尾部，目标行<strong>永不</strong>进 DOM。而 2026-11-10 修的跨帧补正 <code>revealWhenRendered</code> <strong>只等目标行进 DOM</strong>（自身不再动滚动），deadline 到按 P1-2 永久放弃 ⇒ 页面停在错误位置直至测试超时。等待面加窗（候选 2）无效 —— 行根本不会出现，与 A/B 红率同量级互证。</p>
+  <p><strong>实际修法</strong>（与建议修法「修等待面或豁免」改道，采第三条路 = 补正循环主动推进）：</p>
+  <ul>
+    <li>产品面 <code>shortcuts_engine.js</code> <code>_kbScrollRowIntoView</code>：窗口化分支的滚动封成 <code>rescroll</code>，补正循环<strong>每帧幂等重发</strong>（目标位不变，同值 scrollTo 不产生滚动），行进 DOM 那帧 reveal() 校正收尾 —— 残位被重发顶开，切片跟上；deadline 1s→5s（每帧有真实推进，窗宽只是慢收敛余量，与测试面 10s 配套）。</li>
+    <li>评审轮补两条守卫（major/minor 各一，同根因）：实例级<strong>代际令牌</strong> <code>_kbRevealGen</code>（同方法重入时旧循环失配停发，恢复旧码「末键胜」—— 否则先按键的循环会把页面从末键目标拽回）；<strong>用户滚轮/触摸退避</strong>（每循环独立监听闭包对，用户接管视口即 P1-2 提前放弃，不逐帧劫持手动滚动）。</li>
+    <li>测试面 <code>kbd-scroll-band.spec.mjs</code> <code>pollBand</code> 5s→10s（与同文件 settleScroll 双窗一致，盖过产品面 5s）。</li>
+  </ul>
+  <p><strong>验证</strong>：修复后同形态三 shard 全并发 <strong>180/180 全绿</strong>（无 diag 现场）；全 spec 6/6 绿；静态守阵 46 passed。</p>
 </section>
 
 <footer>

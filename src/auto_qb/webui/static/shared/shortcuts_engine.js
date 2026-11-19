@@ -304,6 +304,11 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
      * 窗口化未渲染行用 _rowWindow 前缀和换算 y(计划 W2; 禁 scrollIntoView, 见文件头)。
      * 上下边界走 _kbViewTop / _kbViewBottom 两个单点(顶栏+吸顶列头 / 固定状态栏+停靠面板)。 */
     _kbScrollRowIntoView(rows, idx) {
+      /* 代际令牌(2026-11-19 评审轮, rescroll 每帧重发的配套守卫): 同方法重入(快速连按 /
+       * state.js writer#4 型回执重入)时旧循环按代号失配停发 —— 无令牌时并存循环每帧各自
+       * 重发, 先按键的目标行进 DOM 后会把页面从末键目标拽回(旧码单发一次是「末键胜」,
+       * 每帧重发把它改成了「首键胜」= 行为回归)。 */
+      const gen = (this._kbRevealGen = (this._kbRevealGen || 0) + 1);
       this.$nextTick(() => {
         const r = rows[idx];
         if (!r) return;
@@ -338,14 +343,41 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
           return true;
         };
         /* 跨帧重试: 窗口化重渲未必一帧落定(共享 runner 上尤其慢), 单次 rAF 仍可能扑空,
-         * 那就等于旧码被换掉的「静默放弃」。在 1s 时间窗内持续等到目标行进 DOM 再校正;
-         * 到点仍不出现按 P1-2 退避放弃, 不无限排队, 也不猜位置。 */
+         * 那就等于旧码被换掉的「静默放弃」。在时间窗内持续等到目标行进 DOM 再校正;
+         * 到点仍不出现按 P1-2 退避放弃, 不无限排队, 也不猜位置。
+         * 窗宽 5s(2026-11-19 放宽, 原 1s): 每帧有真实推进(见 rescroll), 窗宽只是慢收敛
+         * 余量; 与 e2e pollBand 窗(10s)留一倍余量, 仍是有界退避。
+         * 每帧 rescroll 重发(2026-11-19, 26-11-18-0308 归因): 旧补正**只等目标行进 DOM**,
+         * 自己不再动滚动 —— 但初发 scrollTo 会被「窗口化重渲中途文档高度塌缩 → scrollY 被
+         * 浏览器钳到底部残位」吞掉(实测: Home 后 sy 钳在 18232/20054, 切片仍渲染尾部,
+         * 目标行**永不**进 DOM, 干等 = P1-2 永久放弃, 页面停在错误位置)。行未进 DOM 且
+         * 前缀和可用时按同式幂等重发(目标位不变, 同值 scrollTo 不产生滚动), 让切片跟上;
+         * 行进 DOM 那帧 reveal() 校正收尾。 */
+        let rescroll = null;  // 窗口化分支可用时赋值(见 revealWhenRendered 注释); 渲染行路/退避路恒 null
+        /* 用户滚轮/触摸 = 用户要自己控制视口: 补正循环按 P1-2 提前放弃, 不逐帧拽回捕获位
+         * 与用户抢滚动(2026-11-19 评审轮退避守卫; 慢渲染窗内目标行迟迟不进 DOM 时重发
+         * 循环会劫持手动滚动)。键盘连按不走这里 —— 走上面的代际令牌(末键胜)。
+         * 监听对随循环各挂各的(revealNext 内每循环独立闭包 + disarm 存引用): 并存循环
+         * 互不摘对方的; 渲染行路(selector 命中直接 reveal+return)不进循环不挂监听。 */
+        let userGrabbed = false;
+        let disarm = null;
         const revealWhenRendered = (deadline) => {
-          if (reveal()) return;
+          if (gen !== this._kbRevealGen || userGrabbed) { if (disarm) disarm(); return; }
+          if (reveal()) { if (disarm) disarm(); return; }
+          if (rescroll) rescroll();
           if (performance.now() < deadline) requestAnimationFrame(() => revealWhenRendered(deadline));
+          else if (disarm) disarm();
         };
         const revealNext = () => {
-          const deadline = performance.now() + 1000;
+          const grab = () => { userGrabbed = true; };
+          const off = () => {
+            window.removeEventListener("wheel", grab);
+            window.removeEventListener("touchstart", grab);
+          };
+          disarm = off;
+          window.addEventListener("wheel", grab, { passive: true });
+          window.addEventListener("touchstart", grab, { passive: true });
+          const deadline = performance.now() + 5000;
           requestAnimationFrame(() => revealWhenRendered(deadline));
         };
         if (document.querySelector(sel)) {
@@ -364,10 +396,15 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         const y = pre[idx] + (this._winTop[kind] || 0);
         const h = pre[idx + 1] - pre[idx];
         // 上界触发界与渲染行路同收紧(单点 + 补差按界源分支, 2026-11-14 T7), 位移量不变;
-        // 估算偏差导致的漏判由下一帧 revealNext 真实 DOM 校正兜底(与下界 S-C 同理)
-        if (y < window.scrollY + vTop + vTopPad) window.scrollTo(0, y - vTop - 8);
-        // 下界触发界与渲染行路同收紧(单点 + 补差按界源分支, 2026-11-13 S-C), 位移量不变
-        else if (y + h > window.scrollY + vBot + vPad) window.scrollTo(0, y + h - vBot + 8);
+        // 估算偏差导致的漏判由下一帧 revealNext 真实 DOM 校正兜底(与下界 S-C 同理)。
+        // 封成 rescroll 供补正循环每帧重发(revealWhenRendered 注释); 两个触发界都不越 = 已落位,
+        // 重发自然空转, 幂等。
+        rescroll = () => {
+          if (y < window.scrollY + vTop + vTopPad) window.scrollTo(0, y - vTop - 8);
+          // 下界触发界与渲染行路同收紧(单点 + 补差按界源分支, 2026-11-13 S-C), 位移量不变
+          else if (y + h > window.scrollY + vBot + vPad) window.scrollTo(0, y + h - vBot + 8);
+        };
+        rescroll();
         revealNext();  // 估算行高与实测行高的偏差由后续帧补正
       });
     },

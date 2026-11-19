@@ -131,7 +131,10 @@ for (const skin of SKINS) {
                 if (!r.at) return -1;
                 return r.overlap <= 1 ? 0 : r.overlap; // 1px = 取整余量
               },
-              { timeout: 5_000 },
+              // 10s 与同文件 settleScroll 双窗一致(2026-11-19): shard 并发负载下滚动+窗口化
+              // 重渲收敛可超 5s —— 旧 5s 窗在重负载形态偶红一次(26-11-18-0308), 产品面
+              // reveal 校正窗也已放宽到 5s, 测试窗须盖过它再留余量。
+              { timeout: 10_000 },
             )
             .toBe(0);
         } catch {
