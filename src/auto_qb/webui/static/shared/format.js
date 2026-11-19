@@ -16,10 +16,16 @@ const AQB_UNIT_LADDER = {
 };
 window.AQB_FORMAT = {
   methods: {
-    /* 单位梯消费单点: digits = 小数位, roundFallback = 梯下原值是否取整, top = 梯顶档位名
-     * (曲线图轴标要短, 只到 TiB; 缺省用整张梯)。表格(toFixed(2)+原样兜底)与图轴(toFixed(1)+
-     * 取整兜底)的精度分歧是设计而非疏漏, 由参数各自表达; 档位数据仍同源。 */
-    _fmtLadder(v, kind, digits, roundFallback, top) {
+    /* 单位梯消费单点(S5 拆分形态, 计划 26-11-20-0009/D11): 参数与字符串形态 _fmtLadder 完全
+     * 一致(digits = 小数位, roundFallback = 梯下原值是否取整, top = 梯顶档位名 —— 曲线图轴标
+     * 要短, 只到 TiB; 缺省用整张梯), 返回拆分对象 {v, u, c} —— v = 数值串(toFixed/取整口径与
+     * 串形态同), u = 单位串(**前导空格归属单位**: 拼接 v+u 与串形态逐字一致, 拆分后文本总宽
+     * 不变), c = 单位档类 csu-族(大小族 csu-B/csu-KiB..csu-PiB、速度族 csu-Bs/csu-KiBs..
+     * csu-GiBs —— 类名 's' 尾即速度族标记, 分族双色与按档组都靠它区分, 不另设族标记类; 颜色
+     * 由 CSS 按 html[data-cs-units] 派生映射, JS 永不产颜色值, R4)。字符串形态 _fmtLadder 改为
+     * 本函数的拼接消费面 —— 拆分与否结构性同源, 不会有第二份梯子走样; 表格(toFixed(2)+原样
+     * 兜底)与图轴(toFixed(1)+取整兜底)的精度分歧是设计而非疏漏, 由参数各自表达。 */
+    _fmtLadderParts(v, kind, digits, roundFallback, top) {
       const floor = kind === "speed" ? "B/s" : "B";
       const ladder = AQB_UNIT_LADDER[kind];
       let i = 0;
@@ -28,9 +34,14 @@ window.AQB_FORMAT = {
         if (at >= 0) i = at;  // 档位名写错(改表忘了改调用)时回落整张梯, 不静默错值
       }
       for (; i < ladder.length; i++) {
-        if (v >= ladder[i][1]) return (v / ladder[i][1]).toFixed(digits) + " " + ladder[i][0];
+        if (v >= ladder[i][1]) return { v: (v / ladder[i][1]).toFixed(digits), u: " " + ladder[i][0], c: "csu-" + ladder[i][0].replace("/", "") };
       }
-      return (roundFallback ? Math.round(v) : v) + " " + floor;
+      return { v: String(roundFallback ? Math.round(v) : v), u: " " + floor, c: "csu-" + floor.replace("/", "") };
+    },
+    /* 单位梯字符串形态(曲线轴标/抽屉行/状态栏等单文本节点消费面): 拆分形态的拼接投影 */
+    _fmtLadder(v, kind, digits, roundFallback, top) {
+      const p = this._fmtLadderParts(v, kind, digits, roundFallback, top);
+      return p.v + p.u;
     },
     fmtSpeed(v) {
       if (!v) return "0 B/s";
@@ -47,6 +58,22 @@ window.AQB_FORMAT = {
     },
     fmtSizeOrDash(v) {
       return v ? this.fmtSize(v) : "";  // 同上(TBL-01)
+    },
+    /* ---------------- 列风格 S5: 单位拆分 parts 家族(计划 26-11-20-0009 S5/D11) ----------------
+     * fmtSize/fmtSpeed 的拆分形态: 返回 {v, u, c} 或 null —— null = 零值 dash 形态不拆, 与
+     * fmtSizeOrDash/fmtSpeedOrDash 的空串口径同源(0/null/undefined/NaN 一律 null; 刻意与串
+     * 形态哨兵 fmtSpeed(0)="0 B/s"/fmtSize(null)="-" 不同: parts 只服务表格双 span 消费面,
+     * 零值走 dash 空白)。模板形态 <span class="cs-v">v</span><span class="cs-u" :class="c">u</span>
+     * (u 携带前导空格, 拼串与 fmt 输出逐字一致, 文本总宽不变); 拆分**恒产**(「统一」组也拆,
+     * 同色 = 视觉与现状无差, 单一代码路径不分支); c = 单位档类(含义见 _fmtLadderParts)。
+     * 消费面 = xtpl-cells.html 四行模型的大小/速度族格(member 行 D5 排除、抽屉变体预装配串
+     * 与状态栏不纳入, 上下限列同走本族 —— fmtLimitBytes 的空串口径与真值门逐值等价)。
+     * 一致性由 node 电池钉死: 非 null 时 v+u == fmtSize/fmtSpeed 全单位梯逐字。 */
+    fmtSizeParts(v) {
+      return v ? this._fmtLadderParts(v, "bytes", 2, false) : null;  // 零值 dash 形态不拆
+    },
+    fmtSpeedParts(v) {
+      return v ? this._fmtLadderParts(v, "speed", 2, false) : null;  // 同上(TBL-01 空值口径)
     },
     /* 时间点显示(追剧视图"最近动静"列): 今年省年份, 往年只到日 */
     fmtTime(ts) {

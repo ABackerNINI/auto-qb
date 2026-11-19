@@ -16,6 +16,7 @@
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
 - test_r4_prog_band_boundaries: S3(计划 26-11-20-0009) —— 进度分档纯函数 progBand/progBandClass(format.js 新增)边界: 编码 0=空端点档/1..5=五档(左开右闭, 20/40/60/80 右闭整点归当档)/6=终点档; 0/0.1/20/20.01/40/40.01/60/60.01/80/80.01/99.9/100 逐点 + 负值/NaN/undefined 归空端点不抛错 + >100 归终点 + 类装配 csb-0/csb-1..csb-5/csb-t 逐档互证 + progPct 钳制联动(>1 比例钳 100 落终点档)
 - test_r4_speed_band_and_num_scale: S4(计划 26-11-20-0009) —— 速度分档 speedBand/speedBandClass(format.js 新增)全边界: 编码 0=无档(bytes<=0 / 分母 0=不限/null=undefined=未知, 归 0 不产类)/1..5=五档(左开右闭, 20/40/60/80% 右闭整点归当档)/6=over(>100% 严格大于, 恰 100%=分母 仍第 5 档); 20% 端点双侧/40/60/80 同构/99.9/over 双侧逐点 + 类装配 ''/csp-1..csp-5/csp-over 逐档互证 + **75% 旧档不受扰**(numTone 0.75 阈值双侧原样且与新档互不干扰, 两套类链由 cellSpeedTone 三态互斥派发: current 逐值 == numTone / off 恒空串 / 选谱 == speedBandClass)+ 数值列三判定(numScaleRatio/numScaleAvail/numScaleEta)翻转端点双侧各一例(ratio=1.0 / availability=1.0 不着色 / eta=60s / eta=8640000 哨兵与 <=0、-1 未知面)+ 消费面经 ctx 真跑(colStyle 状态桩 + hrRatioClass 伴值桩): cellNumScaleRatio 空白格不染(progress=0)与 HR 伴值共存形态(伴值行 pending/reached 不产 cst-*, D10 让位; 无伴值行正常; 组行无 HR 字段自然落判定)+ cellNumScaleAvail numeric 开关互斥(off == numTone(v,1) 原样 / on = D10 完整语义, 0.75 档让位)
+- test_r4_unit_parts_family: S5(计划 26-11-20-0009) —— 单位拆分 parts 家族(fmtSizeParts/fmtSpeedParts, format.js 新增)与拆分单点 _fmtLadderParts: **parts ≡ fmt 串逐字一致**(非 null 时 v+u == fmtSize/fmtSpeed 输出; 大小族全梯 B~PiB: 档下原值/1024 进制恰端点命中/档内中值/2^60 超大值封 PiB/负数不进档; 速度族 B/s~GiB/s 同构 + 超 GiB 封顶) + 零值 dash null 形态(0/null/undefined/NaN -> null, 与 fmtSizeOrDash/fmtSpeedOrDash 空串口径逐值互证) + u 前导空格归属(拼串含空格, 文本总宽不变)与字段形态恰 {v, u, c} + 档类/族标记(大小族 csu-B/csu-KiB..csu-PiB, 速度族 csu-Bs/csu-KiBs..csu-GiBs, 类名 's' 尾即速度族, 与单位串含 /s 互证) + 小数位 toFixed(2)/负数/超大值边界 + 上下限列消费面(fmtLimitBytes 空串门与 parts null 门逐值等价, 非零串形态逐字同) + 拆分单点回归(_fmtLadder == parts 拼接投影, top 档名回落/取整兜底语义原样)
 - test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
   说明不足 2 字单行 —— trim 后计长, 分隔符后连接空格不算门槛/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
@@ -1808,6 +1809,97 @@ def test_r4_speed_band_and_num_scale():
     自然落判定"""
     report = _run_probe(_NODE_SPEED_BAND_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
     _assert_battery(report, "速度分档与数值色阶电池")
+
+
+# S5(计划 26-11-20-0009): 单位拆分 parts 家族(fmtSizeParts/fmtSpeedParts)与拆分单点
+# _fmtLadderParts 电池 ---------------- 沙箱口径与进度/速度分档电池同式(format.js 桩 window 后
+# eval, 取 window.AQB_FORMAT.methods)。判定口径: 非 null 时 parts.v + parts.u 与
+# fmtSize/fmtSpeed 输出**逐字一致**(u 携带前导空格 = 空格归属单位 span, 拼串即串形态);
+# null = 零值 dash 形态不拆, 与 fmtSizeOrDash/fmtSpeedOrDash 的空串口径同源(0/null/
+# undefined/NaN 全 falsy); 档类 c: 大小族 csu-B/csu-KiB..csu-PiB、速度族 csu-Bs/csu-KiBs..
+# csu-GiBs(类名 's' 尾即速度族标记 —— 与单位串含 /s 互证), 颜色一律 CSS 派生, JS 不产色值。
+_NODE_UNIT_PARTS_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_FORMAT;");
+const M = globalThis.__W2__.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+// ---- parts ≡ fmt 串逐字一致(全单位梯): 非 null 时 v+u == fmtSize/fmtSpeed 输出 ----
+// 大小族 B~PiB: 档下原值(含小数)/1024 进制恰端点命中/档内中值/2^60 超大值封 PiB/负数
+const sizeVals = [1, 0.5, 512, 1023, 1024, 1536, 2 ** 20, 1.5 * 2 ** 20, 2 ** 30, 2 ** 40, 2 ** 50, 2 ** 60, -5, -1536];
+ok("fmtSizeParts 全梯逐字一致(档下/各档恰端点/中值/超大值/负数)", sizeVals.every((v) => {
+  const p = M.fmtSizeParts(v);
+  return p !== null && p.v + p.u === M.fmtSize(v);
+}));
+// 速度族 B/s~GiB/s 同构(速度梯 3 档 + 楼层; 2^34 = 16 GiB/s 超档封顶同形)
+const speedVals = [1, 512, 1023, 1024, 1536, 2 ** 20, 2 ** 30, 2 ** 34, -100];
+ok("fmtSpeedParts 全梯逐字一致(楼层/各档恰端点/中值/超 GiB 封顶/负数)", speedVals.every((v) => {
+  const p = M.fmtSpeedParts(v);
+  return p !== null && p.v + p.u === M.fmtSpeed(v);
+}));
+
+// ---- 零值 dash null 形态: 与 OrDash 空串口径同源(0/null/undefined/NaN 全 falsy 不拆) ----
+ok("零值 dash 形态不拆(0/null/undefined/NaN -> null, 两族同口径)",
+   M.fmtSizeParts(0) === null && M.fmtSizeParts(null) === null && M.fmtSizeParts(undefined) === null && M.fmtSizeParts(NaN) === null &&
+   M.fmtSpeedParts(0) === null && M.fmtSpeedParts(null) === null && M.fmtSpeedParts(undefined) === null && M.fmtSpeedParts(NaN) === null);
+ok("null 门与 OrDash 空串门逐值等价(全梯 + 零值, 两族)", [0, null, undefined, NaN, ...sizeVals, ...speedVals].every((v) =>
+  (M.fmtSizeParts(v) === null) === (M.fmtSizeOrDash(v) === "") && (M.fmtSpeedParts(v) === null) === (M.fmtSpeedOrDash(v) === "")));
+
+// ---- u 前导空格归属(拼串含空格, 文本总宽不变)与字段形态恰 {v, u, c} ----
+ok("u 恒携带前导空格(空格归属单位 span)", sizeVals.every((v) => M.fmtSizeParts(v).u.charAt(0) === " ") && speedVals.every((v) => M.fmtSpeedParts(v).u.charAt(0) === " "));
+ok("字段形态恰 {v, u, c}", [1023, 1024, 1536, 2 ** 50, 512, 2 ** 20].every((v) => {
+  const p = M.fmtSizeParts(v), q = M.fmtSpeedParts(v);
+  return [p, q].every((r) => Object.keys(r).length === 3 && "v" in r && "u" in r && "c" in r);
+}));
+
+// ---- 档类/族标记: 大小族无 's' 尾, 速度族 's' 尾; 与单位串含 /s 互证 ----
+ok("大小族档类逐档正确(B/KiB/MiB/GiB/TiB/PiB, 超大值封 PiB)",
+   M.fmtSizeParts(500).c === "csu-B" && M.fmtSizeParts(1023).c === "csu-B" && M.fmtSizeParts(2 ** 10).c === "csu-KiB" &&
+   M.fmtSizeParts(2 ** 20).c === "csu-MiB" && M.fmtSizeParts(2 ** 30).c === "csu-GiB" && M.fmtSizeParts(2 ** 40).c === "csu-TiB" &&
+   M.fmtSizeParts(2 ** 50).c === "csu-PiB" && M.fmtSizeParts(2 ** 60).c === "csu-PiB");
+ok("速度族档类逐档正确(Bs/KiBs/MiBs/GiBs, 类名 's' 尾即族标记)",
+   M.fmtSpeedParts(500).c === "csu-Bs" && M.fmtSpeedParts(1023).c === "csu-Bs" && M.fmtSpeedParts(2 ** 10).c === "csu-KiBs" &&
+   M.fmtSpeedParts(2 ** 20).c === "csu-MiBs" && M.fmtSpeedParts(2 ** 30).c === "csu-GiBs" && M.fmtSpeedParts(2 ** 34).c === "csu-GiBs");
+ok("族标记与单位串互证(u 含 /s 当且仅当档类 's' 尾, 全梯)", [...sizeVals, ...speedVals].every((v) => [M.fmtSizeParts(v), M.fmtSpeedParts(v)].every((p) =>
+  p === null || (p.u.indexOf("/s") >= 0) === (p.c.charAt(p.c.length - 1) === "s"))));
+
+// ---- 小数位/负数/超大值边界: toFixed(2) 口径与串形态同源 ----
+ok("小数位 toFixed(2) 口径(1.50 KiB / 1.50 KiB/s 形态)", M.fmtSizeParts(1536).v === "1.50" && M.fmtSizeParts(1536).u === " KiB" && M.fmtSpeedParts(1536).v === "1.50" && M.fmtSpeedParts(1536).u === " KiB/s");
+ok("负数不进档(负值 < 全部档阈值, 楼层原值串)", M.fmtSizeParts(-1536).v === "-1536" && M.fmtSizeParts(-1536).u === " B" && M.fmtSpeedParts(-100).v === "-100" && M.fmtSpeedParts(-100).u === " B/s");
+ok("超大值封 PiB 档(2^60 = 1024.00 PiB, 梯顶不截断)", M.fmtSizeParts(2 ** 60).v === "1024.00" && M.fmtSizeParts(2 ** 60).u === " PiB");
+ok("速度族楼层 B/s(512 -> 512 B/s)", M.fmtSpeedParts(512).v === "512" && M.fmtSpeedParts(512).u === " B/s");
+
+// ---- 上下限列消费面: fmtLimitBytes 空串门与 parts null 门逐值等价, 非零串形态逐字同 ----
+ok("fmtLimitBytes == fmtSpeedParts 投影(缺失/0 = 不限速 -> '', 非零 v+u)", [0, null, undefined, 1024, 1536].every((v) => {
+  const p = M.fmtSpeedParts(v);
+  return M.fmtLimitBytes(v) === (p === null ? "" : p.v + p.u);
+}));
+
+// ---- 拆分单点回归: _fmtLadder 是 _fmtLadderParts 的拼接投影(top 回落/取整兜底语义原样) ----
+ok("_fmtLadder == parts 拼接(top 档名回落/梯顶截断/取整兜底语义原样)",
+   M._fmtLadder(2 ** 50, "bytes", 2, false, "TiB") === "1024.00 TiB" && M._fmtLadder(2 ** 50, "bytes", 2, false, "ZiB") === "1.00 PiB" &&
+   M._fmtLadder(2 ** 50, "bytes", 2, false) === "1.00 PiB" && M._fmtLadder(500.6, "bytes", 1, true) === "501 B" &&
+   M._fmtLadder(500.6, "bytes", 1, false) === "500.6 B" && M._fmtLadder(512, "speed", 2, false) === "512 B/s");
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_r4_unit_parts_family():
+    """S5(计划 26-11-20-0009): 单位拆分 parts 家族 fmtSizeParts/fmtSpeedParts(format.js 新增)
+    与拆分单点 _fmtLadderParts 电池 —— parts ≡ fmt 串逐字一致(大小族全梯 B~PiB + 速度族
+    B/s~GiB/s, 非 null 时 v+u == fmtSize/fmtSpeed 输出)/零值 dash null 形态(与 OrDash 空串
+    口径逐值互证)/u 前导空格归属与字段形态恰 {v, u, c}/档类与族标记(csu-B..csu-PiB 与
+    csu-Bs..csu-GiBs, 's' 尾即速度族, 与单位串含 /s 互证)/小数位 toFixed(2)/负数/超大值
+    封 PiB 边界/上下限列消费面(fmtLimitBytes == parts 投影)/拆分单点回归(_fmtLadder ==
+    parts 拼接, top 回落/取整兜底语义原样)"""
+    report = _run_probe(_NODE_UNIT_PARTS_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
+    _assert_battery(report, "单位拆分 parts 家族电池")
 
 
 def test_r4_fx_mount_toast_split_and_rows_ghost():

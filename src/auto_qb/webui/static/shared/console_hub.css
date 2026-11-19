@@ -620,3 +620,72 @@ html[data-cs-numeric="on"] .group-row .g-stat.cst-good,
 html[data-cs-numeric="on"] .group-row .m-pair.cst-good { color: var(--green); }
 html[data-cs-numeric="on"] .group-row .g-stat.cst-soon,
 html[data-cs-numeric="on"] .group-row .m-pair.cst-soon { color: var(--accent-hi); }
+
+/* ==========================================================================
+   列风格引擎 · 单位色组渲染面(计划 26-11-20-0009 S5/D11)
+   --------------------------------------------------------------------------
+   S5: fmtSize/fmtSpeed 家族格(xtpl-cells.html 四行模型: 组/种子/集行, member 行 D5
+   排除不拆)拆双 span —— .cs-v 数值 + .cs-u 单位(单位串携带前导空格, 拼串与拆分前逐字
+   一致, span 内联文本总宽不变; 排序走 _raw 不受扰)。单位档类 csu- 由 format.js parts
+   家族携带(c 字段): 大小族 csu-B/csu-KiB/csu-MiB/csu-GiB/csu-TiB/csu-PiB, 速度族
+   csu-Bs/csu-KiBs/csu-MiBs/csu-GiBs —— 类名 's' 尾即速度族标记(分族双色与按档组共用
+   该区分, 不另设族标记类)。本段按 html[data-cs-units] 派生映射(D11 表), 「统一」
+   (uniform, 默认)不出任何规则 = 继承级联基线, 视觉与现状零差异。
+   消费面只有本拆分产的 .cs-v/.cs-u 两个类(DOM 中仅四行模型值格两处 span), 无需行级
+   容器限定: 命中面天然限于拆分格, 直接命中即赢过单元格继承(状态/tone/csp 色挂在
+   .g-stat div 上, 继承只在 span 无自身规则时生效 —— S4 的特异性之争仅在"同一元素两层
+   规则"才有意义)。cs-v 默认无规则(随格继承); 仅 invert 组改写数值色(D11: 数值
+   --fg-muted)。与 S2 菜单色样段(cs-uv/cs-uu 等样例类)、S3 csb- 族、S4 csp-/cst- 族
+   零重叠(R6)。零新增令牌: 全部引用既有令牌(R4)。
+   D11 未列速度族 B/s 档: 取 B 同档色(梯下原值与 B 同级的楼层语义对齐), 不留无色洞;
+   band 三组按 10 档类全集逐组落表(csu-B/Bs/KiB/KiBs/MiB/MiBs/GiB/GiBs/TiB/PiB)。
+   ========================================================================== */
+/* ---- 单位淡化: 单位恒 --fg-muted ---- */
+html[data-cs-units="dim"] .cs-u { color: var(--fg-muted); }
+/* ---- 单位点缀: 单位恒 --accent ---- */
+html[data-cs-units="accent"] .cs-u { color: var(--accent); }
+/* ---- 单位反转: 数值 --fg-muted / 单位 --fg(D11 唯一改写数值色的组) ---- */
+html[data-cs-units="invert"] .cs-v { color: var(--fg-muted); }
+html[data-cs-units="invert"] .cs-u { color: var(--fg); }
+/* ---- 分族双色: 大小族 --teal / 速度族 --pink('s' 尾档类 = 速度族) ---- */
+html[data-cs-units="family"] .cs-u { color: var(--teal); }
+html[data-cs-units="family"] .cs-u.csu-Bs,
+html[data-cs-units="family"] .cs-u.csu-KiBs,
+html[data-cs-units="family"] .cs-u.csu-MiBs,
+html[data-cs-units="family"] .cs-u.csu-GiBs { color: var(--pink); }
+/* ---- 按档·冷熟: B fg-muted / KiB blue / MiB cyan / GiB teal / TiB lime / PiB green;
+   速度族对齐: KiB/s blue / MiB/s teal / GiB/s green, B/s 随 B 档(D11 表) ---- */
+html[data-cs-units="band-cool"] .cs-u.csu-B,
+html[data-cs-units="band-cool"] .cs-u.csu-Bs { color: var(--fg-muted); }
+html[data-cs-units="band-cool"] .cs-u.csu-KiB,
+html[data-cs-units="band-cool"] .cs-u.csu-KiBs { color: var(--blue); }
+html[data-cs-units="band-cool"] .cs-u.csu-MiB { color: var(--cyan); }
+html[data-cs-units="band-cool"] .cs-u.csu-MiBs,
+html[data-cs-units="band-cool"] .cs-u.csu-GiB { color: var(--teal); }
+html[data-cs-units="band-cool"] .cs-u.csu-TiB { color: var(--lime); }
+html[data-cs-units="band-cool"] .cs-u.csu-GiBs,
+html[data-cs-units="band-cool"] .cs-u.csu-PiB { color: var(--green); }
+/* ---- 按档·温度: B fg-muted / KiB cyan / MiB lime / GiB warn / TiB error / PiB error
+   (封顶); 速度族: KiB/s cyan / MiB/s lime / GiB/s warn, B/s 随 B 档(D11 表) ---- */
+html[data-cs-units="band-heat"] .cs-u.csu-B,
+html[data-cs-units="band-heat"] .cs-u.csu-Bs { color: var(--fg-muted); }
+html[data-cs-units="band-heat"] .cs-u.csu-KiB,
+html[data-cs-units="band-heat"] .cs-u.csu-KiBs { color: var(--cyan); }
+html[data-cs-units="band-heat"] .cs-u.csu-MiB,
+html[data-cs-units="band-heat"] .cs-u.csu-MiBs { color: var(--lime); }
+html[data-cs-units="band-heat"] .cs-u.csu-GiB,
+html[data-cs-units="band-heat"] .cs-u.csu-GiBs { color: var(--warn); }
+html[data-cs-units="band-heat"] .cs-u.csu-TiB,
+html[data-cs-units="band-heat"] .cs-u.csu-PiB { color: var(--error); }
+/* ---- 按档·主题: B violet / KiB indigo / MiB blue / GiB cyan / TiB teal / PiB
+   accent-hi; 速度族: KiB/s indigo / MiB/s blue / GiB/s cyan, B/s 随 B 档(D11 表) ---- */
+html[data-cs-units="band-theme"] .cs-u.csu-B,
+html[data-cs-units="band-theme"] .cs-u.csu-Bs { color: var(--violet); }
+html[data-cs-units="band-theme"] .cs-u.csu-KiB,
+html[data-cs-units="band-theme"] .cs-u.csu-KiBs { color: var(--indigo); }
+html[data-cs-units="band-theme"] .cs-u.csu-MiB,
+html[data-cs-units="band-theme"] .cs-u.csu-MiBs { color: var(--blue); }
+html[data-cs-units="band-theme"] .cs-u.csu-GiB,
+html[data-cs-units="band-theme"] .cs-u.csu-GiBs { color: var(--cyan); }
+html[data-cs-units="band-theme"] .cs-u.csu-TiB { color: var(--teal); }
+html[data-cs-units="band-theme"] .cs-u.csu-PiB { color: var(--accent-hi); }

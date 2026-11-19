@@ -41,17 +41,24 @@
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
         </span>
       </div>
-      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !g.dlspeed }">{{ $root.fmtSpeedOrDash(g.dlspeed) }}</div>
-      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !g.upspeed }">{{ $root.fmtSpeedOrDash(g.upspeed) }}</div>
-      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !g.uploaded }">{{ $root.fmtSizeOrDash(g.uploaded) }}</div>
-      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !g.size }">
-        {{ $root.fmtSizeOrDash(g.size) }}
-        <span v-if="g.sizeMismatch" class="risk-mark"
+      <!-- 单位拆分(S5, 计划 26-11-20-0009/D11): 大小/速度族格双 span —— cs-v 数值 + cs-u
+           单位(单位串携带前导空格, 拼串与 fmtSizeOrDash/fmtSpeedOrDash 输出逐字一致, span
+           内联文本总宽不变); 档位类 csu- 由 parts 输出携带(c 字段, 's' 尾即速度族), 颜色由
+           console_hub.css 按 html[data-cs-units] 派生映射 —— JS 永不产颜色值(R4), 「统一」
+           (默认)无规则 = 现状零变化。拆分恒产(单一代码路径不分支); 零值 dash 形态维持原
+           单节点(v-if 真值门与 zero 类同判据, 与 OrDash 空串口径逐值等价)。四行模型同模板
+           自然继承; member 行(tpl-aq-member-cells, D5)/抽屉变体 rowsFn 预装配串/状态栏不纳入。
+           !cs-v/cs-u 两 span 必须紧邻零空白: Vue condense 会剥元素间纯空白节点, 手滑换行
+             = 多出/丢掉空格, 文本不再逐字一致 -->
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !g.dlspeed }"><template v-if="g.dlspeed"><span class="cs-v">{{ $root.fmtSpeedParts(g.dlspeed).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(g.dlspeed).c">{{ $root.fmtSpeedParts(g.dlspeed).u }}</span></template></div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !g.upspeed }"><template v-if="g.upspeed"><span class="cs-v">{{ $root.fmtSpeedParts(g.upspeed).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(g.upspeed).c">{{ $root.fmtSpeedParts(g.upspeed).u }}</span></template></div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !g.uploaded }"><template v-if="g.uploaded"><span class="cs-v">{{ $root.fmtSizeParts(g.uploaded).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(g.uploaded).c">{{ $root.fmtSizeParts(g.uploaded).u }}</span></template></div>
+      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !g.size }"><template v-if="g.size"><span class="cs-v">{{ $root.fmtSizeParts(g.size).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(g.size).c">{{ $root.fmtSizeParts(g.size).u }}</span></template>{{ " " }}<span v-if="g.sizeMismatch" class="risk-mark"
               title="组内成员种子大小不一致 —— 辅种可能指向不同文件, 需人工确认">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
         </span>
       </div>
-      <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ $root.fmtSizeOrDash(g.total_size) }}</div>
+      <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }"><template v-if="g.total_size"><span class="cs-v">{{ $root.fmtSizeParts(g.total_size).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(g.total_size).c">{{ $root.fmtSizeParts(g.total_size).u }}</span></template></div>
       <!-- 辅种扩列(2026-09-28): 组级聚合后端算好。进度 = 组内最高(最完整副本), 复用明细同款进度条 -->
       <!-- 进度单元格与 torrent/ep(本文件)两处逐字同(member(xtpl.html)刻意不挂档位类, D5 排除;
            issue 26-10-20-2231 登记不动): 刻意不组件化, 百分比算式已抽 $root.progPct 单点(format.js),
@@ -67,7 +74,7 @@
            注), 「关」(默认)无映射规则 = 现状零变化; 组行无 HR 伴值, 判定自然生效 -->
       <div v-else-if="col.key === 'eta'" class="g-stat" :class="[{ zero: !g.eta || g.eta >= 8640000 }, $root.numScaleEta(g.eta)]">{{ $root.fmtEta(g.eta) }}</div>
       <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
-      <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, $root.numTone(g.downloaded, g.size)]">{{ $root.fmtSizeOrDash(g.downloaded) }}</div>
+      <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, $root.numTone(g.downloaded, g.size)]"><template v-if="g.downloaded"><span class="cs-v">{{ $root.fmtSizeParts(g.downloaded).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(g.downloaded).c">{{ $root.fmtSizeParts(g.downloaded).u }}</span></template></div>
       <div v-else-if="col.key === 'tags'" class="g-tags">
         <!-- tag-chip 三处**不**逐字同(issue 26-10-20-2231 登记不动, 刻意不组件化): 组行(本处)
              吃聚合口径 g.commonTags.list + 首个成员算 tagClass; torrent 行(本文件)与 member 行
@@ -137,7 +144,7 @@
       </div>
       <!-- 可选列(默认隐藏口径见 app.js DEFAULT_HIDDEN_KEYS): 表头名称与种子页同名列对齐 -->
       <!-- 剩余 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
-      <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ $root.fmtSizeOrDash(g.amount_left) }}</div>
+      <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }"><template v-if="g.amount_left"><span class="cs-v">{{ $root.fmtSizeParts(g.amount_left).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(g.amount_left).c">{{ $root.fmtSizeParts(g.amount_left).u }}</span></template></div>
       <!-- 做种时间 = 组内平均(分钟取整) -->
       <div v-else-if="col.key === 'seeding_time'" class="g-stat" :class="{ zero: !g.seeding_time }">{{ g.seeding_time ? $root.fmtDuration(g.seeding_time) : '' }}</div>
       <!-- 可用性 = 组内最高(null = 全组未知 -> 空白); 数值色阶挂 numScaleAvail 纯判定(S4/D10,
@@ -169,10 +176,15 @@
            csp-*(颜色由 console_hub.css 按 html[data-cs-speedramp] 派生); 分母与既有 numTone
            挂点同一条读数路径(speedLimitBytes 单点, null=未知/0=不限)。up_limit/dl_limit 两列
            的 numTone 挂点不在此维管辖(D8: 分母不同不混) -->
-      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, $root.cellSpeedTone(m.dlspeed, $root.speedLimitBytes.down)]">{{ $root.fmtSpeedOrDash(m.dlspeed) }}</div>
-      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, $root.cellSpeedTone(m.upspeed, $root.speedLimitBytes.up)]">{{ $root.fmtSpeedOrDash(m.upspeed) }}</div>
-      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, $root.numTone(m.uploaded, m.size)]">{{ $root.fmtSizeOrDash(m.uploaded) }}</div>
-      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ $root.fmtSizeOrDash(m.size) }}</div>
+      <!-- dlspeed/upspeed/uploaded/size/downloaded/amount_left/up_limit/dl_limit 八格双 span
+           化(S5, 口径与组行同注释): 速度两列的 cellSpeedTone 档类仍挂单元格 div(值色随谱),
+           cs-u 单位色由色组映射另管(两维正交, 同格共存); up_limit/dl_limit 走 fmtSpeedParts
+           —— fmtLimitBytes 的空串口径(null/缺失/0 = 不限速)与 v-if 真值门逐值等价, 非零串
+           形态 == fmtSpeed(上下限列在 D11 覆盖面内, member 行同名单元格不拆, D5) -->
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, $root.cellSpeedTone(m.dlspeed, $root.speedLimitBytes.down)]"><template v-if="m.dlspeed"><span class="cs-v">{{ $root.fmtSpeedParts(m.dlspeed).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(m.dlspeed).c">{{ $root.fmtSpeedParts(m.dlspeed).u }}</span></template></div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, $root.cellSpeedTone(m.upspeed, $root.speedLimitBytes.up)]"><template v-if="m.upspeed"><span class="cs-v">{{ $root.fmtSpeedParts(m.upspeed).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(m.upspeed).c">{{ $root.fmtSpeedParts(m.upspeed).u }}</span></template></div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, $root.numTone(m.uploaded, m.size)]"><template v-if="m.uploaded"><span class="cs-v">{{ $root.fmtSizeParts(m.uploaded).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(m.uploaded).c">{{ $root.fmtSizeParts(m.uploaded).u }}</span></template></div>
+      <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }"><template v-if="m.size"><span class="cs-v">{{ $root.fmtSizeParts(m.size).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(m.size).c">{{ $root.fmtSizeParts(m.size).u }}</span></template></div>
       <div v-else-if="col.key === 'category'" class="g-cat">
         <span v-if="m.category" class="cat-chip"
               :class="[$root.catClass(m.category, m), $root.hrExclClass('category', m), { 'f-on': $root.isFilterOn('categoryFilter', m.category) }]"
@@ -195,16 +207,16 @@
       <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</div>
       <div v-else-if="col.key === 'eta'" class="g-stat" :class="[{ zero: !m.eta || m.eta >= 8640000 }, $root.numScaleEta(m.eta)]">{{ $root.fmtEta(m.eta) }}</div>
       <div v-else-if="col.key === 'added_on'" class="g-stat" :title="$root.cellTimeHint(m.added_on, 'added_on')">{{ $root.cellTime(m.added_on, 'added_on') }}</div>
-      <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, $root.numTone(m.downloaded, m.size)]">{{ $root.fmtSizeOrDash(m.downloaded) }}</div>
-      <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ $root.fmtSizeOrDash(m.amount_left) }}</div>
+      <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, $root.numTone(m.downloaded, m.size)]"><template v-if="m.downloaded"><span class="cs-v">{{ $root.fmtSizeParts(m.downloaded).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(m.downloaded).c">{{ $root.fmtSizeParts(m.downloaded).u }}</span></template></div>
+      <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }"><template v-if="m.amount_left"><span class="cs-v">{{ $root.fmtSizeParts(m.amount_left).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(m.amount_left).c">{{ $root.fmtSizeParts(m.amount_left).u }}</span></template></div>
       <!-- FX-26: 负数(-1 = qB 未知)与暂停中的种子不显示, 口径走 cellAvailability -->
       <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !$root.cellAvailability(m) }, $root.cellNumScaleAvail(m.availability)]">{{ $root.cellAvailability(m) }}</div>
       <div v-else-if="col.key === 'time_active'" class="g-stat">{{ $root.fmtDuration(m.time_active) }}</div>
       <!-- FX-27/28: 相对时间(表头右键可切绝对); 另一种口径留作 title -->
       <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="$root.cellTimeHint(m.last_activity, 'last_activity')">{{ $root.cellTime(m.last_activity, 'last_activity') }}</div>
       <div v-else-if="col.key === 'completion_on'" class="g-stat" :title="$root.cellTimeHint(m.completion_on, 'completion_on')">{{ $root.cellTime(m.completion_on, 'completion_on') }}</div>
-      <div v-else-if="col.key === 'up_limit'" class="g-stat" :class="$root.numTone(m.up_limit, m.up_limit)">{{ $root.fmtLimitBytes(m.up_limit) }}</div>
-      <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="$root.numTone(m.dl_limit, m.dl_limit)">{{ $root.fmtLimitBytes(m.dl_limit) }}</div>
+      <div v-else-if="col.key === 'up_limit'" class="g-stat" :class="$root.numTone(m.up_limit, m.up_limit)"><template v-if="m.up_limit"><span class="cs-v">{{ $root.fmtSpeedParts(m.up_limit).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(m.up_limit).c">{{ $root.fmtSpeedParts(m.up_limit).u }}</span></template></div>
+      <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="$root.numTone(m.dl_limit, m.dl_limit)"><template v-if="m.dl_limit"><span class="cs-v">{{ $root.fmtSpeedParts(m.dl_limit).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(m.dl_limit).c">{{ $root.fmtSpeedParts(m.dl_limit).u }}</span></template></div>
       <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1 || m.hash">{{ (m.infohash_v1 || m.hash || '').slice(0, 8) }}</div>
       <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
       <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[$root.hrDurClass(m), $root.hrSrcClass(m)]" @mouseenter="$root.hrPopEnter($event, m)" @mouseleave="$root.hrPopLeave">
@@ -296,14 +308,14 @@
         <span class="val" :class="$root.progBandClass($root.progPct(e.progress))">{{ $root.progPct(e.progress).toFixed(1) }}%</span>
       </div>
       <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
-           :title="'最完整版本大小'">{{ $root.fmtSizeOrDash(e.size) }}</div>
+           :title="'最完整版本大小'"><template v-if="e.size"><span class="cs-v">{{ $root.fmtSizeParts(e.size).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(e.size).c">{{ $root.fmtSizeParts(e.size).u }}</span></template></div>
       <div v-else-if="col.key === 'versions'" class="g-count">{{ e.count }}</div>
       <div v-else-if="col.key === 'sites'" class="g-sites">
         <aq-site-chip v-for="m in e.members" :key="m.hash" :m="m"></aq-site-chip>
       </div>
-      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }">{{ $root.fmtSpeedOrDash(e.dlspeed) }}</div>
-      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }">{{ $root.fmtSpeedOrDash(e.upspeed) }}</div>
-      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }">{{ $root.fmtSizeOrDash(e.uploaded) }}</div>
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }"><template v-if="e.dlspeed"><span class="cs-v">{{ $root.fmtSpeedParts(e.dlspeed).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(e.dlspeed).c">{{ $root.fmtSpeedParts(e.dlspeed).u }}</span></template></div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }"><template v-if="e.upspeed"><span class="cs-v">{{ $root.fmtSpeedParts(e.upspeed).v }}</span><span class="cs-u" :class="$root.fmtSpeedParts(e.upspeed).c">{{ $root.fmtSpeedParts(e.upspeed).u }}</span></template></div>
+      <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }"><template v-if="e.uploaded"><span class="cs-v">{{ $root.fmtSizeParts(e.uploaded).v }}</span><span class="cs-u" :class="$root.fmtSizeParts(e.uploaded).c">{{ $root.fmtSizeParts(e.uploaded).u }}</span></template></div>
       <div v-else-if="col.key === 'hr'" class="g-hr" :class="$root.hrGroupClass(e)"
            :title="$root.hrEpTitle(e)">
         <span v-if="!e.hr_triggered" class="zero"></span>
