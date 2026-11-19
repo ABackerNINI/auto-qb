@@ -1,7 +1,7 @@
 """test_webui_static_dom_panel_traffic 测试计划: webui 前端静态守阵: 详情面板 / 弹窗 / 浮层
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07; 契约适配 26-11-18-0037 阶段 3) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 点列->_qbPointsToData 直读 node 真跑(schema=2 样本分组点列每点带 t 直读(非等距真值 t/float 组距)/显式空值点 {t, dl:null, up:null} y=null 断线/尾组最新样本 ts 恒真值/anchor={xs} 全列真值时刻/空列与 interval 非法回落; agg 段窗旧「桶值|null」定长数组兼容面保留(D4 零改动): null 槽栅格重建/前导 null 推算/S3b 月行真值落点与空槽内插) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(sample_interval_s 夹取全窗统一(F7/26-11-15-1104 D6 反转旧「低频轮询=桶宽」口径) + immediate 首拍立即(F8/D4) + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归(显式空值点形态))
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07; 契约适配 26-11-18-0037 阶段 3) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 点列->_qbPointsToData 直读 node 真跑(schema=2 样本分组点列每点带 t 直读(非等距真值 t/float 组距)/显式空值点 {t, dl:null, up:null} y=null 断线/尾组最新样本 ts 恒真值/anchor={xs} 全列真值时刻/空列与 interval 非法回落; agg 段窗旧「桶值|null」定长数组兼容面保留(D4 零改动): null 槽栅格重建/前导 null 推算/S3b 月行真值落点与空槽内插) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(sample_interval_s 夹取全窗统一(F7/26-11-15-1104 D6 反转旧「低频轮询=桶宽」口径) + immediate 首拍立即(F8/D4) + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归(显式空值点形态)); T4a(plan 26-11-18-0037)追钉: openDrawerTraffic 打开路径改首拉 + _qbStreamStart(SSE 主路径, GET 轮询骨架退役为降级态取数)/drawer_store 流量页签同改 + _stopDrawerPoll 同收流
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏); R8 追加 state.js 数值面板接线静态钉(fx: qbInitialFx() / fxPanel 显式建字段, plan 26-11-12-1139 §05.5), 修复轮追加状态行展示值 computed 落位钉(qbFxPeriodS/qbFxBeatMs 恰 1 次定义且夹在 computed: { 与 mounted() { 之间, fx-panel.html 保持裸插值不带括号 —— 落 methods 即复现 toDisplayString 函数源码渲染 blocker)
 - test_frontend_qb_fx_store_and_sanitize_battery: 数值面板持久化读路径与逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5, §09 脏值探针) —— qbInitialFx 桩 localStorage 钉四脏值场景(坏 JSON/v:0/数组根/空串)整体回落默认且键保留(全程零 removeItem) + _qbFxSanitize 逐字段: 错类型(数字字段 null/布尔/数组不得被 Number() 误收、布尔严格 ===true/false 且类型归位、合法 false 保真)/未知枚举与空串回落/clamp 边界(impact/particles [0,1]、shiftRatio [0.2,1] 双侧, 数字串"0.9"抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 清场)/合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键) + S4-a 轮追加 section 5(§05.9 第 6 项/第 9 项的电池级等价): openFxPanel 经 overlay_fit 单点钳位 + 图宿主右缘钳位(右缘 >=8px)/重开复位 alt/Alt 看穿三路(keydown+keyup 同处理器按 e.altKey 写态 + 面板不可见早退 + blur 失焦复位)/四皮肤 .fx-panel CSS 成对(fixed 本体/max-height 兜底/fx-alt/120ms 仅 opacity/reduce 零动画)/D20 渗色禁令(fx CSS 段剥注释零 --today-up/--today-down)
@@ -14,10 +14,11 @@
 - test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做; 缺口/缝判据点列适配 26-11-18-0037 阶段 3) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算 —— schema=2 显式空值点与旧契约 null 桶转列后同判); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点; schema=2 形态 26-11-18-0037 阶段 3: 链末按列值判(显式空值点不算观测)/右沿 = 末点真值 t(旧等距外推退役)/尾组真值点链到右沿->null/全空值点空态面->null) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: 1. node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; 2. 静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
-- test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: 1. 阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); 2. 判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); 3. _qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判); 附 R5#182 死代码反向锚(loadQbHistory 兼容别名零残留, 入口全走 openQbHistory/openDrawerTraffic)
-- test_frontend_qb_poll_rhythm_and_immediate_first_beat: F7/F8/A7 电池(plan 26-11-15-1104; 组距口径 26-11-18-0037 阶段 3) —— 轮询节奏 = 采样间隔全窗统一(D6): _qbPollMs 读 meta.sample_interval_s(生效采样间隔)经 [1.5s,600s] 防御夹取, si 1.5/30/600/900/0.8 逐值 + 只带 interval_s 的旧形状(桶宽 3600)不吃(30000 兜底, 旧「被夹成 600000」形态即旧口径回潮) + meta 缺失/si 非法(0/负)兜底; A7 状态行两组值同源: 周期实算 qbFxPeriodS/beat qbFxBeatMs 与采样行 qbFxSampleText 都从 sample_interval_s 来(schema=2 样本分组契约两值形态 si=1.5/iv=174(schema 2, stride 116) -> 「1.5 s · 组距 174.0 s」(interval_s = 组距标称 k x si, 桶面退役)+ beat 600, 旧口径吃组距 beat 恒 1000 即回潮; agg 段窗无 schema 键二值仍「1.5 s · 桶宽 3600.0 s」(D4 零改动); 相等形态回落单值逐字一致); F8 冷开首拍立即(D4): startPoll immediate 首拍立即(delay 0)/非 immediate 调用面零变化/直拉在途首拍被 mutex 挡掉不双发 + 短重试 AQB_POLL_FIRST_RETRY_MS=1500 不落 30s fallback/直拉落定后首拍真实执行记账清位回归节律周期/隐藏期首拍跳过拉数但重排仍短间隔; 静态钉: AQB_POLL_FIRST_RETRY_MS=1500 + 骨架首拍记账表达式 + 流量侧 immediate: true 声明; 行为面 node 电池真跑(真骨架 + 真 _qbPollMs/_qbLoad/computed, 无 node 静默跳过)
+- test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16; T4a 起 GET 轮询骨架为降级态取数路径, 本守阵语义不变) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: 1. 阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); 2. 判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); 3. _qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判); 附 R5#182 死代码反向锚(loadQbHistory 兼容别名零残留, 入口全走 openQbHistory/openDrawerTraffic)
+- test_frontend_qb_poll_rhythm_and_immediate_first_beat: F7/F8/A7 电池(plan 26-11-15-1104; 组距口径 26-11-18-0037 阶段 3; T4a 子波 2 起 GET 轮询骨架 = 降级态取数路径, 逐拍面不变) —— 轮询节奏 = 采样间隔全窗统一(D6): _qbPollMs 读 meta.sample_interval_s(生效采样间隔)经 [1.5s,600s] 防御夹取, si 1.5/30/600/900/0.8 逐值 + 只带 interval_s 的旧形状(桶宽 3600)不吃(30000 兜底, 旧「被夹成 600000」形态即旧口径回潮) + meta 缺失/si 非法(0/负)兜底; A7 状态行两组值同源: 周期实算 qbFxPeriodS/beat qbFxBeatMs 与采样行 qbFxSampleText 都从 sample_interval_s 来(schema=2 样本分组契约两值形态 si=1.5/iv=174(schema 2, stride 116) -> 「1.5 s · 组距 174.0 s」(interval_s = 组距标称 k x si, 桶面退役)+ beat 600, 旧口径吃组距 beat 恒 1000 即回潮; agg 段窗无 schema 键二值仍「1.5 s · 桶宽 3600.0 s」(D4 零改动); 相等形态回落单值逐字一致); F8 冷开首拍立即(D4): startPoll immediate 首拍立即(delay 0)/非 immediate 调用面零变化/直拉在途首拍被 mutex 挡掉不双发 + 短重试 AQB_POLL_FIRST_RETRY_MS=1500 不落 30s fallback/直拉落定后首拍真实执行记账清位回归节律周期/隐藏期首拍跳过拉数但重排仍短间隔; 静态钉: AQB_POLL_FIRST_RETRY_MS=1500 + 骨架首拍记账表达式 + 流量侧 immediate: true 声明; 行为面 node 电池真跑(真骨架 + 真 _qbPollMs/_qbLoad/computed, 无 node 静默跳过)
 - test_frontend_qb_tick_label_and_isolated_idxs: R5#192 —— x 轴刻度与孤点索引 node 电池(同文件其余纯函数均有电池, 唯这两处标着纯函数却零执行): _qbTickLabel 四族分支 13 档逐档断言(1m/5m 标到秒 / 30m-24h 只标时刻 / 3d/7d/30d 标日期 / 6mo/1y/all 标年月; 期望值由同一 Date 本地时区现算, 与机器时区无关)+ torrent 挂点读自己的窗口字段(三挂点窗口互不串) + _qbIsolatedIdxs 三态(两侧皆 null 的孤点收/任一侧非 null 的链中链端不收/贴边孤点与空系列边界)
 - test_frontend_qb_themechange_event_pair: R5#194 —— theme.js↔qb_traffic_chart.js 换肤事件契约成对静态锚(此前 theme.js 全文件零测试, 事件名/派发点被改名或删除时流量图 canvas 换肤残旧色且无测试变红): theme.js 手动切换(set)与系统明暗跟随(onSys, R5#180 补)两路都必须派发 autoqb:themechange 且落在 documentElement 上, qb_traffic_chart.js 必须监听同名事件且挂在同一 target(documentElement) —— 成对断言, 单侧改名/换 target 即红
+- test_frontend_qb_stream_merge_degrade_and_badge_battery: SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3 子波 2; D7/D9/E1/E4/E7) —— 判定帧节拍源换轴后的前端事件驱动面, 行为级真跑(真骨架 polling.js + 真图方法 + EventSource/票据桩): 合并语义纯函数 _qbStreamAppend(t > 列末追加「最新测量」尾点=步进 / t == 列末尾点替代 / 同值重发 false / t < 列末丢弃(GET 竞态不得回退) / 显式空值点透传 / 超预算 500+64 从头截断) + wiring(换票 POST /api/events/ticket -> EventSource ?scope=&ticket= 建流 / 对账 30s + watchdog 两张骨架定时器 / hello+onopen 双源 live) + 数据帧(首帧基线=后端「断档检测在基线之后」契约 / seq 连续推进 / 断档立即 GET 重拉 + 3s 节流防断档风暴 / GET 快照晚于事件按 ts 归并: t > GET 列末保留其余折叠) + 徽标 D3(两文案两态: 滞后 Ns = 末样本 ts vs 墙钟超 3 x si / 已断连 = retry/degraded/pullFail 叠加静默 / connecting 不惊扰; 恢复自动消显; 位置 = 判定线 x/绘图区顶沿, 变值才写; ensure 幂等) + 降级 E7(票据 503 计失败轮, 连续 3 轮 3s/轮失败 -> GET 轮询 qb:<scope> 接管 + 对账停摆 + 60s 保守重试; 恢复 = 流回来撤销降级 + 轮询退役 + 立即对账) + 清理面(_qbStreamStop 收 ES/重试定时器/三张定时器/状态缓冲, 幂等; 重开先停后起不泄漏; 目标未就绪不开流; 落票后复查= polling.js #7 同款竞态窗口); 静态钉: E4 常量五件(对账 30000/静默 3/重连 3000/失败上限 3/降级恢复 60000)+ 尾点预算(500+64)+ _QB_SCOPES stream 构建器三形态(与后端 _parse_scope 同语法)+ 生命周期挂钩(openDrawerTraffic _qbStreamStart / drawer_store 页签 _qbStreamStart("torrent") / _stopDrawerPoll 与 _qbTeardown 收流 / _qbReloadOnEnter _qbStreamResume / 换窗不动流)+ 徽标接线(build ensure + _qbFxAnchorSync 顶部搭车(anc 早退之前, 不受 FX 门控)+ destroy 清记录)+ CSS 单点(transform 右收/pointer-events:none/z-index 2 照 tooltip 惯例, --warn 断连色)+ 会话代际三件(_qbStreamStop 翻代 gen / _qbStreamConnect 两处 await 后核验 / onopen/hello/帧/onerror 四监听器来连核验 st.es === es)+ 失败计数单点(onopen 不清 —— 握手成功 ≠ 可用 / _qbStreamFrame 来帧清); 行为面含 watchdog 静默沿(>3 x si)三检查点: 静默沿立即 GET 重拉一次(D6)+ silentPull 记账防同段静默重复重拉(D6b)+ 新帧到复位(下一次静默重新判, D6c)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -419,10 +420,10 @@ def test_frontend_qb_traffic_chart_wiring():
     # 单种挂点(§07 表 2): 种子详情头部「流量」页签 v-if 门 + drawer.js 接线三处
     assert 'v-if="qbTrafficOn"' in drawer_tpl and 'drawerTab(\'traffic\')' in drawer_tpl, \
         "drawer.html 缺「流量」页签按钮(v-if=qbTrafficOn 门 + drawerTab 入口)"
-    assert 'tab === "traffic" && this.qbTrafficOn' in store_js and 'this._qbPollStart("torrent")' in store_js, \
-        "drawer_store.js _loadDrawerTab 缺流量页签分支(加载 + 起轮询; W1 起取数在数据层)"
-    assert 'this._qbPollStop("torrent")' in store_js, \
-        "drawer_store.js _stopDrawerPoll 缺流量轮询收口(关抽屉/切页签/换目标全走这里 = 关闭即停; W1 起在数据层)"
+    assert 'tab === "traffic" && this.qbTrafficOn' in store_js and 'this._qbStreamStart("torrent")' in store_js, \
+        "drawer_store.js _loadDrawerTab 缺流量页签分支(加载 + 起 SSE 流; W1 起取数在数据层; T4a 起主路径为流)"
+    assert 'this._qbPollStop("torrent")' in store_js and 'this._qbStreamStop("torrent")' in store_js, \
+        "drawer_store.js _stopDrawerPoll 缺流量轮询/流收口(关抽屉/切页签/换目标全走这里 = 关闭即停; W1 起在数据层)"
     assert 'last === "traffic" && !this.qbTrafficOn' in drawer_js, \
         "drawer.js 打开抽屉缺流量页签初值归一(功能关闭时上次停留页签须落回常规页)"
     # 全局/分组挂点: 组右键菜单项(v-if 门) + 抽屉流量形态(共用正文块/建图落点/关闭/窗口切换)
@@ -452,8 +453,8 @@ def test_frontend_qb_traffic_chart_wiring():
         "drawer.html 缺流量形态头部调用点(形态判据 drawerIsTraffic + 标题取 qbTrafficTitle)"
     assert 'this.openDrawerTraffic("global", "")' in js and 'this.openDrawerTraffic("group", key)' in js, \
         "openQbHistory/openQbGroup 必须归一到 openDrawerTraffic(打开流量形态抽屉)"
-    assert 'this._qbLoad(scope);' in js and 'this._qbPollStart(scope);' in js, \
-        "openDrawerTraffic 缺打开拉取 + 起轮询(§07 表 3「打开弹层拉取」)"
+    assert 'this._qbLoad(scope);' in js and 'this._qbStreamStart(scope);' in js, \
+        "openDrawerTraffic 缺打开拉取 + 起 SSE 流(T4a: 主路径为流 + 30s 对账; GET 轮询骨架保留为降级态取数)"
     assert 'if (!this.qbTrafficOn || !key) return;' in js, "openQbGroup 缺 fail-closed 兜底门(入口 v-if 之外的加载路径)"
     # 低频轮询(§07; F7/26-11-15-1104 D6 起读 meta.sample_interval_s 生效采样间隔全窗统一,
     # 「低频轮询=桶宽」旧口径反转): [1.5s,600s] 夹取(配置校验界, A4 下界对齐 v3 采样间隔放宽
@@ -5286,6 +5287,7 @@ const mkVm = (scope) => ({
     meta: { interval_s: 30 } }),
   $nextTick: (fn) => { if (fn) fn(); },
   _qbChartBuild: () => {}, _qbPollResync: () => {}, _drawerDone: () => {},
+  _qbStreamOnLoad: () => {},  // T4a: GET 落袋的对账基准单点(无流态零操作 —— 桩面同生产守卫)
 });
 (async () => {
   const vt = mkVm("torrent");
@@ -5831,7 +5833,8 @@ def test_frontend_qb_traffic_load_stall_fallback():
 
     2026-10-22(issue 26-10-20-2231-refactor-fe-polling-family-dup): 兜底随轮询生命周期收进
     polling.js 骨架, 阈值常量上提为 `AQB_POLL_STALL_MS`(抽屉侧自此同口径 —— 此前同一类卡死只修了
-    流量图一边)。本守阵改钉三层, 任一层被拆即红:
+    流量图一边)。!T4a(plan 26-11-18-0037)起 GET 轮询骨架为降级态取数路径(E7), 本守阵钉的
+    stall/mutex 声明与行为面随之服务于降级态 —— 语义不变。本守阵改钉三层, 任一层被拆即红:
       1. 阈值常量 `AQB_POLL_STALL_MS` 在 polling.js(30000 = 请求级超时 15s 的两倍余量);
       2. 流量侧**声明**齐全: `stall: () => this[_QB_SCOPES[scope].loading]` + `mutex: true`
          (合体式早退 `document.hidden || this[def.loading]` 不得回潮 —— 那正是本 issue 的成因形态);
@@ -6006,6 +6009,9 @@ console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: check
 def test_frontend_qb_poll_rhythm_and_immediate_first_beat():
     """F7/F8/A7 电池(plan 26-11-15-1104): 轮询节奏 = 采样间隔全窗统一 + 冷开首拍立即 + 状态行同源
 
+    !T4a(plan 26-11-18-0037 阶段 3 子波 2)起本电池钉的 GET 轮询骨架(_qbPollStart/_qbPollMs)
+    是**降级态取数路径**(E7: SSE 主路径 _qbStreamStart 接管事件驱动判定帧, 票据满额/连续
+    重连失败才回退轮询) —— 骨架语义与旧「打开期间按 si 续拉」完全一致, 本电池逐拍面不变。
     - F7/D6: _qbPollMs 读 meta.sample_interval_s(生效采样间隔)全窗统一, [1.5s,600s] 防御夹取;
       只带 interval_s 的旧形状(桶宽)不吃 —— 缺键回 30s 兜底(G-F「轮询=桶宽节律错配」的回潮钉)。
     - A7: 状态行两组值同源 —— 周期实算(qbFxPeriodS)/beat(qbFxBeatMs)与采样行(qbFxSampleText)
@@ -6160,6 +6166,656 @@ def test_frontend_qb_themechange_event_pair():
     assert 'document.documentElement.removeEventListener("autoqb:themechange", this._qbOnThemeChange)' in ub \
         and "_qbThemeBound = false" in ub, \
         "beforeUnmount 必须对称摘除 autoqb:themechange 监听(removeEventListener + _qbThemeBound 复位)"
+
+
+# ==================== SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3
+# 子波 2; D7/D9/E1/E4/E7) ====================
+# 真骨架(polling.js)+ 真图方法 + EventSource/票据桩: 开连 / seq 断档重拉 / 30s 对账 / GET 竞态
+# 归并 / 降级与恢复 / 清理面 / 徽标两文案两态; 纯函数面 _qbStreamAppend(尾点替代/追加/竞态不回退/
+# 预算截断)。生命周期挂钩(打开/页签/收口/登出/换窗)为 python 静态钉。无 node 静默跳过(同
+# _NODE_QB_TRAFFIC 口径)。
+_NODE_QB_STREAM_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.document = { hidden: false };
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js(骨架)
+eval(fs.readFileSync(process.argv[2], "utf8"));   // qb_traffic_chart.js
+const P = window.AQB_POLL.methods;
+const M = window.AQB_QB_TRAFFIC.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+// —— 桩: 定时器捕获(不真跑) / 可控墙钟 / EventSource 桩 / DOM 元素桩 ——
+let timers = [];
+let tseq = 0;
+global.setTimeout = (fn, ms) => { const id = ++tseq; timers.push({ id, fn, ms, cleared: false, fired: false }); return id; };
+global.clearTimeout = (id) => { const t = timers.find((x) => x.id === id); if (t) t.cleared = true; };
+const fireOne = (ms) => {
+  const t = timers.find((x) => !x.cleared && !x.fired && x.ms === ms);
+  if (!t) return false;
+  t.fired = true;
+  t.fn();
+  return true;
+};
+const timerArmed = (ms) => timers.some((x) => !x.cleared && !x.fired && x.ms === ms);
+const realNow = Date.now; let off = 0;
+Date.now = () => realNow() + off;
+const nowS = () => Math.floor((realNow() + off) / 1000);
+let esList = [];
+global.EventSource = class {
+  constructor(url) {
+    this.url = url; this.closed = false; this._h = {}; this.onopen = null; this.onerror = null;
+    esList.push(this);
+  }
+  addEventListener(t, fn) { (this._h[t] = this._h[t] || []).push(fn); }
+  close() { this.closed = true; }
+  emit(t, data) { (this._h[t] || []).forEach((fn) => fn({ data: JSON.stringify(data) })); }
+  open() { if (this.onopen) this.onopen(); }
+  fail() { if (this.onerror) this.onerror(); }
+};
+const flush = () => new Promise((r) => setImmediate(r));
+const META = { interval_s: 30, sample_interval_s: 1.5, schema: 2, stride: 1 };
+function mkVm(over) {
+  const v = Object.assign({
+    qbTrafficOn: true, drawerIsTraffic: true, drawer: { open: true, scope: "global" },
+    page: "groups", qbHistWindow: "24h", qbHistData: null, qbHistLoading: false, qbHistError: "",
+    authOk: true, apiCalls: [], apiFail: false, apiData: null,
+    _qbCharts: null,
+  }, over || {});
+  Object.assign(v, M, { _qbChartBuild: () => {} });   // 真方法全域 + 建图桩(帧合并只验数据面)
+  v.$nextTick = (fn) => { if (fn) fn(); };   // 渲染等价桩: 同步 flush(落袋/合并后当帧见数)
+  v.startPoll = P.startPoll;
+  v.stopPoll = P.stopPoll;
+  v.api = async (path, opts) => {
+    v.apiCalls.push({ path, opts: opts || {} });
+    if (v.apiFail) throw new Error(v.apiFailMsg || "HTTP 503");
+    if (path === "/api/events/ticket") return { ticket: "T-" + (v.ticketSeq = (v.ticketSeq || 0) + 1), ttl: 30 };
+    return JSON.parse(JSON.stringify(v.apiData
+      || { points: [], totals: [], limits: [], meta: META }));
+  };
+  return v;
+}
+const COL = (tEnd, n) => {
+  // 造一列 n 个点(t 步进 30, 末点 t = tEnd, 升序)
+  const pts = [];
+  for (let i = 0; i < n; i++) pts.push({ t: tEnd - (n - 1 - i) * 30, dl: 1 + i, up: 2 + i });
+  return { points: pts, totals: [], limits: [], meta: META };
+};
+
+(async () => {
+  // —— A: 纯函数 _qbStreamAppend(合并语义三分支 + 预算截断 + 缓冲记账) ——
+  {
+    const pts = [{ t: 100, dl: 1, up: 2 }];
+    const tail = [];
+    ok("A1 t > 列末 -> 追加「最新测量」尾点(步进) + tail 缓冲同步登记",
+      _qbStreamAppend(pts, tail, { t: 130, dl: 3, up: 4 }, 564) === true && pts.length === 2
+      && pts[1].t === 130 && tail.length === 1 && tail[0].t === 130);
+    ok("A2 t == 列末 -> 尾点替代(同 tick 重发/尾组刷新)",
+      _qbStreamAppend(pts, tail, { t: 130, dl: 9, up: 4 }, 564) === true && pts.length === 2
+      && pts[1].dl === 9 && tail.length === 1 && tail[0].dl === 9);
+    ok("A3 同值重发 -> false(零变化不触发重画)",
+      _qbStreamAppend(pts, tail, { t: 130, dl: 9, up: 4 }, 564) === false && pts.length === 2);
+    ok("A4 t < 列末 -> 丢弃(GET 竞态纪律: 不得回退)",
+      _qbStreamAppend(pts, tail, { t: 90, dl: 0, up: 0 }, 564) === false && pts[0].t === 100);
+    const q = [{ t: 200, dl: null, up: null }];
+    const tq = [];
+    _qbStreamAppend(q, tq, { t: 230, dl: null, up: null }, 564);
+    ok("A5 显式空值点透传(缺口真值, dl/up = null 原样)", q[1].dl === null && q[1].up === null);
+    const big = []; const tbig = [];
+    let adv = false;
+    for (let i = 0; i < 600; i++) adv = _qbStreamAppend(big, tbig, { t: i * 10, dl: i, up: i }, 564) || adv;
+    ok("A6 超预算(MAN_RAW 500 + 余量 64)从头截断(防御双通道同故障的无界增长)",
+      big.length === 564 && big[0].t === 360 && tbig.length === 564);
+  }
+  // —— B: 开流 wiring(票据 -> EventSource -> live) ——
+  const v = mkVm();
+  v.qbHistData = COL(1030, 2);
+  v._qbStreamStart("global");
+  await flush(); await flush(); await flush();
+  ok("B1 换票一次(POST /api/events/ticket) + EventSource 以 scope&ticket 建流",
+    v.apiCalls.length === 1 && v.apiCalls[0].path === "/api/events/ticket"
+    && v.apiCalls[0].opts.method === "POST"
+    && esList.length === 1
+    && esList[0].url === "/api/traffic/qb/stream?scope=global&ticket=T-1");
+  ok("B2 对账 30s + watchdog 两张骨架定时器在表(qb-acc/qb-wd)",
+    !!v._polls["qb-acc:global"] && !!v._polls["qb-wd:global"] && !v._polls["qb:global"]);
+  const es = esList[0];
+  ok("B3 流状态 connecting(票据/握手在途)", v._qbStreams.global.state === "connecting");
+  es.emit("hello", { ok: true, scope: "global" });
+  ok("B3b live(hello 开流标记 —— 双源汇一)", v._qbStreams.global.state === "live"
+    && v._qbStreams.global.failRun === 0);   // 握手成功不清失败计数(R2: 清零认帧不认握手)
+  es.open();
+  ok("B3c onopen 同源幂等(已 live 再开零变化)", v._qbStreams.global.state === "live");
+  const callsR = v.apiCalls.length;
+  const esR = esList.length;
+  v._qbStreamResume("global");
+  ok("B3d 进场核对零操作(_qbStreamResume: 流在场 want=true 直返 —— 核对丢失即拆流重建)",
+    esList.length === esR && v.apiCalls.length === callsR
+    && v._qbStreams.global.state === "live" && v._qbStreams.global.want === true);
+  // —— C: 数据帧(首帧基线 / 尾点替代推进 / seq 断档重拉) ——
+  es.emit("traffic", { seq: 1, scope: "global", points: [{ t: 1030, dl: 30, up: 40 }] });
+  ok("C1 首帧基线(断档检测在基线之后) + 同 t 尾点替代(GET 组尾点被事件样本真值替代 —— 步进)",
+    v._qbStreams.global.seq === 1 && v.qbHistData.points.length === 2
+    && v.qbHistData.points[1].t === 1030 && v.qbHistData.points[1].dl === 30);
+  es.emit("traffic", { seq: 2, scope: "global", points: [{ t: 1060, dl: 5, up: 6 }] });
+  ok("C2 seq 连续 + 新样本尾点追加(每 tick 替代推进) + tail 缓冲登记",
+    v._qbStreams.global.seq === 2 && v.qbHistData.points.length === 3
+    && v.qbHistData.points[2].t === 1060
+    && v._qbStreams.global.tail.length === 2 && v._qbStreams.global.tail[1].t === 1060);
+  const callsC3 = v.apiCalls.length;
+  es.emit("traffic", { seq: 9, scope: "global", points: [{ t: 1090, dl: 7, up: 8 }] });
+  ok("C3 seq 断档(队列满丢弃留痕) -> seq 重基线 + 立即 GET 重拉(D9)",
+    v._qbStreams.global.seq === 9 && v.apiCalls.length === callsC3 + 1
+    && v.apiCalls[v.apiCalls.length - 1].path.indexOf("/api/traffic/qb/global") === 0);
+  await flush(); await flush();
+  ok("C3b 重拉落袋: GET 空列(无样本)时事件尾点缓冲全量归并回显示列",
+    v.qbHistData.points.length === 3 && v.qbHistData.points[2].t === 1090);
+  // C4 重拉节流: 3s 内重复断档不再打 GET(防断档风暴)
+  const callsC4 = v.apiCalls.length;
+  es.emit("traffic", { seq: 20, scope: "global", points: [{ t: 1120, dl: 1, up: 1 }] });
+  ok("C4 重拉 3s 节流(断档风暴防御): 节流窗内断档只重基线不发 GET",
+    v._qbStreams.global.seq === 20 && v.apiCalls.length === callsC4);
+  // —— C6(评审 T4a-R3/R2): ES onerror 路径 + 失败计数语义(清零认帧不认握手) ——
+  {
+    const vo = mkVm();
+    vo.qbHistData = COL(1030, 2);
+    vo._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    const eo = esList[esList.length - 1];
+    eo.open();
+    eo.emit("traffic", { seq: 1, scope: "global", points: [{ t: 1030, dl: 1, up: 1 }] });
+    ok("C6pre live 且来帧计数归零(基线)", vo._qbStreams.global.state === "live"
+      && vo._qbStreams.global.failRun === 0 && vo._qbStreams.global.es === eo);
+    eo.fail();
+    ok("C6a ES onerror(live->retry): 关连(st.es=null) + 计失败轮 1 + 3s 换票重开定时器"
+      + "(漏置 null = 双连叠加/漏汇 retry = 永不降级, 任一回归即红)",
+      eo.closed === true && vo._qbStreams.global.es === null
+      && vo._qbStreams.global.state === "retry" && vo._qbStreams.global.failRun === 1
+      && timerArmed(3000));
+    fireOne(3000); await flush(); await flush(); await flush();
+    const eo2 = esList[esList.length - 1];
+    eo2.open();   // 握手成功但零帧(空闪连形态)
+    ok("C6b 握手成功不清失败计数(onopen 不清 —— 空闪连 0/1 振荡形态被打破, R2)",
+      vo._qbStreams.global.state === "live" && vo._qbStreams.global.failRun === 1);
+    eo2.fail();
+    ok("C6c 空闪连第 2 轮: 计轮 2(可积累到上限降级, E7 可达性)",
+      vo._qbStreams.global.failRun === 2 && vo._qbStreams.global.state === "retry");
+    fireOne(3000); await flush(); await flush(); await flush();
+    const eo3 = esList[esList.length - 1];
+    eo3.open();
+    eo3.emit("traffic", { seq: 2, scope: "global", points: [{ t: 1060, dl: 2, up: 2 }] });
+    ok("C6d 来帧清零(正常瞬断形态: 流过数据后断, 重连来帧即归零不积累)",
+      vo._qbStreams.global.failRun === 0 && vo._qbStreams.global.state === "live");
+    eo3.fail();
+    ok("C6e 瞬断后再断: 计轮从 1 起算(前轮已被帧清零)",
+      vo._qbStreams.global.failRun === 1 && timerArmed(3000));
+    vo._qbStreamStop("global");
+  }
+  // —— C6f(评审 T4a-R3): 混合计轮(票据失败 1 轮 + ES 失败 2 轮交叉)达 3 -> 降级 ——
+  {
+    const vp = mkVm();
+    vp.apiFail = true; vp.apiFailMsg = "HTTP 503";
+    vp._qbStreamStart("global");
+    await flush(); await flush(); await flush();   // 票据失败轮 1
+    vp.apiFail = false;
+    fireOne(3000); await flush(); await flush(); await flush();   // 重开: 建流成功
+    const ep = esList[esList.length - 1];
+    ep.open();                                     // 握手成功(零帧, 不清轮 —— R2)
+    ep.fail();                                     // ES 失败轮 2
+    fireOne(3000); await flush(); await flush(); await flush();   // 重开
+    const ep2 = esList[esList.length - 1];
+    ep2.open();
+    ep2.fail();                                    // ES 失败轮 3 -> 降级
+    ok("C6f 混合计轮(票据 1 + ES 2 交叉)达 3 -> 降级 GET 轮询接管(E7)",
+      vp._qbStreams.global.failRun === 3 && vp._qbStreams.global.degraded === true
+      && !!vp._polls["qb:global"]);
+    vp._qbStreamStop("global");
+  }
+  // —— C5: GET 快照晚于事件(竞态归并): t > GET 列末 t 的尾点保留, t <= 的视为已折叠 ——
+  {
+    const v2 = mkVm();
+    v2.qbHistData = COL(1030, 2);
+    v2.apiData = COL(1030, 2);   // GET 列末 t = 1030
+    v2._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    const e2 = esList[esList.length - 1];
+    e2.open();
+    e2.emit("traffic", { seq: 1, scope: "global", points: [{ t: 1030, dl: 30, up: 40 }] });
+    e2.emit("traffic", { seq: 2, scope: "global", points: [{ t: 1060, dl: 5, up: 6 }] });
+    v2.qbHistData = JSON.parse(JSON.stringify(v2.apiData));   // 模拟 _qbLoad 落袋次序(先换数据)
+    v2._qbStreamOnLoad("global", v2.apiData);                 // 再做对账归并(生产同序)
+    ok("C5 GET 竞态归并: t > GET列末 的事件尾点保留(1060), t <= 的被组粒度列折叠(1030 回 GET 真值)",
+      v2.qbHistData.points.length === 3 && v2.qbHistData.points[1].t === 1030
+      && v2.qbHistData.points[1].dl === 2 && v2.qbHistData.points[2].t === 1060
+      && v2._qbStreams.global.tail.length === 1 && v2._qbStreams.global.tail[0].t === 1060);
+    ok("C5b GET 落袋 = 对账基准: pullFail 复位 + lastT 归位(取最新已知样本 ts)",
+      v2._qbStreams.global.pullFail === false && v2._qbStreams.global.lastT === 1060);
+  }
+  // —— D: 徽标(两文案两态 / 恢复消显 / 位置同步) ——
+  {
+    function mkEl() {
+      return {
+        className: "", style: {}, textContent: "", isConnected: true, parentElement: null, children: [],
+        classList: {
+          _set: new Set(),
+          toggle(cls, force) {
+            const want = force === undefined ? !this._set.has(cls) : !!force;
+            if (want) this._set.add(cls); else this._set.delete(cls);
+            return want;
+          },
+          contains(cls) { return this._set.has(cls); },
+        },
+        remove() {
+          if (this.parentElement) {
+            const i = this.parentElement.children.indexOf(this);
+            if (i >= 0) this.parentElement.children.splice(i, 1);
+            this.parentElement = null;
+          }
+          this.isConnected = false;
+        },
+        appendChild(c) { c.parentElement = this; this.children.push(c); c.isConnected = true; },
+      };
+    }
+    global.document.createElement = () => mkEl();
+    const wrap = mkEl();
+    const u = {
+      root: { isConnected: true, querySelector: (s) => (s === ".u-wrap" ? wrap : null) },
+      _wrap: wrap, bbox: { left: 60, top: 10, width: 800, height: 300 }, data: [],
+      _qbScope: "global",
+    };
+    v._qbCharts = { global: u };
+    v._qbStallBadgeEnsure(u);
+    ok("D1 徽标建面: .qb-stall-badge 挂 .u-wrap(.u-wrap 末位) + 初始隐藏",
+      !!u._qbStallBadge && u._qbStallBadge.className === "qb-stall-badge"
+      && wrap.children[wrap.children.length - 1] === u._qbStallBadge
+      && u._qbStallBadge.style.display === "none");
+    v._qbStallBadgeEnsure(u);
+    ok("D1b ensure 幂等(再调零操作 —— 与 _qbFxAnchorEnsure 同款纪律)",
+      wrap.children.length === 1 && u._qbStallBadge === wrap.children[0]);
+    const st = v._qbStreams.global;
+    st.state = "live"; st.degraded = false; st.pullFail = false;
+    st.lastT = nowS() - 100;   // 末样本落后墙钟 100s
+    v.qbHistData.meta = Object.assign({}, META);   // si = 1.5 -> 阈值 4.5s
+    v._qbStallBadgeSync(u);
+    ok("D2 冻结态: 「滞后 Ns」(N = 末样本 ts vs 墙钟取整) + qb-stall-down 类不在",
+      /^滞后 \d+s$/.test(u._qbStallBadge.textContent)
+      && !u._qbStallBadge.classList.contains("qb-stall-down")
+      && u._qbStallBadge.style.display === "");
+    ok("D2b 位置 = 判定线 x(bbox 右缘 860)/绘图区顶沿(10+3) —— 尾点旁不遮菱形",
+      u._qbStallBadge.style.left === "860px" && u._qbStallBadge.style.top === "13px");
+    u._qbStallBadge.style.left = "keep";
+    v._qbStallBadgeSync(u);
+    ok("D2c 同位置重同步零改写(变值才写)", u._qbStallBadge.style.left === "keep");
+    st.pullFail = true;
+    v._qbStallBadgeSync(u);
+    ok("D3 静默叠加对账失败 -> 升格「已断连」(两条取数路径都断) + qb-stall-down 类挂",
+      u._qbStallBadge.textContent === "已断连"
+      && u._qbStallBadge.classList.contains("qb-stall-down"));
+    st.pullFail = false;
+    st.lastT = nowS();   // 新帧到: 沉默解除
+    v._qbStallBadgeSync(u);
+    ok("D4 恢复(新帧到/seq 续上)徽标自动消显", u._qbStallBadge.style.display === "none");
+    st.state = "retry";
+    v._qbStallBadgeSync(u);
+    ok("D5a 重连中(retry)-> 「已断连」(流断开且重连中)", u._qbStallBadge.textContent === "已断连");
+    st.state = "live"; st.degraded = true;
+    v._qbStallBadgeSync(u);
+    ok("D5b 降级态 -> 「已断连」照显(E7)", u._qbStallBadge.textContent === "已断连");
+    st.degraded = false; st.state = "connecting"; st.lastT = nowS() - 100;
+    v._qbStallBadgeSync(u);
+    ok("D5c connecting(票据/握手在途)不惊扰: 隐藏", u._qbStallBadge.style.display === "none");
+    st.state = "stopped";
+    v._qbStallBadgeSync(u);
+    ok("D5d 流已停: 隐藏(want=false 同)", u._qbStallBadge.style.display === "none");
+    // D6 静默沿立即 GET 重拉(watchdog 行为面): live + 静默超 3 x si -> 一次 GET
+    // (墙钟前跳 10s: 越过 C3 重拉的 3s 节流窗 —— 本拍重拉是对账节流之外的独立通道)
+    off += 10000;
+    st.state = "live"; st.lastT = nowS() - 100; st.silentPull = false;
+    const callsD6 = v.apiCalls.length;
+    v._qbStallTick("global");
+    ok("D6 静默沿(>3 x si)watchdog 立即 GET 重拉一次(D9) + silentPull 记账防重复",
+      v.apiCalls.length === callsD6 + 1 && st.silentPull === true);
+    v._qbStallTick("global");
+    ok("D6b 同一段静默内不重复重拉(30s 对账兜周期)", v.apiCalls.length === callsD6 + 1);
+    es.emit("traffic", { seq: 30, scope: "global", points: [{ t: nowS(), dl: 1, up: 1 }] });
+    ok("D6c 新帧到: silentPull 复位(下一次静默重新判)", st.silentPull === false);
+    // —— D7(评审 T4a-R4): pullFail 生产分支 —— 流活时对账 GET 失败(feeding 门内):
+    //     pullFail 记账 + 数据不清 + 错误态不亮(回旧语义 = 对账失败闪空态一帧, 回归即红) ——
+    {
+      await flush(); await flush();   // D6 静默重拉的 GET 落定(loading 复位, 计时起点不叠)
+      off += 10000;                   // 越过 D6 重拉的 3s 节流窗
+      st.lastT = nowS();              // 静默解除基线(徽标先隐)
+      v._qbStallBadgeSync(u);
+      ok("D7 pre 徽标隐藏(数据面新鲜)", u._qbStallBadge.style.display === "none");
+      v.apiFail = true; v.apiFailMsg = "HTTP 500";
+      const dataBefore = v.qbHistData;
+      const errBefore = v.qbHistError;
+      v._qbReconcile("global");
+      await flush(); await flush();
+      ok("D7a 对账 GET 失败(feeding 门): pullFail 记账 + 显示列不清 + 错误态不亮",
+        st.pullFail === true && v.qbHistData === dataBefore
+        && v.qbHistError === errBefore && v.qbHistData !== null);
+      st.lastT = nowS() - 100;        // 静默叠加 -> 徽标升格
+      v._qbStallBadgeSync(u);
+      ok("D7b 静默叠加对账失败: 徽标升格「已断连」(两条取数路径都断)",
+        u._qbStallBadge.textContent === "已断连");
+      v.apiFail = false;
+      v.apiData = COL(2000, 3);
+      v._qbStreamPullNow("global", true);   // 对账恢复(force: 生产 _qbLoad 全链)
+      await flush(); await flush();
+      ok("D7c 对账恢复: pullFail 复位 + 徽标退回(「已断连」升格撤销)",
+        st.pullFail === false && u._qbStallBadge.textContent.indexOf("已断连") < 0);
+      v.apiData = null;
+    }
+  }
+  // —— E: 降级路径(E7: 票据 503 / 连续 3 轮失败 -> GET 轮询兜底; 60s 保守重试恢复) ——
+  {
+    const v3 = mkVm();
+    v3.apiFail = true; v3.apiFailMsg = "HTTP 503";
+    const esE = esList.length;
+    v3._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    ok("E1 票据 503: 计失败轮 1 + 3s 换票重开定时器(照 polling.js 重试纪律)",
+      v3._qbStreams.global.state === "retry" && v3._qbStreams.global.failRun === 1
+      && timerArmed(3000) && esList.length === esE);   // 建流失败: 无新 ES 实例
+    fireOne(3000); await flush(); await flush(); await flush();
+    ok("E2 第 2 轮失败: 仍 retry(未达上限)", v3._qbStreams.global.failRun === 2
+      && v3._qbStreams.global.degraded === false);
+    fireOne(3000); await flush(); await flush(); await flush();
+    ok("E3 连续 3 轮失败 -> 降级: GET 轮询接管(qb:global 在表) + 对账停摆 + 60s 恢复定时器",
+      v3._qbStreams.global.degraded === true && v3._qbStreams.global.state === "degraded"
+      && !!v3._polls["qb:global"] && timerArmed(60000));
+    const callsE3 = v3.apiCalls.length;
+    v3._qbReconcile("global");
+    ok("E3b 降级态对账停摆(_qbStreamPullNow 的 degraded 门)", v3.apiCalls.length === callsE3);
+    // 60s 重试(仍失败) -> 再走 retry -> 3 轮 -> 降级(已降级不重复拉轮询)
+    fireOne(60000); await flush(); await flush(); await flush();
+    fireOne(3000); await flush(); await flush(); await flush();
+    fireOne(3000); await flush(); await flush(); await flush();
+    fireOne(3000); await flush(); await flush(); await flush();
+    ok("E4 降级恢复失败循环: 仍降级 + 轮询不重复重启(幂等)",
+      v3._qbStreams.global.degraded === true && !!v3._polls["qb:global"] && timerArmed(60000));
+    // 恢复: 票据/建流成功 -> live -> 降级撤销 + GET 轮询退役 + 立即对账
+    v3.apiFail = false;
+    v3.apiData = COL(2000, 3);
+    fireOne(60000); await flush(); await flush(); await flush();
+    const e3 = esList[esList.length - 1];
+    e3.open();
+    await flush(); await flush();
+    ok("E5 流恢复: 降级撤销 + GET 轮询退役(qb:global 摘除) + 回 live",
+      v3._qbStreams.global.degraded === false && v3._qbStreams.global.state === "live"
+      && v3._polls["qb:global"] == null);
+    ok("E5b 恢复后立即对账一次(轮询期可能积了滞后)",
+      v3.apiCalls.some((c) => c.path.indexOf("/api/traffic/qb/global") === 0)
+      && v3.qbHistData.points.length === 3);
+    v3._qbStreamStop("global");
+  }
+  // —— F: 清理面(照 stopEvents 四件; 幂等) ——
+  {
+    // F0(评审 T4a-R6): 关流清「在挂的重试定时器」—— 先制造一轮票据失败(3s 定时器在挂)再关流
+    const v7 = mkVm();
+    v7.apiFail = true; v7.apiFailMsg = "HTTP 503";
+    v7._qbStreamStart("global");
+    await flush(); await flush(); await flush();   // 轮 1 失败 -> 3s 重试定时器在挂
+    ok("F0 pre: 重试定时器确在挂(非空转前提)", timerArmed(3000)
+      && v7._qbStreams.global.state === "retry");
+    v7._qbStreamStop("global");
+    ok("F0 关流清在挂重试定时器(fireOne 无拍可点 -> 不会再触发 connect)+ 单柄置 null + state 归位",
+      !timerArmed(3000) && v7._qbStreams.global.retry === null
+      && v7._qbStreams.global.state === "stopped");
+    const v4 = mkVm();
+    v4.qbHistData = COL(1030, 2);
+    v4._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    const es4 = esList[esList.length - 1];
+    es4.open();
+    es4.emit("traffic", { seq: 1, scope: "global", points: [{ t: 1030, dl: 9, up: 9 }] });
+    v4._qbStreamStop("global");
+    ok("F1 关流: ES close + retry 清 + 三张定时器(qb-acc/qb-wd/qb)全收 + 状态归位",
+      es4.closed === true && !timerArmed(3000) && !timerArmed(60000)
+      && v4._polls["qb-acc:global"] == null && v4._polls["qb-wd:global"] == null
+      && v4._polls["qb:global"] == null
+      && v4._qbStreams.global.state === "stopped" && v4._qbStreams.global.want === false);
+    ok("F1b 缓冲/seq/沉默基线随停流归置(重开零残留)",
+      v4._qbStreams.global.tail.length === 0 && v4._qbStreams.global.seq === null
+      && v4._qbStreams.global.lastT === 0 && v4._qbStreams.global.pullFail === false);
+    v4._qbStreamStop("global");
+    ok("F2 关流幂等(未开也安全, 重复调用零异常零变化)",
+      v4._qbStreams.global.state === "stopped" && v4._qbStreams.global.want === false);
+    const esBefore = esList.length;
+    v4._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    ok("F3 重开: 先停后起(重复开连不泄漏 —— 恰一条新 ES)",
+      esList.length === esBefore + 1 && v4._qbStreams.global.want === true);
+    v4._qbStreamStop("global");
+    // F4 目标未就绪(torrent 无 hash)不开流(防御: 空目标 URL 必 400)
+    const v5 = mkVm({ drawer: { open: true, scope: "global" }, drawerIsTraffic: true });
+    const esBefore5 = esList.length;
+    v5._qbStreamStart("torrent");   // drawer.hash 缺失 -> stream() 给 "torrent:" -> 拒开
+    ok("F4 目标未就绪(torrent 无 hash)不开流不发请求", esList.length === esBefore5
+      && v5.apiCalls.length === 0);
+    // F5 落票后复查(await 期间已停流): 票据到手但代际已翻(want 亦清) -> 不建流
+    const esBefore6 = esList.length;
+    const v6 = mkVm();
+    v6._qbStreamStart("global");
+    v6._qbStreamStop("global");   // await 换票期间关流(代际翻新)
+    await flush(); await flush(); await flush();
+    ok("F5 落票后复查(polling.js #7 同款竞态窗口 + 代际判据): 停流后落票不建流",
+      esList.length === esBefore6 && v6._qbStreams.global.state === "stopped");
+  }
+  // —— G: 会话代际(评审 T4a-R1): stop/restart 翻代 —— 在途换票 continuation 落票即弃 ——
+  {
+    // a. 重开竞态(页签/抽屉在换票 RTT 内关-开): 旧 continuation 带票丢弃, 恰一条新 ES
+    //    (无双建: 双建时 st.es 后写覆盖前写 = 先建 ES 永不 close 的订阅泄漏)
+    const vg = mkVm();
+    const esG = esList.length;
+    vg._qbStreamStart("global");        // connect A 在途(换票 await)
+    vg._qbStreamStop("global");         // 代际翻新 + 复位 busy 门
+    vg._qbStreamStart("global");        // 新会话 connect B 在途
+    await flush(); await flush(); await flush();
+    ok("G1 重开竞态: 旧 continuation 带票丢弃不建流(恰一条新 ES —— 双建即泄漏)",
+      esList.length === esG + 1 && vg.apiCalls.length === 2   // 两次换票都发出(旧票弃置)
+      && vg._qbStreams.global.want === true && vg._qbStreams.global.gen >= 2);
+    esList[esList.length - 1].open();
+    ok("G1b 新会话状态完好(live 可达)", vg._qbStreams.global.state === "live");
+    vg._qbStreamStop("global");
+    // b. 在途重试定时器触发的 connect 被 stop 打断(同代际面)
+    const vh = mkVm();
+    vh.apiFail = true; vh.apiFailMsg = "HTTP 503";
+    const esH = esList.length;
+    vh._qbStreamStart("global");
+    await flush(); await flush(); await flush();   // 轮 1 失败 -> 3s 重试定时器
+    vh.apiFail = false;
+    fireOne(3000);                      // 重试触发的 connect C 在途(换票 await)
+    vh._qbStreamStop("global");         // 代际翻新: connect C 作废
+    vh._qbStreamStart("global");        // 新会话 connect D
+    await flush(); await flush(); await flush();
+    ok("G2 在途重试触发的 connect 被 stop 打断: 旧 continuation 同样带票弃置(恰一条新 ES)",
+      esList.length === esH + 1 && vh._qbStreams.global.want === true);
+    esList[esList.length - 1].open();
+    ok("G2b 新会话 live(重试路径同受代际保护)", vh._qbStreams.global.state === "live");
+    vh._qbStreamStop("global");
+    // c. 旧连监听器不误伤新会话(来连核验 st.es === es 三面: onerror/onopen/帧)
+    const vk = mkVm();
+    vk.qbHistData = COL(1030, 2);
+    vk._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    const ek = esList[esList.length - 1];
+    ek.open();
+    const ghost = new global.EventSource("/api/traffic/qb/stream?scope=global&ticket=ghost");
+    vk._qbStreams.global.es = ghost;    // 手工接管: 模拟新会话已建流、旧连未及 close 的窗口
+    const callsK = vk.apiCalls.length;
+    ek.fail();
+    ok("G3 旧连 onerror: 不动新会话(st.es 保持 ghost / state 不翻 retry / 零重试定时器 / 零新请求)",
+      vk._qbStreams.global.es === ghost && vk._qbStreams.global.state === "live"
+      && !timerArmed(3000) && vk.apiCalls.length === callsK);
+    ek.emit("traffic", { seq: 9, scope: "global", points: [{ t: 1090, dl: 7, up: 8 }] });
+    ok("G3b 旧连帧: 不改写新会话显示列(合并零发生)",
+      vk.qbHistData.points.length === 2 && vk.qbHistData.points[1].t === 1030);
+    vk._qbStreams.global.state = "connecting";   // 模拟 ghost 会话仍在握手
+    ek.open();
+    ok("G3c 旧连 onopen 不改写新会话状态(仍 connecting —— 防旧连监听器改写 st)",
+      vk._qbStreams.global.state === "connecting");
+    vk._qbStreamStop("global");
+  }
+  // —— H: 隐藏渲染节流(评审 T4a-R5): 帧照常合并、建图跳过; 回场恢复 ——
+  {
+    const vz = mkVm();
+    let builds = 0;
+    vz._qbChartBuild = () => { builds += 1; };
+    vz.qbHistData = COL(1030, 2);
+    vz._qbStreamStart("global");
+    await flush(); await flush(); await flush();
+    const ez = esList[esList.length - 1];
+    ez.open();
+    ez.emit("traffic", { seq: 1, scope: "global", points: [{ t: 1030, dl: 9, up: 9 }] });
+    ok("H1 可见态帧: 合并 + 建图照走(基线)", vz.qbHistData.points[1].dl === 9 && builds === 1);
+    global.document.hidden = true;
+    ez.emit("traffic", { seq: 2, scope: "global", points: [{ t: 1060, dl: 5, up: 6 }] });
+    ok("H2 隐藏期帧: 合并照常(列推进)但建图跳过(渲染节流 —— 极性反转即红)",
+      vz.qbHistData.points.length === 3 && vz.qbHistData.points[2].t === 1060 && builds === 1);
+    global.document.hidden = false;
+    ez.emit("traffic", { seq: 3, scope: "global", points: [{ t: 1090, dl: 7, up: 8 }] });
+    ok("H3 回场: 建图恢复(下一帧补上渲染)", builds === 2 && vz.qbHistData.points[3].t === 1090);
+    vz._qbStreamStop("global");
+  }
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error("PROBE CRASH: " + (e && e.stack || e)); process.exit(1); });
+"""
+
+
+def test_frontend_qb_stream_merge_degrade_and_badge_battery():
+    """SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3 子波 2)
+
+    判定帧节拍源换轴(D7)后的前端事件驱动面, 行为级真跑(真骨架 + 真图方法 + 桩):
+    - 合并语义(模块级 _qbStreamAppend 纯函数): t > 列末追加「最新测量」尾点(步进) / t == 列末
+      尾点替代 / 同值重发 false / t < 列末丢弃(GET 竞态不得回退) / 显式空值点透传 / 超预算
+      (500+64)从头截断;
+    - wiring: 换票(POST /api/events/ticket)-> EventSource(?scope=&ticket=) 建流; 对账 30s +
+      watchdog 两张骨架定时器; live 状态经 onopen/hello 双源; 进场核对零操作
+      (_qbStreamResume: 流在场 want=true 直返, 不重连不发票 —— B3d);
+    - 数据帧: 首帧基线(断档检测在基线之后, 后端契约)/ seq 连续推进 / 断档立即 GET 重拉 +
+      3s 节流防断档风暴 / GET 快照晚于事件按 ts 归并(t > GET 列末保留, 其余折叠);
+    - watchdog 静默沿(D9/R7): 流 live 且末样本 ts 落后墙钟超 3 x si -> 立即 GET 重拉一次
+      (D6)+ silentPull 记账防同一段静默重复重拉(D6b)+ 新帧到复位(下一次静默重新判, D6c);
+    - ES onerror 路径(评审 T4a-R3): live->retry 迁移全链(关连 st.es=null + 计失败轮 + 3s
+      换票重开定时器, C6a)/ 空闪连计轮形态(握手成功不清计数 -> 可积累到上限, C6b/C6c)/
+      正常瞬断形态(来帧清零不积累, C6d/C6e)/ 混合计轮(票据 1 + ES 2 交叉达 3 降级, C6f);
+    - pullFail 生产分支(评审 T4a-R4): 流活时对账 GET 失败(feeding 门内)pullFail 记账 +
+      显示列不清 + 错误态不亮(D7a)+ 静默叠加徽标升格「已断连」(D7b)+ 对账恢复复位(D7c);
+    - 隐藏渲染节流(评审 T4a-R5): document.hidden 期帧照常合并但建图跳过、回场恢复(H1-H3);
+    - 徽标(D3): 两文案两态(滞后 Ns = 末样本 ts vs 墙钟超 3 x si; 已断连 = retry/degraded/
+      pullFail 叠加静默; connecting 不惊扰)+ 恢复自动消显 + 位置 = 判定线 x / 顶沿(变值才写);
+    - 降级(E7): 票据 503 计失败轮, 连续 3 轮(3s/轮)失败 -> GET 轮询接管(qb:<scope> 骨架句柄)
+      + 对账停摆 + 60s 保守重试; 恢复 = 流回来即撤销降级 + 轮询退役 + 立即对账;
+    - 清理面: _qbStreamStop 收 ES/重试定时器/三张定时器/状态缓冲, 幂等; 在挂重试定时器真实
+      清验(先票据失败一轮再关流, F0 —— 活流直关的空转断言不算数); 重开先停后起不泄漏;
+      目标未就绪不开流; 落票后复查(await 期间已停流不建流, polling.js #7 同款 + 代际判据);
+    - 会话代际(评审 T4a-R1): stop/restart 翻代 -> 在途换票 continuation 落票即弃(重开竞态
+      G1 / 在途重试触发的 connect 被 stop 打断 G2 两形态, 恰一条新 ES = 双建泄漏即红)/
+      旧连监听器三面核验(st.es === es: onerror 不误伤新会话 G3、旧帧不改写显示列 G3b、
+      旧 onopen 不改写状态 G3c)。
+    静态钉: E4 常量五件(对账 30s/静默 3 x si/重连 3s/失败上限 3/降级恢复 60s)+ _QB_SCOPES
+    stream 构建器三形态 + 生命周期挂钩(打开 _qbStreamStart / 页签 _qbStreamStart("torrent") /
+    _stopDrawerPoll 与 _qbTeardown 收流 / 进场 _qbStreamResume / 换窗不动流)+ 徽标接线
+    (build ensure + _qbFxAnchorSync 顶部搭车 + destroy 清记录)+ CSS 单点(pointer-events:none /
+    z-index 2 照 tooltip 惯例, --warn 断连色)+ 会话代际三件(stop 翻代 / connect 两处 await 后
+    核验 / 四监听器来连核验)+ 失败计数单点(onopen 不清 / _qbStreamFrame 清)。无 node 静默跳过
+    (同 _NODE_QB_TRAFFIC 口径)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    poll_path = os.path.join(shared, "polling.js")
+    js_path = os.path.join(shared, "qb_traffic_chart.js")
+    poll_js = open(poll_path, encoding="utf-8").read()
+    js = open(js_path, encoding="utf-8").read()
+    store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
+    auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
+
+    # —— E4 常量(模块常量不进配置, D5): 值漂移必须同步计划与本守阵 ——
+    assert "const _QB_STREAM_RECONCILE_MS = 30000;" in js, \
+        "缺对账周期常量 30s(E4: 流活着也低频 GET 全量校准, 缓冲归位组粒度)"
+    assert "const _QB_STREAM_SILENCE_X = 3;" in js, \
+        "缺静默阈值常量 3(E4: 静默 > 3 x si 起显「滞后 Ns」, R7 诚实等待)"
+    assert "const _QB_STREAM_RETRY_MS = 3000;" in js, \
+        "缺重连节奏常量 3s(照 polling.js 一次性票据换新票重开同拍)"
+    assert "const _QB_STREAM_FAIL_MAX = 3;" in js, \
+        "缺连续失败上限常量 3(达到即降级 GET 轮询, E7)"
+    assert "const _QB_STREAM_RETRY_DEGRADE_MS = 60000;" in js, \
+        "缺降级恢复重试周期常量 60s(保守侧: 降级期 GET 轮询在供数, 每分钟静默重试一次流)"
+    assert "const _QB_RAW_POINTS_MAX = 500;" in js and "const _QB_STREAM_TAIL_HEADROOM = 64;" in js, \
+        "缺事件尾点预算常量(MAX_RAW_POINTS 500 = §03 契约 + 64 余量; 超界从头截断防无界增长)"
+    # —— _QB_SCOPES stream 构建器(与后端 _parse_scope 三形态同语法, 前端不自行编码) ——
+    assert 'stream: () => "global",' in js \
+        and 'stream: (t) => "torrent:" + (t.drawer.hash || ""),' in js \
+        and 'stream: (t) => "group:" + (t.qbGroupKey || ""),' in js, \
+        "_QB_SCOPES 缺 SSE 订阅 scope 构建器(global/torrent:<hash>/group:<key>)"
+    # —— 生命周期挂钩(打开 / 页签 / 收口 / 进场 / 换窗 / 登出) ——
+    od = re.search(r"async openDrawerTraffic\(scope, key\) \{\n(.*?)\n    \},", js, re.S)
+    assert od and "this._qbLoad(scope);" in od.group(1) \
+        and "this._qbStreamStart(scope);" in od.group(1) \
+        and "this._qbPollStart(scope)" not in od.group(1), \
+        "openDrawerTraffic 必须首拉 + 起 SSE 流(_qbStreamStart); GET 轮询骨架只在降级态拉起"
+    assert 'this._qbLoad("torrent");' in store_js and 'this._qbStreamStart("torrent");' in store_js, \
+        "drawer_store.js 流量页签分支缺首拉 + 起 SSE 流"
+    assert 'this._qbPollStop("torrent");' in store_js and 'this._qbStreamStop("torrent");' in store_js, \
+        "drawer_store.js _stopDrawerPoll 必须同收流量轮询与 SSE 流(页签切走/换目标/关面板即断流)"
+    td = re.search(r"_qbTeardown\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert td and "this._qbPollStop(s);" in td.group(1) \
+        and "this._qbStreamStop(s);" in td.group(1) \
+        and "this._qbChartDestroy(s);" in td.group(1), \
+        "_qbTeardown 必须单点收三挂点轮询 + SSE 流 + 图(closeDrawer/形态切换/登出全走这里)"
+    assert "this._qbTeardown();" in drawer_js and "this._qbTeardown();" in auth_js, \
+        "closeDrawer 与 _logout 必须走 _qbTeardown 单点(流随收 —— 登出不留后台流)"
+    re_b = re.search(r"_qbReloadOnEnter\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert re_b and "this._qbStreamResume(scope);" in re_b.group(1) \
+        and "this._qbLoad(scope);" in re_b.group(1), \
+        "_qbReloadOnEnter 必须进场核对流在场(_qbStreamResume; 流活着零操作不重连)"
+    sw = re.search(r"async _qbSetWindow\(scope, w\) \{\n(.*?)\n    \},", js, re.S)
+    assert sw and "_qbStreamStart" not in sw.group(1) and "_qbStreamStop" not in sw.group(1), \
+        "换窗不得动流(窗口是 GET 参数, 流 scope 不变 —— 换窗只首拉 + 流续)"
+    # —— 徽标接线(建面/同步搭车/销毁清记录)——
+    assert "this._qbStallBadgeEnsure(u);" in js and "u._qbScope = scope;" in js, \
+        "建图缺徽标幂等建面(_qbStallBadgeEnsure)或图记录缺 scope 反查标记(_qbSync 点无 scope 参数)"
+    fx_sync = re.search(r"_qbFxAnchorSync\(u\) \{\n(.*?)\n      const anc = u && u\._qbFxAnchors;", js, re.S)
+    assert fx_sync and "this._qbStallBadgeSync(u);" in fx_sync.group(1), \
+        "徽标同步必须搭车 _qbFxAnchorSync 顶部(四处几何同步点覆盖面一致; 不受 FX 门控 —— anc 早退之前)"
+    assert "u._qbStallBadge = null;" in js, "_qbChartDestroy 必须清徽标图记录引用(换肤/重建零残留)"
+    # —— CSS 单点(_qbChartInjectCss: pointer-events/z-index 照 tooltip 惯例 views.css .hist-tip) ——
+    assert ".qb-stall-badge { position: absolute; transform: translateX(-100%); padding-right: 6px;" \
+        " pointer-events: none;" in js, \
+        "徽标 CSS 缺 transform 右收/pointer-events:none(悬停/FX 不受干扰)"
+    assert ".qb-stall-badge.qb-stall-down { color: var(--warn); }" in js, \
+        "徽标断连态缺 --warn 色分义(两文案两态的视觉面)"
+    # —— 会话代际与来连核验(评审 T4a-R1)/ 失败计数单点(评审 T4a-R2)——
+    assert "st.gen = (st.gen || 0) + 1;" in js, \
+        "_qbStreamStop 必须翻会话代际(在途换票 continuation 落票即弃 —— 重开竞态双建即订阅泄漏)"
+    assert "const myGen = st.gen || 0;" in js and js.count("if (st.gen !== myGen) return;") == 2, \
+        "_qbStreamConnect 必须在换票前捕获代际且两处 await 后核验(catch 分支 + 落票后), 旧 continuation 不得建流"
+    assert "es.onopen = () => { if (st.es === es)" in js \
+        and 'es.addEventListener("hello", () => { if (st.es === es)' in js \
+        and js.count("if (st.es !== es) return;") >= 2, \
+        "onopen/hello/帧/onerror 四监听器必须核验来连 === st.es(旧连不误伤新会话也不自救)"
+    fb = re.search(r"_qbStreamOnOpen\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert fb and "st.failRun = 0" not in fb.group(1), \
+        "失败计数不得在 onopen 清(握手成功 ≠ 可用 —— 空闪连 0/1 振荡使 E7 降级不可达, 评审 T4a-R2)"
+    frm = re.search(r"_qbStreamFrame\(scope, fr\) \{\n(.*?)\n      if \(st\.seq == null\) \{", js, re.S)
+    assert frm and "st.failRun = 0;" in frm.group(1), \
+        "失败计数清零单点必须在 _qbStreamFrame(本连产出过数据帧)处 —— onopen 清即 R2 回归"
+
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_QB_STREAM_PROBE, poll_path, js_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"SSE 主路径 node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"SSE 主路径电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 # ==================== F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2,

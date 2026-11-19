@@ -1183,7 +1183,9 @@ def test_frontend_poll_skeleton_single_point():
       3. 停止条件单点: `document.hidden` 只许出现在骨架里(另一处是 lifecycle 的 visibilitychange
          事件响应, 那是"停表"不是"每拍判据"), 散点回潮即红; S1 起放行 qb_traffic_chart.js 的
          **节拍暂停**一处(plan 26-11-12-1139 §09: 页面隐藏暂停 rAF、可见后从当前显示值接续,
-         不是"跳拍"语义) —— 恰一次且必须在 _qbBeatFrame 内;
+         不是"跳拍"语义); T4a(plan 26-11-18-0037)再放行 SSE 帧到达的**渲染节流**一处
+         (_qbStreamFrame: 隐藏期帧照常合并进显示列但跳过 $nextTick 建图 —— 流不停, 渲染等回场,
+         ver 通道 hidden 短路同先例) —— qb_traffic_chart.js 内恰两处且各在各的方法内;
       4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 `awaitPoll`, 手写的
          `++pollGen` 代际守卫与 setTimeout 递归不得回潮。
     行为面走 node 电池真跑(无 node 静默跳过), 见 _NODE_POLL_SKELETON_PROBE。
@@ -1221,18 +1223,25 @@ def test_frontend_poll_skeleton_single_point():
 
     # 3. 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里;
     #    S1 起放行 qb_traffic_chart.js 的**节拍暂停**一处(plan 26-11-12-1139 §09: 页面隐藏暂停
-    #    rAF、可见后从当前显示值接续 —— 是"冻结拍内时钟"不是"跳拍"), 轮询跳过语义仍单点在骨架
+    #    rAF、可见后从当前显示值接续 —— 是"冻结拍内时钟"不是"跳拍"), 轮询跳过语义仍单点在骨架;
+    #    T4a(plan 26-11-18-0037)再放行 SSE 帧到达的**渲染节流**一处(_qbStreamFrame: 隐藏期帧
+    #    照常合并进显示列但跳过 $nextTick 建图 —— 流不停(重连 churn 贵), 渲染等回场, ver 通道
+    #    hidden 短路同先例), 恰两处且各在各的方法内, 散点回潮即红。
     hidden_files = sorted(
         n for n in os.listdir(shared) if n.endswith(".js") and os.path.isfile(os.path.join(shared, n)) and
         "document.hidden" in open(os.path.join(shared, n), encoding="utf-8").read()
     )
     assert hidden_files == ["lifecycle.js", "polling.js", "qb_traffic_chart.js"], \
-        f"document.hidden 散点回潮(应为骨架 polling.js + lifecycle 停表 + 流量图节拍暂停一处): {hidden_files}"
+        f"document.hidden 散点回潮(应为骨架 polling.js + lifecycle 停表 + 流量图节拍暂停/帧渲染节流两处): {hidden_files}"
     beat_frame_m = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", chart_js, re.S)
+    stream_frame_m = re.search(r"_qbStreamFrame\(scope, fr\) \{\n(.*?)\n    \},", chart_js, re.S)
     chart_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", chart_js, flags=re.S))
-    assert beat_frame_m and len(re.findall(r"document\.hidden", chart_code)) == 1 \
-        and "document.hidden" in beat_frame_m.group(1), \
-        "qb_traffic_chart.js 的 document.hidden 必须恰 _qbBeatFrame 内一处(节拍暂停; 轮询跳过语义不得回潮到此)"
+    assert beat_frame_m and stream_frame_m \
+        and len(re.findall(r"document\.hidden", chart_code)) == 2 \
+        and "document.hidden" in beat_frame_m.group(1) \
+        and "document.hidden" in stream_frame_m.group(1), \
+        "qb_traffic_chart.js 的 document.hidden 必须恰两处(_qbBeatFrame 节拍暂停 + _qbStreamFrame 隐藏渲染节流;" \
+        "轮询跳过语义不得回潮到其它位置)"
 
     # 4. 有界等待一律经 awaitPoll, 旧形态不得回潮
     assert "this.awaitPoll(null, {" in cmd_js, \

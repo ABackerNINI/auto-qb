@@ -163,8 +163,11 @@ window.AQB_DRAWER_STORE = {
       // _drawerListLoadingOn); 该标记只在 _drawerSwitchEnd 落定/被打断时清。
       // 流量页签(S5b)的低频轮询同收: 本方法是抽屉页签轮询的收口单点(closeDrawer/drawerTab/
       // _switchDrawerTarget/openTorrentDrawer 全走这里), 页签切走/换目标/关面板即停 —— 若新页签
-      // 仍是流量, _loadDrawerTab 会重新起(_qbPollStart 自带先停后起)
+      // 仍是流量, _loadDrawerTab 会重新起(_qbStreamStart 自带先停后起)
       this._qbPollStop("torrent");
+      // SSE 流同收(T4a, plan 26-11-18-0037): 页签轮询收口单点扩到流 —— 页签切走/换目标/关面板
+      // 即断流(订阅生命周期 = 图表打开期间, E1); 流量页签重入由 _loadDrawerTab 重新开
+      this._qbStreamStop("torrent");
     },
     /* 抽屉页签轮询走长驻骨架(polling.js::startPoll 单点): 这里只声明差异 ——
      *   - 节拍 2026-10-14(用户报「详情面板用户页实时速度刷新率太低」): 5s 固定 -> 主节拍
@@ -311,13 +314,13 @@ window.AQB_DRAWER_STORE = {
         this._startDrawerPoll();
       } else if (tab === "content") this._fetchDrawerFiles(false, seq);
       // 流量页签(S5b, plan 26-10-03-0946 §07 表(2)): 数据源 /api/traffic/qb/torrent/{hash};
-      // 打开时拉取一次 + 打开期间按采样间隔低频续拉(qb_traffic_chart.js _qbPollStart,
-      // F7/26-11-15-1104 D6 起 meta.sample_interval_s 取间隔全窗统一, 首拍 immediate 不再
-      // arm 成 30s fallback), 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收 ——
-      // hash 上下文竞态(换目标后旧响应)在 _qbLoad 的 stale 判定里丢弃
+      // 打开时拉取一次(首拉)+ 打开期间 SSE 主路径推送(qb_traffic_chart.js _qbStreamStart,
+      // T4a/plan 26-11-18-0037: per-scope 订阅 + 事件驱动判定帧 + 30s 对账; GET 低频轮询
+      // 骨架保留为降级态取数路径, _qbStreamDegrade 拉起), 关抽屉/切页签/换目标由
+      // _stopDrawerPoll 统一收 —— hash 上下文竞态(换目标后旧响应)在 _qbLoad 的 stale 判定里丢弃
       else if (tab === "traffic" && this.qbTrafficOn) {
         this._qbLoad("torrent");
-        this._qbPollStart("torrent");
+        this._qbStreamStart("torrent");
       }
       // R2 S5(计划 26-10-09-2219): 合并生效时第二列的数据供给也在此收口(插件禁触碰取数/轮询
       // 纪律不破) —— gc 对补 detail+files, tp 对补 trackers+peers(带 seq 走代际守卫, 详情走

@@ -305,6 +305,10 @@ const TRIGGER_DEFS = {
       "scope": "none", "why": "SSE 订阅票据: 非动作"
     },
     {
+      "file": "qb_traffic_chart.js", "fn": "_qbStreamConnect", "ep": "/api/events/ticket",
+      "scope": "none", "why": "流量步进 SSE 流订阅票据(共用 /api/events/ticket 池, plan 26-11-18-0037 T4a): 非动作"
+    },
+    {
       "file": "config_hub.js", "fn": "tmAutostart", "ep": "/api/traffic/monitor/autostart",
       "scope": "none", "why": "全局流量来源工具自启开关(计划 26-10-17-0339 S17): 非种子目标, 作用于外部工具进程"
     },
