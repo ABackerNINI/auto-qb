@@ -11,6 +11,20 @@
 - test_frontend_fx_tag_cat_chip_glow_layering: flux tag/cat chip 辉光放行 + H&R 竖线迁层守阵(计划 26-11-12-1012 S1+S2) —— 旧计划 26-11-10-0921 只救 .site-chip 本体裁剪, tag/cat chip 的 hover 辉光仍被两层裁掉(「辉光仅显示一侧或两侧」第二根因: 直接父容器 .g-tags/.m-tags/.g-cat/.m-cat 的 overflow:hidden 裁掉画在盒外的 box-shadow 外发光, components.css:340-341): S1 段逐字钉四祖先(html[data-fx-preset] 前缀, 不入四皮肤键集扫描)规则体含 overflow: clip + overflow-clip-margin: 16px(clip 非 visible = 不建滚动容器保留内容裁剪语义 I3, 标签全量展开换行行高与吸左首格几何不动; 16px = 12px blur + 3px spread + 1px 硬芯余量(stack 最大层 0 0 12px 3px), 零新增令牌 I2; .g-sites 本来无裁剪不加同款 D5); S2 段钉 .tag-chip 补 position: relative(基线 components.css:342 无定位包含块, .f-on:380 同值不冲突)+ .hr-pending/.hr-done::before 迁层三条(content:""/absolute/inset:0/pointer-events:none 共用绘制盒 + box-shadow: inset 2px 0 0 var(--hr-pending)/var(--hr-done) 两档语义色竖线)+ 本体 box-shadow: none 关闭(缺任一半 = hover 前后竖线消失或本体线与 ::before 线双线叠画, 同 site-chip S4 迁移面; HR = H&R 做种考核状态类, 非人力资源)+ ::before 渐隐过渡段(RM 媒体块内, box-shadow 段令牌逐字沿用 site-chip::before 渐隐段 --dur-fast/--ease, hr-pending<->hr-done 状态类切换竖线色渐变不跳变); any() 存在性断言只防删行/改值, hover 本体仍单独消费同一条 --fx-glow-stack, 级联胜负由 S3 像素采样 e2e 仲裁(纯静态/纯 computed 均对绘制层裁剪无感)
 - test_frontend_console_square_radius: console 方角口径守阵(R1 精修 B1, 用户报「console 详情模板/文字元素出现圆角」) —— console/style.css 的 --radius-lg/--radius/--radius-sm 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(0/999px 胶囊/小值/50%/var(--radius*)/inherit, 现存值盘点后冻结): flux 意图的圆角 16/10/6 写进共享面 = 三皮肤同时回归, 新值入列必须显式改白名单(有意识决策)
 - test_frontend_tpl_ctl_bits_single_source
+- test_frontend_colstyle_tpl_class_css_paired: 列风格「模板类→CSS 配对」守阵(计划 26-11-20-0009 S6)
+  —— 片段模板(shared/tpl/ctx-menus.html 表头菜单色样 + xtpl-cells.html 行格双 span)新挂的
+  cs- 命名空间类名(cs-bar/cs-bar-led/cs-ramp/cs-dots/cs-unit/cs-uv/cs-uu 族/令牌色类/cs-v/
+  cs-u + 动态四族 csb-*/csp-*/cst-*/csu-*)必须在四皮肤**各自**的有效级联面
+  (_ui_css_effective = 本皮肤全链 + shared 收尾件, link 序; 列风格映射规则族单点
+  shared/console_hub.css 尾段)有选择器规则 —— 类挂 DOM 而无规则 = 选择器永不命中, 色样/
+  单位着色/档位映射静默失效无报错。既有挂件闸 _scan_page_class_wiring 只扫 <main> 标签
+  挂件类(实际命中 settings.html 等页壳, 四皮肤 index.html 无 <main>), 覆盖不到片段模板新类。
+  used 面两源: 静态 class="..." 属性提取(剥 HTML 注释; :class 绑定里的 'cs-barstyle' 等是
+  subMenu 状态键不是类名) + 动态四族经 format.js 判定单点(progBandClass/speedBandClass/
+  numScale*/fmt*Parts)node 真跑全值域枚举(与 r4 电池同口径, 无 node 静默跳过该族); 两侧
+  各有提取存活下限(头部家族类/枚举面清单点名)防空转恒绿。判据是类名级 used ⊆ defined,
+  删某类名的**全部**规则(或缺最后一条)即红, 只删多定义类的一条不红(谱×档矩阵完整性归
+  S6 e2e); 范围克制只扫列风格 cs- 前缀类, 不扩成全模板扫描(历史未配对类不掀)。
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -929,3 +943,89 @@ def test_frontend_console_square_radius():
                 "皮肤面(B1 回归向量: flux 意图的圆角 16/10/6 漏进 console 加载面); "
                 "若确属 console 设计变更, 显式更新本守阵白名单"
             )
+
+
+def test_frontend_colstyle_tpl_class_css_paired():
+    """列风格「模板类→CSS 配对」守阵(计划 26-11-20-0009 S6): 片段模板 cs-* 类名在四皮肤有效级联面均有定义
+
+    静默故障形态(与 _scan_page_class_wiring 同族): 类名挂上 DOM 而对应皮肤的有效 CSS 面里
+    没有选择器规则 —— 选择器永不命中, 色样/单位着色/档位映射静默失效, 无任何报错。那道
+    既有闸只扫 `<main class="...">` 挂件类(实际命中 settings.html 等页壳模板; 四皮肤
+    index.html 无 <main>), 覆盖不到片段模板新类, 本守阵补齐列风格这一族。
+
+    used 面(模板侧, 两源):
+      1. 静态 class="..." 属性: shared/tpl/ctx-menus.html(表头菜单五维色样)与
+         xtpl-cells.html(行格 cs-v/cs-u 双 span); 剥 HTML 注释后逐属性提取 cs- 命名空间
+         类名 —— :class 绑定里的 'cs-barstyle' 等是 subMenu 状态键不是类名, 只取静态属性。
+      2. 动态四族 csb-*/csp-*/cst-*/csu-*: 模板只经 :class 绑定 format.js 判定单点
+         (progBandClass/speedBandClass/numScale*/fmt*Parts), 类名静态提不出来 —— node
+         真跑单点函数全值域枚举(r4 电池同口径; 无 node 静默跳过该族, 静态面照守)。
+    defined 面(CSS 侧): _ui_css_effective(皮肤全链 + shared 收尾件, link 序 = 该皮肤真实
+    吃到的级联面)剥注释后从规则选择器段提取; 注释里的 csb-N 等举例不计。
+    判据: used ⊆ defined 对四皮肤**逐一**成立(§01 不变量「新类名四皮肤全部有对应规则」;
+    列风格是全局引擎 D1, 一套选择跨四皮肤共享, 规则族单点 shared/console_hub.css 尾段)。
+    判据是类名级 used ⊆ defined, 删某类名的**全部**规则(或缺最后一条)即红, 只删多定义类
+    的一条不红(谱×档矩阵完整性归 S6 e2e)。范围克制: 只扫列风格 cs- 前缀类, 不扩成全模板
+    扫描(历史未配对类不掀)。
+    """
+    used_static = set()
+    for name in ("ctx-menus.html", "xtpl-cells.html"):
+        path = os.path.join(STATIC_ROOT, "shared", "tpl", name)
+        assert os.path.isfile(path), f"缺 shared/tpl/{name}(列风格模板类 used 面的提取源)"
+        stripped = re.sub(r"<!--.*?-->", "", open(path, encoding="utf-8").read(), flags=re.S)
+        for m in re.finditer(r'(?<![:\w-])class="([^"]*)"', stripped):
+            for cls in m.group(1).split():
+                if re.match(r"^cs[a-z]*(?:-[A-Za-z0-9]+)+$", cls):
+                    used_static.add(cls)
+    # 提取口径存活下限: 头部家族类一个都提不出来 = 模板改版让本守阵空转恒绿, 显式红
+    for floor in ("cs-bar", "cs-ramp", "cs-dots", "cs-unit", "cs-v", "cs-u"):
+        assert floor in used_static, (f"片段模板静态类提取丢失 {floor}(实测 {sorted(used_static)}) —— 模板改版须同步本守阵 used 面")
+
+    # 动态四族: format.js 判定单点真跑全值域枚举(类名单点在 format.js, 模板 :class 绑定)
+    used_dynamic = set()
+    node = shutil.which("node")
+    if node:
+        probe = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_FORMAT;");
+const M = globalThis.__W2__.methods;
+const names = new Set();
+for (let p = -5; p <= 105; p += 0.5) { const c = M.progBandClass(p); if (c) names.add(c); }
+for (let b = -10; b <= 2000; b += 1) { const c = M.speedBandClass(b, 1000); if (c) names.add(c); }
+[M.numScaleRatio(0.5), M.numScaleRatio(1.5), M.numScaleAvail(0.5), M.numScaleEta(30)].forEach((c) => { if (c) names.add(c); });
+[1, 512, 1023, 1024, 1536, 2 ** 20, 2 ** 30, 2 ** 40, 2 ** 50, 2 ** 60, -1].forEach((v) => { const p = M.fmtSizeParts(v); if (p) names.add(p.c); });
+[1, 512, 1023, 1024, 1536, 2 ** 20, 2 ** 30, 2 ** 34, -1].forEach((v) => { const p = M.fmtSpeedParts(v); if (p) names.add(p.c); });
+console.log(JSON.stringify([...names].sort()));
+"""
+        proc = subprocess.run(
+            [node, "-e", probe, os.path.join(STATIC_ROOT, "shared", "format.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"format.js 类名枚举探针跑挂: {proc.stderr.strip()}"
+        used_dynamic = set(json.loads(proc.stdout.strip().splitlines()[-1]))
+        # 枚举面存活下限: 判定单点改版(档位/梯子/语义类改名)让枚举面漂移时显式红
+        for floor in (
+            "csb-0", "csb-t", "csp-1", "csp-over", "cst-warn", "cst-good", "cst-soon", "csu-B", "csu-PiB", "csu-GiBs"
+        ):
+            assert floor in used_dynamic, (f"判定单点枚举丢失 {floor}(实测 {sorted(used_dynamic)}) —— format.js 改版须同步本守阵下限")
+
+    used = used_static | used_dynamic
+    missing = {}
+    for ui in _UI_ALL:
+        css = re.sub(r"/\*.*?\*/", "", _ui_css_effective(ui), flags=re.S)
+        defined = set()
+        for mo in re.finditer(r"([^{}@/][^{}]*)\{", css):
+            defined.update(re.findall(r"\.((?:cs|csb|csp|cst|csu)-[A-Za-z0-9-]+)", mo.group(1)))
+        gap = sorted(used - defined)
+        if gap:
+            missing[ui] = gap
+    assert not missing, (
+        f"列风格「模板类→CSS 配对」失守: 以下 cs-* 类名在该皮肤的有效级联面里没有任何选择器规则 "
+        f"(类照挂 DOM 但选择器永不命中, 色样/着色/档位映射静默失效; 列风格映射规则族单点在 "
+        f"shared/console_hub.css 尾段, 四皮肤逐一面都要有): {missing}"
+    )

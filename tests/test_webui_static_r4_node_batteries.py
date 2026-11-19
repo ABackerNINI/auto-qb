@@ -17,6 +17,21 @@
 - test_r4_prog_band_boundaries: S3(计划 26-11-20-0009) —— 进度分档纯函数 progBand/progBandClass(format.js 新增)边界: 编码 0=空端点档/1..5=五档(左开右闭, 20/40/60/80 右闭整点归当档)/6=终点档; 0/0.1/20/20.01/40/40.01/60/60.01/80/80.01/99.9/100 逐点 + 负值/NaN/undefined 归空端点不抛错 + >100 归终点 + 类装配 csb-0/csb-1..csb-5/csb-t 逐档互证 + progPct 钳制联动(>1 比例钳 100 落终点档)
 - test_r4_speed_band_and_num_scale: S4(计划 26-11-20-0009) —— 速度分档 speedBand/speedBandClass(format.js 新增)全边界: 编码 0=无档(bytes<=0 / 分母 0=不限/null=undefined=未知, 归 0 不产类)/1..5=五档(左开右闭, 20/40/60/80% 右闭整点归当档)/6=over(>100% 严格大于, 恰 100%=分母 仍第 5 档); 20% 端点双侧/40/60/80 同构/99.9/over 双侧逐点 + 类装配 ''/csp-1..csp-5/csp-over 逐档互证 + **75% 旧档不受扰**(numTone 0.75 阈值双侧原样且与新档互不干扰, 两套类链由 cellSpeedTone 三态互斥派发: current 逐值 == numTone / off 恒空串 / 选谱 == speedBandClass)+ 数值列三判定(numScaleRatio/numScaleAvail/numScaleEta)翻转端点双侧各一例(ratio=1.0 / availability=1.0 不着色 / eta=60s / eta=8640000 哨兵与 <=0、-1 未知面)+ 消费面经 ctx 真跑(colStyle 状态桩 + hrRatioClass 伴值桩): cellNumScaleRatio 空白格不染(progress=0)与 HR 伴值共存形态(伴值行 pending/reached 不产 cst-*, D10 让位; 无伴值行正常; 组行无 HR 字段自然落判定)+ cellNumScaleAvail numeric 开关互斥(off == numTone(v,1) 原样 / on = D10 完整语义, 0.75 档让位)
 - test_r4_unit_parts_family: S5(计划 26-11-20-0009) —— 单位拆分 parts 家族(fmtSizeParts/fmtSpeedParts, format.js 新增)与拆分单点 _fmtLadderParts: **parts ≡ fmt 串逐字一致**(非 null 时 v+u == fmtSize/fmtSpeed 输出; 大小族全梯 B~PiB: 档下原值/1024 进制恰端点命中/档内中值/2^60 超大值封 PiB/负数不进档; 速度族 B/s~GiB/s 同构 + 超 GiB 封顶) + 零值 dash null 形态(0/null/undefined/NaN -> null, 与 fmtSizeOrDash/fmtSpeedOrDash 空串口径逐值互证) + u 前导空格归属(拼串含空格, 文本总宽不变)与字段形态恰 {v, u, c} + 档类/族标记(大小族 csu-B/csu-KiB..csu-PiB, 速度族 csu-Bs/csu-KiBs..csu-GiBs, 类名 's' 尾即速度族, 与单位串含 /s 互证) + 小数位 toFixed(2)/负数/超大值边界 + 上下限列消费面(fmtLimitBytes 空串门与 parts null 门逐值等价, 非零串形态逐字同) + 拆分单点回归(_fmtLadder == parts 拼接投影, top 档名回落/取整兜底语义原样)
+- test_r4_colstyle_engine_semantics: S6(计划 26-11-20-0009) —— 列风格引擎 colstyle.js 真跑电池
+  (B1 欠账: lifecycle 电池里 _colStyleSyncAttrs/adoptColStyle 以替身放行, 引擎真跑面归本电池):
+  loadColStyle 容错逐档(好数据逐字段透传/坏 JSON/存储字面 null·数字根/字段缺失/类型不符/
+  枚举外值逐字段回落默认 + 空存储全默认 + 未知字段与 v 版本戳不进状态, 键集恰五维) +
+  setColStyle 写链语义(合法变更返回 true 写状态+落盘 {v:1,...全维}/连续变更逐次全量覆写/
+  同值幂等返回 true 零落盘(提前 return 无赋值)/非法 dim 与非法 value 每维四型静默拒绝 false
+  零扰动/隐私模式 setItem 抛错返回 true 不抛降级会话内生效+刷新回落存储旧值) +
+  adoptColStyle 整份采用(未带字段回落默认不留本标签旧值=不合并/重复采用幂等/存储变更后
+  拾取新值)+ _colStyleSyncAttrs 五枚 data-cs-* 属性同步(五维全值域扫描值域=COLSTYLE_ENUMS/
+  默认态=DEFAULTS/属性键集恰五枚/绕开 setColStyle 的坏值逐字段回落默认档/属性面恒合法枚举)。
+  沙箱: app.js 截断切片(_app_head_source 同 loadColState 电池口径, 截到 initialColState 前)+
+  colstyle.js 同一 eval 拼接 —— 方法体裸名引用 COLSTYLE_*/loadColStyle, 常量真值全部来自
+  app.js(探针零手抄), 分开 eval 常量不可见必 ReferenceError; watch 派发以 state.js
+  watch.colStyle handler 同体(_colStyleSyncAttrs)显式调用模拟(真机由 Vue deep watch 承担)。
+  无 node 静默跳过
 - test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
   说明不足 2 字单行 —— trim 后计长, 分隔符后连接空格不算门槛/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
@@ -1900,6 +1915,256 @@ def test_r4_unit_parts_family():
     parts 拼接, top 回落/取整兜底语义原样)"""
     report = _run_probe(_NODE_UNIT_PARTS_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
     _assert_battery(report, "单位拆分 parts 家族电池")
+
+
+# S6(计划 26-11-20-0009): 列风格引擎 colstyle.js 真跑电池(B1 欠账收口) ----------------
+# 沙箱口径: app.js 截断切片(_app_head_source, 与 loadColState 电池同源 —— COLSTYLE_STORE_KEY/
+# COLSTYLE_ENUMS/COLSTYLE_FIELDS/COLSTYLE_DEFAULTS/loadColStyle 全在其内)+ colstyle.js
+# **同一 eval 拼接**: colstyle.js 方法体按生产全局词法域裸名引用这些常量, 沙箱里只有同一
+# eval 的词法域可见(分两次 eval 常量进不了 colstyle.js 的作用域, 必 ReferenceError)。
+# 引擎常量真值全部来自 app.js, 探针零手抄。watch 派发(真机 = state.js watch.colStyle deep
+# handler 调 _colStyleSyncAttrs)以同体显式调用模拟: 逐维赋值后派发一次, 属性即时跟随面照真跑。
+# 替身: localStorage(可编程抛错 = 隐私模式)+ document.documentElement.setAttribute 记录面。
+_NODE_COLSTYLE_ENGINE_PROBE = r"""
+const fs = require("fs");
+global.Vue = { createApp: () => ({}) };   // app.js 头部 `const { createApp } = Vue;`
+global.window = {};
+let store = {};            // localStorage 替身: 内容可编程
+let writes = 0;            // 落盘次数计数(同值幂等「不重复落盘」的判据)
+let failWrite = false;     // 隐私模式替身: setItem 抛错(配额满/隐私模式同形)
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { if (failWrite) throw new Error("quota exceeded"); writes++; store[k] = String(v); },
+  removeItem: (k) => { delete store[k]; },
+};
+const attrs = {};          // <html> data-cs-* 属性替身(setAttribute 记录面)
+global.document = { documentElement: { setAttribute: (k, v) => { attrs[k] = String(v); } } };
+
+const head = fs.readFileSync(process.argv[1], "utf8");   // app.js 截断切片(常量真值单点)
+const src = fs.readFileSync(process.argv[2], "utf8");    // colstyle.js 引擎本体
+eval(head + "\n" + src + "\n;globalThis.__X = { CS: window.AQB_COLSTYLE.methods, loadColStyle, COLSTYLE_ENUMS, COLSTYLE_FIELDS, COLSTYLE_DEFAULTS, COLSTYLE_STORE_KEY };");
+const CS = globalThis.__X.CS;
+// !不叫 loadColStyle: head 里的函数声明经 sloppy eval 注册进本脚本作用域, 同名 const 必
+//  SyntaxError(与 loadColState 电池的 const LC = ... 同款规避)
+const loadCol = globalThis.__X.loadColStyle;
+const ENUMS = globalThis.__X.COLSTYLE_ENUMS;
+const FIELDS = globalThis.__X.COLSTYLE_FIELDS;
+const DEFAULTS = globalThis.__X.COLSTYLE_DEFAULTS;
+const STORE_KEY = globalThis.__X.COLSTYLE_STORE_KEY;
+
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+// state.js watch.colStyle(deep)handler 的电池替身: 真机「逐维赋值/整份替换 -> 派发属性同步」
+// 由 Vue deep watch 承担, 电池显式调用同一 handler 体模拟派发(引擎语义与跟随面照真跑)
+const dispatch = (ctx) => ctx._colStyleSyncAttrs();
+// state.js data() 初值同款: colStyle: loadCol()(load 先于首渲染, R7)
+const mkCtx = () => { const ctx = Object.assign({}, CS); ctx.colStyle = loadCol(); return ctx; };
+
+// ---- loadColStyle 容错逐档(解析失败/字段缺失/类型不符/枚举外逐字段回落默认) ----
+ok("好数据: 合法字段透传, 其余回落默认", (() => {
+  store = {}; writes = 0;
+  store[STORE_KEY] = JSON.stringify({ v: 1, barstyle: "led", speedramp: "off", units: "band-heat" });
+  const out = loadCol();
+  return out.barstyle === "led" && out.speedramp === "off" && out.units === "band-heat" &&
+         out.barramp === DEFAULTS.barramp && out.numeric === DEFAULTS.numeric;
+})());
+ok("每字段合法值逐字段透传(取各维末档, 其余维恒默认)", FIELDS.every((k) => {
+  store = {};
+  store[STORE_KEY] = JSON.stringify({ [k]: ENUMS[k][ENUMS[k].length - 1] });
+  const out = loadCol();
+  const last = ENUMS[k][ENUMS[k].length - 1];
+  return out[k] === last && FIELDS.every((j) => (j === k ? true : out[j] === DEFAULTS[j]));
+}));
+ok("坏 JSON: 解析失败走 catch, 整体回落默认不抛错", (() => {
+  store = {}; store[STORE_KEY] = "{broken";
+  const out = loadCol();
+  return FIELDS.every((k) => out[k] === DEFAULTS[k]);
+})());
+ok("存储字面 null / 数字根: 原始值形态不抛错回落默认", (() => {
+  store = {}; store[STORE_KEY] = "null";
+  let r1 = null; try { r1 = loadCol(); } catch (e) { r1 = null; }
+  store[STORE_KEY] = "123";
+  let r2 = null; try { r2 = loadCol(); } catch (e) { r2 = null; }
+  return !!r1 && !!r2 && FIELDS.every((k) => r1[k] === DEFAULTS[k] && r2[k] === DEFAULTS[k]);
+})());
+ok("字段缺失: 只收在盘字段, 缺省维回落默认", (() => {
+  store = {}; store[STORE_KEY] = JSON.stringify({ v: 1, numeric: "on" });
+  const out = loadCol();
+  return out.numeric === "on" && out.barstyle === DEFAULTS.barstyle &&
+         out.speedramp === DEFAULTS.speedramp && out.units === DEFAULTS.units;
+})());
+ok("类型不符(数字/数组/布尔/对象/null): 逐字段回落默认不抛错", (() => {
+  store = {};
+  store[STORE_KEY] = JSON.stringify({ barstyle: 123, numeric: ["on"], units: true, barramp: { a: 1 }, speedramp: null });
+  const out = loadCol();
+  return FIELDS.every((k) => out[k] === DEFAULTS[k]);
+})());
+ok("枚举外值逐字段回落默认(类型合法但不在值域)", (() => {
+  store = {};
+  store[STORE_KEY] = JSON.stringify(FIELDS.reduce((acc, k) => (acc[k] = "zzz-" + k, acc), {}));
+  const out = loadCol();
+  return FIELDS.every((k) => out[k] === DEFAULTS[k]);
+})());
+ok("空存储(getItem null -> \"{}\"): 全默认", (() => {
+  store = {};
+  const out = loadCol();
+  return FIELDS.every((k) => out[k] === DEFAULTS[k]);
+})());
+ok("未知字段与 v 版本戳不进状态(键集恰五维)", (() => {
+  store = {}; store[STORE_KEY] = JSON.stringify({ v: 1, bogus: "led", another: 42, numeric: "on" });
+  const out = loadCol();
+  return Object.keys(out).length === FIELDS.length && FIELDS.every((k) => k in out) &&
+         !("bogus" in out) && !("v" in out) && !("another" in out) && out.numeric === "on";
+})());
+
+// ---- setColStyle 写链语义 ----
+store = {}; writes = 0; failWrite = false;
+const ctx = mkCtx();  // 空存储 -> 全默认(state.js data() 同臂)
+ok("非法 dim 静默拒绝(false): 状态与存储零扰动", (() => {
+  const r = ["bogus", undefined, "", "barstyles"].every((d) => CS.setColStyle.call(ctx, d, "led") === false);
+  return r && writes === 0 && FIELDS.every((k) => ctx.colStyle[k] === DEFAULTS[k]);
+})());
+ok("非法 value 每维四型静默拒绝(false): 枚举外/数字/undefined/null 全不收", FIELDS.every((k) =>
+  CS.setColStyle.call(ctx, k, "zzz") === false &&
+  CS.setColStyle.call(ctx, k, 123) === false &&
+  CS.setColStyle.call(ctx, k, undefined) === false &&
+  CS.setColStyle.call(ctx, k, null) === false) && writes === 0);
+ok("合法变更: 返回 true + 状态写键 + 落盘恰一次(JSON {v:1, ...全维})", (() => {
+  const r = CS.setColStyle.call(ctx, "barstyle", "plain");
+  if (r !== true || ctx.colStyle.barstyle !== "plain" || writes !== 1) return false;
+  const saved = JSON.parse(store[STORE_KEY]);
+  return saved.v === 1 && FIELDS.every((k) => saved[k] === ctx.colStyle[k]);
+})());
+ok("连续变更逐次全量覆写: 存储恒等于当前整份状态", (() => {
+  CS.setColStyle.call(ctx, "speedramp", "off");
+  CS.setColStyle.call(ctx, "units", "band-heat");
+  const saved = JSON.parse(store[STORE_KEY]);
+  return writes === 3 && saved.speedramp === "off" && saved.units === "band-heat" &&
+         saved.barstyle === "plain" && saved.barramp === DEFAULTS.barramp && saved.numeric === DEFAULTS.numeric;
+})());
+ok("同值幂等: 返回 true 但零落盘零赋值(提前 return, watch 不惊动)", (() => {
+  const before = writes;
+  const r = CS.setColStyle.call(ctx, "barstyle", "plain");
+  return r === true && writes === before && ctx.colStyle.barstyle === "plain";
+})());
+ok("变更免刷新: 派发后 <html> 属性即时跟随新状态", (() => {
+  dispatch(ctx);
+  return attrs["data-cs-barstyle"] === "plain" && attrs["data-cs-speedramp"] === "off" &&
+         attrs["data-cs-units"] === "band-heat" && attrs["data-cs-numeric"] === DEFAULTS.numeric;
+})());
+// 隐私模式双面: 先落一版非默认 barramp, 再在 setItem 抛错下改它 —— 「会话内生效」与
+// 「刷新回落存储旧值」两臂才咬合(回落面既不是会话内新值也不是默认值, 而是存储旧值)
+CS.setColStyle.call(ctx, "barramp", "cool");
+ok("隐私模式(setItem 抛错): 返回 true 不抛, 会话内生效, 存储保持旧值", (() => {
+  failWrite = true;
+  const before = store[STORE_KEY];
+  let r = null; try { r = CS.setColStyle.call(ctx, "barramp", "heat"); } catch (e) { r = "THREW"; }
+  failWrite = false;
+  return r === true && ctx.colStyle.barramp === "heat" && store[STORE_KEY] === before;
+})());
+ok("隐私模式写入失败后刷新(loadColStyle): 回落存储旧值 cool(非会话内 heat 亦非默认)", (() => {
+  return loadCol().barramp === "cool";
+})());
+
+// ---- adoptColStyle 整份采用(跨标签 storage / 可见性补对齐, 整份替换不合并) ----
+const ctx2 = mkCtx();
+CS.setColStyle.call(ctx2, "barstyle", "led");
+CS.setColStyle.call(ctx2, "speedramp", "off");
+CS.setColStyle.call(ctx2, "numeric", "on");
+store = {}; writes = 0;  // 另一标签写了一份只含部分字段的存储
+store[STORE_KEY] = JSON.stringify({ v: 1, barstyle: "plain" });
+CS.adoptColStyle.call(ctx2);
+ok("整份替换不合并: 未带字段回落默认, 不留本标签旧值", (() => {
+  const out = ctx2.colStyle;
+  return out.barstyle === "plain" && out.speedramp === DEFAULTS.speedramp &&
+         out.numeric === DEFAULTS.numeric && out.barramp === DEFAULTS.barramp &&
+         out.units === DEFAULTS.units;
+})());
+ok("重复采用幂等: 同值重放, 状态面零漂移", (() => {
+  CS.adoptColStyle.call(ctx2);
+  CS.adoptColStyle.call(ctx2);
+  const out = ctx2.colStyle;
+  return out.barstyle === "plain" && out.speedramp === DEFAULTS.speedramp && out.numeric === DEFAULTS.numeric;
+})());
+ok("跨标签新值到达: 存储变更后再采用拾取新值", (() => {
+  store[STORE_KEY] = JSON.stringify({ v: 1, units: "band-theme", numeric: "on" });
+  CS.adoptColStyle.call(ctx2);
+  return ctx2.colStyle.units === "band-theme" && ctx2.colStyle.numeric === "on" &&
+         ctx2.colStyle.barstyle === DEFAULTS.barstyle;
+})());
+ok("采用后派发: 属性即时跟随整份新状态", (() => {
+  dispatch(ctx2);
+  return attrs["data-cs-units"] === "band-theme" && attrs["data-cs-numeric"] === "on" &&
+         attrs["data-cs-barstyle"] === DEFAULTS.barstyle;
+})());
+
+// ---- _colStyleSyncAttrs: 五枚 data-cs-* 属性同步, 值域 = COLSTYLE_ENUMS ----
+store = {}; writes = 0;  // 清场: mkCtx() 初值 = loadCol(), 默认态各臂要空存储 -> 全默认
+ok("五维全值域扫描: 每维每档经 setColStyle+派发后属性 = 所选档", FIELDS.every((k) =>
+  ENUMS[k].every((v) => {
+    const c = mkCtx();
+    const r = CS.setColStyle.call(c, k, v);
+    dispatch(c);
+    return r === true && attrs["data-cs-" + k] === v;
+  })));
+ok("默认态: 五枚属性 = COLSTYLE_DEFAULTS(默认值 = 零视觉变化面)", (() => {
+  store = {};  // 全值域扫描把 store 留在了末档组合上, 默认态臂要空存储 -> 全默认
+  const c = mkCtx();
+  dispatch(c);
+  return FIELDS.every((k) => attrs["data-cs-" + k] === DEFAULTS[k]);
+})());
+ok("属性键集恰五枚 data-cs-*(不多不少, 缺枚即 CSS 永不命中)", (() => {
+  const c = mkCtx();
+  for (const k in attrs) delete attrs[k];
+  dispatch(c);
+  const want = FIELDS.map((k) => "data-cs-" + k).sort();
+  return JSON.stringify(Object.keys(attrs).sort()) === JSON.stringify(want);
+})());
+ok("绕开 setColStyle 的坏值: 逐字段回落默认档(合法维照常, 不把无效值写进 DOM)", (() => {
+  store = {};  // 同上: 默认基线要空存储
+  const c = mkCtx();
+  CS.setColStyle.call(c, "barstyle", "led");   // 合法维照常透传
+  c.colStyle.units = "neon";                   // 直赋枚举外(绕开写链的手滑形态)
+  c.colStyle.numeric = 123;                    // 直赋类型不符
+  delete c.colStyle.speedramp;                 // 字段缺失
+  dispatch(c);
+  return attrs["data-cs-barstyle"] === "led" && attrs["data-cs-units"] === DEFAULTS.units &&
+         attrs["data-cs-numeric"] === DEFAULTS.numeric && attrs["data-cs-speedramp"] === DEFAULTS.speedramp &&
+         attrs["data-cs-barramp"] === DEFAULTS.barramp;
+})());
+ok("属性面恒合法枚举: 坏状态派发后逐枚值都在 COLSTYLE_ENUMS 值域内", (() => {
+  const c = mkCtx();
+  FIELDS.forEach((k) => { c.colStyle[k] = "bogus"; });
+  dispatch(c);
+  return FIELDS.every((k) => ENUMS[k].indexOf(attrs["data-cs-" + k]) >= 0);
+})());
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_r4_colstyle_engine_semantics():
+    """S6(计划 26-11-20-0009): 列风格引擎 colstyle.js 真跑 node 电池(B1 欠账: lifecycle 电池
+    以替身放行引擎方法, 真跑面归本电池) —— loadColStyle 容错逐档(好数据透传/坏 JSON/存储
+    字面 null·数字/字段缺失/类型不符/枚举外逐字段回落 + 空存储全默认 + 未知字段与 v 版本戳
+    不进状态) + setColStyle 写链语义(合法变更 true+写键+落盘 {v:1,...}/同值幂等 true 零落盘/
+    非法 dim 与非法 value 静默拒绝 false/隐私模式 setItem 抛错降级会话内生效不抛+刷新回落
+    存储旧值) + adoptColStyle 整份采用幂等(不合并残留/存储变更拾取新值) +
+    _colStyleSyncAttrs 五枚 data-cs-* 属性同步(值域=COLSTYLE_ENUMS 全值域扫描/默认态/
+    键集恰五枚/坏值逐字段回落默认档)"""
+    # 落点带 pid: xdist worker 共用实例根, 固定名会被别的 worker 截断成 0 字节(同 bundle_file 竞态)
+    head_path = os.path.join(tempfile.gettempdir(), f"aqb_app_head_for_colstyle_{os.getpid()}.js")
+    assert str(os.getpid()) in os.path.basename(head_path), "head 探针落点缺 pid(同 bundle_file 竞态)"
+    with open(head_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_app_head_source())
+    report = _run_probe(
+        _NODE_COLSTYLE_ENGINE_PROBE,
+        head_path,
+        os.path.join(STATIC_ROOT, "shared", "colstyle.js"),
+    )
+    _assert_battery(report, "列风格引擎电池")
 
 
 def test_r4_fx_mount_toast_split_and_rows_ghost():
