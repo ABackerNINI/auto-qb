@@ -556,3 +556,67 @@ html[data-cs-barramp="rainbow"] .dt07-prog .bar > i,
 html[data-cs-barramp="rainbow"] .dt08-prog .bar > i,
 html[data-cs-barramp="rainbow"] .dt09-prog .bar > i { background: var(--cs-fill, var(--blue)); }
 
+
+/* ==========================================================================
+   列风格引擎 · 速度色阶与数值列色阶渲染面(计划 26-11-20-0009 S4/D8/D9/D10)
+   --------------------------------------------------------------------------
+   速度维(speedramp): 渲染器消费面 cellSpeedTone(format.js 单点)按维值互斥派发 ——
+   current(跟随现状, 默认)产 numTone 两档类链, 本段零规则(现状级联一字不动); off(关)
+   产空串(仅 dlspeed/upspeed 两格回落级联基线, 类链源头关闭 —— 单元格 DOM 无列标识,
+   tone-* 的 CSS 复位会波及 uploaded/downloaded 等其它消费列, R6); 选谱产 csp-1..csp-5/
+   csp-over。颜色全部由本段按 html[data-cs-speedramp] x 档位类派生映射, JS 永不产颜色值
+   (R4); 档位→令牌严格照计划 §03 谱目录表(D9, 与进度同表): 冷熟 indigo/blue/cyan/teal/
+   lime over=warn; 主题 violet/indigo/blue/cyan/teal over=warn; 温度 blue/cyan/teal/lime/
+   warn over=error; 彩虹 violet/blue/cyan/lime/pink over=warn。速度列无条可染, 谱色落
+   **文字**(S3「条与文字同色」的值色同源口径); 分母 0(不限)/null(未知)与速度 0(空白)
+   由 speedBand 归 0 档 = 无类, 不进映射。
+   数值维(numeric, D10): 判定三件 numScaleRatio/numScaleAvail/numScaleEta(format.js 单点)
+   产语义类 cst-warn/cst-good/cst-soon, 「关」(默认)不出映射规则 = 类在链上也无色 = 现状;
+   「开」三条: cst-warn -> --warn / cst-good -> --green / cst-soon -> --accent-hi(共用族)。
+   HR 伴值共存(D10): 伴值行由判定单点 cellNumScaleRatio 让位不产 cst-*(JS 侧), 本段零豁免
+   规则。三个时间列(last_activity/seeding_time/time_active)不产类(D10: 防圣诞树)。
+   特异性: 主表行恒带 s-<state> 状态文字色规则(.group-row.s-* .g-stat:not(.zero), 四皮肤
+   最高 (0,4,0)), 本段选择器一律 html[attr] + .group-row + 单元格类 + 档位类 = (0,4,1) ——
+   显式选谱/开数值时压过状态色(用户显式选择优先, S3 同判据), 未选档无规则 = 状态色照旧。
+   csp- 与 cst- 独立命名空间(R6): 不碰 tone- 链其它消费列(uploaded/downloaded/up_limit/
+   dl_limit), 不与 S2 菜单色样 cs-* / S3 进度档 csb-* 重叠。
+   ========================================================================== */
+/* ---- 速度谱 x 档 = 4 谱 x 6 档(1..5 + over), 每条 = 文字着色(值色一体, 无条可染) ---- */
+/* 冷熟谱: indigo -> blue -> cyan -> teal -> lime, over(>100%) warn(D9) */
+html[data-cs-speedramp="cool"] .group-row .g-stat.csp-1 { color: var(--indigo); }
+html[data-cs-speedramp="cool"] .group-row .g-stat.csp-2 { color: var(--blue); }
+html[data-cs-speedramp="cool"] .group-row .g-stat.csp-3 { color: var(--cyan); }
+html[data-cs-speedramp="cool"] .group-row .g-stat.csp-4 { color: var(--teal); }
+html[data-cs-speedramp="cool"] .group-row .g-stat.csp-5 { color: var(--lime); }
+html[data-cs-speedramp="cool"] .group-row .g-stat.csp-over { color: var(--warn); }
+/* 主题谱: violet -> indigo -> blue -> cyan -> teal, over warn(D9) */
+html[data-cs-speedramp="theme"] .group-row .g-stat.csp-1 { color: var(--violet); }
+html[data-cs-speedramp="theme"] .group-row .g-stat.csp-2 { color: var(--indigo); }
+html[data-cs-speedramp="theme"] .group-row .g-stat.csp-3 { color: var(--blue); }
+html[data-cs-speedramp="theme"] .group-row .g-stat.csp-4 { color: var(--cyan); }
+html[data-cs-speedramp="theme"] .group-row .g-stat.csp-5 { color: var(--teal); }
+html[data-cs-speedramp="theme"] .group-row .g-stat.csp-over { color: var(--warn); }
+/* 温度谱: blue -> cyan -> teal -> lime -> warn, over error(D9 热度计语义, 显式选择自担) */
+html[data-cs-speedramp="heat"] .group-row .g-stat.csp-1 { color: var(--blue); }
+html[data-cs-speedramp="heat"] .group-row .g-stat.csp-2 { color: var(--cyan); }
+html[data-cs-speedramp="heat"] .group-row .g-stat.csp-3 { color: var(--teal); }
+html[data-cs-speedramp="heat"] .group-row .g-stat.csp-4 { color: var(--lime); }
+html[data-cs-speedramp="heat"] .group-row .g-stat.csp-5 { color: var(--warn); }
+html[data-cs-speedramp="heat"] .group-row .g-stat.csp-over { color: var(--error); }
+/* 彩虹谱: violet -> blue -> cyan -> lime -> pink, over warn(D9) */
+html[data-cs-speedramp="rainbow"] .group-row .g-stat.csp-1 { color: var(--violet); }
+html[data-cs-speedramp="rainbow"] .group-row .g-stat.csp-2 { color: var(--blue); }
+html[data-cs-speedramp="rainbow"] .group-row .g-stat.csp-3 { color: var(--cyan); }
+html[data-cs-speedramp="rainbow"] .group-row .g-stat.csp-4 { color: var(--lime); }
+html[data-cs-speedramp="rainbow"] .group-row .g-stat.csp-5 { color: var(--pink); }
+html[data-cs-speedramp="rainbow"] .group-row .g-stat.csp-over { color: var(--warn); }
+/* ---- 数值色阶三条(D10): 「开」才出规则; 「关」无规则 = 现状 ----
+ * g-stat 面(eta/availability + 组行 ratio 格)与 m-pair 面(种子行 ratio 格)分写: 两面单元
+ * 格类不同但档位类同源, 特异性同为 (0,4,1)(含 html[attr] 前缀)。伴值行不产 cst-*(判定
+ * 单点让位), .m-pair.pending/.reached 口径不被覆盖。 */
+html[data-cs-numeric="on"] .group-row .g-stat.cst-warn,
+html[data-cs-numeric="on"] .group-row .m-pair.cst-warn { color: var(--warn); }
+html[data-cs-numeric="on"] .group-row .g-stat.cst-good,
+html[data-cs-numeric="on"] .group-row .m-pair.cst-good { color: var(--green); }
+html[data-cs-numeric="on"] .group-row .g-stat.cst-soon,
+html[data-cs-numeric="on"] .group-row .m-pair.cst-soon { color: var(--accent-hi); }

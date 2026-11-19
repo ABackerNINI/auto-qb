@@ -15,6 +15,7 @@
 - test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + 默认升序非空键默认列首击切降序(用户表 addr/1、Tracker sev/1 缺陷修复; 修复前三击全 no-op)与非默认列/空键三态零误伤 + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
 - test_r4_prog_band_boundaries: S3(计划 26-11-20-0009) —— 进度分档纯函数 progBand/progBandClass(format.js 新增)边界: 编码 0=空端点档/1..5=五档(左开右闭, 20/40/60/80 右闭整点归当档)/6=终点档; 0/0.1/20/20.01/40/40.01/60/60.01/80/80.01/99.9/100 逐点 + 负值/NaN/undefined 归空端点不抛错 + >100 归终点 + 类装配 csb-0/csb-1..csb-5/csb-t 逐档互证 + progPct 钳制联动(>1 比例钳 100 落终点档)
+- test_r4_speed_band_and_num_scale: S4(计划 26-11-20-0009) —— 速度分档 speedBand/speedBandClass(format.js 新增)全边界: 编码 0=无档(bytes<=0 / 分母 0=不限/null=undefined=未知, 归 0 不产类)/1..5=五档(左开右闭, 20/40/60/80% 右闭整点归当档)/6=over(>100% 严格大于, 恰 100%=分母 仍第 5 档); 20% 端点双侧/40/60/80 同构/99.9/over 双侧逐点 + 类装配 ''/csp-1..csp-5/csp-over 逐档互证 + **75% 旧档不受扰**(numTone 0.75 阈值双侧原样且与新档互不干扰, 两套类链由 cellSpeedTone 三态互斥派发: current 逐值 == numTone / off 恒空串 / 选谱 == speedBandClass)+ 数值列三判定(numScaleRatio/numScaleAvail/numScaleEta)翻转端点双侧各一例(ratio=1.0 / availability=1.0 不着色 / eta=60s / eta=8640000 哨兵与 <=0、-1 未知面)+ 消费面经 ctx 真跑(colStyle 状态桩 + hrRatioClass 伴值桩): cellNumScaleRatio 空白格不染(progress=0)与 HR 伴值共存形态(伴值行 pending/reached 不产 cst-*, D10 让位; 无伴值行正常; 组行无 HR 字段自然落判定)+ cellNumScaleAvail numeric 开关互斥(off == numTone(v,1) 原样 / on = D10 完整语义, 0.75 档让位)
 - test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
   说明不足 2 字单行 —— trim 后计长, 分隔符后连接空格不算门槛/全角冒号与逗号分隔/单行也挂 toast-txt)+ toastSync 差分 stamp(rise/队列牌/倒计时
@@ -1699,6 +1700,114 @@ def test_r4_prog_band_boundaries():
     逐档互证 + progPct 钳制联动(>1 比例钳 100 落终点档)"""
     report = _run_probe(_NODE_PROG_BAND_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
     _assert_battery(report, "进度分档电池")
+
+
+# S4(计划 26-11-20-0009): 速度分档 speedBand/speedBandClass + 数值列色阶判定三件
+# (numScaleRatio/numScaleAvail/numScaleEta)与渲染器消费面(cellSpeedTone/cellNumScaleRatio/
+# cellNumScaleAvail)电池 ---------------- 沙箱口径与进度分档电池同式(format.js 桩 window 后
+# eval, 取 window.AQB_FORMAT.methods); 消费面经 ctx 真跑(方法互调走 this): ctx = methods
+# 全集 + colStyle 状态桩 + hrRatioClass 桩(HR mixin 在 hr.js, 不随 format.js 进沙箱, 伴值
+# 形态由桩回报, 判定单点"有伴值即让位"照真跑)。编码(报告口径): speedBand 0=无档(不产类)/
+# 1..5=五档(左开右闭)/6=over(>100% 严格大于); 数值维翻转端点: ratio=1.0 / availability=1.0
+# / eta=60s 与 eta=8640000 哨兵。
+_NODE_SPEED_BAND_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = window.AQB_FORMAT;");
+const M = globalThis.__W2__.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const mkCtx = (colStyle) => Object.assign({ colStyle: colStyle }, M, {
+  hrRatioClass: (m) => m.__hrRatio || "",
+});
+const B = (b, l) => M.speedBand(b, l);
+const C = (b, l) => M.speedBandClass(b, l);
+
+// ---- speedBand 全边界: 无效面(速度 0/负/NaN, 分母 0=不限/null=undefined=未知)恒无档 ----
+ok("bytes=0 -> 无档 0(本就空白 fmtSpeedOrDash)", B(0, 1000) === 0);
+ok("分母 0(不限)-> 无档 0", B(500, 0) === 0 && B(999999, 0) === 0);
+ok("分母 null(未知)-> 无档 0", B(500, null) === 0);
+ok("分母 undefined -> 无档 0(不抛错)", B(500, undefined) === 0);
+ok("bytes 负值/NaN/undefined -> 无档 0(不抛错)", B(-5, 1000) === 0 && B(NaN, 1000) === 0 && B(undefined, 1000) === 0);
+// 五档左开右闭: (0,20%]→1 … (80,100%]→5 —— 右闭整点归当档(20%/40%/60%/80%), xx.1% 归上档
+ok("20% 恰端点归第 1 档(右闭)", B(200, 1000) === 1 && B(20, 100) === 1);
+ok("20.1% 归第 2 档(左开) / 19.9% 仍第 1 档", B(201, 1000) === 2 && B(199, 1000) === 1);
+ok("40% 归第 2 档(右闭) / 40.1% 归第 3 档", B(400, 1000) === 2 && B(401, 1000) === 3);
+ok("60% 归第 3 档(右闭) / 60.1% 归第 4 档", B(600, 1000) === 3 && B(601, 1000) === 4);
+ok("80% 归第 4 档(右闭) / 80.1% 归第 5 档", B(800, 1000) === 4 && B(801, 1000) === 5);
+ok("99.9% 仍第 5 档((80,100] 上段)", B(999, 1000) === 5);
+// over 面: 严格大于 100% 才 over; 分母=limit 恰 100% 仍第 5 档(不进 over)
+ok("恰 100%(bytes==limit)仍第 5 档, 不是 over", B(1000, 1000) === 5 && B(100, 100) === 5 && B(5, 5) === 5);
+ok(">100% 归 over 档 6(双侧: 恰超一点/翻倍)", B(1001, 1000) === 6 && B(2000, 1000) === 6);
+
+// ---- speedBandClass 装配: 0->'' / 1..5->csp-N / 6->csp-over(类只表档位, 不产颜色值) ----
+ok("类装配 0/1/5 档 -> ''/csp-1/csp-5", C(0, 1000) === "" && C(200, 1000) === "csp-1" && C(999, 1000) === "csp-5");
+ok("类装配 over -> csp-over", C(1001, 1000) === "csp-over" && C(2000, 1000) === "csp-over");
+ok("类装配与 speedBand 全边界逐档互证", [[0,1000],[1,1000],[199,1000],[200,1000],[201,1000],[400,1000],[401,1000],[600,1000],[601,1000],[800,1000],[801,1000],[999,1000],[1000,1000],[1001,1000],[2000,1000]].every(([b, l]) => {
+  const band = B(b, l);
+  return C(b, l) === (band === 0 ? "" : band === 6 ? "csp-over" : "csp-" + band);
+}));
+
+// ---- 75% 旧档不受扰: numTone 0.75 阈值语义原样, 与新档互不干扰 ----
+ok("numTone 0.75 阈值双侧原样(0.749->tone-low / 0.75->tone-high)",
+   M.numTone(749, 1000) === "tone-low" && M.numTone(750, 1000) === "tone-high");
+ok("numTone 无效面原样(value<=0 或分母缺失 -> '')",
+   M.numTone(0, 1000) === "" && M.numTone(500, 0) === "" && M.numTone(500, null) === "");
+ok("75% 点两套判定各归各档互不干扰(tone-high 且 speedBand 4 档, 0.75*5=3.75)",
+   M.numTone(750, 1000) === "tone-high" && B(750, 1000) === 4 && B(749, 1000) === 4);
+
+// ---- cellSpeedTone 三态互斥派发(current=原链 / off=空串 / 谱=csp-*) ----
+const cur = mkCtx({ speedramp: "current" });
+const off = mkCtx({ speedramp: "off" });
+const cool = mkCtx({ speedramp: "cool" });
+ok("current: cellSpeedTone 逐值 == numTone(类链一字不动)", [0, 500, 749, 750, 2000].every((b) => cur.cellSpeedTone(b, 1000) === M.numTone(b, 1000)));
+ok("off: cellSpeedTone 恒空串(高低值/无效分母均无类)", off.cellSpeedTone(500, 1000) === "" && off.cellSpeedTone(2000, 1000) === "" && off.cellSpeedTone(500, 0) === "");
+ok("选谱: cellSpeedTone == speedBandClass(csp-*)", [199, 200, 201, 999, 1000, 1001].every((b) => cool.cellSpeedTone(b, 1000) === C(b, 1000)) && cool.cellSpeedTone(200, 1000) === "csp-1" && cool.cellSpeedTone(1001, 1000) === "csp-over");
+
+// ---- 数值列三判定翻转端点双侧 ----
+ok("numScaleRatio: 0.99->cst-warn / 1.0 翻转点->cst-good / 1.5->cst-good / 0->cst-warn",
+   M.numScaleRatio(0.99) === "cst-warn" && M.numScaleRatio(1.0) === "cst-good" && M.numScaleRatio(1.5) === "cst-good" && M.numScaleRatio(0) === "cst-warn");
+ok("numScaleAvail: 0.99->cst-warn / 1.0 翻转点->不产类(不着色) / 1.5->不产类",
+   M.numScaleAvail(0.99) === "cst-warn" && M.numScaleAvail(1.0) === "" && M.numScaleAvail(1.5) === "");
+ok("numScaleAvail: qB 未知哨兵 -1 与缺失 null/undefined -> 不产类(不抛错)",
+   M.numScaleAvail(-1) === "" && M.numScaleAvail(null) === "" && M.numScaleAvail(undefined) === "");
+ok("numScaleEta: 59->cst-soon / 60 翻转点->不产类 / 8639999->不产类",
+   M.numScaleEta(59) === "cst-soon" && M.numScaleEta(60) === "" && M.numScaleEta(8639999) === "");
+ok("numScaleEta: 8640000 哨兵与 <=0(未知/缺失)-> 不产类(不抛错)",
+   M.numScaleEta(8640000) === "" && M.numScaleEta(0) === "" && M.numScaleEta(-5) === "" && M.numScaleEta(undefined) === "");
+
+// ---- cellNumScaleRatio: 空白格不染 + HR 伴值共存(D10: 伴值行不产 cst-*, 无伴值行正常) ----
+const numOnCtx = mkCtx({ numeric: "on" });
+ok("无伴值行: ratio<1 -> cst-warn / >=1 -> cst-good", numOnCtx.cellNumScaleRatio({ progress: 1, ratio: 0.5 }) === "cst-warn" && numOnCtx.cellNumScaleRatio({ progress: 1, ratio: 1.2 }) === "cst-good");
+ok("空白格不染(progress=0 -> cellRatio '' -> 不产类)", numOnCtx.cellNumScaleRatio({ progress: 0, ratio: 0.5 }) === "");
+ok("HR 伴值共存: 伴值行(pending/reached)不产 cst-*(D10 HR 优先)", [{ __hrRatio: "pending" }, { __hrRatio: "reached" }].every((m) => numOnCtx.cellNumScaleRatio(Object.assign({ progress: 1, ratio: 0.5 }, m)) === ""));
+ok("组行形态(无 HR 字段)自然落数值判定", numOnCtx.cellNumScaleRatio({ progress: 1, ratio: 2.0 }) === "cst-good");
+
+// ---- cellNumScaleAvail: numeric 开关在类链源头互斥(开=D10 / 关=既有 numTone 原样) ----
+const numOffCtx = mkCtx({ numeric: "off" });
+ok("numeric=off: cellNumScaleAvail 逐值 == numTone(v,1)(现状链原样)", [0, 0.5, 0.749, 0.75, 1.5].every((v) => numOffCtx.cellNumScaleAvail(v) === M.numTone(v, 1)));
+ok("numeric=on: <1 -> cst-warn / >=1 -> 不产类(D10 完整语义, 0.75 档让位)", numOnCtx.cellNumScaleAvail(0.5) === "cst-warn" && numOnCtx.cellNumScaleAvail(0.9) === "cst-warn" && numOnCtx.cellNumScaleAvail(1.0) === "" && numOnCtx.cellNumScaleAvail(1.5) === "");
+ok("numeric=on: 未知哨兵 -1 -> 不产类", numOnCtx.cellNumScaleAvail(-1) === "");
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_r4_speed_band_and_num_scale():
+    """S4(计划 26-11-20-0009): 速度分档 speedBand/speedBandClass 边界电池 + 数值列色阶判定
+    三件(numScale*)翻转端点 + 渲染器消费面(cellSpeedTone/cellNumScaleRatio/cellNumScaleAvail)
+    三态互斥与 HR 伴值共存形态 —— speedBand 编码 0=无档(bytes<=0 / 分母 0=不限/null=undefined
+    =未知)/1..5=五档(左开右闭)/6=over(严格 >100%, 恰 100% 仍第 5 档); 类装配 ''/csp-1..
+    csp-5/csp-over 逐档互证; numTone 0.75 旧档双侧原样且与新档互不干扰; 消费面经 ctx 真跑
+    (colStyle 状态桩 + hrRatioClass 伴值桩): current 逐值 == numTone / off 恒空串 / 选谱 ==
+    speedBandClass; 数值维 ratio=1.0、availability=1.0、eta=60s 翻转点双侧各一例 + eta=8640000
+    哨兵; HR 伴值行不产 cst-*(D10 让位)且空白格(progress=0)不染, 组行形态(无 HR 字段)
+    自然落判定"""
+    report = _run_probe(_NODE_SPEED_BAND_PROBE, os.path.join(STATIC_ROOT, "shared", "format.js"))
+    _assert_battery(report, "速度分档与数值色阶电池")
 
 
 def test_r4_fx_mount_toast_split_and_rows_ghost():

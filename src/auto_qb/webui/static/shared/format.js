@@ -149,6 +149,76 @@ window.AQB_FORMAT = {
       const band = this.progBand(p);
       return band === 6 ? "csb-t" : "csb-" + band;
     },
+    /* ---------------- 列风格 S4: 速度色阶与数值列色阶(计划 26-11-20-0009 S4/D8/D9/D10) ----------------
+     * 判定纯函数(speedBand / numScale 三件)与渲染器消费面(cellSpeedTone / cellNumScaleRatio /
+     * cellNumScaleAvail)只产**档位/语义类名**, 颜色全部由 console_hub.css 按 html[data-cs-speedramp]
+     * / html[data-cs-numeric] 属性派生映射 —— JS 永不产颜色值(R4)。csp- 与 cst- 是独立命名空间
+     * (R6): 不碰 tone- 链与 HR 伴值链(.m-pair), 不与 S2 菜单色样 cs-* / S3 进度档 csb-* 重叠。 */
+    /* 速度分档(S4/D8/D9): 输入行速度 bytes 与该方向全局限速 limit(bytes/s)——分母由调用方从
+     * 行模型传入, 读数路径与既有 numTone 的 dlspeed/upspeed 挂点一致($root.speedLimitBytes,
+     * dialogs.js 单点: null=未知/0=不限), 输出档位号 0..6 —— 0 = 无档(不产类: 速度 0 本就空白
+     * fmtSpeedOrDash、分母 0=不限/null=未知恒不着色)/1..5 = 五档(**左开右闭**: (0,20%]→1 …
+     * (80,100%]→5, 与 progBand 同构)/6 = over(>100% 超限; 恰 100% 仍第 5 档 —— over 是严格
+     * 大于)。与 numTone 的 0.75 旧档互不干扰: 两套类链由 cellSpeedTone 按 speedramp 维互斥
+     * 派发, 从不同时在链上。 */
+    speedBand(bytes, limit) {
+      if (!bytes || bytes <= 0 || !limit || limit <= 0) return 0;
+      const ratio = bytes / limit;
+      return ratio > 1 ? 6 : Math.ceil(ratio * 5);
+    },
+    /* 速度档类装配: 0 -> ""(无类) / 1..5 -> csp-1..csp-5 / 6 -> csp-over(类只表档位) */
+    speedBandClass(bytes, limit) {
+      const band = this.speedBand(bytes, limit);
+      return band === 0 ? "" : band === 6 ? "csp-over" : "csp-" + band;
+    },
+    /* 速度格着色消费面(dlspeed/upspeed 两格挂点, 分母同既有 numTone 读数路径): speedramp 三态
+     * 互斥派发 —— current(跟随现状, 默认) -> numTone 两档类链**原样返回**(tone-* 链与现状逐值
+     * 等价); off(关) -> 空串(仅速度两列回落级联基线; up_limit/dl_limit 的 numTone 挂点在各自
+     * 模板分支不受扰 —— D8: 分母不同不混); 选谱 -> speedBandClass(csp-*, 颜色由 CSS 派生)。
+     * 关闭机制走 JS 类链源头而非 CSS 复位: 单元格 DOM 无列标识(行是 grid 且列可隐藏重排,
+     * nth-child 不可依赖), tone-* 的 CSS 复位规则必然波及 uploaded/downloaded 等其它消费列
+     * (R6) —— 三态互斥在类链源头一处收口。 */
+    cellSpeedTone(bytes, limit) {
+      const ramp = this.colStyle.speedramp;
+      if (ramp === "current") return this.numTone(bytes, limit);
+      if (ramp === "off") return "";
+      return this.speedBandClass(bytes, limit);
+    },
+    /* 数值列色阶判定三件(S4/D10, 纯函数只认值本身): ratio <1 -> cst-warn(未回本) / >=1 ->
+     * cst-good; availability <1 -> cst-warn / >=1 不产类(不着色; 负数 = qB 未知哨兵 -1、缺失
+     * 同 cellAvailability 口径不产); eta <60s -> cst-soon(即将完成; <=0 = 未知/缺失、8640000
+     * 哨兵同 fmtEta 口径不产)。三个时间列(last_activity/seeding_time/time_active)刻意不做
+     * (D10 原文: 方向语义弱, 防圣诞树)。 */
+    numScaleRatio(v) {
+      if (v === null || v === undefined || isNaN(v)) return "";
+      return v < 1 ? "cst-warn" : "cst-good";
+    },
+    numScaleAvail(v) {
+      if (v === null || v === undefined || isNaN(v) || v < 0) return "";
+      return v < 1 ? "cst-warn" : "";
+    },
+    numScaleEta(sec) {
+      if (!sec || sec <= 0 || sec >= 8640000) return "";  // 哨兵/非正口径与 fmtEta 逐字同
+      return sec < 60 ? "cst-soon" : "";
+    },
+    /* 数值列消费面: cellNumScaleRatio 吃行模型 —— HR 伴值共存(D10 拍板): ratio 格已有
+     * hrRatioClass 伴值类(hr.js 单点产, .m-pair pending/reached), 同格共存时 **HR 伴值优先**,
+     * 有伴值即不产 cst-*(JS 侧让位, 不靠 CSS 特异度搏斗, 杜绝串色); 无伴值且格有值(cellRatio
+     * 非空 = progress>0, 空白格不染)才走 numScaleRatio。组行无 HR 伴值字段 -> hrRatioClass 恒
+     * 空串 -> 自然落数值判定(种子行+组行同口径; member 行 D5 排除不挂, 判定单点对任意行模型
+     * 成立, 日后纳入只差模板一行)。cellNumScaleAvail 吃原始值 —— numeric 开 -> numScaleAvail
+     * (D10 完整语义: 0.75~1.0 归 warn、>=1 不着色, numTone 的 0.75 档让位); 关(默认) -> 既有
+     * numTone(v,1) **原样**(tone-* 链与现状逐值等价)。开关在类链源头互斥收口, 不靠 CSS 比
+     * 特异度(会波及 tone-* 其它消费列, R6)。组行 availability 无既有着色, 直接挂 numScaleAvail
+     * 纯判定(关 = 无映射规则 = 现状)。eta 格直接挂 numScaleEta(自身哨兵口径已兜空白)。 */
+    cellNumScaleRatio(m) {
+      if (this.hrRatioClass(m)) return "";
+      if (!this.cellRatio(m)) return "";
+      return this.numScaleRatio(m.ratio || 0);
+    },
+    cellNumScaleAvail(v) {
+      return this.colStyle.numeric === "on" ? this.numScaleAvail(v) : this.numTone(v, 1);
+    },
     /* 可用性(FX-26): 两个"没有有效值"的来源都不显示 ——
      * 1. 负数: qB 拿不到 distributed_copies 时给 -1(未连上 tracker / 无 peer 数据), 旧版直接
      *    toFixed 出 "-1.00" 看着像真数值; 2. 暂停中的种子: 没连接就谈不上分布式副本数(与

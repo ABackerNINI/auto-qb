@@ -62,8 +62,10 @@
         <span class="bar"><i :class="$root.progBandClass($root.progPct(g.progress))" :style="{ width: $root.progPct(g.progress) + '%' }"></i></span>
         <span class="val" :class="$root.progBandClass($root.progPct(g.progress))">{{ $root.progPct(g.progress).toFixed(1) }}%</span>
       </div>
-      <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致 -->
-      <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !g.eta || g.eta >= 8640000 }">{{ $root.fmtEta(g.eta) }}</div>
+      <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致。
+           数值色阶(S4/D10)组行同口径: eta/availability/ratio 三格挂判定单点(见种子行 ratio 格
+           注), 「关」(默认)无映射规则 = 现状零变化; 组行无 HR 伴值, 判定自然生效 -->
+      <div v-else-if="col.key === 'eta'" class="g-stat" :class="[{ zero: !g.eta || g.eta >= 8640000 }, $root.numScaleEta(g.eta)]">{{ $root.fmtEta(g.eta) }}</div>
       <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
       <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, $root.numTone(g.downloaded, g.size)]">{{ $root.fmtSizeOrDash(g.downloaded) }}</div>
       <div v-else-if="col.key === 'tags'" class="g-tags">
@@ -138,10 +140,12 @@
       <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ $root.fmtSizeOrDash(g.amount_left) }}</div>
       <!-- 做种时间 = 组内平均(分钟取整) -->
       <div v-else-if="col.key === 'seeding_time'" class="g-stat" :class="{ zero: !g.seeding_time }">{{ g.seeding_time ? $root.fmtDuration(g.seeding_time) : '' }}</div>
-      <!-- 可用性 = 组内最高(null = 全组未知 -> 空白) -->
-      <div v-else-if="col.key === 'availability'" class="g-stat" :class="{ zero: !g.availability }">{{ g.availability == null || g.availability < 0 ? '' : g.availability.toFixed(2) }}</div>
-      <!-- 组分享率 = 总上传 ÷ 单份大小; 复用 cellRatio(组进度为 0 不显示, FX-04 同口径) -->
-      <div v-else-if="col.key === 'ratio'" class="g-stat" :class="{ zero: !g.ratio }">{{ $root.cellRatio(g) }}</div>
+      <!-- 可用性 = 组内最高(null = 全组未知 -> 空白); 数值色阶挂 numScaleAvail 纯判定(S4/D10,
+           组行无既有着色, 关 = 无映射规则 = 现状) -->
+      <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !g.availability }, $root.numScaleAvail(g.availability)]">{{ g.availability == null || g.availability < 0 ? '' : g.availability.toFixed(2) }}</div>
+      <!-- 组分享率 = 总上传 ÷ 单份大小; 复用 cellRatio(组进度为 0 不显示, FX-04 同口径);
+           数值色阶挂 cellNumScaleRatio(与种子行同口径, 组行无 HR 伴值自然生效, S4/D10) -->
+      <div v-else-if="col.key === 'ratio'" class="g-stat" :class="[{ zero: !g.ratio }, $root.cellNumScaleRatio(g)]">{{ $root.cellRatio(g) }}</div>
     </template>
   </script>
 
@@ -160,8 +164,13 @@
         </span>
         <span class="state-text">{{ $root.stateText(m) }}</span>
       </div>
-      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, $root.numTone(m.dlspeed, $root.speedLimitBytes.down)]">{{ $root.fmtSpeedOrDash(m.dlspeed) }}</div>
-      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, $root.numTone(m.upspeed, $root.speedLimitBytes.up)]">{{ $root.fmtSpeedOrDash(m.upspeed) }}</div>
+      <!-- 速度色阶(S4/D8): 着色类由 cellSpeedTone 单点(format.js)按 speedramp 维互斥派发 ——
+           current(默认)= 既有 numTone 两档链原样 / off = 空串(仅此两列回落级联基线) / 选谱 =
+           csp-*(颜色由 console_hub.css 按 html[data-cs-speedramp] 派生); 分母与既有 numTone
+           挂点同一条读数路径(speedLimitBytes 单点, null=未知/0=不限)。up_limit/dl_limit 两列
+           的 numTone 挂点不在此维管辖(D8: 分母不同不混) -->
+      <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, $root.cellSpeedTone(m.dlspeed, $root.speedLimitBytes.down)]">{{ $root.fmtSpeedOrDash(m.dlspeed) }}</div>
+      <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, $root.cellSpeedTone(m.upspeed, $root.speedLimitBytes.up)]">{{ $root.fmtSpeedOrDash(m.upspeed) }}</div>
       <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, $root.numTone(m.uploaded, m.size)]">{{ $root.fmtSizeOrDash(m.uploaded) }}</div>
       <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ $root.fmtSizeOrDash(m.size) }}</div>
       <div v-else-if="col.key === 'category'" class="g-cat">
@@ -184,12 +193,12 @@
       </div>
       <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'seeds') }">{{ $root.cellPeers(m, 'seeds') }}</div>
       <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</div>
-      <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ $root.fmtEta(m.eta) }}</div>
+      <div v-else-if="col.key === 'eta'" class="g-stat" :class="[{ zero: !m.eta || m.eta >= 8640000 }, $root.numScaleEta(m.eta)]">{{ $root.fmtEta(m.eta) }}</div>
       <div v-else-if="col.key === 'added_on'" class="g-stat" :title="$root.cellTimeHint(m.added_on, 'added_on')">{{ $root.cellTime(m.added_on, 'added_on') }}</div>
       <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, $root.numTone(m.downloaded, m.size)]">{{ $root.fmtSizeOrDash(m.downloaded) }}</div>
       <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ $root.fmtSizeOrDash(m.amount_left) }}</div>
       <!-- FX-26: 负数(-1 = qB 未知)与暂停中的种子不显示, 口径走 cellAvailability -->
-      <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !$root.cellAvailability(m) }, $root.numTone(m.availability, 1)]">{{ $root.cellAvailability(m) }}</div>
+      <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !$root.cellAvailability(m) }, $root.cellNumScaleAvail(m.availability)]">{{ $root.cellAvailability(m) }}</div>
       <div v-else-if="col.key === 'time_active'" class="g-stat">{{ $root.fmtDuration(m.time_active) }}</div>
       <!-- FX-27/28: 相对时间(表头右键可切绝对); 另一种口径留作 title -->
       <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="$root.cellTimeHint(m.last_activity, 'last_activity')">{{ $root.cellTime(m.last_activity, 'last_activity') }}</div>
@@ -209,7 +218,12 @@
           <i v-if="$root.hrSrcFull(m)" class="hr-line"></i>
         </span>
       </div>
-      <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="$root.hrRatioClass(m)">
+      <!-- 数值色阶(S4/D10): cst-* 语义类由 cellNumScaleRatio 单点(format.js)产, 颜色由
+           console_hub.css 按 html[data-cs-numeric="on"] 派生映射(「关」无规则 = 现状不着色)。
+           HR 伴值共存(D10 拍板): hrRatioClass 伴值类(pending/reached)原样保留且优先 ——
+           判定单点检测到伴值即不产 cst-*(伴值行零新增类), 无伴值行才落 D10 色; 组行同口径
+           (本文件 tpl-aq-group-cells 的 ratio 格), member 行 D5 排除不挂 -->
+      <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="[$root.hrRatioClass(m), $root.cellNumScaleRatio(m)]">
         {{ $root.cellRatio(m) }}
         <span v-if="$root.cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
       </div>

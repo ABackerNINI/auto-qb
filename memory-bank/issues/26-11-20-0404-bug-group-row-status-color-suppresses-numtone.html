@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>组行状态文字色规则压制 numTone 着色(atlas 注释误判源顺序) · bug · 计划外问题</title>
+<meta name="issue-slug" content="group-row-status-color-suppresses-numtone">
+<meta name="issue-stamp" content="26-11-20-0404">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="group-row-status-color-suppresses-numtone">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0009-plan-webui-column-style.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="组行状态文字色规则压制 numTone 着色(atlas 注释误判源顺序)">
+<meta name="issue-summary" content="四皮肤 .group-row.s-* .g-stat:not(.zero) 特异度 (0,4,0) 高于 tone 规则 .group-row .g-stat.tone-* (0,3,0), 现状 numTone 两档着色在主表状态行上被级联压制、视觉不生效; atlas components.css :347 「tone 写在状态色之后(源顺序胜出)」的注释判断有误 —— 源顺序只在同特异度时生效">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>组行状态文字色规则压制 numTone 着色(atlas 注释误判源顺序)</h1>
+<p class="lede">四皮肤 .group-row.s-* .g-stat:not(.zero) 特异度 (0,4,0) 高于 tone 规则 .group-row .g-stat.tone-* (0,3,0), 现状 numTone 两档着色在主表状态行上被级联压制、视觉不生效; atlas components.css :347 「tone 写在状态色之后(源顺序胜出)」的注释判断有误 —— 源顺序只在同特异度时生效</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-20-0404-bug-group-row-status-color-suppresses-numtone</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 04:04</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>WEBUI 列风格切换任务(计划 26-11-20-0009)S4 速度色阶批次(2026-11-20)实现期发现: 实现代理为让新色阶规则「真出色」核对级联时, 证实既有 numTone 两档着色在主表种子行与组行上(两者都挂 .group-row + s-* 状态类)被更高特异度的状态文字色规则压制、视觉不生效 —— 属既有行为, 非本批引入, 按范围守恒未修、入池。与平台/配置无关, 纯 CSS 级联语义。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code>取证(2026-11-20 04:04, 四皮肤 grep 实测):
+状态文字色规则(特异度 (0,4,0): .group-row + .s-X + .g-stat + :not(.zero)):
+  atlas/css/components.css:313-329  .group-row.s-seeding/.s-downloading/.s-checking/.s-moving/.s-error/.s-paused/.s-other .g-stat:not(.zero), ...
+  flux :292+ / console / prism/css/views.css 同构(各 6 行共 7 处——s-checking/s-moving 合并一行含两条选择器)
+tone 规则(特异度 (0,3,0)): 
+  atlas :349-350 / flux :325-326 / console :323-324 / prism views :816-817
+  .group-row .g-stat.tone-low { color: var(--fg-muted); }
+  .group-row .g-stat.tone-high { color: var(--accent-hi); }
+atlas :347 注释原文: /* 数值色阶(TBL-03): tone 写在状态色之后(源顺序胜出) —— 数值列按"占分母比例"着色: */
+  —— 「源顺序胜出」只在同特异度时成立; (0,3,0) &lt; (0,4,0) 恒被压制, 注释判断有误。</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>主种子表的组行与种子行都挂 <code>group-row</code> + 行状态类(s-*, 种子行 torrents.html:12 / 组行 groups.html:25)且数值格挂 tone-low/tone-high —— 即现状默认呈现, 必现</td></tr>
+    <tr><td>影响范围</td><td>四皮肤主表 tone 着色列(uploaded/downloaded/上下限/availability 等 numTone 消费列)视觉全部回落状态色; <strong>种子行与组行同受扰, 种子行是主要消费面</strong>(种子行 numTone 格 xtpl-cells.html :172/:173/:174/:198/:201/:206/:207——:172/:173 为 dlspeed/upspeed 经 cellSpeedTone 默认 current 档回落 numTone 原样链, :201 availability 关档回落 numTone, 与 :172/:173 同性质; 组行 numTone 格 :70 downloaded); member 行恒挂裸 kind 类(groups.html:38, 非 s-* 前缀)不命中 .group-row.s-* 规则, 但命中以裸 kind 为键的 member 状态规则 <code>.member-row.&lt;kind&gt; .m-stat:not(.zero)</code>((0,4,0): prism views :801-812 / atlas :334-345 / flux :311-322 / console :309-321 同构), 且 member 格挂 numTone(xtpl.html :262/:301)——<strong>仅 prism 提供 .member-row .m-stat.tone 着色规则(views :816-817), 该半边同样被压制</strong>; atlas/flux/console 的 member 状态规则无 member tone 规则可压(无压制对象, 仅缺 member tone 规则)</td></tr>
+    <tr><td>严重度</td><td>中(功能静默失效 —— 着色特性存在但用户看不见; 无功能破坏)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/webui/static/atlas/css/components.css:347</code>(取证 2026-11-20 04:04)· grep 关键词 <code>tone 写在状态色之后</code> —— 误判注释本体</li>
+    <li><code>atlas :349</code> · grep 关键词 <code>.group-row .g-stat.tone-low</code> —— tone 规则 (0,3,0); 四皮肤同构: flux :325 / console :323 / prism views :816</li>
+    <li><code>atlas :313</code> · grep 关键词 <code>.group-row.s-seeding .g-stat:not(.zero)</code> —— 状态规则 (0,4,0) 族首条; 四皮肤各 6 行共 7 处(口径同 §02)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">CSS 特异度级联: 状态文字色规则 (0,4,0) &gt; tone 规则 (0,3,0), tone 恒被压制; atlas :347 注释把「源顺序在后」误当胜出依据(仅同特异度成立)。已排除: 规则被删/改(四皮肤现状都在)、类名没挂上(xtpl 模板 tone 类在挂)、变量缺定义(--fg-muted/--accent-hi 四皮肤都有)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>方向: 让 tone 在组行状态行上真生效。候选: (a) tone 规则提特异度到 (0,4,0) 并置于状态规则之后(如 <code>.group-row .g-stat.tone-low</code> 改 <code>.group-row.s-seeding .g-stat.tone-low, ...</code> 全枚举或加一个共用状态父选择器); (b) 状态规则改 :where()(降特异度, 波及面大需全面核对); (c) tone 规则加 !important(最省事但开坏先例, 不推荐)。修时覆盖面必须含种子页主表种子行(主要消费面, 别只改组行)与 prism views :816-817 的 member 半边一并提特异度; 并与列风格任务新立的 (0,4,1) 数值/速度规则(console_hub.css)核对层序。代价: 每皮肤 1-2 行 + 注释纠正 + 真浏览器核对。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-20 04:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-20-0404-bug-group-row-status-color-suppresses-numtone.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
