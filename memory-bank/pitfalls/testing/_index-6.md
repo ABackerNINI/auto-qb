@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 6/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `poll-skeleton-redverify.md` … `sandbox-tempfile-cwd-fallback.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `poll-skeleton-redverify.md` … `sandbox-full-run.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -22,6 +22,6 @@
 | [repo-snapshot-in-tree.md](repo-snapshot-in-tree.md) | 做只读评审要导出整棵仓库快照时, 快照必须放仓库**外** —— 树内的副本会让"单点定义"守卫扫到散落实现, `test.full` 直接红两条, 而快照目录明明已 gitignore。 | 快照, snapshot, git archive, 只读评审, review.lane.start, 批量评审, test-results 放快照, 单点守卫红, test_free_port, test_tmp_bootstrap, 散落 |
 | [restart-transient-and-offline-cmd-window.md](restart-transient-and-offline-cmd-window.md) | 重启后合并与 VERIFY 同拍: 账面 rewritten 毫秒瞬态轮询不可观测 + 下线窗命令回执被重连 connect 阻塞 ~29s/次 | 账面 rewritten, rewritten 瞬态, 相位瞬态, 轮询不可观测, 合并同拍, ACT_VERIFY 同拍, 下线窗回执, cmd_post_and_wait 超时, 回执 30s 未落, urllib3 重试, connect 阻塞, 断连稳态, 重启瞬态, D13, 镜像合并, wait rewritten 超时 |
 | [route-callback-teardown-race.md](route-callback-teardown-race.md) | `page.route` 桩回调体内含 `await`(`route.fetch` 等)时, 回调是异步飞行物 —— 用例末段触发的 | route.fetch, Test ended, 收尾竞态, teardown race, unrouteAll, ignoreErrors, installRouteCleanup, |
+| [route-leg-flip-incremental-polling.md](route-leg-flip-incremental-polling.md) | e2e 想用 `page.route('**/api/state*')` 改写回包做「同一页面 A/B 两腿状态切换」(翻 Node 侧 flag 让下一轮回包不再注入 → app 回落原态)时,**翻腿后 app 永远吃不到新态**: 桩的增量轮询在数据版本未变时**不回传行**(polling.js:345「版本未变时响应体已趋近于零(不回传 groups)」), 响应体里没有 groups/torrents, 改写器根本没机会动那些行 —— app 保留旧渲染态(2026-11-20 实测: 翻腿后 expect.poll 15s 不清零, pair 行纹丝不动, `fetches.plain` 计数涨而 DOM 不变)。可行的两条路: ① **vm 注入**改行对象字段(delta 轮询不重投递未变行, 注入态跨多个轮询周期存活, 实测 >13s; 属 lib/vm.mjs D4 守则允许的「注入/复原桩态」类); ② **两次整页加载**各跑一腿按行 key 差分(无竞态但每腿一次 goto 的时长成本)。 | e2e 翻腿不生效; route 改写后页面状态不变; expect.poll 超时但页面"看起来对"; A/B 两腿测试第二腿恒空转; exposeFunction 翻 flag 没效果 |
 | [rowwin-target-row-from-dom.md](rowwin-target-row-from-dom.md) | 行窗口化(rowWin, ROW_WIN_MIN=200)下给 locator 选点击目标, 不能拿 vm 数据序的行当靶 —— vm.groups 是服务端插入序(added_on 升序), 组视图按最近添加降序渲染, 插入序首组排最末、恰在窗外不渲染(点击等元素 30s 超时, 默认档 150 组 < 阈值不开窗所以不触发); 也不能取「已渲染集合里插入序第一个」—— 那是窗口尾缘行, 行高实测收敛推 _rowHVer++ 重算收窄后离场(挑选时在场、点击时已消失)。唯一稳定区 = DOM 序最前的顶部行(滚动顶部窗口 start 恒钳 0, 任何窗口状态下都在场)。 | e2e/冒烟在大库档(E2E_TORRENTS=3000 矩阵轮等)点组行/种子行超时; 给窗口化表格写「挑一行来点」的 arrange; 修完可达性后仍偶发点击超时(尾缘行竞速)。 |
 | [sandbox-full-run.md](sandbox-full-run.md) | 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的测试命令, 沙箱拒写 R 盘 ⇒ `TMPDIR` 建不了目录 ⇒ pytest 回落 `H:\Temp`(重解析点读不了) ⇒ **点号全过却在收尾崩**, 看着像回归实为沙箱拦截; 关沙箱即消失。 | 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红, run_in_background, 后台跑测试 |
-| [sandbox-tempfile-cwd-fallback.md](sandbox-tempfile-cwd-fallback.md) | 工具(`tools/global-traffic-monitor`)是独立 uv 项目, 其套件不在根 `testpaths` 内 ⇒ 跑它时**不带**根 `test.*` 包的 `TMPDIR` 收口; 若又在本 agent 沙箱内跑, `H:\Temp` 与 `%TEMP%` 对 uv 子进程都不可写 ⇒ python `tempfile.gettempdir()` 候选目录全失败后**静默回落 cwd** ⇒ 测试临时文件(随机名文件 + `pytest-of-<user>/`)落进工具目录, `git status` 变脏。 | 跑工具侧测试, 工具套件, global-traffic-monitor, 临时目录, TMPDIR, 沙箱, 临时垃圾, git status 脏, tmp 文件, pytest-of |

@@ -17,6 +17,6 @@
 | [3](_index-3.md) | `fakeclock-migration-missed-forms.md` … `harness-is-stub-server.md` | 17 |
 | [4](_index-4.md) | `harness-save-flow.md` … `mutants-shared-mirror.md` | 17 |
 | [5](_index-5.md) | `mutants-wsl-shell.md` … `poll-last-round-race.md` | 17 |
-| [6](_index-6.md) | `poll-skeleton-redverify.md` … `sandbox-tempfile-cwd-fallback.md` | 17 |
-| [7](_index-7.md) | `sandbox-tool-cache.md` … `test-lock-path-injection.md` | 17 |
-| [8](_index-8.md) | `test-plan-docstring-sections.md` … `xdist-worker-global-snapshot.md` | 16 |
+| [6](_index-6.md) | `poll-skeleton-redverify.md` … `sandbox-full-run.md` | 17 |
+| [7](_index-7.md) | `sandbox-tempfile-cwd-fallback.md` … `sync-midrun-coverage-synthesis.md` | 17 |
+| [8](_index-8.md) | `test-lock-path-injection.md` … `xdist-worker-global-snapshot.md` | 17 |

@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 8/8
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `test-plan-docstring-sections.md` … `xdist-worker-global-snapshot.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `test-lock-path-injection.md` … `xdist-worker-global-snapshot.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [test-lock-path-injection.md](test-lock-path-injection.md) | 工具侧 `Storage` 的默认锁锚点(S12/D8)从 `data_dir` 迁到用户级指针目录(`%LOCALAPPDATA%/global-traffic-monitor/instance.lock` 等) —— 于是 `Storage(str(tmp_path))` 后直接 `acquire_lock()` 的测试**不再动 tmp**, 而是去锁真实用户目录: 沙箱内 `os.makedirs` 报 `PermissionError [WinError 5]`, 沙箱外更隐蔽(污染真实目录 / 跨用例互相抢锁)。修法 = 每处装配显式传 `lock_path=<tmp>/instance.lock`, 发现指针同理传 `endpoint_file=<tmp>/endpoint.json`。 | 加/改工具侧测试, Storage, acquire_lock, 真实用户目录, PermissionError WinError 5, 拒绝访问, AppData, LOCALAPPDATA, global-traffic-monitor, instance.lock, endpoint.json, 锁锚点, 跨用例抢锁, S12 |
 | [test-plan-docstring-sections.md](test-plan-docstring-sections.md) | test_plan_docstring_guard 只审计 docstring 主「## 测试计划」段, 用例条目写进其它同级小节不进审计面, 首次全量才被点名 | 测试计划, docstring 守卫, test_plan_docstring_guard, 用例清单, 同级小节 |
 | [tests-real-qb-api-traps.md](tests-real-qb-api-traps.md) | 手工压测/relocate 取证直接打 qB WebAPI 时的五类坑 —— 短 hash 静默 200、renameFolder 账面级假成功(ENOENT 也算成功且零日志)、addTrackers 参数是单数 hash、FakeTracker 的 peer 表是构造时静态注入、lib/bencode.decode 返回 (值, pos) 元组 | tests-real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内存盘, R 盘 |
 | [tests-real-retirement-blindspot.md](tests-real-retirement-blindspot.md) | tests-real 不在 pytest testpaths, 全量全绿不等于 tests-real 可收集; 退役/改签名产品组件时 grep 面必须含 tests-real/, 否则同组件的 tests-real 用例 import 即炸且全量发现不了。 | 退役, 组件退役, 改签名, 删模块, tests-real, testpaths, 全量全绿, 收集不到, import 失败, finalize_watch, acquire_pid, collect-only, 真机片, 同步退役 |

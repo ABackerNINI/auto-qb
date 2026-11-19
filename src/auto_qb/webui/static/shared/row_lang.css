@@ -519,9 +519,16 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * cursor:pointer + hover 底色)+ 各自独立 .f-on 选中底线, 点击 = 切换路径筛选 —— 仍不开
  * 抽屉/链浮窗, 详情真相在悬停浮窗(relocate_pop.js)。
  * 宽度: has-relpair 时单元格转 flex, pair 块 flex:0 0 auto 不被长路径挤出列外(pa/pb 各自
- * overflow 省略); 列宽模板不动, 行高按需增长仅限两排行。颜色一律吃皮肤语义令牌
- * (warn/error/accent 三族名集由 token parity 守阵), 不写皮肤分支。 */
-.rl-scope .g-save-path.has-relpair { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+ * overflow 省略); 列宽模板不动。颜色一律吃皮肤语义令牌
+ * (warn/error/accent 三族名集由 token parity 守阵), 不写皮肤分支。
+ * 行高(2026-11-19 行高恒等修正): **双排不得使行高变化**(最初设计判据, v2 落地时被
+ * 「行高按需增长」表述放过 —— pair 块 2×14.3px@11px/1.3 + 2px gap = 30.59px, 超出主表行
+ * 内容盒 21.69px(14px/21.7px 行盒决定基线 42.69px, 种子行 22.05px 同构)8.9px, 该行较邻居
+ * 独高、迁移终态回落时再缩回。修法 = 单元格负 margin 吃进行上下 padding: margin-box
+ * 30.59-10 = 20.59px ≤ 内容盒, 行高与单排逐像素相等; 四皮肤行 padding 恒 10px
+ * (components/views css .group-row), 文字距行缘余量 ≥5px。e2e 守阵
+ * relocate-pair-row-height.spec.mjs 钉四皮肤两页行高等值。 */
+.rl-scope .g-save-path.has-relpair { display: flex; align-items: center; gap: 6px; overflow: hidden; margin: -5px 0; }
 .rl-scope .rel-pair { display: flex; width: fit-content; max-width: 100%; align-items: stretch; gap: 4px; flex: 0 0 auto; }
 .rl-scope .rel-pcol { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .rl-scope .rel-pa, .rl-scope .rel-pb {
