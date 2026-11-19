@@ -45,8 +45,9 @@
   无产出超预算时防挂死照样触发
 - test_submit_second_batch_keeps_waiting_start: 容器已有未结算工作时不重置判定起点
   (修 1 分支二)—— 旧槽位等待起点不变, 全局无产出超预算 x 深度时两批一起兜底
-- test_unwired_default_ports_placeholders: S2 默认端口占位语义 —— 删源端口未接线返回 False
-  (源保留 + 注记「源删除失败, 源已保留」), 回执端口未接线落 WARNING 不写回执
+- test_unwired_default_ports_placeholders: S2 默认端口占位语义(构造默认, 测试替身面;
+  生产真实端口已接线) —— 删源端口占位返回 False(源保留 + 注记「源删除失败, 源已
+  保留」), 回执端口占位落 WARNING 不写回执
 - test_submit_empty_jobs_raises: 空条目/全已结算条目 fail-fast(ValueError; 应走生产段快路径,
   不入中心)
 - test_submit_success_settled_entry_raises: SUCCESS 状态的已结算条目 fail-fast —— 已结算
@@ -776,8 +777,8 @@ def test_unwired_default_ports_placeholders(center_factory):
     with capture_logs(LOG_NAME) as cap:
         _drain_until(center, lambda: center._batches == {})
     # 占位回执端口不写回执(无 receipts 可取) —— 语义经 WARNING + 容器摘除断言
-    assert any("删源端口未接线" in m for m in cap.messages)
-    assert any("回执端口未接线" in m for m in cap.messages)
+    assert any("删源端口为构造默认占位" in m for m in cap.messages)
+    assert any("回执端口为构造默认占位" in m for m in cap.messages)
     assert center._batches == {}
 
 

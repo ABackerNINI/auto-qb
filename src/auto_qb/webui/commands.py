@@ -240,8 +240,13 @@ class WebCommandsMixin(TorrentsMixin, ConfigMixin, LimitMixin, LogsMixin):
             )
             return
         # 递交路径: 混列整批递交(已结算结果作槽位初值, 回执延后由 drain 写); 最终三态
-        # 计数在批次齐时由回执端口一侧落日志(center._complete_if_ready)
-        self.web.transfer_center.submit_batch(cmd_id, target, entries)
+        # 计数在批次齐时由回执端口一侧落日志(center._complete_if_ready)。返回 "" =
+        # 中心已 stop、批次被丢弃(center 侧已落 WARNING), 如实记丢弃, 不再报「已递交」
+        batch_key = self.web.transfer_center.submit_batch(cmd_id, target, entries)
+        if not batch_key:
+            logger.warning(f"WEB UI | 转移批次 -> {target.name}({len(req)}个): 批次已随关停丢弃"
+                           f"(验证作业 {job_n} 个未入后台)")
+            return
         logger.info(
             f"WEB UI | 转移批次 -> {target.name}({len(req)}个): 已递交后台验证"
             f"(生产段已结算 {len(req) - job_n} 个, 验证作业 {job_n} 个)"

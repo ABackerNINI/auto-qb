@@ -70,24 +70,27 @@ _SEED_HTTP_WORST_S = float(REQUESTS_TIMEOUT[0] + REQUESTS_TIMEOUT[1])
 
 
 def _unwired_delete_port(source_hash: str) -> bool:
-    """S2 占位删源端口(生产默认; 真实实现 S3 接线): 恒 False(源保留)
+    """S2 占位删源端口(构造默认, 测试替身面; 生产真实端口已接线): 恒 False(源保留)
 
-    本期生产路径无生产者递交作业, 本端口不会被调到; 真实实现(S3)接
-    qbapi.torrents_delete(delete_files=False)(含 store.remove_torrent 快照摘除),
-    契约 = True 已删 / False 删失败(结果按「源删除失败, 源已保留」注记, 与 run_batch
-    同口径; 未知 hash 的静默无操作也返 True —— qB 对不存在 hash 回 200)。
+    生产真实端口已接线(WebUIRuntime.__init__ 注入 delete_port=_transfer_delete_source,
+    复用 orchestrator._delete_source -> qbapi.torrents_delete(delete_files=False) 含
+    store.remove_torrent 快照摘除), 生产路径永不触达本占位; 本函数只在未注入端口的
+    构造面(测试替身)被调到。契约 = True 已删 / False 删失败(结果按「源删除失败,
+    源已保留」注记, 与 run_batch 同口径; 未知 hash 的静默无操作也返 True —— qB 对
+    不存在 hash 回 200)。
     """
-    logger.warning("transfer: 删源端口未接线(S3 接真实实现), 源未删 %s", source_hash)
+    logger.warning("transfer: 删源端口为构造默认占位(生产真实端口已接线), 源未删 %s", source_hash)
     return False
 
 
 def _unwired_receipt_port(cmd_id: str, payload: dict) -> None:
-    """S2 占位回执端口(生产默认; 真实实现 S3 接线): 落 WARNING 不写回执
+    """S2 占位回执端口(构造默认, 测试替身面; 生产真实端口已接线): 落 WARNING 不写回执
 
-    本期生产路径无生产者递交作业, 本端口不会被调到; 真实实现(S3)接
-    runtime.set_result(cmd_id, "ok", truth=payload)。
+    生产真实端口已接线(WebUIRuntime.__init__ 注入 receipt_port=_transfer_receipt,
+    与命令 handler 自写回执同面 set_result(cmd_id, "ok", truth=payload)), 生产路径
+    永不触达本占位; 本函数只在未注入端口的构造面(测试替身)被调到。
     """
-    logger.warning("transfer: 回执端口未接线(S3 接真实实现), 批次回执未写 cmd_id=%r", cmd_id)
+    logger.warning("transfer: 回执端口为构造默认占位(生产真实端口已接线), 批次回执未写 cmd_id=%r", cmd_id)
 
 
 @dataclass(frozen=True)
