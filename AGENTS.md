@@ -15,6 +15,7 @@
 - **建件与改版**:一律命令化创建(`kb.new <族>` / `kb.status` / `kb.bump` / `kb.wrap`),派生面零手写;族清单与口径见`memory-bank/conventions/doc-forms.md`「创建/更新方式」。
 - **收尾**:每批收尾先跑code-review skill(批次判定见其①,`review.pack`/`review.check`是机械面; 提交闸门强制 `Review:` trailer),然后按skill的DoD:切片`commands run kb.wrap`(机械面;蒸馏与判断仍是agent的活)→达阈值立档`commands run kb.new task`→代码事实变更回写`memory-bank/`与根README→`commands run test.full`并新建基线切片(`kb.new baseline --total ..`,数字从实测誊写)→**新坑按动作写进`pitfalls/<类>/<主题>.md`并重跑`commands run kb.index`**。若这轮踩到**已记的坑**,把该条`复发`+1,并在档案里写一句为什么没命中(路由没到/文件没读/读了没照做)。
 - **冲突裁决**:代码 > `memory-bank/` > 根`README.md` > `想法.md`;漂移以代码为准并回写。
+- **沟通与报告**:用简单清晰的描述,少用引用/锚点——回复与报告里把话说直白,别堆砌路径引用和锚点跳转。
 
 ## 产出口径
 
