@@ -71,6 +71,26 @@ config:
                       - copy-hash
                       - copy-magnet
                     hidden: []
+        transfer:
+            targets:
+              - name: qb-long-seeding
+                type: qb
+                base_url: http://127.0.0.1:26586
+                username: ''
+                password: ''
+                api_key: qbt_578ZPfNA58REGHtmmZDDIk6wfPQW
+                enabled: true
+                after_state: paused
+                skip_check: true
+                fields:
+                    save_path: true
+                    category: true
+                    tags: true
+                    share_ratio_limit: true
+                    seeding_time_limit: true
+                    up_limit: true
+                    down_limit: true
+                    super_seeding: false
 
     # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
     notify:
@@ -133,24 +153,26 @@ config:
         curves:
           - curve:
                 period: DAY
-                upload_curve:   # 上传量达到指定值后, 限制上传速度
+                upload_curve:
                   - 10GiB:
                         upload_speed_limit: 6MiB/s
                   - 20GiB:
-                        upload_speed_limit: 5.5MiB/s
-                  - 30GiB:
                         upload_speed_limit: 5MiB/s
-                  - 40GiB:
+                  - 30GiB:
                         upload_speed_limit: 4MiB/s
-                  - 50GiB:
-                        upload_speed_limit: 3MiB/s
-                  - 70GiB:
+                  - 40GiB:
                         upload_speed_limit: 2MiB/s
-                  - 100GiB:
-                        upload_speed_limit: 1MiB/s
-                  - 1000GiB:
+                  - 50GiB:
                         upload_speed_limit: 0.5MiB/s
-                download_curve:   # 下载量达到指定值后, 限制下载速度
+                  - 60GiB:
+                        upload_speed_limit: 0.1MiB/s
+                  - 70GiB:
+                        upload_speed_limit: 50KiB/s
+                  - 80GiB:
+                        upload_speed_limit: 10KiB/s
+                  - 100GiB:
+                        upload_speed_limit: 1KiB/s
+                download_curve:
                   - 30GiB:
                         download_speed_limit: 11MiB/s
                   - 50GiB:
@@ -162,8 +184,19 @@ config:
                   - 1000GiB:
                         download_speed_limit: 1MiB/s
           - curve:
+                period: 3D
+                upload_curve:
+                  - 100GiB:
+                        upload_speed_limit: 8MiB/s
+                  - 200GiB:
+                        upload_speed_limit: 1MiB/s
+                  - 300GiB:
+                        upload_speed_limit: 0.5MiB/s
+                  - 10000GiB:
+                        upload_speed_limit: 10KiB/s
+          - curve:
                 period: MONTH
-                upload_curve:   # 上传量达到指定值后, 限制上传速度
+                upload_curve:
                   - 100GiB:
                         upload_speed_limit: 6MiB/s
                   - 200GiB:
@@ -172,11 +205,13 @@ config:
                         upload_speed_limit: 4MiB/s
                   - 500GiB:
                         upload_speed_limit: 2MiB/s
-                  - 1000GiB:
+                  - 900GiB:
                         upload_speed_limit: 1MiB/s
-                  - 10000GiB:
-                        upload_speed_limit: 0.5MiB/s
-                download_curve:   # 下载量达到指定值后, 限制下载速度
+                  - 1000GiB:
+                        upload_speed_limit: 0.2MiB/s
+                  - 100000GiB:
+                        upload_speed_limit: 10KiB/s
+                download_curve:
                   - 600GiB:
                         download_speed_limit: 11MiB/s
                   - 1000GiB:
@@ -194,23 +229,30 @@ config:
             trigger: on_torrent_added
             cooldown: 5M
             conditions:
-              - path:
-                  - "regex:^R:/Download/PTing/"
-                  - "regex:^R:/Download/ing/"
+                all:
+                  - path:
+                      - regex:^R:/Download/PTing/
+                      - regex:^R:/Download/ing/
             actions:
-              - add_tags:
-                  - "R"     # 添加"R"标签
-
+              - type: add_tags
+                params:
+                  - R
+                on_error:
+                    policy: stop
+                    retries: 3
+                    backoff: 60
     skip_checking_rules:
         i_rule: # I盘: 种子全量校验
             enabled: true
             interval: 30M
             cooldown: 5M
             conditions:
-              - path:
-                  - "regex:^I:/"
+                all:
+                  - path:
+                      - regex:^I:/
             actions:
-              - checking:
+              - type: checking
+                params:
                     basic_check: filelist
                     with_reference:
                         enabled: true
@@ -220,15 +262,21 @@ config:
                         enabled: true
                         mode: full-checking
                         auto_start: false
+                on_error:
+                    policy: stop
+                    retries: 3
+                    backoff: 60
         h_rule: # H盘: 有参考的跳检, 无参考的全量校验
             enabled: true
             interval: 30M
             cooldown: 5M
             conditions:
-              - path:
-                  - "regex:^H:/"
+                all:
+                  - path:
+                      - regex:^H:/
             actions:
-              - checking:
+              - type: checking
+                params:
                     basic_check: filelist
                     with_reference:
                         enabled: true
@@ -238,15 +286,21 @@ config:
                         enabled: true
                         mode: full-checking
                         auto_start: false
+                on_error:
+                    policy: stop
+                    retries: 3
+                    backoff: 60
         r_rule: # R盘: 种子全量校验
             enabled: true
             interval: 5M
             cooldown: 5M
             conditions:
-              - path:
-                  - "regex:^R:/"
+                all:
+                  - path:
+                      - regex:^R:/
             actions:
-              - checking:
+              - type: checking
+                params:
                     basic_check: filelist
                     with_reference:
                         enabled: true
@@ -256,7 +310,10 @@ config:
                         enabled: true
                         mode: full-checking
                         auto_start: false
-
+                on_error:
+                    policy: stop
+                    retries: 3
+                    backoff: 60
     hhan_checking_rules:
         rule: # 全量校验
             enabled: true
@@ -264,7 +321,8 @@ config:
             cooldown: 5M
             conditions: ''
             actions:
-              - checking:
+              - type: checking
+                params:
                     basic_check: filelist
                     with_reference:
                         enabled: true
@@ -274,7 +332,10 @@ config:
                         enabled: true
                         mode: full-checking
                         auto_start: false
-
+                on_error:
+                    policy: stop
+                    retries: 3
+                    backoff: 60
     trackers:
         HHan:
             domains:
@@ -538,14 +599,44 @@ config:
             rules:
               - '@add_drive_letter_tag_rules'
               - "@skip_checking_rules"
-    schema_version: 5
+        tracker_ptskit_org:
+            domains:
+              - tracker.ptskit.org
+            tags:
+              - PTSkit
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
+            hr:
+                required_seeding_time: 15D
+                required_share_ratio: 0
+                extra_seeding_time: 12H
+                condition: 80%
+            rules:
+              - '@add_drive_letter_tag_rules'
+              - '@skip_checking_rules'
+        tracker_qingwapt_com:
+            domains:
+              - tracker.qingwapt.com
+              - tracker.qingwapt.org
+            tags:
+              - QingwaPT
+            upload_speed_limit: 0KiB/s
+            download_speed_limit: 0KiB/s
+            rules:
+              - '@add_drive_letter_tag_rules'
+              - '@skip_checking_rules'
+    schema_version: 8
     qb_traffic:
         enabled: true
-        sample_interval: 1.5S
         raw_window: 30D
         rollup_window: 1000000D
+        sample_interval_multiplier: 1
     traffic_source:
         provider: global_traffic_monitor
         traffic_monitor:
             dat_path: D:/Programs/TrafficMonitor/history_traffic.dat
         enabled: true
+    relocate:
+        enabled: true
+        pending_tag: zRelocate
+        bt_backup: C:\Users\11059\AppData\Local\qBittorrent\BT_backup
