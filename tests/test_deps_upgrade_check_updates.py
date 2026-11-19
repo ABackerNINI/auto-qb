@@ -19,6 +19,8 @@
 - test_joint_display_name_fallbacks: repo 缺失 / 无斜杠 / id 无 watch 项时回退 joint id, 不抛异常
 - test_build_report_joint_names_assembled_from_config: 联合分析文案的三依赖名与数量词
   (all {len(joint)} special deps)从 deps.toml 装配, 输出不再含小写字面三连名或写死的 "three"
+- test_build_report_empty_joint_degenerate_config (issue 26-11-18-0611): [joint] deps 为空的
+  退化配置下 full 模式不再装配 "all 0 special deps ()" 数量词句, 改走中性文案, 触发信息不丢
 """
 
 from __future__ import annotations
@@ -338,3 +340,31 @@ def test_build_report_joint_names_assembled_from_config(monkeypatch):
     text2 = mod.build_report(cfg2, quick=False, timeout=1.0)
     assert f"JOINT analysis of all {len(cfg2['joint']['deps'])} special deps" in text2
     assert "all three special deps" not in text2
+
+
+def test_build_report_empty_joint_degenerate_config(monkeypatch):
+    """退化配置 (issue 26-11-18-0611): [joint] deps 为空 + pin 侧 NEW vs matrix 行存在。
+
+    full 模式 pin 侧提取不按 joint 成员过滤, joint_hits 非空但 len(joint)==0 ——
+    修复前装配出 "all 0 special deps ()"; 修复后改走中性文案, 且 pin 表照常可见
+    NEW vs matrix 行(触发信息不丢, 只是不再套 joint 框架)。
+    """
+    mod = _mod()
+    cfg = {
+        "joint": {
+            "deps": []
+        },
+        "watch": [],
+        "paths": {
+            "lockfile": "uv.lock",
+            "pyproject": "pyproject.toml"
+        },
+    }
+    monkeypatch.setattr(mod, "check_watch_entry", lambda *a, **k: ([], []))
+    pin_line = "| aaaa | 1.0.0 | 1.0.1 | patch | 2026-01-02 | - | - | NEW vs matrix |"
+    monkeypatch.setattr(mod, "check_pin_deps", lambda *a, **k: ([pin_line], 1))
+    text = mod.build_report(cfg, quick=False, timeout=1.0)
+    assert "all 0 special deps" not in text
+    assert "JOINT analysis of all" not in text
+    assert "(none) - no joint deps configured ([joint] deps is empty)." in text
+    assert pin_line in text  # 触发信息仍在 pin 表, 不因中性文案丢失

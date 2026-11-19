@@ -377,15 +377,21 @@ def build_report(cfg: dict[str, Any], quick: bool, timeout: float) -> str:
 
     out.append("## Joint analysis triggers")
     out.append("")
-    if joint_hits:
+    if joint_hits and joint:
         names = " / ".join(joint_display_names(cfg))
         out.append(f"Any update below requires JOINT analysis of all {len(joint)} special deps")
         out.append(f"({names}): one upgrade changes the")
         out.append("adaptation surface of the others. Runbook: project/impact-map.md, section 3.")
         out.append("")
         out.extend(joint_hits)
-    else:
+    elif joint:
         out.append("(none) - no unanalyzed release detected on the joint deps.")
+    else:
+        # Degenerate config (issue 26-11-18-0611): [joint] deps empty. Full mode
+        # extracts pin-side rows without joint-membership filtering, so joint_hits
+        # can be non-empty here and the quantifier sentence would render
+        # "all 0 special deps ()". Rows stay visible in the pin table above.
+        out.append("(none) - no joint deps configured ([joint] deps is empty).")
     out.append("")
 
     out.append("## How to act")

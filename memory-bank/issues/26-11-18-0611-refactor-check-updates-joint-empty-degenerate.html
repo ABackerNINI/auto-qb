@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="deps-check-updates">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="check_updates 联合分析句在空 joint 配置下输出 all 0 special deps (退化配置边界, nit)">
 <meta name="issue-summary" content="check_updates.py:382 数量词装配在 [joint] deps 为空的退化配置下, full 模式可输出 all 0 special deps (); quick 模式不可达; 旧文案写死 three 同场景更错, 本次修复严格更优, 修不修待议">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-18-0611-refactor-check-updates-joint-empty-degenerate</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-18 06:11</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -120,12 +120,20 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>可选方向（待议，不强推）：空集时改走中性文案（与 else 分支一致），或提前告警配置退化（[joint] deps 为空本身可疑）。</p>
+  <p><strong>实际修法（2026-11-19，按方向一）</strong>：句子装配分支加 <code>joint</code> 非空守卫——
+  <code>if joint_hits and joint</code> 走原句；<code>joint</code> 空集改走中性文案
+  <code>(none) - no joint deps configured ([joint] deps is empty).</code>，触发行不再套 joint 框架罗列
+  （pin 表 support 列照常可见，事实不丢）。<code>joint</code> 非空且无触发的原 else 文案保持逐字节不变。</p>
+  <p><strong>验证</strong>：新增回归测试
+  <code>test_build_report_empty_joint_degenerate_config</code>（断言不再输出 <code>all 0 special deps</code> /
+  中性文案在场 / pin 行仍在），<code>commands run test.one</code> 该文件 25 passed。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-18 06:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
   </ul>
 </section>
 

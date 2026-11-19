@@ -123,6 +123,9 @@
     ⚠ 但 [fixed-port-test-collision.md](fixed-port-test-collision.md) 记过一次「猜 `_free_port()`
     TOCTOU 结果猜错」的前科 —— 要定性得先有栈, 别顺着最像竞态的那个猜。
 - **同族**: [fixed-port-test-collision.md](fixed-port-test-collision.md)(固定端口 + 连号候选表的面)。
+- **复发**: 1 (2026-11-19, issue 26-11-18-0611 修复批闸门预跑): 又红在
+  `test_runtime_discovery_bind_failure_keeps_data_endpoint`, 改动面(skill 脚本+测试)零交集, 单跑绿判偶发;
+  为什么没命中: 闸门预跑前没查 pitfalls/testing(路由没到), 且重蹈「只截 tail、traceback 没落盘」覆辙。
 
 ### 共享实例根下的聚合脚本: `open("w")` 截断窗让 node 读到 0 字节(2026-11-08, 已修)
 
