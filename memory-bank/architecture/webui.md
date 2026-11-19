@@ -1,7 +1,7 @@
 # WEB UI 运行时
 
-> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、组行 hash 引用式(聚合 + members hash 数组)、truth 通道、前端 ingestion 物化缝、version-reload 自愈、响应性设计要点、表格几何单点(dt_table)、部分组操作预警、键位现场提示(按需显影/键帽/页签徽标/角标)、图形化配置编辑器骨架、配置备份 bundle 导出/导入(掩码不出机 + 勾选段应用 + 偏好键双清单)。
-> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, HR 三表, hrDetail, hrWave, hrKv, hr-full-modal, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 键位, 键帽, 键位现场提示, 显影, 常驻, kbd-reveal, kbd-persist, Backquote, kbShortcutDisplay, kbKeycapOf, kbKeysRev, aq-kbd, 配置编辑器, schema, writer, 配置备份, bundle, 导出配置, 导入配置, backup, 掩码, ui_prefs, PREF_KEYS
+> 摘要: FastAPI 装配单点与启动 fail-fast、皮肤目录即 URL 与静态契约、线程边界(读快照 + 投命令)、视图发布与版本门控、组行 hash 引用式(聚合 + members hash 数组)、truth 通道、前端 ingestion 物化缝、version-reload 自愈、响应性设计要点、表格几何单点(dt_table)、排序引擎单点(sort.js 三态 / 默认升序键修复)、部分组操作预警、键位现场提示(按需显影/键帽/页签徽标/角标)、图形化配置编辑器骨架、配置备份 bundle 导出/导入(掩码不出机 + 勾选段应用 + 偏好键双清单)。
+> 触发: WEB UI, webui, FastAPI, create_app, 路由, 皮肤, 静态, 线程边界, 视图发布, group_view_ver, hash 引用式, members hash 数组, memberByHash, VIEW_ARRAYS, 物化, _materializeGroupRows, _rematQueue, version-reload, _versionSelfHeal, truth, 回执, 乐观 UI, 响应性, 窗口化, 表格几何, dt_table, DT_TABLE, columns_grid, gridTemplate, 排序, setSort, 三态排序, defKey, defDir, dtSortCell, dtSortState, IP 点分数值序, HR 三表, hrDetail, hrWave, hrKv, hr-full-modal, 部分组, 部分组预警, partialGroups, 将缺文件, 整组迁移, 键位, 键帽, 键位现场提示, 显影, 常驻, kbd-reveal, kbd-persist, Backquote, kbShortcutDisplay, kbKeycapOf, kbKeysRev, aq-kbd, 配置编辑器, schema, writer, 配置备份, bundle, 导出配置, 导入配置, backup, 掩码, ui_prefs, PREF_KEYS
 
 ## 装配单点与启动 (webui/server/factory.py, webui/module.py)
 
@@ -44,6 +44,11 @@
 - **`assertLayout()` 常驻生产渲染自查**(拍板 D3): 三处 O(1) 计数(grid 轨道数 / 列头格数 / 首行子格数), 不一致 `console.error`(含 tableId 与三方计数)**不打断渲染**(保守默认); 未挂载豁免。
 - **D4 例外清单(26-11-17-0059 第二轮后收缩)**: 现役例外只剩 **04 卡片形态面**(drawerTrackerV04, 非网格形态, 入池 issue 26-11-17-0038 待排期); 另有桥验证 fixture **drawerStubV0**(仅 `?dtstub` 查询参数注册, 生产零观感)是 `ASSERT_SKIP_FACES` 成员但不算现役面。HR 三表(hrDetail / hrWave / hrKv)已随计划 plans/26-11-17-0059-plan-hr-table-wiring.html 迁入 aq-table grid 链路(2026-11-17): 列定义补 tpl/align 并入 `ALL_TABLE_DEFS`(page 键 hrDetail/hrWave/hrKv, 几何走同一 `DT_TABLE.layout()` 单点), 四项交互(拖宽/拖序/右键隐藏/持久化)复用主表引擎单点, 状态落 `autoqb_cols_v5` 新 page 子树(不升版本); hrDetail 排序并入引擎 `setSort`(E8, 逐站点记忆→表级); hrKv k 列 locked(E7, 拆散 k/v 对不可表达 —— 隐藏侧引擎既有守卫, 拖序侧 W2 补 `startColDrag`/`applyColOrder` locked 检查, 主表 locked 列随之不可拖走); 值格渲染注册化(`registerCell` → `HR_CELL_RENDERERS`, 模板经 `cellOf` 消费, dt_table 六口子全活); `<aq-table>` 的 `mode="thead"` 借壳模式随迁移整体退役(hrDetail 是唯一消费方); settings 页 `.hr-full-modal` 的 v-show 未展开态走 assertLayout「未挂载豁免」口径(展开态经 `headDom: true` 锚覆盖)。
 - 守阵: node 电池等价性探针(`tests/test_webui_static_r4_node_batteries.py::test_r4_dt_table_layout_geometry_equivalence`, 13 表 136 列 + colWidths 五类场景, 断言现役拼轨 ≡ DT_TABLE.layout 输出; 13 表不含 HR —— 沙箱不加载 hr_status.js, HR 等价性由例外清单守阵静态形态钉 + parity e2e 真跑) + e2e `dt-table-layout-parity.spec.mjs`(语义 = **钉住单点输出不变**; 26-11-17-0059 W3① 起含 HR 三面 hrDetail 10 列 / hrWave 8 列 / hrKv 2 列, route 拦截喂合成载荷)与 `dt-table-face-bg.spec.mjs`。
+
+## 排序引擎单点 (webui/static/shared/sort.js)
+
+- **三态排序全仓单点 `AQB_SORT.setSort`**(scope = 表 id, 见 sort.js 头注): 首击某列降序 → 再击升序 → 第三击复位默认; 状态分两形——经典表落根 data 的 `gk/gd` 字段(主视图四表), dyn 表落 `dtSortState[tableId]`(抽屉变体 + HR 三表), `dtSortCell` 懒建保响应式。表壳 `<aq-table>` 的 `headActivate` 与键盘 Enter/Space 同走此单点, `headAriaSort` 与箭头渲染同源。IP/地址列走 `_dtStrCompare` 的点分数值序(字典序会把 10.10.2.x 排到 10.10.10.x 后)。
+- **默认升序键的隐藏前提(2026-11-19 修复)**: `defKey` 非空 + `defDir:1`(默认按某列升序, 如用户表 addr/1、Tracker 06 sev/1)时, 初始 cell 恰为中间态 `(defKey,1)`, 点击默认列旧实现三击全落复位 no-op(IP 列点了没反应)。修法 = 第三击复位前判 `cell.key===defKey && defDir===1` 则翻降序, dyn/经典两分支同口径; 非默认列三态与 defDir=-1/空 defKey 表零行为变化。坑档 `pitfalls/web-ui/sort-default-asc-tristate-noop.md`; 守阵 node 电池 `test_r4_sort_domain` 的 dPos 组 + e2e `drawer-peers-variant-tables.spec.mjs` dt07 点 addr 列。
 
 ## 部分组操作预警 (webui/static/shared/selection.js + delete_flow.js + drawer.js)
 

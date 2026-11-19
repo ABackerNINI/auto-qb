@@ -18,5 +18,5 @@
 | [4](_index-4.md) | `est-cold-start-vs-absolute-threshold.md` … `hr-tooltip-overlap.md` | 14 |
 | [5](_index-5.md) | `hscroll-indicator.md` … `modal-mask-click-self-drag.md` | 14 |
 | [6](_index-6.md) | `modal-width-tier.md` … `scroll-visible-band.md` | 14 |
-| [7](_index-7.md) | `search-pending-collapse.md` … `toast-kind-unstyled.md` | 14 |
-| [8](_index-8.md) | `toast-queue-pushin-overlap.md` … `wording-audit-surface.md` | 13 |
+| [7](_index-7.md) | `search-pending-collapse.md` … `toast-countdown-ttl-misattributed.md` | 14 |
+| [8](_index-8.md) | `toast-kind-unstyled.md` … `wording-audit-surface.md` | 14 |

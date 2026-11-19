@@ -100,6 +100,23 @@ for (const skin of SKINS) {
       await expect(anchor.locator('.group-row[data-table="drawerPeerV07"]').first())
         .toContainText(addrOf(0));
 
+      // 默认升序键(addr)点表头必须能翻序(用户报障「IP 列点了没反应」回归):
+      // setSort 三态遇 defKey/defDir=addr/1 时, 旧实现三击全落复位 no-op; 修复后
+      // 一击翻降序(首行 i=11)→ 二击升序(i=0)→ 三击再降序(i=11), 箭头方向同源。
+      const addrCell = anchor.locator('.h-cell.hc-addr');
+      await addrCell.click();
+      await expect(addrCell).toHaveAttribute('aria-sort', 'descending');
+      await expect(anchor.locator('.group-row[data-table="drawerPeerV07"]').first())
+        .toContainText(addrOf(11));
+      await addrCell.click();
+      await expect(addrCell).toHaveAttribute('aria-sort', 'ascending');
+      await expect(anchor.locator('.group-row[data-table="drawerPeerV07"]').first())
+        .toContainText(addrOf(0));
+      await addrCell.click();
+      await expect(addrCell, '默认列三击不得原地 no-op').toHaveAttribute('aria-sort', 'descending');
+      await expect(anchor.locator('.group-row[data-table="drawerPeerV07"]').first())
+        .toContainText(addrOf(11));
+
       // 排序: 点「下载」列头 → 引擎三态第一击(降序箭头亮), 首行换人(375000 峰值 = i=3)
       await anchor.locator('.h-cell.hc-dlspeed').click();
       await expect(anchor.locator('.h-cell.hc-dlspeed .arrow svg'), '引擎排序箭头点亮').toBeVisible({ timeout: 5_000 });

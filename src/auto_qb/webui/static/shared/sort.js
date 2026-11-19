@@ -41,6 +41,12 @@ window.AQB_SORT = {
         const cell = this.dtSortCell(k.id);
         if (cell.key !== key) { cell.key = key; cell.dir = -1; return; }
         if (cell.dir === -1) { cell.dir = 1; return; }
+        /* 同键且当前升序(第三击): 通常复位默认。但当默认键非空且默认方向为升序
+         * (defKey/defDir, 如用户表 addr/1、Tracker 04/06 的 sev/1)时, 初始态 cell 就停在
+         * (defKey, 1) —— 首次点击该默认列会落到这里, 若照常复位则目标 == 当前态, 三击全
+         * no-op(用户报障「IP 列点了没反应」)。此时改走降序, 让默认列首击真正切到降序;
+         * 非默认列点第三击仍复位默认(其 key !== defKey), 三态语义对其余列不变。 */
+        if (cell.key === k.defKey && k.defDir === 1) { cell.dir = -1; return; }
         cell.key = k.defKey; cell.dir = k.defDir;
         return;
       }
@@ -54,6 +60,9 @@ window.AQB_SORT = {
         this[gd] = 1;
         return;
       }
+      /* 经典表同构第三击: 默认方向为升序的非默认表(此处 defDir 恒 -1, 未来若引入 +1 亦可正确)
+       * 与 dyn 分支同口径 —— 默认键首击落复位时应翻降序而非原地复位, 见上分支注释。 */
+      if (this[gk] === k.defKey && k.defDir === 1) { this[gd] = -1; return; }
       this._resetSort(scope);
     },
     /* dyn 表直设排序态(计划 26-10-12-0527 U3): 04 卡片变体的分段钮是**模式选择**语义

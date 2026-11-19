@@ -12,7 +12,7 @@
 - test_r4_move_dialog_partial_group_gate: 迁移关部分组确认框落点级真跑(计划 26-11-11-0820 S3, 拍板 D3) —— submitMoveDialog(drawer.js)在目标含部分组且 flags.relocate_enabled===false 时首次投递前弹确认框(tone error/danger/wide), 确认才发, 取消留在设定位置框; 判定单点消费 selection.js::_partialGroupsOf、聚合单点消费 _partialGroupsSummary(与删除链 S2 行共用)。正例: 部分组+迁移关恰弹一次且弹层顺序先收 moveOpen 再开确认框(R3 防双遮罩互盖, 照 confirm 回路先例), 文案钉住词「将缺文件」+「整组迁移」逐字段, 确认后首发带 confirm=true(后端部分组闸放行位, issue 26-11-11-0823), 成功后框收; 取消零投递带原路径重开; 确认后投递失败带原路径重开(框已被闸先收, 照 confirm 回路失败分支, 手输路径不丢), 非闸直发失败维持现状无重开; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)闸照触发且文案只列 C。负例(D3): 整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组直发零新增弹层。旗标两态: 迁移开直发零弹层(S4 披露条的面); flags/relocate_enabled 解析不出(R6)静默直发不误拦; decoratedGroups 缺失不抛不误拦。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_move_dialog_partial_disclosure_bar: 迁移开部分组披露条落点级真跑(计划 26-11-11-0820 S4, 拍板 D4) —— openMoveDialog(drawer.js)在 flags.relocate_enabled===true 时开框瞬间算一次部分组聚合(_partialGroupsOf+_partialGroupsSummary 带接收者, 判定/聚合单点只在 JS 侧)存非下划线状态 movePartialDisclosure 供 move-dialog.html 披露条消费(R2: Vue 模板编译器不解析 _ 前缀标识符, 模板只读本字段)。正例: 部分组+迁移开披露非 null 且单组 names/sel/total/gap 逐字段; 四组聚合前 3 +「等 K 个」合计口径; 跨组混合(整组 A 组键入选+部分组 C 散员, D2 触发面)披露只列 C; 非部分组负例(整组入选/成员全选未晋升/单成员组/虚拟行/hash 不属任何组)无条。降级面(R6/D4): 迁移关(relocate_enabled===false, S3 确认框的面, 含 S3 取消重开路径)无条; flags/relocate_enabled 解析不出无条不抛; decoratedGroups 缺失无条不抛。接线面: 开框既有状态机零破坏(moveOpen/moveCount/movePathInput 照常)。静态守阵(照 delete_flow.js WARN 原注/_scan_mixin_wiring 范式): move-dialog.html 剥注释后零 _ 前缀标识符; 文案钉住「整组迁移」+「将按整组迁移扩展至全组」+「个成员」; drawer.js 接线形态(先复位 null + relocate_enabled===true 门 + 带接收者单点调用); state.js 显式建字段; 四皮肤 dialogs.css 各有 .move-note.move-note-warn warn 档。电池合并 selection.js + drawer.js 两 mixin 方法, 无 node 静默跳过
 - test_r4_load_col_state_seeding: R5#18 —— loadColState 默认隐藏播种三态: 空存储播种 / 仅空 hidden 不播(「刻意全开」合法偏好) / 有任一偏好键不播; 附坏 JSON 走完整流程、locked 列忽略、w 白名单洗净(洗净后三键全缺照播)
-- test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
+- test_r4_sort_domain: R5#54 —— AQB_SORT 真跑: setSort 三态循环(经典 gk/gd 与 dyn dtSortState 两形态) + 默认升序非空键默认列首击切降序(用户表 addr/1、Tracker sev/1 缺陷修复; 修复前三击全 no-op)与非默认列/空键三态零误伤 + _dtStrCompare(IPv4 逐段数值序/端口数值/等值/非 IP localeCompare 回落) + sortedDrawer 空值两方向恒末位与 IPv4 数值序
 - test_r4_format_ladder_family: R5#55 —— format 函数族档位边界: _fmtLadder 梯顶回落(top 命中/缺省/档名写错回落整梯)与字节/速度两族、fmtEta 8640000 哨兵与非正值、fmtDuration 三段进位边界、fmtPeersQb 缺省只显已连接
 - test_r4_fx_mount_toast_split_and_rows_ghost: R5#193 —— flux fx 挂载层 node 电池(fx-mount.js 是 IIFE,
   桩 DOM/BOM 后真跑): TOAST_SPLIT 拆段正则族(主标题+说明两段落地/无分隔符与括号头与超 14 字头与
@@ -1100,6 +1100,9 @@ const fs = require("fs");
 global.ALL_TABLE_DEFS = {
   group: { sort: { gk: "sortKey", gd: "sortDir", defKey: "added_on", defDir: -1 } },
   d0: { sort: { dyn: true, defKey: "added_on", defDir: -1 } },
+  // defKey 非空 + 默认升序(用户表 addr/1、Tracker sev/1): 默认列首击必须切降序, 三击全 no-op 是缺陷
+  dPos: { sort: { dyn: true, defKey: "addr", defDir: 1 } },
+  dEmpty: { sort: { dyn: true, defKey: "", defDir: 1 } },
 };
 global.VIEW_TABLE = { groups: "group" };
 global.DRAWER_TABLE_DEFS = { d0: { sort: { dyn: true, defKey: "", defDir: -1 } } };
@@ -1134,6 +1137,32 @@ ok("dyn 二击: 同键升序", c.dtSortState.d0.dir === 1);
 M.setSort.call(c, "size", "d0");
 ok("dyn 三击: 回默认键", c.dtSortState.d0.key === "added_on" && c.dtSortState.d0.dir === -1);
 
+// 2b. 默认升序非空键(dPos: addr/1)默认列首击: 修复前初始 cell==(addr,1), 三击全 no-op;
+//     修复后一击降序 -> 二击升序 -> 三击仍降序(默认列不原地复位), 非默认列三态照常复位默认
+c = mkCtx();
+ok("默认升序键: 初始 cell=默认(addr/1)", c.dtSortState.dPos === undefined &&
+   JSON.stringify(M.dtSortCell.call(c, "dPos")) === JSON.stringify({ key: "addr", dir: 1 }));
+M.setSort.call(c, "addr", "dPos");
+ok("默认升序键: 默认列一击=降序(缺陷修复核心)", c.dtSortState.dPos.key === "addr" && c.dtSortState.dPos.dir === -1);
+M.setSort.call(c, "addr", "dPos");
+ok("默认升序键: 默认列二击=升序", c.dtSortState.dPos.dir === 1);
+M.setSort.call(c, "addr", "dPos");
+ok("默认升序键: 默认列三击=降序(非 no-op)", c.dtSortState.dPos.dir === -1);
+c = mkCtx();
+M.setSort.call(c, "client", "dPos");
+ok("默认升序键: 非默认列一击=降序", c.dtSortState.dPos.key === "client" && c.dtSortState.dPos.dir === -1);
+M.setSort.call(c, "client", "dPos");
+ok("默认升序键: 非默认列二击=升序", c.dtSortState.dPos.dir === 1);
+M.setSort.call(c, "client", "dPos");
+ok("默认升序键: 非默认列三击=复位默认(addr/1)", c.dtSortState.dPos.key === "addr" && c.dtSortState.dPos.dir === 1);
+// 空默认键 + 默认升序(dEmpty): 首击任意列=降序, 三击复位空键 —— 与修复前逐位一致(零误伤)
+c = mkCtx();
+M.setSort.call(c, "sev", "dEmpty");
+ok("空默认键: 首击=降序(零误伤)", c.dtSortState.dEmpty.key === "sev" && c.dtSortState.dEmpty.dir === -1);
+M.setSort.call(c, "sev", "dEmpty");
+ok("空默认键: 二击=升序", c.dtSortState.dEmpty.dir === 1);
+M.setSort.call(c, "sev", "dEmpty");
+ok("空默认键: 三击=复位空键", c.dtSortState.dEmpty.key === "" && c.dtSortState.dEmpty.dir === 1);
 // 3. _dtStrCompare: IPv4(+可选端口)逐段数值序; 端口数值; 等值 0; 非 IP localeCompare 回落
 const cmp = (a, b) => M._dtStrCompare(a, b);
 ok("IPv4 段内数值序: 10.10.2.3 < 10.10.10.1(字典序会排反)", cmp("10.10.2.3:51413", "10.10.10.1:80") < 0);
