@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 静态资源串行加载放大首屏延迟(并发化/长缓存/打包) · perf · 计划外问题</title>
+<meta name="issue-slug" content="webui-boot-serial-asset-chain">
+<meta name="issue-stamp" content="26-11-20-0553">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="webui-boot-first-data">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 静态资源串行加载放大首屏延迟(并发化/长缓存/打包)">
+<meta name="issue-summary" content="boot.js 串行加载 28 分片+81 脚本共约 109 个请求, 稳态首屏约 1.4s; 单请求延迟被线性放大。作为独立优化入池, 经复测非重启 5-15s 主因(硬刷新 1-2s)">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· perf</div>
+<h1>WEBUI 静态资源串行加载放大首屏延迟(并发化/长缓存/打包)</h1>
+<p class="lede">boot.js 串行加载 28 分片+81 脚本共约 109 个请求, 稳态首屏约 1.4s; 单请求延迟被线性放大。作为独立优化入池, 经复测非重启 5-15s 主因(硬刷新 1-2s)</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-20-0553-perf-webui-boot-serial-asset-chain</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 05:53</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>真机轨(环境1 副实例 36596)追查「重启后 WebUI 主界面 5-15s 不可见」时顺带量到: 前端启动链 <code>boot.js</code> 严格串行拉 28 个模板分片 + 81 个脚本 ≈ 109 个串行请求(稳态首屏框架可见约 1.4s)。用户复测反馈: 本地部署下 <b>ctrl+F5 硬刷新仅 1-2s</b> —— 说明这条链本身在本地不是 5-15s 卡顿的主因; 但它把单请求延迟线性放大(注入实验实测), 是一个独立的首屏性能面, 入池另案。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-20 05:4x, 真浏览器(Playwright chromium)冷加载产品 WebUI, 210 假种子:
+# 稳态加载: 框架可见 1092ms, 静态资源 123 个, 200=124 / 304=0
+# F5(带缓存): 框架可见 866ms, 静态资源 123 个, 304=3
+# 串行性实测: 83 个 shared 脚本相邻启动间隔中位数 1ms, 总跨度 753ms —— 一个接一个, 无并发
+#
+# 单请求延迟注入实验(路由拦截给每个静态资源加固定延迟), 框架可见时间:
+#   注入   0ms/资源 ->  943ms
+#   注入  40ms/资源 -> 6996ms
+#   注入 100ms/资源 -> 13667ms
+#   => 框架可见 ≈ 基线 + 109 x 单请求延迟, 线性放大
+#
+# 证据文件(gitignored 工作区): tests-real/.work/browserboot/{probe_steady,cold_probe1,
+#   overlap_clean,refresh,inject_0,inject_40,inject_100}.json + boot_probe.cjs/inject_probe.cjs 等探针
+</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>每次页面加载(冷加载/刷新)都要走全链; 单请求延迟越高(远程/代理/磁盘慢)放大越显著</td></tr>
+    <tr><td>影响范围</td><td>三皮肤共用 boot.js; 框架可见时间(导航栏/状态栏/vue mount 前的白屏段)</td></tr>
+    <tr><td>严重度</td><td>低-中 —— 本地稳态约 1.4s 可接受; 用户复测硬刷新 1-2s, 非本次重启 5-15s 卡顿主因</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/boot.js:72</code>（取证 2026-11-20 05:4x）· <code>nextPart()</code> 分片串行递归 · grep 关键词 <code>nextPart</code></li>
+    <li><code>src/auto_qb/webui/static/shared/boot.js:119</code> · <code>nextScript()</code> 脚本 onload 串行链 · grep 关键词 <code>nextScript</code></li>
+    <li><code>src/auto_qb/webui/static/shared/app.js:1036</code> · <code>app.mount("#app")</code> 框架可见点 · grep 关键词 <code>app.mount</code></li>
+    <li><code>src/auto_qb/webui/server/static_ui.py:48</code> · <code>_static_no_cache</code> 静态 no-cache 中间件 · grep 关键词 <code>no-cache</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p>启动链结构: 分片逐个 fetch(等上一个 then 才发下一个) + 脚本 <code>onload</code> 链式逐个插, 109 个请求严格串行, 无并发无预加载; 每个请求的往返延迟累加成首屏时间。<code>no-cache</code> 使刷新时每个资源仍需 ETag 校验往返(304 也占一趟)。</p>
+  <div class="callout">已排除: 不是本次「重启后 5-15s 卡死」的根因 —— 用户本地 ctrl+F5 硬刷新(全量重下静态资源)仅 1-2s, 若是此链为瓶颈硬刷新应同样慢; 重启特有的慢另有根因, 另案追查。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向: 把 109 个串行请求改并发/打包, 砍掉线性放大。候选: ①分片 <code>Promise.all</code> 并发 fetch(顺序注入仍保序) —— 收益大, 代价低; ②脚本改 <code>type=module</code> 或并发 preload + 显式排序执行 —— 需处理当前的严格顺序依赖与 top-level const 冲突约束; ③服务端对 immutable 静态资源上长缓存 + 内容 hash 文件名, 刷新走本地缓存免 ETag 往返 —— 与升级即有新文件的机制要协调。三案不互斥, 可分期。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-20 05:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-20-0553-perf-webui-boot-serial-asset-chain.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
