@@ -63,10 +63,15 @@ def _stub_probe_pass(monkeypatch):
     issue 26-11-07-0527 R1#35 后, B′/visibility_only 弱证据不再置 same_fs_proved,
     多成员组执行链必走一次 run_probe —— 替身环境(FakeClient 无列目录端点且 recheck 不
     推进度)真跑必然证读超时(实测 10s)判 blocked, 全链用例经本桩放行。
+
+    S2 探测闸异步化(计划 26-11-10-2350)后生产缺省走「意图入队+kick+探测中回执」,
+    本桩同时类级打开 _probe_inline 同步内联(替身先于模块实例存在的夹具形态, 类属性
+    monkeypatch 覆盖全部实例), 全链用例保持既有同步语义零漂移。
     """
     from auto_qb.core.modules import relocate_exec as _rex
     from auto_qb.core.modules.relocate_probe import ProbeResult
 
+    monkeypatch.setattr(_rex.ExecMixin, "_probe_inline", True)
     monkeypatch.setattr(
         _rex, "run_probe", lambda ctx, src, dst: ProbeResult("passed", "ok", False, {
             "method": "e1",

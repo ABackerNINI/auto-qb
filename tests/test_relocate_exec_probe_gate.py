@@ -111,13 +111,20 @@ def _gate_env(monkeypatch, *, host="127.0.0.1", port=8080):
 
 
 def _stub_run_probe(monkeypatch, results):
-    """替身 run_probe: 按调用序返回 results(超出末位复用最后一个); 返回调用台账"""
+    """替身 run_probe: 按调用序返回 results(超出末位复用最后一个); 返回调用台账
+
+    S2 异步化(计划 26-11-10-2350)后探测闸未命中分支生产缺省走「意图入队+kick+探测中
+    回执」; 本替身面同时类级打开 _probe_inline 同步内联, 未命中分支经 run_inline 同步拿
+    verdict 走原收尾三态 —— 既有用例同步语义零漂移(逐条处置表见
+    test_relocate_probe_gate_async.py 文件头)。
+    """
     calls = []
 
     def _fake(ctx, src, dst):
         calls.append({"src": src, "dst": dst})
         return results[len(calls) - 1] if len(calls) <= len(results) else results[-1]
 
+    monkeypatch.setattr(rex.ExecMixin, "_probe_inline", True)
     monkeypatch.setattr(rex, "run_probe", _fake)
     return calls
 

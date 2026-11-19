@@ -11,12 +11,34 @@ from ...infra import alias_fs, file_access, relocate_journal, utils
 from .. import fastresume
 from . import relocate_proof as rp
 from . import relocate_units as ru
-from .relocate_probe import probe_fingerprint, run_probe
+from .relocate_probe import ProbeResult, ProbeRunner, probe_fingerprint, run_probe
 from ...torrents import TorrentRecord
-from .relocate_units import GroupFacts, RelocateJob, evaluate_group_unit
+from .relocate_units import PROBE_GATE_PROBING_KEY, GroupFacts, RelocateJob, evaluate_group_unit
 from .relocate_common import _LINK_CHUNK, _native, logger
 
 _DAEMON_MODULE = "auto_qb.tools.recycle_daemon"  # S3 回收 daemon 拉起目标(与 _spawn 同款 detached)
+
+
+def _probe_call(ctx: Any, src: str, dst: str) -> ProbeResult:
+    """探测调用单点(两条执行形态共用的缺省 probe_fn): 调用期解析本模块 run_probe 名
+
+    既有替身形态是 monkeypatch.setattr(rex, "run_probe", ...) 打在**本模块**名上
+    (test_relocate_exec_probe_gate._stub_run_probe / relocate_exec_support._stub_probe_pass
+    先例) —— 直接把 relocate_probe.run_probe 绑进 runner 会在 __init__ 期钉死函数对象,
+    替身打不进去; 经本包装调用期解析, 替身与真身两条执行形态(try_start 线程 / run_inline
+    内联)都按调用时刻的模块名取人, 零适配生效。
+    """
+    return run_probe(ctx, src, dst)
+
+
+# 生产 runner(S2, 计划 26-11-10-2350 §03 落点段): 缺省协作面全走 relocate_probe 模块单例
+# (PROBE_SLOT 全局单飞槽 / PROBE_VERDICT_QUEUE 结果队列 / probe_thread_ctx 线程侧独立连接),
+# 探测在 daemon 线程跑、结论经队列回主循环(T3 消费) —— 主循环零阻塞。
+PROBE_RUNNER = ProbeRunner(probe_fn=_probe_call)
+# 测试内联 runner(_probe_inline=True 的缺省注入面): 与线程体同款执行面但 run_inline 同步
+# 内联 —— thread_ctx_factory 原样透传(单测 ctx 不重建, 替身 api 身份不变), probe_fn 经
+# _probe_call 调用期解析(monkeypatch 先例零适配); 不投队列不碰槽, 与单飞完全解耦。
+PROBE_RUNNER_INLINE = ProbeRunner(thread_ctx_factory=lambda ctx: ctx, probe_fn=_probe_call)
 
 
 def _torrent_v2_of(backup_dir: str, torrent_hash: str) -> str:
@@ -58,6 +80,19 @@ def arm_members_of(hashes: Iterable[str], backup_dir: str) -> List[dict]:
 
 
 class ExecMixin:
+    # ---------- 探测闸异步化(S2)的注入 seam(计划 26-11-10-2350 §03/§06 D1-D10) ----------
+    # _probe_inline: 探测闸「未命中」分支的执行形态开关, 类属性缺省 False = 生产异步形态
+    # (意图入队 + 单飞 kick + 「探测中」回执, 主循环零阻塞), 生产侧零布线。True = 同步内联
+    # (测试注入面): run_inline 同步拿 verdict 走原收尾三态, 既有替身形态(monkeypatch
+    # rex.run_probe)语义零漂移。测试打开方式二选一: 类级 monkeypatch.setattr(rex.ExecMixin,
+    # "_probe_inline", True)(替身先于模块实例存在的夹具形态, _stub_probe_pass 先例)或
+    # 实例属性 mod._probe_inline = True(只影响单实例)。
+    # _probe_runner: runner 替身注入位(None = 缺省单例: 异步用 PROBE_RUNNER, 内联用
+    # PROBE_RUNNER_INLINE)。异步用例注入独立 ProbeRunner(queue=.., slot=..,
+    # thread_ctx_factory=.., probe_fn=..)隔离全局单飞槽与结果队列(T1 测试口径)。
+    _probe_inline: bool = False
+    _probe_runner: Optional[ProbeRunner] = None
+
     # ---------- 搬: 轮询 / 停滞判据 / 长耗时转 watching ----------
 
     def _recover(self, job: RelocateJob, rt: dict, mover: TorrentRecord) -> None:
@@ -1621,7 +1656,7 @@ class ExecMixin:
             if ru.at_dst(target, records[0].save_path, fold_case=False):
                 items.append({**verdict, "cls": "skip", "notes": list(verdict["notes"]) + ["已在目标位置(幂等): 未发起迁移"]})
                 continue
-            gate = self._ensure_probe(records, facts, verdict)
+            gate = self._ensure_probe(records, facts, verdict, origin=origin)
             if gate is not None:
                 items.append(gate)
                 continue
@@ -1629,11 +1664,17 @@ class ExecMixin:
         logger.info(f"relocate | 迁移执行({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
 
-    def _ensure_probe(self, records: List[TorrentRecord], facts: GroupFacts, verdict: dict) -> Optional[dict]:
-        """执行链一次性同机强探测闸(计划 26-11-04-0055 §04 P3 行后半 + §06 D1-D7)
+    def _ensure_probe(self,
+                      records: List[TorrentRecord],
+                      facts: GroupFacts,
+                      verdict: dict,
+                      origin: str = "unknown") -> Optional[dict]:
+        """执行链一次性同机强探测闸(计划 26-11-04-0055 §04 P3 行后半 + §06 D1-D7; S2 异步化 26-11-10-2350)
 
         位置契约(D5): 必须在建账(_start_job)与任何 torrents_set_location 之前调用 ——
         探测失败 => 零建账、零 setLocation; 规则引擎自动迁移共用本入口, 无旁路(D6)。
+        异步化后「探测中」回执同样只走到 blocked 通道为止(本轮零建账零 setLocation),
+        verdict 到达后的自动续跑在 on_task_line 消费面(T3)按意图重放本入口。
 
         决策表(按序短路, 返回 None = 放行, verdict 的 notes 可能被追加; 返回 dict =
         blocked 回执, 与 evaluate_group 现行 blocked item 同形: reasons 元素 gate/cls/text):
@@ -1644,9 +1685,14 @@ class ExecMixin:
         - 指纹缓存(D3: host+port+username+secret; R1#42 起指纹=HMAC+随机盐, 盐存 state
           relocate.probe_salt, 换盐即全缓存失效重探)命中 passed => 放行;
           命中 failed => blocked(D7 1 同指纹不重试);
-        - 未命中 => run_probe 同步执行(常态 ~1.3s): passed => probe_put(passed) 放行;
-          failed env=False(FS 不可达) => probe_put(failed) + blocked(D7 1);
-          failed env=True(环境性) => 不写缓存 + blocked(下次迁移重试, D7 2)。
+        - 未命中(S2 异步化): 意图入队(probe_pending, 同意图三元组合并 hashes 去重 /
+          其余追加等位队尾)+ 单飞 kick(槽空闲起探测线程, 槽被占即等位)+ 返回「探测中」
+          gate 回执(cls=blocked + item[PROBE_GATE_PROBING_KEY]=True 机器判别键, note
+          「同机探测已入队」; T3 重放防自环/T4 web 受理段按该键分流)。同步语义经
+          _probe_inline 注入内联保留: run_inline 同步拿 verdict 后走原收尾三态
+          (passed => probe_put(passed) 放行; failed env=False => probe_put(failed) +
+          blocked(D7 1); failed env=True => 不写缓存 + blocked(下次迁移重试, D7 2)),
+          既有替身形态(monkeypatch rex.run_probe)语义零漂移。
         """
         if len(records) <= 1:
             return None
@@ -1704,35 +1750,72 @@ class ExecMixin:
                         }
                     ],
             }
-        probe = run_probe(self._ctx, facts.save_path, facts.target)
-        if probe.status == "passed":
-            self.probe_put(fp, probe.status, probe.evidence)
-            return None
-        if probe.env:
-            # 环境性失败(网络/凭据/连接中断/本机写探针失败): 与 FS 可达性无关, 不缓存(D7 2)
-            text = (
-                f"探测环境性失败: {probe.reason}(与 FS 可达性无关, 未缓存, 下次迁移将重试) —— 出路: 排查环境后重试"
-                "(磁盘满/队列满/权限/连接; 容器部署检查 fs.path_map), 或配置 relocate.assume_shared 显式越权"
-                "(未经 auto-qb 验证, 由用户承担)"
-            )
-        else:
-            # FS 不可达(证读/证写超时): 硬拦 + 缓存失败(D7 1 同指纹不重试 —— 探测要真写一次
-            # 目标盘, 缓存免得每次迁移都白搬一遍探针); 坏缓存可经 probe_put 覆盖写修复
-            self.probe_put(fp, probe.status, {**probe.evidence, "reason": probe.reason})
-            text = (
-                "qB 读不到本机 src 或写不进 dst: " + probe.reason + " —— 出路: 检查 fs.path_map 映射是否覆盖源/目标路径, "
-                "或确认 qB 与 auto-qb 确实共享文件系统后配置 relocate.assume_shared"
-            )
+        # ---- 未命中分支(S2 异步化): 生产=意图入队+单飞 kick+「探测中」回执; 测试经
+        # _probe_inline 注入内联(run_inline 同步拿 verdict 走原收尾三态, 语义零漂移)。
+        runner = self._probe_runner if self._probe_runner is not None else (
+            PROBE_RUNNER_INLINE if self._probe_inline else PROBE_RUNNER
+        )
+        if self._probe_inline:
+            # 同步内联(既有替身形态的保留通道): run_inline 与线程体同款执行面但同步执行,
+            # verdict 经返回值交付(不投队列不碰槽); 以下收尾三态与异步化前逐字一致。
+            probe = runner.run_inline(self._ctx, fp, facts.save_path, facts.target)
+            if probe.status == "passed":
+                self.probe_put(fp, probe.status, probe.evidence)
+                return None
+            if probe.env:
+                # 环境性失败(网络/凭据/连接中断/本机写探针失败): 与 FS 可达性无关, 不缓存(D7 2)
+                text = (
+                    f"探测环境性失败: {probe.reason}(与 FS 可达性无关, 未缓存, 下次迁移将重试) —— 出路: 排查环境后重试"
+                    "(磁盘满/队列满/权限/连接; 容器部署检查 fs.path_map), 或配置 relocate.assume_shared 显式越权"
+                    "(未经 auto-qb 验证, 由用户承担)"
+                )
+            else:
+                # FS 不可达(证读/证写超时): 硬拦 + 缓存失败(D7 1 同指纹不重试 —— 探测要真写一次
+                # 目标盘, 缓存免得每次迁移都白搬一遍探针); 坏缓存可经 probe_put 覆盖写修复
+                self.probe_put(fp, probe.status, {**probe.evidence, "reason": probe.reason})
+                text = (
+                    "qB 读不到本机 src 或写不进 dst: " + probe.reason + " —— 出路: 检查 fs.path_map 映射是否覆盖源/目标路径, "
+                    "或确认 qB 与 auto-qb 确实共享文件系统后配置 relocate.assume_shared"
+                )
+            return {
+                **verdict,
+                "cls":
+                    "blocked",
+                "reasons":
+                    list(verdict.get("reasons") or []) +
+                    [{
+                        "gate": ru.GATE_SAME_FS,
+                        "cls": ru.CLS_BLOCKED,
+                        "text": text,
+                    }],
+            }
+        # 生产异步形态: 先落意图再 kick。同意图(同指纹同源同目标)把 hashes 并进既有条目
+        # (去重 —— 规则 move_to 每轮重复发起的同名再触发不重复入队, 计划 §03「同指纹合并」
+        # 的落地口径); 其余(异指纹/同指纹异意图)一律追加等位队尾 —— 合并只并 hashes 会
+        # 吞掉后来条目的 src/dst, verdict 后按条目重放会把异目标组搬到首条目的目标(错位),
+        # 与计划 §03 影响面表 2/3 行「组2..G 入等位队尾」同向。槽空闲时 try_start 受理即
+        # 兑现(起 daemon 线程探测); 槽被占返回 False 即等位(verdict 消费后由 T3 kick 下一条),
+        # 两种情形回执同形, 不以 kick 结果区分(T3/T4 只按 PROBE_GATE_PROBING_KEY 分流)。
+        member_hashes = [r.hash for r in records]
+        if not self.probe_pending_merge_intent(fp, facts.save_path, facts.target, member_hashes):
+            self.probe_pending_append(fp, member_hashes, facts.save_path, facts.target, origin)
+        runner.try_start(self._ctx, fp, facts.save_path, facts.target)
         return {
             **verdict,
             "cls":
                 "blocked",
+            PROBE_GATE_PROBING_KEY:
+                True,
             "reasons":
-                list(verdict.get("reasons") or []) + [{
-                    "gate": ru.GATE_SAME_FS,
-                    "cls": ru.CLS_BLOCKED,
-                    "text": text,
-                }],
+                list(verdict.get("reasons") or []) + [
+                    {
+                        "gate": ru.GATE_SAME_FS,
+                        "cls": ru.CLS_BLOCKED,
+                        "text": "同机探测已入队(探测进行中或等位): 结论到达后自动续跑, 本轮未建账未下发 setLocation",
+                    }
+                ],
+            "notes":
+                list(verdict.get("notes") or []) + ["同机探测已入队: 同机强探测进行中, 迁移将在探测结论到达后自动续跑"],
         }
 
     def _carry_prev_state(self, job_id: str, job: RelocateJob) -> RelocateJob:

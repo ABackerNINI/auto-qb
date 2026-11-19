@@ -45,6 +45,7 @@ __all__ = [
     "CLS_OK",
     "CLS_CONFIRM",
     "CLS_BLOCKED",
+    "PROBE_GATE_PROBING_KEY",
     # 闸门 id(稳定字符串, 前端/测试按 id 消费)
     "GATE_GONE",
     "GATE_DISABLED",
@@ -176,6 +177,13 @@ FORM_REJECT = "reject"  # 拒绝(不迁移, 零副作用)
 CLS_OK = "ok"
 CLS_CONFIRM = "confirm"
 CLS_BLOCKED = "blocked"
+
+# 「探测中」gate 回执的机器判别键(S2 异步化, 计划 26-11-10-2350 §03 落点段): 探测闸
+# 未命中分支的回执 item 带 item[PROBE_GATE_PROBING_KEY] is True, cls 仍是 blocked(与
+# evaluate_group blocked item 同形, 走 blocked 通道: 本轮不建账不 setLocation)。消费面:
+# T3 verdict 重放按它识别「探测又入队」、T4 web 两段回执按它出受理段; 与闸内其余 blocked
+# (缓存 failed / env=True 失败 / qb_conf 缺失, 均无此键)机器可区分。
+PROBE_GATE_PROBING_KEY = "probing"
 
 # 闸门 id(稳定字符串: 测试与前端按它断言, 改文案不改 id)。执行侧一次性回执 gate
 # (param/unavailable/pause_failed/dry_run/cost 等内联字面量)历来字面量属基线豁免, 不收进本块。

@@ -237,24 +237,62 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         """FIFO 顺序返回全部条目副本(坏条目跳过留原地, 与 probe_get 坏形按未命中同口径)"""
         return tuple(self._probe_pending_copy(e) for e in self._state_probe_pending() if isinstance(e, dict))
 
+    def _probe_pending_merge_into(self, entry: dict, hashes: Any) -> None:
+        """把 hashes 去重并入条目真身(probe_pending_merge_hashes/merge_intent 共用合并体)
+
+        去重保序(既有 hashes 在前、并入者在后, 空白 hash 丢弃); 真身在队列条目上原地更新
+        (主循环单写线程面)。字符串按单 hash 容错(与 append 侧 isinstance 分支同口径)。
+        """
+        if isinstance(hashes, str):  # 字符串按单 hash 容错(逐字符拆分是真实 footgun)
+            hashes = [hashes]
+        incoming = [str(h) for h in (hashes or ()) if str(h or "").strip()]
+        entry["hashes"] = [
+            str(h) for h in dict.fromkeys((*self._probe_hashes_as_list(entry.get("hashes")), *incoming))
+            if str(h or "").strip()
+        ]
+
     def probe_pending_merge_hashes(self, fingerprint: str, hashes: Any) -> bool:
-        """同指纹合并: 把 hashes 去重并入既有条目(保 FIFO 位不动); 无此指纹返回 False
+        """同指纹合并(粗键): 把 hashes 去重并入**首个**同指纹条目(保 FIFO 位不动); 无此指纹返回 False
 
         合并语义 = 计划 §03: 在飞/等位的同指纹请求把 hashes 并进已有 pending 条目(去重),
         绝不重复入队(否则重放会重复发起)。真身在队列条目上原地更新(主循环单写线程面)。
+        匹配键只有指纹 —— S2 执行闸的合并消费面用**精确三元组**的 probe_pending_merge_intent
+        (同指纹异意图不得合并, 否则重放会把异目标组搬到首条目的目标)。
+        非可迭代 hashes 仅在命中条目时经 _probe_pending_merge_into 归一抛 TypeError; 无命中时
+        返回 False 不抛 —— 单点化前的旧实现在循环前无条件计算 incoming, 非法入参在无命中
+        路径同样炸; 本句钉住这条未测非法入参路径的现行为(行为差属声明面, 不另造容错)。
         """
         fp = str(fingerprint or "")
-        if isinstance(hashes, str):
-            hashes = [hashes]
-        incoming = [str(h) for h in (hashes or ()) if str(h or "").strip()]
         for entry in self._state_probe_pending():
             if isinstance(entry, dict) and entry.get("fingerprint") == fp:
-                merged = [
-                    str(h) for h in dict.fromkeys((*self._probe_hashes_as_list(entry.get("hashes")), *incoming))
-                    if str(h or "").strip()
-                ]
-                entry["hashes"] = merged
+                self._probe_pending_merge_into(entry, hashes)
                 return True
+        return False
+
+    def probe_pending_merge_intent(self, fingerprint: str, src: str, dst: str, hashes: Any) -> bool:
+        """同意图合并(精确三元组): 指纹+源+目标都一致的既有条目并入 hashes(去重保序)
+
+        S2 _ensure_probe 的合并单点(计划 26-11-10-2350 落点段「同指纹合并」的落地口径):
+        只合并「同一迁移意图的再次到达」(规则 move_to 每轮重复发起/连点同款请求) ——
+        同指纹异意图(另组/另一目标)一律不合并走追加等位, 因为合并只并 hashes 会吞掉
+        后来条目的 src/dst, verdict 后按条目重放会把异目标组搬到首条目的目标(错位)。
+        匹配归一走 ru._norm fold_case=False(判定面归一单点, 与本文件 job dst 比较同款);
+        条目真身存的仍是原文(replay/setLocation 消费原文, 归一只用于匹配)。无匹配返回
+        False(调用方改走 probe_pending_append)。
+        """
+        fp = str(fingerprint or "")
+        want_src = ru._norm(str(src or ""), fold_case=False)
+        want_dst = ru._norm(str(dst or ""), fold_case=False)
+        for entry in self._state_probe_pending():
+            if not isinstance(entry, dict) or entry.get("fingerprint") != fp:
+                continue
+            if (
+                ru._norm(str(entry.get("src") or ""), fold_case=False) != want_src or
+                ru._norm(str(entry.get("dst") or ""), fold_case=False) != want_dst
+            ):
+                continue
+            self._probe_pending_merge_into(entry, hashes)
+            return True
         return False
 
     def probe_pending_pop(self) -> Optional[dict]:
@@ -269,7 +307,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
     def probe_pending_drop(self, fingerprint: str) -> bool:
         """按指纹摘除一条 pending(T3 清条目面); 本就没有返回 False, 幂等
 
-        同指纹在队内至多一条(单飞 + 同指纹合并的不变量), 摘首个命中即语义完整。
+        摘首个同指纹命中(S2 起合并键是意图三元组, 同指纹异意图可并存多条 —— 逐 verdict
+        消费一个条目的场景应配 pop 队首面, 按指纹摘除只适合「确定队内至多一条该指纹」
+        或按条目归属自行保证唯一性的调用方)。
         """
         fp = str(fingerprint or "")
         box = self._state_probe_pending()
