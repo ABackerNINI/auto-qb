@@ -60,6 +60,7 @@ from .runtime_common import (
     public_traffic_view,
 )
 from .runtime_stream import StreamMixin
+from .runtime_transfer import TransferVerifyCenter
 from .runtime_views import ViewsMixin
 
 if TYPE_CHECKING:
@@ -93,6 +94,12 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         self.reannounce_background: dict = {}
         # 待推真值(cmd_id -> {cmd, args, ts}); 回执已即时发出, 这里只等真值落地再推事件
         self.truth_pending: dict = {}
+        # ---- transfer 验证中心(计划 26-11-20-0127 S2) ----
+        # 作业/结果队列 + 单 daemon worker + 批次聚合容器; 组件与线程契约见
+        # runtime_transfer.py(本门面持有, 主循环单写者)。worker 懒启动(首个批次递交
+        # 时; S3 前无生产者, 恒无线程), stop Event 即时醒 —— 接进 web 停止序列是 S4。
+        # 命令线尾部消费: consume_commands 尾部调 drain(删源/回执端口本期占位, S3 接真实)。
+        self.transfer_center = TransferVerifyCenter(clock=self._clock)
         # ---- 视图快照(Web 线程只读, 发布时整体替换) ----
         self.group_view: List[dict] = []
         self.singles_view: List[dict] = []  # 未归组单种子视图

@@ -99,6 +99,11 @@ class CommandsMixin:
                         self.set_result(cmd_id, "error", reason, _timing(queued_ts, start_ts, self._clock))
         except queue.Empty:
             pass
+        # 命令线尾部(D6, 计划 26-11-20-0127): 消费 transfer 验证中心的回灌结论
+        # (收结果 -> 删源 -> 填槽 -> 批次齐写回执; 暂停分支也照跑 —— run_command_line
+        # 在暂停判断之前)。S2 生产路径恒空转(还没有生产者递交作业, 队列恒空, 零行为
+        # 变化); 删源并入 cmd_changed_state(P0-5 补刷新)是 S3 的接线面, 本期不动。
+        self.transfer_center.drain()
         return changed
 
     def _judge_reannounce(self, h: str, baseline: dict, *, t0: float, now: float) -> tuple:
