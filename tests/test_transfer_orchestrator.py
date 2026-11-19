@@ -49,9 +49,31 @@
 - test_result_receipt_shape: to_receipt() = {hash, 状态(中文三态), 原因}; label 单点
 - test_empty_hashes_skips_adapter: 空 hashes -> 空结果且不实例化适配器
 - test_auth_failure_classified: 添加失败原因含"登录失败" -> AUTH_FAILED; 其余 -> ADD_FAILED
+
+## 测试计划: S1 拆分面(计划 26-11-20-0127: produce_transfer_job / run_verify_job / run_batch 组合)
+- test_produce_settles_source_read_failure: 生产段源查无 -> 已结算 FAILED/SOURCE_READ_FAILED(不产出作业)
+- test_produce_settles_gate_blocked: 生产段门拦(下载管线态) -> 已结算 SKIPPED/BLOCKED_STATE
+- test_produce_settles_export_failure: 生产段导出失败 -> 已结算 FAILED/EXPORT_FAILED
+- test_produce_returns_verify_job_fields: 门过 -> 验证作业逐字段(hash/source_hash/plan/keep_source/after_state/notes)
+- test_produce_job_dual_hash_split: 源 maindata hash 与入参 hash 不同 -> 作业双 hash 分置(回执键=入参/操作键=源)
+- test_produce_runs_without_adapter: 生产段零适配器依赖(create_adapter 间谍工厂记录调用, 零命中; 误调即红)
+- test_worker_success_leaves_delete_to_caller: worker 验证成功 -> SUCCESS 但不删源不碰 qb_api(after_state=keep 不暂停)
+- test_worker_paused_pauses_target: after_state=paused 作业 -> worker 调暂停, 删源仍不在 worker 侧
+- test_worker_pause_failure_noted: 暂停失败 -> 仍 SUCCESS 但注记「目标暂停失败」
+- test_worker_keep_source_note_order: keep_source 作业注记字节序: add 受理 -> 忽略字段 -> 保留源种子 -> 暂停失败
+- test_worker_duplicate_skips: add SKIPPED -> SKIPPED/DUPLICATE + 源已保留(worker 侧即终态)
+- test_worker_add_failed_classified: add 失败 -> AUTH_FAILED/ADD_FAILED + 源已保留(分类单点沿用)
+- test_worker_add_exception_settles_unexpected: add 抛异常 -> UNEXPECTED「目标添加调用异常」(worker 侧兜底)
+- test_worker_verify_timeout_keeps_add_details: 验证超时 -> add 详情/降级注明/验证超时/源已保留 全链拼装
+- test_worker_verify_target_error: 目标 error/missingFiles -> TARGET_ERROR(worker 侧即终态)
+- test_worker_unsupported_adapter: 适配器无 find_torrent -> VERIFY_UNSUPPORTED(绝不无验证删源)
+- test_worker_job_notes_flow_into_reason: job.notes 非空 -> 拼进 reason 首段(S2 注记面不被吞)
+- test_run_batch_settled_path_skips_worker: run_batch 已结算种子不进 worker 侧(add/find 零调用)
+- test_run_batch_job_path_deletes_with_job_source_hash: 作业路径 worker 成功后 run_batch 按 source_hash 删源(只删任务)
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Dict, List, Optional
 
 import pytest
@@ -64,6 +86,7 @@ from auto_qb.transfer.orchestrator import (
     TransferOutcomeCode,
     TransferOrchestrator,
     TransferStatus,
+    TransferVerifyJob,
     _field_of,
     map_save_path,
 )
@@ -216,6 +239,19 @@ def _added_with_found(find_state: str = "stoppedUP") -> tuple:
                          "hash": HASH_A,
                          "state": find_state
                      }])
+
+
+def _produce_stage(qb_api, target=None, hash_: str = HASH_A, keep_source: bool = False):
+    """生产段直跑(不建/不碰适配器, 不 monkeypatch create_adapter): 返回 (orchestrator, qb替身, stage)"""
+    orch = TransferOrchestrator(
+        qb_api,
+        sleep=lambda s: None,
+        verify_timeout=1.0,
+        poll_interval=0.25,
+    )
+    tgt = target if target is not None else _make_target()
+    stage = orch.produce_transfer_job(tgt, hash_, keep_source=keep_source)
+    return orch, qb_api, stage
 
 
 # ---------- 状态门矩阵 ----------
@@ -761,3 +797,236 @@ def test_auth_failure_classified(monkeypatch):
     assert results[1].code is TransferOutcomeCode.ADD_FAILED
     assert all(r.status is TransferStatus.FAILED for r in results)
     assert qb.deletions == []
+
+
+# ---------- S1 拆分: 生产段 produce_transfer_job(读源 -> 门 -> 导出 -> 准备) ----------
+
+
+def test_produce_settles_source_read_failure():
+    """源查无 -> 已结算 FAILED/SOURCE_READ_FAILED(不产出验证作业)"""
+    orch, _, stage = _produce_stage(_FakeQbApi())  # 空 torrents
+    assert isinstance(stage, TorrentTransferResult)
+    assert (stage.status, stage.code) == (TransferStatus.FAILED, TransferOutcomeCode.SOURCE_READ_FAILED)
+
+
+def test_produce_settles_gate_blocked():
+    """门拦(下载管线态) -> 已结算 SKIPPED/BLOCKED_STATE(无需验证)"""
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent(state="downloading")})
+    orch, _, stage = _produce_stage(qb)
+    assert isinstance(stage, TorrentTransferResult)
+    assert stage.status is TransferStatus.SKIPPED
+    assert stage.code is TransferOutcomeCode.BLOCKED_STATE
+    assert "downloading" in stage.reason
+
+
+def test_produce_settles_export_failure():
+    """导出失败 -> 已结算 FAILED/EXPORT_FAILED(不产出验证作业)"""
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}, export_error=RuntimeError("boom"))
+    orch, _, stage = _produce_stage(qb)
+    assert isinstance(stage, TorrentTransferResult)
+    assert (stage.status, stage.code) == (TransferStatus.FAILED, TransferOutcomeCode.EXPORT_FAILED)
+
+
+def test_produce_returns_verify_job_fields():
+    """门过 -> 验证作业逐字段(hash/source_hash/plan/keep_source/after_state/notes)"""
+    target = _make_target(after_state="paused")
+    orch, _, stage = _produce_stage(
+        _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}), target=target, keep_source=True
+    )
+    assert isinstance(stage, TransferVerifyJob)
+    assert stage.hash == HASH_A  # 回执键 = 入参
+    assert stage.source_hash == HASH_A  # 操作键 = 源 maindata hash
+    assert stage.plan.data == EXPORT_BYTES
+    assert stage.plan.fields["infohash"] == HASH_A
+    assert stage.plan.fields["save_path"] == "D:/data/Torrents"
+    assert stage.plan.skip_check is True  # progress=1.0 且目标跳检开
+    assert stage.plan.degraded_note == ""
+    assert stage.keep_source is True
+    assert stage.after_state == "paused"
+    assert stage.notes == ""  # S1 生产段恒空串(S2 跨批次注记面预留)
+
+
+def test_produce_job_dual_hash_split():
+    """源 maindata hash 与入参 hash 不同 -> 作业双 hash 分置(回执键=入参, 操作键=源 hash)"""
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent(HASH_B)})  # 记录内 hash = HASH_B
+    orch, _, stage = _produce_stage(qb, hash_=HASH_A)
+    assert isinstance(stage, TransferVerifyJob)
+    assert stage.hash == HASH_A
+    assert stage.source_hash == HASH_B
+
+
+def test_produce_runs_without_adapter(monkeypatch):
+    """生产段零适配器依赖: create_adapter 间谍工厂零命中(qb 目标的适配器构造是惰性的,
+    「不 monkeypatch 直跑」无判别力 —— 守卫必须让误调真失败)"""
+    factory_calls: List[str] = []
+
+    def spying_factory(target):
+        factory_calls.append(target.name)
+        return _FakeAdapter()
+
+    monkeypatch.setattr(orchestrator_module, "create_adapter", spying_factory)
+    orch, _, stage = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    assert isinstance(stage, TransferVerifyJob)
+    assert factory_calls == []  # 生产段不建目标适配器(误调即红)
+
+
+# ---------- S1 拆分: worker 侧 run_verify_job(add -> 验证 -> 暂停) ----------
+
+
+def test_worker_success_leaves_delete_to_caller():
+    """验证成功 -> SUCCESS 但不删源不暂停(删源与注记补拼由调用方在主循环侧执行)"""
+    orch, qb, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    assert isinstance(job, TransferVerifyJob)
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}])
+    result = orch.run_verify_job(adapter, job)
+    assert result.status is TransferStatus.SUCCESS
+    assert result.code is None
+    assert result.hash == job.hash
+    assert result.reason == "目标已受理"  # 删源注记不在 worker 侧出现
+    assert qb.deletions == []  # worker 侧不碰主循环 qb_api
+    assert adapter.add_calls[0]["data"] == EXPORT_BYTES
+    assert adapter.pause_calls == []  # after_state=keep 默认不暂停
+
+
+def test_worker_paused_pauses_target():
+    """after_state=paused 作业 -> worker 调暂停; 删源仍不在 worker 侧"""
+    orch, qb, job = _produce_stage(
+        _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}), target=_make_target(after_state="paused")
+    )
+    assert isinstance(job, TransferVerifyJob)
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}])
+    result = orch.run_verify_job(adapter, job)
+    assert result.status is TransferStatus.SUCCESS
+    assert adapter.pause_calls == [HASH_A]
+    assert qb.deletions == []
+
+
+def test_worker_pause_failure_noted():
+    """暂停失败 -> 仍 SUCCESS 但注记「目标暂停失败」(不回滚已成功的转移)"""
+    orch, _, job = _produce_stage(
+        _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}), target=_make_target(after_state="paused")
+    )
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}], pause_ok=False)
+    result = orch.run_verify_job(adapter, job)
+    assert result.status is TransferStatus.SUCCESS
+    assert "目标暂停失败(after_state=paused 未生效)" in result.reason
+
+
+def test_worker_keep_source_note_order():
+    """keep_source 作业注记字节序: add 受理 -> 忽略字段 -> 按勾选保留源种子 -> 暂停失败"""
+    orch, _, job = _produce_stage(
+        _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}),
+        target=_make_target(after_state="paused"),
+        keep_source=True
+    )
+    adapter = _FakeAdapter(
+        add_results=[AddResult.added("目标已受理", ignored_fields=("tags", ))],
+        find_sequence=[{
+            "hash": HASH_A,
+            "state": "stoppedUP"
+        }],
+        pause_ok=False,
+    )
+    result = orch.run_verify_job(adapter, job)
+    assert result.status is TransferStatus.SUCCESS
+    assert result.reason == ("目标已受理; 目标不支持已忽略字段: tags; 按勾选保留源种子; 目标暂停失败(after_state=paused 未生效)")
+
+
+def test_worker_duplicate_skips():
+    """add SKIPPED(已存在) -> SKIPPED/DUPLICATE + 源已保留(worker 侧即终态)"""
+    orch, qb, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    adapter = _FakeAdapter(add_results=[AddResult.skipped("目标已存在(响应: Fails.)")])
+    result = orch.run_verify_job(adapter, job)
+    assert (result.status, result.code) == (TransferStatus.SKIPPED, TransferOutcomeCode.DUPLICATE)
+    assert result.reason == "目标已存在(响应: Fails.); 源已保留"
+    assert qb.deletions == []
+
+
+def test_worker_add_failed_classified():
+    """add 失败 -> AUTH_FAILED/ADD_FAILED + 源已保留(失败分类单点沿用)"""
+    orch, _, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    adapter = _FakeAdapter(add_results=[AddResult.failed("目标登录失败(检查用户名/密码)")])
+    result = orch.run_verify_job(adapter, job)
+    assert (result.status, result.code) == (TransferStatus.FAILED, TransferOutcomeCode.AUTH_FAILED)
+    assert result.reason == "目标登录失败(检查用户名/密码); 源已保留"
+
+    orch_b, _, job_b = _produce_stage(_FakeQbApi(torrents={HASH_B.lower(): _full_torrent(HASH_B)}), hash_=HASH_B)
+    adapter_b = _FakeAdapter(add_results=[AddResult.failed("目标拒绝添加(响应: Fails.)")])
+    result_b = orch_b.run_verify_job(adapter_b, job_b)
+    assert result_b.code is TransferOutcomeCode.ADD_FAILED
+
+
+def test_worker_add_exception_settles_unexpected():
+    """add 调用抛未预期异常 -> UNEXPECTED「目标添加调用异常」(worker 侧兜底, 不外抛)"""
+    orch, _, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    adapter = _FakeAdapter(add_error=RuntimeError("boom"))
+    result = orch.run_verify_job(adapter, job)
+    assert (result.status, result.code) == (TransferStatus.FAILED, TransferOutcomeCode.UNEXPECTED)
+    assert result.reason == "目标添加调用异常(boom)"
+
+
+def test_worker_verify_timeout_keeps_add_details():
+    """验证超时 -> 失败回执全链拼装: add 受理详情 -> 降级注明 -> 验证超时 -> 源已保留"""
+    orch, qb, job = _produce_stage(
+        _FakeQbApi(torrents={HASH_A.lower(): _full_torrent(HASH_A, progress=0.5)}),
+        target=_make_target(skip_check=True),
+    )
+    adapter = _FakeAdapter(
+        add_results=[AddResult.added("目标已受理(成功 1 / 失败 0 / 待定 0)")],
+        find_sequence=[],  # 恒查无 -> 验证超时
+    )
+    result = orch.run_verify_job(adapter, job)
+    assert (result.status, result.code) == (TransferStatus.FAILED, TransferOutcomeCode.VERIFY_TIMEOUT)
+    assert result.reason == ("目标已受理(成功 1 / 失败 0 / 待定 0); 未完成, 已自动改为校验添加; 验证超时(1s 内目标未出现该种子); 源已保留")
+    assert qb.deletions == []
+
+
+@pytest.mark.parametrize("state", ["error", "missingFiles"])
+def test_worker_verify_target_error(state):
+    """目标 error/missingFiles 态 -> TARGET_ERROR(worker 侧即终态, 源保留)"""
+    orch, _, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": state}])
+    result = orch.run_verify_job(adapter, job)
+    assert (result.status, result.code) == (TransferStatus.FAILED, TransferOutcomeCode.TARGET_ERROR)
+    assert state in result.reason
+
+
+def test_worker_unsupported_adapter():
+    """适配器无 find_torrent 扩展点 -> VERIFY_UNSUPPORTED(绝不无验证删源)"""
+    orch, _, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    adapter = _FakeAdapter(with_find=False)
+    result = orch.run_verify_job(adapter, job)
+    assert (result.status, result.code) == (TransferStatus.FAILED, TransferOutcomeCode.VERIFY_UNSUPPORTED)
+
+
+def test_worker_job_notes_flow_into_reason():
+    """job.notes 非空 -> 拼进回执 reason 首段(S2 跨批次注记面不被吞; S1 生产段恒空串)"""
+    orch, _, job = _produce_stage(_FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}))
+    job_with_notes = replace(job, notes="已由其它批次转移")
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}])
+    result = orch.run_verify_job(adapter, job_with_notes)
+    assert result.status is TransferStatus.SUCCESS
+    assert result.reason == "已由其它批次转移; 目标已受理"
+
+
+# ---------- S1 拆分: run_batch 组合(生产段 + worker 侧顺序执行的参考实现) ----------
+
+
+def test_run_batch_settled_path_skips_worker(monkeypatch):
+    """已结算种子(门拦)不进 worker 侧: add/find 零调用, 结果直接入列"""
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent(HASH_A, state="downloading")})
+    adapter = _FakeAdapter()
+    results, adapter = _run(monkeypatch, qb, _make_target(), [HASH_A], adapter=adapter)
+    assert results[0].status is TransferStatus.SKIPPED
+    assert adapter.add_calls == [] and adapter.find_calls == []
+    assert qb.deletions == []
+
+
+def test_run_batch_job_path_deletes_with_job_source_hash(monkeypatch):
+    """作业路径: worker 验证成功后 run_batch 按作业 source_hash 删源(只删任务)"""
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent(HASH_B)})  # 源 maindata hash = HASH_B
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_B, "state": "stoppedUP"}])
+    results, adapter = _run(monkeypatch, qb, _make_target(), [HASH_A], adapter=adapter)
+    assert results[0].status is TransferStatus.SUCCESS
+    assert adapter.find_calls == [HASH_B]  # 验证轮询用作业的 source_hash
+    assert qb.deletions == [(HASH_B, False)]  # 删源也用 source_hash, delete_files 恒 False

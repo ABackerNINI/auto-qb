@@ -1,13 +1,19 @@
 """种子转移编排器(计划 26-10-31-0306 §03 单种子执行流水 / §04 W2 / 拍板 D1/D2/D5/D6/D8/D9)
 
-单种子流水: 状态门 -> 源 export -> 字段采集 -> 路径映射 -> 跳检决策
--> adapter.add_torrent -> 验证轮询 -> (after_state=paused 暂停目标) -> 删源。
+单种子流水(S1 起拆两段, 计划 26-11-20-0127):
+- 生产段(主循环侧): 状态门 -> 源 export -> 字段采集 -> 路径映射 -> 跳检决策
+  -> 已结算结果(源读失败/门拦/导出失败)或验证作业(TransferVerifyJob);
+- worker 侧(add -> 验证 -> 暂停; S2 起进 daemon 线程, 本期串行顺序调用):
+  adapter.add_torrent -> 验证轮询 -> (after_state=paused 暂停目标);
+- 主循环侧结算: 验证成功且未保留源 -> 删源(结论消费恒在主循环线程)。
 
 不变量(违反即错, 计划 §01):
 - 数据文件永不移动、永不删除 —— 删源只删任务(torrents_delete delete_files=False 恒定);
 - 任何不成功路径不碰源 —— 门拦/export 败/已存在/添加败/验证超时/目标 error 一律保留源;
 - 未完成种子绝不以跳检形式添加 —— progress < 100% 时跳检逐条自动降级为校验添加(D8);
-- 单一写线程假设: 本模块纯串行逐种子, 不引入线程/并发(D6)。
+- 单一写线程假设: 删源/回执结算只在主循环线程; worker 侧函数不读写主循环共享态
+  (0306 D6「不引入线程/并发」的读法按计划 26-11-20-0127 改道: adapter 为目标侧
+  独立连接, S2 起由 worker 线程独占; 本期仍是串行顺序调用)。
 
 实现选型(验证轮询): 经 adapter 扩展点 —— QbDownloaderAdapter.find_torrent(本任务在
 qb adapter 上新增的具体方法, 不进 ABC 协议); orchestrator 经 getattr 探测, 适配器没有
@@ -26,9 +32,9 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 from ..config.models import TRANSFER_FIELD_KEYS, TransferTargetConfig
 from .adapters import AddStatus, create_adapter
@@ -249,12 +255,35 @@ class _SeedPlan:
     source_hash: str
 
 
+@dataclass(frozen=True)
+class TransferVerifyJob:
+    """验证作业(生产段产出 -> worker 侧执行的交接结构, 计划 26-11-20-0127 S1)
+
+    hash: 入参 hash(回执键 —— 结果 identity 恒用它, 与调用入参一致);
+    source_hash: 源 maindata hash(验证轮询/暂停/删源的操作键, 可能与入参不同);
+    plan: 门后准备产物(.torrent 字节/下发字段/跳检决策/降级注明);
+    keep_source: 「仅本次保留源种子」勾选(worker 侧据此拼注记, 调用方据此决定删源);
+    after_state: 目标承诺状态("paused" -> 验证成功后暂停目标);
+    notes: 生产段累计注记(S1 恒空串, 预留 S2 跨批次注记面; 非空时拼进回执 reason 首段)。
+    """
+
+    hash: str
+    source_hash: str
+    plan: _SeedPlan
+    keep_source: bool
+    after_state: str
+    notes: str = ""
+
+
 class TransferOrchestrator:
     """串行逐种子编排一个转移批次(D6: 批量无上限/不中断/不自动重试)
 
     qb_api: 主 qB 的 QbApi facade(只用来读源 maindata / export / 删源任务;
     删源恒 delete_files=False, 且只在验证成功后发生)。
     sleep/verify_timeout/poll_interval: 验证轮询可注入(测试不真等 10s)。
+    单种子流水拆两段(计划 26-11-20-0127 S1): produce_transfer_job(生产段, 主循环侧)
+    + run_verify_job(worker 侧, adapter 显式传入); run_batch 是两段顺序组合的
+    参考实现(外部语义锚 —— 既有测试/命令面契约逐字节不变)。
     """
     def __init__(
         self,
@@ -281,6 +310,8 @@ class TransferOrchestrator:
 
         keep_source: 「仅本次保留源种子」勾选(D1)—— 跳过删源, 其余流程不变。
         批量无上限、不自动重试; 单种子的任何异常只结算本条, 不中断批次(D6)。
+        参考实现: 生产段 + worker 侧逻辑顺序执行(S2 起 worker 侧移 daemon 线程、
+        删源移命令线 drain, 本方法保留为「外部语义逐字节不变」的锚)。
         """
         hashes = [str(h) for h in (hashes or [])]
         if not hashes:
@@ -289,7 +320,17 @@ class TransferOrchestrator:
         results: List[TorrentTransferResult] = []
         for hash_ in hashes:
             try:
-                results.append(self._transfer_one(adapter, target, hash_, keep_source))
+                stage = self.produce_transfer_job(target, hash_, keep_source)
+                if isinstance(stage, TorrentTransferResult):
+                    results.append(stage)  # 已结算(源读失败/门拦/导出失败): 无需验证, 直接入列
+                    continue
+                result = self.run_verify_job(adapter, stage)
+                if result.status is TransferStatus.SUCCESS and not stage.keep_source:
+                    # 验证已成功且未保留源: 删源是主循环侧结算的最后一步;
+                    # 删源失败不翻盘已成功的转移, 只补注记(issue 26-11-03-0824)
+                    if not self._delete_source(stage.source_hash):
+                        result = replace(result, reason=_join_notes(result.reason, "源删除失败, 源已保留"))
+                results.append(result)
             except Exception as exc:  # noqa: BLE001 —— D6: 单种子兜底, 批次继续
                 logger.error("transfer: 种子 %s 未预期异常", hash_, exc_info=True)
                 results.append(
@@ -299,15 +340,24 @@ class TransferOrchestrator:
                 )
         return results
 
-    # ---------- 单种子流水 ----------
+    # ---------- 生产段(主循环侧, 单种子): 读源 -> 门 -> 导出 -> 准备 ----------
 
-    def _transfer_one(
+    def produce_transfer_job(
         self,
-        adapter: "DownloaderAdapter",
         target: TransferTargetConfig,
         hash_: str,
         keep_source: bool,
-    ) -> TorrentTransferResult:
+    ) -> Union[TorrentTransferResult, TransferVerifyJob]:
+        """生产段(单种子, 主循环侧): 读源 -> 状态门 -> 导出 -> 准备
+
+        返回二选一:
+        - TorrentTransferResult: 已结算终态(源读失败/门拦/导出失败 —— 均不碰目标侧,
+          无需验证, 直接入回执);
+        - TransferVerifyJob: 验证作业(交 run_verify_job / S2 目标侧 worker 执行
+          add -> 验证 -> 暂停)。
+        本段只读源侧(共享 Session 的 torrents_info/torrents_export), 不建/不碰目标
+        adapter; 准备阶段的未预期异常不在此兜底(由调用方逐种子结算, D6)。
+        """
         record = self._read_source(hash_)
         if record is None:
             return TorrentTransferResult(
@@ -328,53 +378,71 @@ class TransferOrchestrator:
             )
 
         plan = self._prepare(data, record, target, source_hash)
+        return TransferVerifyJob(
+            hash=hash_,
+            source_hash=source_hash,
+            plan=plan,
+            keep_source=keep_source,
+            after_state=target.after_state,
+        )
 
+    # ---------- worker 侧(目标侧, 单种子): add -> 验证 -> 暂停 ----------
+
+    def run_verify_job(self, adapter: "DownloaderAdapter", job: TransferVerifyJob) -> TorrentTransferResult:
+        """worker 侧(单种子): add -> 验证轮询 -> (after_state=paused 暂停目标)
+
+        adapter 由调用方显式传入(本函数不自建连接; S2 起为 worker 线程独占的批次级
+        适配器, 与主循环不同时使用)。本函数不读写主循环共享态(队列/state/store),
+        也不删源 —— 验证成功且未保留源的删源与注记补拼由调用方(主循环侧)执行
+        (参考实现 run_batch / S2 drain), 回执 reason 的删源段因此不在本函数出现。
+        产出沿用 TorrentTransferResult 原结构(三态/失败分类单点不变)。
+        """
+        plan = job.plan
         try:
             add = adapter.add_torrent(plan.data, plan.fields, plan.skip_check)
         except Exception as exc:  # noqa: BLE001 —— 适配器编程错误也按 D6 结算本条, 带堆栈日志
-            logger.error("transfer: 目标添加调用异常 %s", source_hash, exc_info=True)
+            logger.error("transfer: 目标添加调用异常 %s", job.source_hash, exc_info=True)
             return TorrentTransferResult(
-                hash_, TransferStatus.FAILED, f"目标添加调用异常({exc})", TransferOutcomeCode.UNEXPECTED
+                job.hash, TransferStatus.FAILED, f"目标添加调用异常({exc})", TransferOutcomeCode.UNEXPECTED
             )
 
-        reason = _join_notes(add.reason, plan.degraded_note)
+        reason = _join_notes(job.notes, add.reason, plan.degraded_note)
         if add.ignored_fields:
             reason = _join_notes(reason, f"目标不支持已忽略字段: {', '.join(add.ignored_fields)}")
 
         if add.status is AddStatus.SKIPPED:
             # 已存在 -> 跳过, 源保留(计划 §03 失败分类「已存在 -> 跳过」)
             return TorrentTransferResult(
-                hash_, TransferStatus.SKIPPED, _join_notes(reason, "源已保留"), TransferOutcomeCode.DUPLICATE
+                job.hash, TransferStatus.SKIPPED, _join_notes(reason, "源已保留"), TransferOutcomeCode.DUPLICATE
             )
         if add.status is not AddStatus.ADDED:
             code = TransferOutcomeCode.AUTH_FAILED if _AUTH_FAILURE_NEEDLE in (
                 add.reason or ""
             ) else TransferOutcomeCode.ADD_FAILED
-            return TorrentTransferResult(hash_, TransferStatus.FAILED, _join_notes(reason, "源已保留"), code)
+            return TorrentTransferResult(job.hash, TransferStatus.FAILED, _join_notes(reason, "源已保留"), code)
 
-        failure = self._verify(adapter, source_hash)
+        failure = self._verify(adapter, job.source_hash)
         if failure is not None:
             # add 已受理 = 目标侧该种子已在: 验证失败回执保留添加受理详情与降级注明
             # (issue 26-11-07-0527 #21), 不只报验证结果 —— 否则用户无从知道目标侧已有该种子
             return TorrentTransferResult(
-                hash_, failure.status, _join_notes(reason, failure.reason, "源已保留"), failure.code
+                job.hash, failure.status, _join_notes(reason, failure.reason, "源已保留"), failure.code
             )
 
         note = ""
-        if target.after_state == "paused":
+        if job.after_state == "paused":
             # D9: 统一暂停。顺序 = 验证成功后、删源前 —— 目标侧先落到承诺状态,
             # 删源这最后一步才发生; 暂停失败不回滚转移(验证已成功), 只在结果注明。
             pause = getattr(adapter, "pause_torrent", None)
-            if pause is None or not pause(source_hash):
+            if pause is None or not pause(job.source_hash):
                 note = "目标暂停失败(after_state=paused 未生效)"
 
-        if keep_source:
-            return TorrentTransferResult(hash_, TransferStatus.SUCCESS, _join_notes(reason, "按勾选保留源种子", note))
+        if job.keep_source:
+            return TorrentTransferResult(job.hash, TransferStatus.SUCCESS, _join_notes(reason, "按勾选保留源种子", note))
 
-        if not self._delete_source(source_hash):
-            # 删源失败不翻盘已成功的转移(目标侧已验证成功): 结果仍 SUCCESS, 只注明源已保留(issue 26-11-03-0824)
-            note = _join_notes(note, "源删除失败, 源已保留")
-        return TorrentTransferResult(hash_, TransferStatus.SUCCESS, _join_notes(reason, note))
+        # 验证已成功且未保留源: SUCCESS 终态在此定盘, 删源结果注记由调用方补拼
+        # (run_batch: 失败补「源删除失败, 源已保留」; S2 drain 同口径)
+        return TorrentTransferResult(job.hash, TransferStatus.SUCCESS, _join_notes(reason, note))
 
     # ---------- 各步实现 ----------
 
