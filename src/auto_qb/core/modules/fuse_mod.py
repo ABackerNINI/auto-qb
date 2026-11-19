@@ -102,14 +102,16 @@ class FuseModule(BaseModule):
         self._drop_missing(entries, store)
         tag = cfg.fuse_tag
         self._warn_tag_reuse(store, tag)
-        # 恢复确认账窗口让路(issue 26-11-14-1744 让路由来, 26-11-15-0441 收窄口径): 登记单点
-        # 在 RelocateModule._sync_resuming, 让路窗口 = resume_pending 非空的账窗口 —— 账在走
-        # 时成员的拉流是恢复动作的正常回声(恢复初期/穷尽挂账期), 不作保险丝的异常证据; 账闭合
-        # (成员经快照核实回运行态)即撤登记恢复计连击。刻意不消费 relocating_hashes: 那是
-        # job 级登记(非终态即登记), armed 恢复运行期 job 成员的**真实拉流**(qB 重下/手动起种)
-        # 也会被当回声清零连击, fuse 保护会停摆至 job 终态 —— grouping 缺文件扫描 / ops_skip
-        # 跳检闸门 / qbapi 删种拦截仍消费 relocating 登记, 口径不动
-        resuming = getattr(store, "resuming_hashes", None) or set()
+        # 恢复确认账窗口让路(issue 26-11-14-1744 让路由来, 26-11-15-0441 收窄口径): 让路窗口 =
+        # resume_pending 非空的账窗口, 消费 relocate 模块的派生查询 resuming_hashes()(S5:
+        # 跨模块走命名查询接口, 不裸伸手 store 登记集) —— 账在走时成员的拉流是恢复动作的
+        # 正常回声(恢复初期/穷尽挂账期), 不作保险丝的异常证据; 账闭合(成员经快照核实回
+        # 运行态)即出册恢复计连击。刻意不消费 relocating 派生查询: 那是 job 级口径(非终态
+        # 即在册), armed 恢复运行期 job 成员的**真实拉流**(qB 重下/手动起种)也会被当回声
+        # 清零连击, fuse 保护会停摆至 job 终态 —— grouping 缺文件扫描 / ops_skip 跳检闸门 /
+        # qbapi 删种拦截仍消费 relocating 口径, 不动
+        relocate = getattr(self._ctx, "relocate", None)
+        resuming = relocate.resuming_hashes() if relocate is not None else frozenset()
         now = self._clock.now()
         to_arm: List[str] = []
         to_adopt: List[str] = []

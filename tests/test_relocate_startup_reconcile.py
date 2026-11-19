@@ -114,7 +114,7 @@ def _failed_env(
     )
     by_hash = {h: types.SimpleNamespace(hash=h, save_path=mover_save, state="pausedUP") for h in hashes}
     mod = _bare_mod(
-        store=types.SimpleNamespace(by_hash=by_hash, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash=by_hash),
         api=types.SimpleNamespace(client=types.SimpleNamespace(app_preferences=lambda **kw: None)),
         data_dir=str(tmp_path / "data"),
     )

@@ -12,7 +12,6 @@
 - test_entry_single_location_disabled_unchanged: 开关关: 单件移动调用序列与今日逐字节一致
 ### P1-T1.1 守卫与容错簇(计划 26-10-20-2101)
 - test_resolve_physical_falls_back_on_resolver_error: 物理位置解析异常退回原路径(组判定绝不因迁移崩)
-- test_sync_relocating_builds_registry_on_legacy_store: 老 store 替身无 relocating_hashes -> 自建并登记非终态成员
 - test_on_task_line_noop_without_ctx: ctx/store 缺失(停机路径)零动作
 - test_advance_ignores_terminal_phase: 终态相位不再推进(相位机兜底)
 - test_penetration_ok_rejects_missing_or_unstatable: 穿透校验三态(不存在/stat 抛/齐备)
@@ -174,13 +173,13 @@ def test_restart_issued_without_evidence_keeps_polling(tmp_path, monkeypatch):
 
 
 def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):
-    """搬迁窗口: relocating 登记内的种子跳检直接 skip(不删除/不重加)"""
+    """搬迁窗口: relocating 派生窗口内的种子跳检直接 skip(不删除/不重加)"""
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     mod.relocate_execute(["HA"], dst)
-    assert "HA" in mgr.store.relocating_hashes
+    assert "HA" in mgr.ctx.relocate.relocating_hashes(), "搬迁窗口: 成员在 relocating 派生登记内"
     mgr.store.own_writes.clear()  # 自有暂停登记先清掉, 单独验证搬迁窗口闸门
     client.calls.clear()
     r = mgr.ctx.ops.skip_check("HA", source="web")
@@ -198,16 +197,9 @@ def test_resolve_physical_falls_back_on_resolver_error(monkeypatch):
     assert mod.resolve_physical("R:/x") == "R:/x", "解析失败必须退回原路径"
 
 
-def test_sync_relocating_builds_registry_on_legacy_store():
-    """老 store 替身没有 relocating_hashes: 自建一份并登记非终态 job 的成员并集"""
-    mod = _bare_mod()
-    store = types.SimpleNamespace(by_hash={})  # 无 relocating_hashes 字段
-    mod._ctx = types.SimpleNamespace(
-        store=store, config=types.SimpleNamespace(relocate=None), state=types.SimpleNamespace(data={})
-    )
-    mod.register_job(_job())
-    mod._sync_relocating()
-    assert store.relocating_hashes == {"HA"}, "登记必须落在自建集合上"
+# test_sync_relocating_builds_registry_on_legacy_store 已退役(S5 登记集退役, 计划
+# 26-11-15-2340 刀3): store 登记面整体消失, 老替身自建兜底与「登记落在自建集合上」
+# 断言失去对象 —— 让路面改走 relocating_hashes() 派生查询, 语义面由消费侧用例钉扎。
 
 
 def test_on_task_line_noop_without_ctx():
@@ -278,7 +270,7 @@ def test_fail_path_resumes_paused_members():
     成员永久停在暂停态且日志一字不提, 用户只能观察到「莫名暂停」。
     """
     resumed = []
-    store = types.SimpleNamespace(by_hash={"HA": types.SimpleNamespace(state="pausedUP")}, relocating_hashes=set())
+    store = types.SimpleNamespace(by_hash={"HA": types.SimpleNamespace(state="pausedUP")})
     mod = _bare_mod(
         store=store,
         api=types.SimpleNamespace(
@@ -614,9 +606,7 @@ def test_chain_gate_deps_dedup_across_surfaces(tmp_path):
         "HA": FakeTorrent(hash="HA", save_path="R:/src/Show"),
         "HX": FakeTorrent(hash="HX", save_path="R:/src"),  # 组外: 恰等旧根(R7 等值面)
     }
-    mod = _bare_mod(
-        store=types.SimpleNamespace(by_hash=by_hash, relocating_hashes=set()), data_dir=str(tmp_path / "data")
-    )
+    mod = _bare_mod(store=types.SimpleNamespace(by_hash=by_hash), data_dir=str(tmp_path / "data"))
     job = _job(
         "j1",
         phase=ru.PHASE_ARMED,

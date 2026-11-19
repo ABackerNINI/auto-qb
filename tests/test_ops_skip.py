@@ -46,6 +46,17 @@
 
 评审修复 R4-core B5(issue 26-11-07-0527 明细 3/4):
 - test_skip_retry_backoff_schedule_beats: R1#97 —— _skip_retry 拍序钉死: 第 n 次重试吃退避表第 n 项(10/20/50/50/50, 首拍 10ms 生效), 拍数=表长, 溢出兜底 FAILED 返回 False(假钟零 sleep)
+
+搬迁窗口拒跳检闸门(计划 26-10-18-1604 §2.3/P4; S5-1 改消费 relocate 派生查询 relocating_hashes(),
+计划 26-11-15-2340 刀3 —— 原 store.relocating_hashes 登记集退役):
+- test_skip_relocating_window_blocks_exec_path: 成员在 relocating 派生窗口内, 执行路径
+  skip_check(同步)与 skip_submit(异步)都在 _skip_begin 闸门处返回「该种子正在整组迁移...」
+  拒跳检; qB 零写(不删不重加)、同日去重零 state 副作用
+- test_skip_relocating_window_empty_allows_exec: 对照面 —— 窗口外(派生空集)同一种子照常
+  跳检完成(闸门只对在册成员生效, 不殃及全库)
+- test_skip_relocating_window_not_in_precheck: 预检不拦 —— skip_check_precheck 按自身闸门
+  给 cls( reasons 无「整组迁移」文案, cls 无 skip 类), 拦截只发生在执行路径(与 own_write
+  闸门同款双轨: 预检是只读预览, cls 契约 blocked/force/ok 不引入第四类)
 """
 
 import copy
@@ -68,6 +79,7 @@ from datetime import date
 
 from types import SimpleNamespace
 
+from auto_qb.core.modules import relocate_units as ru
 from auto_qb.core.modules.ops_common import SKIP_PHASE_APPEARED, SKIP_PHASE_FAILED, SKIP_PHASE_GONE
 from auto_qb.core.modules.ops_mod import OpsModule
 
@@ -1327,3 +1339,61 @@ def test_skip_retry_backoff_schedule_beats():
     assert job.phase == SKIP_PHASE_FAILED and job.error == "耗尽文案", "溢出兜底必须终态失败并落文案"
     ops._skip_step(job)  # 终态相位经步进结算出账(与真实推进同路径)
     assert ops._skip_jobs == {}, "终态后 job 出账"
+
+
+# ============================================================
+# C. 搬迁窗口拒跳检闸门(计划 26-10-18-1604 §2.3/P4; S5-1 改消费 relocate 派生查询,
+#    计划 26-11-15-2340 刀3 —— 原 store.relocating_hashes 登记集退役)
+# ============================================================
+def _register_relocating_job(mgr, hashes):
+    """把非终态迁移 job 登进真 relocate 模块: relocating 派生窗口即含成员(真实派生路径)"""
+    mgr.ctx.relocate.register_job(
+        ru.RelocateJob(
+            job_id="jr-window", hashes=tuple(hashes), mover=hashes[0], src="R:/src", dst="R:/dst", scope="R:/src"
+        )
+    )
+
+
+def test_skip_relocating_window_blocks_exec_path():
+    """执行路径拒跳检: 成员在 relocating 派生窗口内, skip_check(同步)与 skip_submit(异步)
+    都在 _skip_begin 闸门处返回「该种子正在整组迁移...」; 删除/重加零发生(零副作用)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    _register_relocating_job(mgr, ("HASH123", ))
+    assert "HASH123" in mgr.ctx.relocate.relocating_hashes(), "前提: 成员在派生窗口内"
+    client.calls.clear()
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_skipped and "整组迁移" in r.message, f"同步入口必须拒跳检: {r}"
+    assert client.calls == [], f"拒跳检零 qB 写(不删不重加): {client.calls}"
+    r2 = mgr.ctx.ops.skip_submit("HASH123", source="web")
+    assert r2.is_skipped and "整组迁移" in r2.message, f"异步入口同样拒跳检: {r2}"
+    assert client.calls == [], client.calls
+    assert mgr.state.get("skip_check_day", {}).get("HASH123") is None, "拒跳检不写同日去重(零 state 副作用)"
+
+
+def test_skip_relocating_window_empty_allows_exec():
+    """对照面: 窗口外(空集)同一种子照常跳检 —— 闸门只对派生在册成员生效, 不殃及全库"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    assert mgr.ctx.relocate.relocating_hashes() == frozenset(), "无迁移在途 = 派生空集"
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"窗口外放行(跳检完成): {r}"
+
+
+def test_skip_relocating_window_not_in_precheck():
+    """预检不拦(ops_skip 闸门注释口径): 成员在窗口内, skip_check_precheck 仍按自身闸门给
+    cls(不引入「整组迁移」类), 拦截只发生在执行路径 —— 预检与执行之间无信任传递"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    _register_relocating_job(mgr, ("HASH123", ))
+    results = mgr.ctx.ops.skip_check_precheck(["HASH123"])
+    assert len(results) == 1 and results[0]["hash"] == "HASH123", results
+    assert all("整组迁移" not in v["text"] for v in results[0]["reasons"]), \
+        f"预检不得出现拒跳检文案: {results[0]}"
+    assert results[0]["cls"] != "skip", f"预检 cls 契约(blocked/force/ok)无 skip 类: {results[0]}"

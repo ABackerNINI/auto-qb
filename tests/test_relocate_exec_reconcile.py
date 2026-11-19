@@ -62,7 +62,7 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 R4 成员收缩接线追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的「种子已不存在」收敛行):
 - test_step_reconcile_shrinks_after_n_absent_rounds: 在线+新鲜快照下连续 N 拍权威缺席 ->
   第 ABSENCE_SHRINK_ROUNDS 拍收缩(WARNING 留痕 + reason/last_error 注记 + relocating
-  登记整表重算不留幽灵行); N-1 拍不收缩; 在场成员零计数
+  派生随账收敛不留幽灵行, S5 无重算挂点); N-1 拍不收缩; 在场成员零计数
 - test_step_reconcile_absence_gates_no_count: qB 离线 / 快照无新轮(一拍一判) / 全量轮
   (need_validate, 基线重建面含「未加载完」活成员差集) / 静默缺席 / 无轮次基线 ——
   既不计数也不复位(宁慢勿误删)
@@ -225,7 +225,7 @@ def test_step_reconcile_merges_rewritten_forward(tmp_path):
     rec = types.SimpleNamespace(hash="HA", save_path="R:/src", state="pausedUP")
 
     def _mk(store_rec=None):
-        store = types.SimpleNamespace(by_hash={"HA": store_rec or rec}, relocating_hashes=set())
+        store = types.SimpleNamespace(by_hash={"HA": store_rec or rec})
         return _bare_mod(store=store, api=types.SimpleNamespace(client=None), data_dir=str(tmp_path))
 
     mod = _mk()
@@ -245,7 +245,7 @@ def test_step_reconcile_same_journal_phase_no_remerge(tmp_path):
     走完; armed + 旧 journal 相位 -> 不合并(旧相位不在新表合并集)"""
     rec = types.SimpleNamespace(hash="HA", save_path="R:/src", state="pausedUP")
     mod = _bare_mod(data_dir=str(tmp_path))
-    mod._ctx.store = types.SimpleNamespace(by_hash={"HA": rec}, relocating_hashes=set())
+    mod._ctx.store = types.SimpleNamespace(by_hash={"HA": rec})
     relocate_journal.write_journal(str(tmp_path), "j1", {"phase": ru.PHASE_REWRITTEN, "ts": 1.0})
     job = _job("j1", phase=ru.PHASE_REWRITTEN)
     mod._step_reconcile(job, {})
@@ -591,7 +591,7 @@ def test_step_reconcile_wires_ensure_daemon(tmp_path):
     mod = _s3_mod(tmp_path, backup=backup)
     host, port = mod._qb_host(), mod._qb_port()
     rec = types.SimpleNamespace(hash=v1, save_path="R:/src", state="pausedUP")
-    mod._ctx.store = types.SimpleNamespace(by_hash={v1: rec}, relocating_hashes=set())
+    mod._ctx.store = types.SimpleNamespace(by_hash={v1: rec})
     _write_new_chain_spec(data_dir, "j1", host, port, backup, v1)
     spawned = []
     mod._spawn_daemon = lambda d, h, p: spawned.append((d, h, p))
@@ -871,7 +871,6 @@ def _r4_env(
     }
     store = types.SimpleNamespace(
         by_hash=by_hash,
-        relocating_hashes=set(),
         rounds_applied=rounds,
         need_validate=need_validate,
         last_removed=list(last_removed),
@@ -897,7 +896,7 @@ def _r4_tick(mod, rounds):
 
 def test_step_reconcile_shrinks_after_n_absent_rounds(tmp_path, monkeypatch):
     """在线+新鲜快照下连续 N 拍权威缺席 -> 第 N 拍收缩(WARNING 留痕 + reason/last_error
-    注记 + relocating 登记整表重算不留幽灵行); N-1 拍不收缩; 在场成员零计数"""
+    注记 + relocating 派生随账收敛不留幽灵行, S5 无重算挂点); N-1 拍不收缩; 在场成员零计数"""
     mod, _job0 = _r4_env(tmp_path, monkeypatch, absent=("HA", ), last_removed=["HA"], rounds=7)
     _r4_tick(mod, 7)
     saved = mod.get_job("j1")
@@ -911,7 +910,7 @@ def test_step_reconcile_shrinks_after_n_absent_rounds(tmp_path, monkeypatch):
     assert dict(saved.absent_counts) == {}, "收缩成员计数账随之摘除"
     assert saved.reason == ru.REASON_MEMBERS_GONE and "收缩" in saved.last_error and "HA" in saved.last_error
     assert saved.phase == ru.PHASE_ARMED, "部分收缩不动相位(剩余成员继续收尾)"
-    assert mod._ctx.store.relocating_hashes == {"HB"}, "relocating 登记随 _set_job 整表重算"
+    assert mod.relocating_hashes() == {"HB"}, "relocating 派生随 _set_job 账面换代即时收敛"
     assert "HB" not in cap.text and "HA" in cap.text and "收缩" in cap.text, cap.text
 
 

@@ -26,7 +26,7 @@
 - test_supersede_unified_repoint_chain_end_to_end: armed A→B 后发起 B→C 全链 —— 新 job
   接管移交条目(plan.inherited), 搬移完成后把前任 A 侧别名统一改指 C; B 侧新建别名
   直指 C; 前任账面零改道(dst 仍 B / spec.dst 仍 B / journal 无 retarget 字段); 新 spec
-  members 覆盖前任成员; relocating 登记连续; I2: 所有别名直指 C 无 A→B→C 链
+  members 覆盖前任成员; relocating 让路在册连续(派生随账收敛); I2: 所有别名直指 C 无 A→B→C 链
 - test_supersede_rewritten_predecessor_handed_over: rewritten 前任同样在发起瞬间收官,
   移交别名统一改指(两条重启序的必要件由单一活任务的 spec 承载)
 - test_supersede_handover_failure_retries_until_converged: 改指失败注入 = 不回滚不判失败
@@ -43,8 +43,8 @@
 - test_supersede_inherited_chain_gate_blocks_finalize: 组外种子落在旧根 A(等值面)时
   J2 删链门计依赖(继承面承接前任的门), 依赖不清永不删别名
 - test_supersede_inherited_surfaces_registered: 继承条目接入三个消费面 ——
-  resolve_physical 把旧根账面解析到新终位置(组键不裂)、_sync_relocating 登记继承别名根
-  (删种拦截 D16 连续)、blocks_relocation 拦截落进继承目录别名作用域的别组
+  resolve_physical 把旧根账面解析到新终位置(组键不裂)、alias_roots() 派生登记继承别名根
+  (删种拦截 D16 连续, S5 无重算挂点)、blocks_relocation 拦截落进继承目录别名作用域的别组
 - test_supersede_inherited_add_confirm_phase_split: 移交面添加预检按改指收敛与否分流
   (评审 should2/minor-4)—— 收敛判据 = plan.handover_done 持久标记(非相位近似):
   标记缺席 actual 按前任终位置建模且文案注明未收敛, 标记在(含「收敛后仍 moved」窗)
@@ -259,8 +259,8 @@ def test_supersede_unified_repoint_chain_end_to_end(tmp_path, monkeypatch):
     spec2 = rj.read_spec(dd, j2)
     assert mod._norm(spec2["src"]) == mod._norm(dst) and mod._norm(spec2["dst"]) == mod._norm(dst_c), spec2
     assert {"HA", "HB"} <= {m["hash_v1"] for m in spec2["members"]}, spec2
-    # relocating 登记连续: 组成员都在账(_sync_relocating 整表重算)
-    assert {"HA", "HB"} <= mgr.store.relocating_hashes
+    # relocating 让路连续: 组成员都在册(派生查询随账收敛, S5 无重算挂点)
+    assert {"HA", "HB"} <= mgr.ctx.relocate.relocating_hashes()
     assert spawned, "移交后 pending 仍在, 回收 daemon 对账在位(下一窗口改写到 C)"
 
 
@@ -474,7 +474,7 @@ def test_supersede_inherited_chain_gate_blocks_finalize(tmp_path, monkeypatch):
 
 def test_supersede_inherited_surfaces_registered(tmp_path, monkeypatch):
     """继承条目接入三个消费面: resolve_physical 把旧根账面解析到新终位置(组键不裂);
-    _sync_relocating 登记继承别名根(删种拦截 D16 连续); blocks_relocation 拦别组落进
+    alias_roots() 派生登记继承别名根(删种拦截 D16 连续); blocks_relocation 拦别组落进
     继承目录别名作用域"""
     pin_disk_usage(monkeypatch)
     mgr, client, mod, j1, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
@@ -487,15 +487,16 @@ def test_supersede_inherited_surfaces_registered(tmp_path, monkeypatch):
     hb_root = ru.content_root_of(mgr.store.by_hash["HB"].save_path, ["Show/e00.mkv", "Show/e01.mkv"])
     assert mod._norm(mod.resolve_physical(mgr.store.by_hash["HB"].save_path, hb_root)) == mod._norm(dst_c), \
         "旧根账面经继承条目解析到新终位置"
-    # 删种拦截登记: 继承别名根(A)在 roots 表(旧根路径的删除仍被 D16 拦); J2 自有根
-    # 在建链后(moved/armed)同样入表 —— 收官不造成拦截空窗
-    roots = mgr.store.relocating_alias_roots
+    # 删种拦截登记: 继承别名根(A)在派生 roots(S5 查询 alias_roots(), 旧根路径的删除仍被
+    # D16 拦); J2 自有根在建链后(moved/armed)同样在册 —— 收官不造成拦截空窗。
+    # 四元组序列按 src 收成旧 dict 形(root -> (job_id, kind, alias_paths))只为本用例断言便利
+    roots = dict((r[0], r[1:]) for r in mgr.ctx.relocate.alias_roots())
     assert mod._norm(src) in {mod._norm(k) for k in roots}, roots
     from relocate_exec_support import _simulate_moved
 
     _simulate_moved(mgr, dst_c, client.files_map["HA"], os.path.join(dst, "Show"))
     _run_ticks(mod, 8)
-    roots = mgr.store.relocating_alias_roots
+    roots = dict((r[0], r[1:]) for r in mgr.ctx.relocate.alias_roots())
     assert mod._norm(dst) in {mod._norm(k) for k in roots}, roots
     assert mod._norm(src) in {mod._norm(k) for k in roots}, roots
     # blocks_relocation: 别组落进继承作用域被拦(目录别名形态); 文件级继承不拦别组
@@ -1010,7 +1011,6 @@ def test_supersede_handover_member_merge_idempotent(tmp_path):
             "HX": FakeTorrent(hash="HX", save_path="R:/dstB/sub/e00.mkv"),
             "HA": FakeTorrent(hash="HA", save_path="R:/dstC/e00.mkv"),
         },
-        relocating_hashes=set(),
     )
     pred = _job("j1", phase=ru.PHASE_ARMED, hashes=("H1", "HX"), src="R:/src", dst="R:/dstB")
     job = _job("j2", hashes=("HZ", ), src="R:/dstB", dst="R:/dstC")
@@ -1054,7 +1054,7 @@ def test_build_links_skips_twin_links_already_pointing_at_target(tmp_path):
             "files": [["Show/e00.mkv", 64]]
         },
     )
-    mod._ctx.store = _types.SimpleNamespace(by_hash={}, relocating_hashes=set())
+    mod._ctx.store = _types.SimpleNamespace(by_hash={})
     rt = {"links": [], "link_pos": 0}
     assert mod._build_links(job, rt) is True
     assert rt["links"] == [str(link)], "孪生直接入账(不重建不报错)"

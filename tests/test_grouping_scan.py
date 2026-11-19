@@ -614,6 +614,6 @@ def test_guard_relocating_window_scan():
         k2 = ("R:/D2", ("b.mkv", ))
         _seed_group(mgr.store, k1, ["H1", "H2"])
         _seed_group(mgr.store, k2, ["H3"])
-        mgr.store.relocating_hashes = {"H1"}  # 仅 k1 的成员在迁
+        mgr.ctx.relocate.relocating_hashes = lambda: frozenset({"H1"})  # 仅 k1 的成员在迁(喂派生查询替身)
         grp._scan_triggered_groups([k1, k2], False)  # list 传参: 迭代序确定(k1 在前)
         assert stops == [["H3"]], f"k1 让路但 k2 必须照常扫描(全盲/截断即红): {stops}"

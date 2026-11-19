@@ -11,7 +11,7 @@
 ## 测试计划(每个测试函数一条)
 - test_cancel_requires_confirmation_then_stops_without_moveback: 撤销先给三段式确认面(D7 guide),
   确认后删自己的链接 + cancelled + 恢复成员(零 setLocation, D6 撤销不搬回)
-- test_jobs_persist_and_reload: job 账落 state 并能重启恢复(非终态重挂 relocating 登记)
+- test_jobs_persist_and_reload: job 账落 state 并能重启恢复(非终态成员派生即在册, 无重挂挂点)
 - test_entry_single_and_bulk_create_jobs: 开关开: 单件/批量都产生 job(回执 truth 计数)
 - test_entry_bulk_missing_hashes_in_receipt: 批量移动(整组迁移开)缺失计数进回执(issue 26-11-07-0536 #3)
   —— 仍有缺失时 error 带「N/M 个种子不存在或已被删除」+ relocate 非零桶计数段(「已发起 M 项 / 另有 N 项待确认」),
@@ -70,7 +70,7 @@
   或 register_job 动过)—— stop 照常补写(不动内容 = 同值重写; 仅动内存的变更靠补写落盘),
   不得矫枉过正把合法落盘也禁了
 - test_apply_hot_enable_restores_ledger_and_interception: 热启用(enabled 假->真)补
-  _load_jobs: state 里的历史在途 job 灌回内存 + relocating_hashes/别名根登记重建;
+  _load_jobs: state 里的历史在途 job 灌回内存 + 让路/拦截派生查询随账恢复(S5 无登记重建挂点);
   持续启用下的段变化不重灌(不重置在途 job 的运行期账 _rt)
 ### 热启用探测残留扫描(issue 26-11-08-1608 hot-enable)
 - test_apply_hot_enable_sweeps_probe_residue: 热启用(enabled 假->真)非 dry-run 补
@@ -167,7 +167,7 @@ def test_cancel_requires_confirmation_then_stops_without_moveback(tmp_path, monk
 
 
 def test_jobs_persist_and_reload(tmp_path, monkeypatch):
-    """job 账落 state; 重启恢复非终态 job 并重挂 relocating 登记"""
+    """job 账落 state; 重启恢复非终态 job, 让路派生随账恢复(无登记重建挂点)"""
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
@@ -180,7 +180,7 @@ def test_jobs_persist_and_reload(tmp_path, monkeypatch):
     mod2 = type(mod)(mgr.ctx)
     n = mod2._load_jobs()
     assert n == 1 and mod2.get_job(job_id).phase == ru.PHASE_MOVING
-    assert {"HA", "HB"} <= mgr.store.relocating_hashes
+    assert {"HA", "HB"} <= mod2.relocating_hashes(), "非终态 job 的成员派生即在册"
 
 
 def test_entry_single_and_bulk_create_jobs(tmp_path, monkeypatch):
@@ -1099,10 +1099,10 @@ def test_stop_persists_after_ledger_touched_this_session(tmp_path, monkeypatch):
 
 
 def test_apply_hot_enable_restores_ledger_and_interception(tmp_path, monkeypatch):
-    """热启用(enabled 假->真)补 _load_jobs: 历史在途 job 灌回 + relocating_hashes 重建(条目2)
+    """热启用(enabled 假->真)补 _load_jobs: 历史在途 job 灌回 + 让路/拦截派生随账恢复(条目2)
 
     disabled 启动的会话(state 里有崩溃/停用期残留)热启用后不补恢复: on_task_line 只推
-    内存账, job 永久休眠; _sync_relocating 不重建, 未收尾拦截对这批成员失明。补灌后与
+    内存账, job 永久休眠; 账不在内存派生即为空集, 未收尾拦截对这批成员失明。补灌后与
     start 的启用分支同口径; 持续启用下的段变化不重灌(不重置在途 job 的运行期账 _rt)。
     """
     pin_disk_usage(monkeypatch)
@@ -1111,12 +1111,11 @@ def test_apply_hot_enable_restores_ledger_and_interception(tmp_path, monkeypatch
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
 
-    # 下一会话 disabled 启动: 账不恢复; 拦截登记为空(重启后 store 全新, 这里显式清出同形)
+    # 下一会话 disabled 启动: 账不恢复; 让路/拦截派生为空(新会话账未接管)
     mgr.config.relocate = RelocateConfig(enabled=False)
     mod2 = RelocateModule(mgr.ctx)
     mod2.start(mgr.ctx, dry_run=False)
-    mod2._sync_relocating()
-    assert mod2.get_job(job_id) is None and not mgr.store.relocating_hashes
+    assert mod2.get_job(job_id) is None and not mod2.relocating_hashes()
 
     old = Config()
     new = Config()
@@ -1125,7 +1124,7 @@ def test_apply_hot_enable_restores_ledger_and_interception(tmp_path, monkeypatch
     # 文案不带「在途」(nit, issue 26-11-07-0527): 计数含终态 job, 说「在途」长期部署必然多报
     assert res.action == "reloaded" and "恢复 job 1 条" in res.detail and "在途" not in res.detail, res
     assert mod2.get_job(job_id) is not None and mod2.get_job(job_id).phase == ru.PHASE_MOVING
-    assert {"HA", "HB"} <= mgr.store.relocating_hashes, "未收尾拦截登记必须随热启用重建"
+    assert {"HA", "HB"} <= mod2.relocating_hashes(), "未收尾拦截派生必须随热启用恢复"
 
     # 持续启用下的段变化不重灌: rt 账不重置(重灌会让在途 job 无谓回到恢复判据)
     mod2._rt[job_id]["sample_ts"] = 123.0

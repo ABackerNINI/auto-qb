@@ -126,9 +126,10 @@ class SkipMixin:
 
         # ---- 搬迁窗口闸门(计划 26-10-18-1604 §2.3/P4): 组内正在整组迁移 ⇒ 跳检跳过
         # 跳检是「删除 + 以跳过校验方式重加」, 在文件正被 qB 搬走时重加会立刻进入缺文件态,
-        # 且删除动作会打断搬运 —— 与 relocating 让路缺文件扫描是同一条纪律(登记单点在
-        # RelocateModule, 这里只读)。
-        if hash in (getattr(self._ctx.store, "relocating_hashes", None) or set()):
+        # 且删除动作会打断搬运 —— 与缺文件扫描的 relocating 让路是同一条纪律(消费 relocate
+        # 模块的派生查询 relocating_hashes(), S5: 跨模块走命名查询接口, 这里只读)。
+        relocate = getattr(self._ctx, "relocate", None)
+        if hash in (relocate.relocating_hashes() if relocate is not None else frozenset()):
             return None, ActionResult.skip("该种子正在整组迁移(搬迁/建别名中): 迁移收尾后再跳检")
 
         # 提交前不再直查(26-10-21-2323 S3): 种子已不在时, 相位机的「导出 .torrent」会失败,

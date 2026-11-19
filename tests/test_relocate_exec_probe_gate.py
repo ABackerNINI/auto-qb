@@ -80,7 +80,6 @@ def _gate_env(monkeypatch, *, host="127.0.0.1", port=8080):
         get=lambda h: recs.get(h),
         groups={},
         by_hash=recs,
-        relocating_hashes=set(),
         server_state={"free_space_on_disk": 1 << 40},
     )
     locs = []

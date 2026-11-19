@@ -116,12 +116,34 @@ def _bare_mod(store=None, api=None, relocate=None, data_dir=""):
 
     mod = RelocateModule()
     mod._ctx = types.SimpleNamespace(
-        store=store if store is not None else types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        store=store if store is not None else types.SimpleNamespace(by_hash={}),
         api=api if api is not None else types.SimpleNamespace(),
         config=types.SimpleNamespace(relocate=relocate or RelocateConfig(enabled=True), data_dir=data_dir),
         state=types.SimpleNamespace(data={}),
     )
     return mod
+
+
+class FakeRelocateQueries:
+    """RelocateModule 派生查询替身(S5 登记集退役后的消费侧替身形态): 三个查询方法回 canned 数据
+
+    供「消费方读 ctx.relocate 派生查询」的用例挂 ctx(如 QbApi 删种拦截): 断言面从
+    「store 塞集合」改「替身查询方法返回值塞成员」。roots = (src, job_id, alias_kind,
+    alias_paths) 四元组序列(与 ru.alias_roots_of 同形); members/resuming = hash 集。
+    """
+    def __init__(self, roots=(), members=(), resuming=()):
+        self.roots = tuple(roots)  # 可变属性: 用例中途换登记(分形态断言)直接重赋值
+        self.members = frozenset(members)
+        self.resuming = frozenset(resuming)
+
+    def relocating_hashes(self):
+        return self.members
+
+    def resuming_hashes(self):
+        return self.resuming
+
+    def alias_roots(self):
+        return self.roots
 
 
 def _job(
@@ -152,7 +174,7 @@ def _job(
 
 def _facts_mod(conf=None, server_free=None):
     """纯事实收集环境: 不落盘, store/config 全替身(_group_facts 只读面)"""
-    store = types.SimpleNamespace(by_hash={}, relocating_hashes=set())
+    store = types.SimpleNamespace(by_hash={})
     if server_free is not None:
         store.server_state = {"free_space_on_disk": server_free}
     mod = RelocateModule()

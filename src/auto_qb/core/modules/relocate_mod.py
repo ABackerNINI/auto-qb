@@ -213,7 +213,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
     def _publish_snapshot(self) -> None:
         """发布不可变 job 快照(主循环写线程单点; Web 只读引用)
 
-        内容相等时不换代也不置脏 —— _sync_relocating 之后的重复发布不该让 Web 每轮重建。
+        内容相等时不换代也不置脏 —— 同一拍内的重复发布不该让 Web 每轮重建。
         内容变化时置 full 脏: 迁移标注会影响组行内嵌成员数组与组级聚合, 局部桶无法覆盖
         未显式登记的组键, 用 full 保证整份视图与快照同代。
         """
@@ -575,9 +575,8 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
 
     def _load_jobs(self) -> int:
         """启动/热重载时从 state 恢复 job 账; 入口先跑旧账迁移器(S1b D8, 见 _migrate_legacy_accounts);
-        非终态的重挂 relocating 登记(抑制缺文件误判),
-        挂账 job 的 resuming 登记同步重建(resume_pending 随 state 持久, 重启后账还活着,
-        让路窗口不能等第一次账面变更才出现 —— 走 _sync_relocating 漏斗, issue 26-11-15-0441)。
+        账灌回内存即恢复让路/拦截面 —— relocating/resuming/别名根(S5 起)都是派生查询,
+        派生即最新, 不再有「重建登记」挂点(issue 26-11-15-0441 的让路窗口滞后窗结构性消失)。
         启动对账回写(评审 minor-6): state 盒按 state 服务周期刷盘而 journal 即时落盘 ——
         journal 写完终相位、state 刷前硬崩的窗口, 重启按陈旧 state 恢复前段相位而 journal
         已退休(daemon 不再认领)= 永久悬挂; journal 相位是收尾账的跨进程投影(I3), 终相位
@@ -648,7 +647,6 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             n += 1
         if reconciled:
             self._persist()  # 回写落账(状态盒; 磁盘刷盘由接管面写穿与 state 服务周期双兜底)
-        self._sync_relocating()
         self._publish_snapshot()
         # S3 终态分级保留(D3, 计划 26-11-15-2340 §03.4): 账接管完成后滚一次成功历史 ——
         # 覆盖迁移器转入的旧账与停机期间累积的超限 done 账(触发面口径见 prune_success_history)
@@ -671,82 +669,17 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._hot_enable_rejected = False
         return n
 
-    def _sync_relocating(self) -> None:
-        """relocating 登记 = 非终态 job 的成员并集(P4: 缺文件扫描与跳检闸门据此让路)
-
-        S1a(单活任务模型 D4)追加: plan.extra_members(收官移交的前任成员)一并入登记
-        —— 前任收官即出活集, 其成员的让路保护(fuse/缺文件扫描)由接管 job 承接, 与旧
-        模型里前任活着时的登记连续性等价。
-
-        S4b(D16 删种拦截)追加: 活动别名根登记 store.relocating_alias_roots
-        ({src: (job_id, alias_kind, alias_paths)}, R3 形态感知取数面, 计划 26-11-13-0448
-        §03 R3; 条目四元组单点产出 = ru.alias_roots_of, 含移交条目的继承根) ——
-        QbApi.torrents_delete 的拦截面据此判「save_path 位于活动别名之下」并按形态分流
-        verdict(文件级按交集谓词精判 / 目录级全量拦), 随本单点(每次 job 变更整表重算)
-        自动增删, 终态即撤拦。
-        末尾附带刷新 resuming 登记(_sync_resuming): 本方法是 job 变更的重算漏斗(_set_job /
-        _load_jobs / 新建 job 都经此), 账变更路径由 _note_resume_state 直呼补齐 —— 两路
-        合起来覆盖登记的全部变更面(issue 26-11-15-0441)。
-        """
-        store = getattr(self._ctx, "store", None) if self._ctx is not None else None
-        if store is None:
-            return
-        reg = getattr(store, "relocating_hashes", None)
-        if reg is None:  # 老 store 替身无该字段: 自建一份, 不打扰既有测试形状
-            reg = set()
-            store.relocating_hashes = reg
-        reg.clear()
-        roots = getattr(store, "relocating_alias_roots", None)
-        if roots is None:  # 同上: 老 store 替身按需自建(QbApi 读侧 getattr 缺省不拦)
-            roots = {}
-            store.relocating_alias_roots = roots
-        roots.clear()
-        for job in self.active_jobs():
-            reg.update(job.hashes)
-            reg.update(job.resume_hashes)
-            reg.update(str(h) for h in ((job.plan or {}).get("extra_members") or ()) if str(h))
-        for src, job_id, kind, paths in ru.alias_roots_of(self.active_jobs()):
-            roots[src] = (job_id, kind, paths)
-        self._sync_resuming()
-
-    def _sync_resuming(self) -> None:
-        """resuming 登记 = resume_pending 非空的账窗口成员并集(fuse 让路口径, issue 26-11-15-0441)
-
-        生命周期语义 = **账窗口, 非 job 窗口**(与 relocating_hashes 的 job 级并集刻意不同):
-        - 开账(_resume_members 四出口经 _note_resume_state 挂账)即登记, 不等 _set_job ——
-          挂账单点不走 _set_job, 若只挂 _sync_relocating 会滞后一拍(账开了登记还没有,
-          让路窗口错位), 故 _note_resume_state 落账即直呼本方法(重算挂点之一);
-        - 账闭合(reconcile 对照快照核实全员回运行态后清账)即撤登记 —— armed 恢复运行期
-          job 仍 active 的真实拉流不再被让路, fuse 恢复计连击(收口「保护停摆至 job 终态」
-          的缺口; P1 回声依据只覆盖按住期/恢复期, 覆盖不了恢复运行期);
-        - 穷尽收敛(pending 只收敛到仍停者)继续登记: 成员本就停着无拉流, 但 triggered 分支
-          不补暂停的口径保持(机器恢复动作不被打回);
-        - 扫**全部 job**(终态与否): reconcile 对账口径就是终态也扫, 终态挂账 job(armed 期
-          穷尽后同 job 终态仍挂账)的让路窗口不能漏 —— 不沿用 relocating 的 active_jobs()
-          过滤。fuse 是唯一消费方(grouping/ops_skip/qbapi 仍消费 relocating_hashes, 不动)。
-        """
-        store = getattr(self._ctx, "store", None) if self._ctx is not None else None
-        if store is None:
-            return
-        reg = getattr(store, "resuming_hashes", None)
-        if reg is None:  # 老 store 替身无该字段: 自建一份, 不打扰既有测试形状
-            reg = set()
-            store.resuming_hashes = reg
-        reg.clear()
-        for job in self._jobs.values():
-            if job.resume_pending:
-                reg.update(job.resume_pending)
-
     def _set_job(self, job: RelocateJob) -> RelocateJob:
-        """登记相位推进后的 job(单点: 落内存 + 刷登记 + 写 state + 可选 qB 标签镜像)
+        """登记相位推进后的 job(单点: 落内存 + 写 state + 可选 qB 标签镜像)
 
         标签镜像在 state 落盘之后做: state 是唯一事实源, 镜像失败(超时/不支持/权限)
         只告警计数, 绝不回滚相位或影响收尾判定。
+        让路/拦截登记(S5 起)是派生查询(relocating_hashes/resuming_hashes/alias_roots),
+        账面换代即最新, 本方法不再有登记重算挂点。
         """
         job = replace(job, updated_at=self._clock.now())
         self._jobs[job.job_id] = job
         self._jobs_loaded = True
-        self._sync_relocating()
         self._persist()
         self._publish_snapshot()
         self._sync_pending_tag(job)

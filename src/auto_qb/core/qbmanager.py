@@ -209,7 +209,9 @@ class QbManager(
         self.store = TorrentStore()
         self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
         # qB API Facade: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
-        self.api = QbApi(self._client, self.store)
+        # ctx 注入(S5): qbapi 的 relocate 依赖面(D16 拦截/成员分型)经 ctx.relocate 派生
+        # 查询现取 —— 此刻 relocate 尚未挂载(挂载在下方装配清单 P5), 调用时才解析, 时序无碍
+        self.api = QbApi(self._client, self.store, self.ctx)
         # 状态持久化服务(plan P0 自 RuleEngineMixin 迁出): state.json 读写/迁移/周期落盘单点
         self.ctx.state = StateService(self.config.state_file)
         # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)

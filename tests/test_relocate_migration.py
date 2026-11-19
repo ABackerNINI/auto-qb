@@ -642,9 +642,11 @@ def test_probe_salt_and_stamp_degenerate_state_shapes(tmp_path):
     mod = _bare_mod(data_dir=str(tmp_path))
     mod._ctx.state = types.SimpleNamespace(data=None)
     assert mod.probe_salt_ensure() == ""
-    # store 为 None 的替身形态: resuming 登记面空转不炸(老 store 缺字段自建的同族退化)
-    mod._ctx.store = None
-    mod._sync_resuming()
+    # 派生查询零 store 依赖(S5 登记集退役): ctx 无 store 字段也能算 —— 原「store 为 None
+    # resuming 登记面空转」的同族退化面随登记面消失, 派生只读内存账
+    mod._ctx = types.SimpleNamespace(state=types.SimpleNamespace(data=None))
+    assert mod.resuming_hashes() == frozenset() and mod.relocating_hashes() == frozenset()
+    assert mod.alias_roots() == ()
     # model_version 坏形(list)+ jobs 箱非 dict: 按未盖章 -> 尝试迁移 -> 无账可迁直接盖章
     # (直调迁移器: _load_jobs 的账恢复循环按 dict 箱为前提, 坏形箱的容错收口在迁移器)
     data_dir = str(tmp_path / "data")

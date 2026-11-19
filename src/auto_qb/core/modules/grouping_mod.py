@@ -173,12 +173,14 @@ class GroupingModule(BaseModule):
         事件路径同构 —— 对每个触发组取现存成员(by_hash 过滤已删), 组非空才扫; 同组只扫
         一次由 triggered 集合保证。
 
-        搬迁窗口让路(计划 26-10-18-1604 §2.3/P4): 组内任一成员在 `store.relocating_hashes`
-        里 ⇒ 整组跳过本次扫描 —— 此刻文件正在被 qB 搬走, 判「缺失」必是误判(真相是
+        搬迁窗口让路(计划 26-10-18-1604 §2.3/P4): 组内任一成员在 relocate 模块的派生查询
+        `relocating_hashes()` 返回集(S5: 跨模块走命名查询接口, 不裸伸手 store 登记集)里
+        ⇒ 整组跳过本次扫描 —— 此刻文件正在被 qB 搬走, 判「缺失」必是误判(真相是
         「正在移动」, 而 missingFiles 的处置是整组暂停 + 打 MISSING 标签, 代价不可逆)。
         """
         store = self._ctx.store
-        relocating = getattr(store, "relocating_hashes", None) or set()
+        relocate = getattr(self._ctx, "relocate", None)
+        relocating = relocate.relocating_hashes() if relocate is not None else frozenset()
         for key in triggered:
             members = [store.by_hash[h] for h in store.groups.get(key, []) if h in store.by_hash]
             if not members:

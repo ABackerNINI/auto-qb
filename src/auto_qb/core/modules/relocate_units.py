@@ -1869,13 +1869,13 @@ def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
 
     只有**确实建过别名**的非终态 job 才拦: alias_kind 非空(direct 单成员组无别名不拦)
     且 alias_paths 非空(账上有链接记录 —— moving 相位别名尚未建, 不拦; 链接随 moved
-    建成后进入拦截, 直到终态随 _sync_relocating 退出登记)。
+    建成后进入拦截, 直到终态退出非终态过滤)。
     R3(计划 26-11-13-0448 §03 R3): 条目随带 alias_kind/alias_paths —— 拦截侧文件级 job
     的 verdict 换「文件清单 x alias_paths 交集」谓词(file_alias_intersects)按形态精判,
     目录级维持全量拦; 四元组在本单点一次产出, 登记与判据不造第二份口径。
     单活任务模型(D4)追加**继承面**: 前任收官为历史后不再入活集, 其移交别名(仍挂在
     旧根, 由活任务统一改指)的删种拦截登记由活任务承接 —— 每条继承条目按自己的旧根
-    单独产出一项(逐根判, 消费侧 roots 字典按 src 键天然支持同 job 多根)。
+    单独产出一项(逐根判, 同 src 多条目也逐项产出, 消费侧逐条遍历天然支持同 job 多根)。
     """
     out = []
     for job in jobs or ():
@@ -1887,6 +1887,47 @@ def alias_roots_of(jobs: Iterable[RelocateJob]) -> tuple:
             if entry.alias_kind and entry.alias_paths:
                 out.append((entry.src, job.job_id, entry.alias_kind, entry.alias_paths))
     return tuple(out)
+
+
+def relocating_hashes_of(jobs: Iterable[RelocateJob]) -> frozenset:
+    """在途整组迁移的成员并集(纯函数): 非终态 job 的 hashes ∪ resume_hashes ∪ plan.extra_members
+
+    让路面(缺文件扫描 / 跳检闸门 / D16 删种文案分型的成员面)的数据源, 生命周期语义 =
+    **job 窗口**(非终态即在册, 与 resuming_hashes_of 的账窗口刻意不同):
+    - resume_hashes 一并入册: 发起时被按住的成员同在搬迁窗内, 让路保护连续;
+    - plan.extra_members(S1a 单活任务模型 D4)一并入册: 前任收官移交的成员由接管 job
+      承接让路保护, 与旧模型里前任活着时的登记连续性等价。
+    纯派生纪律(计划 26-11-15-2340 S5): 事实由调用方传入(调用侧给 active_jobs() 视图),
+    本函数不触盘不读 qB 不写 state; 派生即最新 —— 历史 = RelocateModule._sync_relocating
+    整表重算 + 7 处挂点(挂点漏一处登记就滞后一拍, 坑类见 pitfalls/backend/
+    derived-registry-sync-points.md), 派生化后无挂点可漏。循环体逐字搬自原 _sync_relocating。
+    """
+    reg: set = set()
+    for job in jobs or ():
+        reg.update(job.hashes)
+        reg.update(job.resume_hashes)
+        reg.update(str(h) for h in ((job.plan or {}).get("extra_members") or ()) if str(h))
+    return frozenset(reg)
+
+
+def resuming_hashes_of(jobs: Iterable[RelocateJob]) -> frozenset:
+    """恢复确认账窗口的成员并集(纯函数): resume_pending 非空 job 的挂账成员(fuse 让路口径)
+
+    生命周期语义 = **账窗口, 非 job 窗口**(与 relocating_hashes_of 的 job 级并集刻意不同):
+    - 开账(_resume_members 四出口经 _note_resume_state 挂账)即在册 —— 挂账期的回声拉流
+      不作保险丝的异常证据; 账闭合(确认回运行态)即出册, armed 恢复运行期的真实拉流恢复
+      计连击; 穷尽仍停者继续在册(triggered 分支不补暂停的口径保持)。
+    - 扫**全部 job**(终态与否, 调用侧给 _jobs.values() 全量): reconcile 对账口径就是终态
+      也扫, 终态挂账 job(armed 期穷尽后同 job 终态仍挂账)的让路窗口不能漏。
+    纯派生纪律同 relocating_hashes_of; 历史写入面 = _sync_resuming 整表重算(重算挂点:
+    _note_resume_state 落账 + _sync_relocating 漏斗尾), 派生化后无挂点可漏。循环体逐字
+    搬自原 _sync_resuming。
+    """
+    reg: set = set()
+    for job in jobs or ():
+        if job.resume_pending:
+            reg.update(job.resume_pending)
+    return frozenset(reg)
 
 
 def chain_gate_hits(

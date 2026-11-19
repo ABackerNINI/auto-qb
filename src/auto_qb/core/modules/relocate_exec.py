@@ -1377,8 +1377,8 @@ class ExecMixin:
             return []
         if head.resume_pending:
             # 挂账缓行(评审 major-2): 恢复确认账非空 = 「需手动恢复」的常驻提示态
-            # (穷尽后余量挂账, _sync_resuming 让路窗口与前端余量行都消费它)—— 整链删除
-            # 会把挂账/登记/前端余量行一起静默带走, 与 Q11「批量搬迁不得冲掉失败账」同一
+            # (穷尽后余量挂账, resuming 派生让路查询与前端余量行都消费它)—— 整链删除
+            # 会把挂账/让路面/前端余量行一起静默带走, 与 Q11「批量搬迁不得冲掉失败账」同一
             # 精神; 挂账闭合(_reconcile_resume_pending 确认/闭账)后再清自然放行。
             logger.info(
                 f"relocate | 整链清理: job {job_id} 仍带恢复确认挂账({len(head.resume_pending)} 个成员"
@@ -1437,9 +1437,7 @@ class ExecMixin:
             logger.info(f"relocate | 整链清理: job {cid} 已随链清除")
         if purged:
             self._persist()
-            self._sync_relocating()
             self._publish_snapshot()
-            self._sync_resuming()
         return purged
 
     @staticmethod
@@ -1973,7 +1971,6 @@ class ExecMixin:
             "last_size": -1,
             "stall_since": 0.0
         }
-        self._sync_relocating()
         self._persist()
         self._publish_snapshot()
         if self._dry_run():

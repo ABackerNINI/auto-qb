@@ -954,11 +954,7 @@ def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
             if c is not None else (_ for _ in ()).throw(RuntimeError("no client"))
         )
     store9 = types.SimpleNamespace(
-        get=lambda h: recs9.get(h),
-        groups={},
-        by_hash=recs9,
-        relocating_hashes=set(),
-        server_state={"free_space_on_disk": 1 << 40}
+        get=lambda h: recs9.get(h), groups={}, by_hash=recs9, server_state={"free_space_on_disk": 1 << 40}
     )
     mod9 = RelocateModule()
     mod9._ctx = types.SimpleNamespace(

@@ -91,8 +91,8 @@ class LifecycleMixin:
         热启用(enabled 假 -> 真)与 start() 的启用分支同口径: 补一次 _load_jobs +
         sweep_probe_residue(非 dry-run 才动手) ——
         以 disabled 启动后热启用的会话, state 里的历史在途 job(崩溃/停用期残留)不恢复
-        就永久休眠(on_task_line 只推内存账), _sync_relocating 也不重建, 未收尾拦截对
-        这批成员失明。仅在「假 -> 真」跳变时灌: 持续启用下的段变化不重灌(重灌会重置
+        就永久休眠(on_task_line 只推内存账), 让路/拦截派生查询也无账可派生, 未收尾拦截
+        对这批成员失明。仅在「假 -> 真」跳变时灌: 持续启用下的段变化不重灌(重灌会重置
         在途 job 的运行期账 _rt, 无谓回到恢复判据)。
         """
         relocate_changed = getattr(old, "relocate", None) != getattr(new, "relocate", None)
@@ -160,6 +160,34 @@ class LifecycleMixin:
 
     def get_job(self, job_id: str) -> Optional[RelocateJob]:
         return self._jobs.get(job_id)
+
+    # ---------- 跨模块派生查询(S5 接口显式化, 计划 26-11-15-2340 刀3) ----------
+
+    def relocating_hashes(self) -> frozenset:
+        """在途整组迁移的成员并集(缺文件扫描/跳检闸门/删种文案成员面的让路数据源)
+
+        派生即最新: ru.relocating_hashes_of(self.active_jobs()) 现算, 无登记可滞后 ——
+        历史 = store.relocating_hashes 整表重算 + 7 处挂点(随 S5 退役)。返回 frozenset
+        副本防消费方误改; 每次调用代价 O(job 数), 让路面(fuse/grouping 每 tick 一次)与
+        闸门面(跳检/删种按笔调用, 批量跳检一拍可多次)的频度下都可接受。
+        """
+        return ru.relocating_hashes_of(self.active_jobs())
+
+    def resuming_hashes(self) -> frozenset:
+        """恢复确认账窗口的成员并集(fuse 让路口径, issue 26-11-15-0441)
+
+        账窗口口径(非 job 窗口): 扫全部 job 含终态挂账 —— ru.resuming_hashes_of(
+        self._jobs.values()) 现算, 派生即最新。返回 frozenset 副本防消费方误改。
+        """
+        return ru.resuming_hashes_of(self._jobs.values())
+
+    def alias_roots(self) -> tuple:
+        """活动别名根集(删种拦截 D16 的数据源): (src, job_id, alias_kind, alias_paths) 四元组序列
+
+        派生即最新: ru.alias_roots_of(self.active_jobs()) 现算(含移交条目的继承根)。
+        返回 tuple 副本防消费方误改。
+        """
+        return ru.alias_roots_of(self.active_jobs())
 
     # ---------- 物理位置解析(§3.4 第 1 层; P4 组判定消费) ----------
 
@@ -237,8 +265,9 @@ class LifecycleMixin:
         不走 _set_job 的原因与 _note_tag_state 相同: 终态 job 的挂账/清账不该触发标签镜像
         重入, 也不该反复后移 updated_at; 内容无变化时不写(对账每拍都进来, 不设变化门会
         每 tick 落盘刷屏)。落盘 + 换代快照, 账随 state 持久(重启后确认循环照常续上)。
-        与 _note_tag_state 的差异: 落账后直呼 _sync_resuming 刷新 resuming 登记 —— 这是
-        本模块唯一不经 _set_job 的账面变更点, 登记重算必须在挂账处补齐(issue 26-11-15-0441)。
+        与 _note_tag_state 曾有的差异(落账后直呼 _sync_resuming 刷新让路登记)已随 S5
+        派生化退役: resuming 让路面 = resuming_hashes() 派生查询, 账面换代即最新,
+        「挂账点必须补齐重算否则滞后一拍」的约束(issue 26-11-15-0441)结构性消失。
         """
         cur = self._jobs.get(job_id)
         if cur is None:
@@ -248,10 +277,6 @@ class LifecycleMixin:
         if cur.resume_pending == pending and cur.resume_retries == retries:
             return
         self._jobs[job_id] = replace(cur, resume_pending=pending, resume_retries=retries)
-        # resuming 登记随落账即时重算(issue 26-11-15-0441): 挂账单点不走 _set_job, 若只等
-        # _sync_relocating 会滞后一拍(账开了登记还没有, fuse 让路窗口错位) —— 开账/闭合/
-        # 穷尽收敛三个账面变化都要在这里落到登记上
-        self._sync_resuming()
         self._persist()
         self._publish_snapshot()
 
@@ -384,7 +409,7 @@ class LifecycleMixin:
         resume_hashes 中非 pending 的成员不动(无账可闭, 不扩面)。幂等: 闭账后成员已不在
         账上, 重复拍零副作用(黄金法则 1); 全程主循环单线程内(黄金法则 5)。webui 呈现走
         静默移除(D10) —— job 零新增字段, 只留一行闭账日志; 收尾链与 _note_resume_state
-        同款(登记重算 + 落盘 + 换代快照)。
+        同款(落盘 + 换代快照)。
         """
         jid = job.job_id
         if not deleted or not tuple(h for h in job.resume_pending if h in deleted):
@@ -395,9 +420,6 @@ class LifecycleMixin:
         for h in deleted:
             self._deleted_streak.pop((jid, h), None)
         logger.info(f"relocate | job {jid}: 成员已删除, 恢复账闭账: {len(deleted)} 个({', '.join(deleted)})")
-        # 闭账动了 resume_hashes(relocating 登记面)与 resume_pending(resuming 登记面):
-        # _sync_relocating 末尾漏斗自带 _sync_resuming, 两面一次重算齐
-        self._sync_relocating()
         self._persist()
         self._publish_snapshot()
         return self._jobs.get(jid, job)

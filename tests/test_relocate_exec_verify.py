@@ -55,7 +55,7 @@
 - test_qbapi_delete_guard_file_kind_intersection_verdict: R3 文件级 verdict(计划
   26-11-13-0448 §03 R3)—— 不相交(组外异名带文件)放行 / 相交(成员/同名撞链接根)拦 /
   不可得(取数抛错/空清单)保守拦 / 目录级全量拦原样 / 多根重叠两序仍拦(file 豁免根
-  不短路 dir 全量拦, 评审轮 1 修 1) / 登记旧形(str)按目录级保守拦(兼容面)
+  不短路 dir 全量拦, 评审轮 1 修 1)(S5: 登记旧形(str)兼容面随派生查询退役 —— 只产四元组)
 - test_qbapi_delete_guard_allows_probe_tagged_seeds: 探测种子(tag 含 TAG_PROBE)落在活动别名
   根下也放行(评审 #5, 自造探针非组成员数据; 拦截会让探测清理 deleteFiles 恒失败)/ 普通种子
   同根仍拦
@@ -85,7 +85,7 @@ from auto_qb.core.qbapi import DeleteBlockedError, QbApi
 from auto_qb.infra import relocate_journal as rj
 
 from helpers import FakeClient, capture_logs
-from relocate_exec_support import _bare_mod, _job
+from relocate_exec_support import FakeRelocateQueries, _bare_mod, _job
 
 # ---------------------------------------------------------------- 纯函数层
 
@@ -153,7 +153,7 @@ def _rewritten_env(tmp_path, members, *, extra=(), alias_paths=("R:/src/l", ), r
     by_hash = {}
     for h, sp in list(members) + list(extra):
         by_hash[h] = _rec(h, sp)
-    mod = _bare_mod(store=types.SimpleNamespace(by_hash=by_hash, relocating_hashes=set()), data_dir=str(tmp_path))
+    mod = _bare_mod(store=types.SimpleNamespace(by_hash=by_hash), data_dir=str(tmp_path))
     rewrites = {h: {"status": "rewritten", "ts": 1.0} for h, _sp in members}
     body = {"phase": ru.PHASE_REWRITTEN, "rewrites": rewrites, "ts": 1.0}
     if replays:
@@ -302,7 +302,7 @@ def test_chain_gate_deps_scope_anchor_and_member_exempt(tmp_path):
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
 
     def _deps(job, records):
-        mod._ctx.store = types.SimpleNamespace(by_hash={h: _rec(h, sp) for h, sp in records}, relocating_hashes=set())
+        mod._ctx.store = types.SimpleNamespace(by_hash={h: _rec(h, sp) for h, sp in records})
         return [h for h, _sp in mod._chain_gate_deps(job)]
 
     # 本组豁免 + scope 外不计: 成员停在嵌套落点(dst ⊆ scope, 豁免承重), 组外种子停旧根兄弟目录
@@ -336,7 +336,7 @@ def test_chain_gate_deps_file_kind_intersection_verdict(tmp_path):
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
 
     def _deps(job, records):
-        mod._ctx.store = types.SimpleNamespace(by_hash={h: r for h, r in records}, relocating_hashes=set())
+        mod._ctx.store = types.SimpleNamespace(by_hash={h: r for h, r in records})
         return [h for h, _sp in mod._chain_gate_deps(job)]
 
     # 文件级 job: src=R:/src, scope=R:/src/Show, 链接账 = 内容根下 e00.mkv(嵌套成员形)
@@ -387,7 +387,7 @@ def test_chain_gate_deps_ancestor_savepath_grid(tmp_path):
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
 
     def _deps(job, records):
-        mod._ctx.store = types.SimpleNamespace(by_hash={r.hash: r for r in records}, relocating_hashes=set())
+        mod._ctx.store = types.SimpleNamespace(by_hash={r.hash: r for r in records})
         return [h for h, _sp in mod._chain_gate_deps(job)]
 
     # 0535 issue 原形: 组 src = R:/Download/PTing, 组外种子 save_path = R:/Download、
@@ -478,17 +478,10 @@ def test_chain_deps_text_form_aware_wording(tmp_path):
 
 
 class _GuardStore:
-    """QbApi 拦截判定的最小 store 替身: get/remove_torrent + relocating_alias_roots 登记
-
-    relocating_hashes = 成员账(R5(1) 文案分型的成员面, 计划 26-11-13-0448); 缺省空集 =
-    全部按组外文案分型(生产真 store 恒有该字段, 替身按需给)。
-    """
-    def __init__(self, records, roots=None, members=()):
+    """QbApi 拦截判定的最小 store 替身: get/remove_torrent(S5 起登记集不在 store 上)"""
+    def __init__(self, records):
         self._records = dict(records)
         self.removed = []
-        self.relocating_hashes = set(members)
-        if roots is not None:
-            self.relocating_alias_roots = dict(roots)
 
     def get(self, h):
         return self._records.get(h)
@@ -498,8 +491,17 @@ class _GuardStore:
 
 
 def _guard_api(records, roots=None, members=()):
+    """QbApi + ctx 假 relocate 模块(S5 派生查询替身): roots 入参沿用旧 dict 形
+    {src: (job_id, kind, alias_paths)}(调用点零改), 此处转 (src, job_id, kind, alias_paths)
+    四元组序列(ru.alias_roots_of 同形)喂替身; members = relocating 成员面(R5(1) 文案分型,
+    计划 26-11-13-0448); 缺省空 = 全部按组外文案分型(拦截判定不受影响)。"""
     client = FakeClient()
-    api = QbApi(client, _GuardStore(records, roots, members))
+    root_items = tuple((src, jid, kind, paths) for src, (jid, kind, paths) in (roots or {}).items())
+    api = QbApi(
+        client,
+        _GuardStore(records),
+        ctx=types.SimpleNamespace(relocate=FakeRelocateQueries(roots=root_items, members=members)),
+    )
     return api, client
 
 
@@ -552,14 +554,14 @@ def test_qbapi_delete_guard_ancestor_savepath_grid():
     assert ("delete", True) in client.calls, "祖先覆盖但异名不相交: 精判放行(R3 契约)"
     # 目录级: 祖先覆盖即拦(数据落 junction 树)
     client.calls.clear()
-    api.store.relocating_alias_roots = {"R:/Download/PTing": ("j2", "dir", ())}
+    api.ctx.relocate.roots = (("R:/Download/PTing", "j2", "dir", ()), )
     with pytest.raises(DeleteBlockedError):
         api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
     assert not any(c[0] == "delete" for c in client.calls)
     # 清单不可得(空表): 内容根不可判 -> 该格不命中, 候选面不猜(放行; 精判面保守拦只
     # 作用于路径面候选, 祖先格无清单即无覆盖事实)
     client.calls.clear()
-    api.store.relocating_alias_roots = {"R:/Download/PTing": ("j1", "file", ("R:/Download/PTing/e00.mkv", ))}
+    api.ctx.relocate.roots = (("R:/Download/PTing", "j1", "file", ("R:/Download/PTing/e00.mkv", )), )
     api.store._records["HN"] = _rec_files("HN", "R:/Download", ())
     api.torrents_delete(torrent_hashes=["HN"], delete_files=True)
     assert ("delete", True) in client.calls, "清单不可得: 祖先格不命中(候选面不猜)"
@@ -651,7 +653,7 @@ def test_qbapi_delete_guard_file_kind_intersection_verdict():
     # 拦: 同名撞链接根(E3 同名跨种形态, 嵌套成员形)
     client.calls.clear()
     api.store._records["HB"] = _rec_files("HB", "R:/src", ("Show/e00.mkv", ))
-    api.store.relocating_alias_roots = {"R:/src": ("j9", "file", ("R:/src/Show/e00.mkv", ))}
+    api.ctx.relocate.roots = (("R:/src", "j9", "file", ("R:/src/Show/e00.mkv", )), )
     with pytest.raises(DeleteBlockedError):
         api.torrents_delete(torrent_hashes=["HB"], delete_files=True)
     assert not any(c[0] == "delete" for c in client.calls)
@@ -665,7 +667,7 @@ def test_qbapi_delete_guard_file_kind_intersection_verdict():
     # 目录级原样: 全量拦(清单不相交也拦, N5 junction 通路)
     client.calls.clear()
     api.store._records["HD"] = _rec_files("HD", "R:/src", ("other.bin", ))
-    api.store.relocating_alias_roots = {"R:/src": ("j1", "dir", ())}
+    api.ctx.relocate.roots = (("R:/src", "j1", "dir", ()), )
     with pytest.raises(DeleteBlockedError):
         api.torrents_delete(torrent_hashes=["HD"], delete_files=True)
     assert not any(c[0] == "delete" for c in client.calls)
@@ -673,30 +675,26 @@ def test_qbapi_delete_guard_file_kind_intersection_verdict():
     # file 根在前 -> 豁免只跳过该根, 后面的 dir 根仍必须拦(评审员实复现的序敏感放行洞)
     client.calls.clear()
     api.store._records["HZ"] = _rec_files("HZ", "R:/src/d1/z.bin", ("z.bin", ))
-    api.store.relocating_alias_roots = {
-        "R:/src": ("jA", "file", ("R:/src/rlfn.bin", )),
-        "R:/src/d1": ("jB", "dir", ()),
-    }
+    api.ctx.relocate.roots = (
+        ("R:/src", "jA", "file", ("R:/src/rlfn.bin", )),
+        ("R:/src/d1", "jB", "dir", ()),
+    )
     with pytest.raises(DeleteBlockedError) as ei:
         api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
     assert ei.value.blocked[0][1:] == ("R:/src/d1", "jB"), ei.value.blocked
     assert not any(c[0] == "delete" for c in client.calls)
     # 反序: dir 根在前(file 根在后) -> 同样拦(两序钉死, 防序敏感回归)
     client.calls.clear()
-    api.store.relocating_alias_roots = {
-        "R:/src/d1": ("jB", "dir", ()),
-        "R:/src": ("jA", "file", ("R:/src/rlfn.bin", )),
-    }
+    api.ctx.relocate.roots = (
+        ("R:/src/d1", "jB", "dir", ()),
+        ("R:/src", "jA", "file", ("R:/src/rlfn.bin", )),
+    )
     with pytest.raises(DeleteBlockedError) as ei2:
         api.torrents_delete(torrent_hashes=["HZ"], delete_files=True)
     assert ei2.value.blocked[0][1:] == ("R:/src/d1", "jB"), ei2.value.blocked
     assert not any(c[0] == "delete" for c in client.calls)
-    # 兼容面: 登记值旧形(str job_id)形态不可判 -> 目录级保守拦(与 R3 前判据同口径)
-    client.calls.clear()
-    api.store.relocating_alias_roots = {"R:/src": "j-old"}
-    with pytest.raises(DeleteBlockedError):
-        api.torrents_delete(torrent_hashes=["HD"], delete_files=True)
-    assert not any(c[0] == "delete" for c in client.calls)
+    # 登记值旧形(str job_id)兼容面用例已退役(S5 派生查询只产四元组, 旧形分支结构性消失,
+    # 计划 26-11-15-2340 刀3) —— 拦截判定面不再有「形态不可判」输入形态。
 
 
 def test_qbapi_delete_guard_allows_outside_and_unregistered():
@@ -705,7 +703,7 @@ def test_qbapi_delete_guard_allows_outside_and_unregistered():
     api, client = _guard_api(records, None)  # 无登记
     api.torrents_delete(torrent_hashes=["HA"], delete_files=True)
     assert ("delete", True) in client.calls
-    api2, client2 = _guard_api({}, {r"R:\src": "j1"})  # 有登记但种子不在快照: 不可判, 放行
+    api2, client2 = _guard_api({}, {r"R:\src": ("j1", "dir", ())})  # 有登记但种子不在快照: 不可判, 放行
     api2.torrents_delete(torrent_hashes=["HX"], delete_files=True)
     assert ("delete", True) in client2.calls
 
@@ -718,8 +716,8 @@ def test_qbapi_delete_guard_allows_probe_tagged_seeds():
 
     probe = types.SimpleNamespace(hash="HP", save_path=r"R:\src\probe-x", tags_set=frozenset({TAG_PROBE}))
     normal = _rec("HA", r"R:\src")  # 无 tags_set 属性(旧形态替身也判得出: 非探针)
-    api, client = _guard_api({"HP": probe, "HA": normal}, {r"R:\src": ("j1", "dir", ())})  # 生产新形
-    # (评审轮 1 修 4; str 旧形兼容面由 webui 删除命令两用例与本文件 intersection 用例尾行覆盖)
+    api, client = _guard_api({"HP": probe, "HA": normal}, {r"R:\src": ("j1", "dir", ())})  # 四元组形(S5 派生口径)
+    # (评审轮 1 修 4)
     api.torrents_delete(torrent_hashes=["HP"], delete_files=True)  # 探针: 放行
     assert ("delete", True) in client.calls
     with pytest.raises(DeleteBlockedError) as ei:  # 普通成员种子同根: 照拦
@@ -743,8 +741,9 @@ def test_webui_delete_blocked_receipt_single_and_group(tmp_path):
     from webui_helpers import _make_grouped_manager
 
     mgr, client, key = _make_grouped_manager(str(tmp_path))
-    mgr.store.relocating_alias_roots = {r"R:\Downloads": "j1"}
-    mgr.store.relocating_hashes = {"HA"}
+    # S5 派生查询替身: 拦截数据面经 ctx.relocate 查询喂入(目录别名根 R:\Downloads + 成员 HA)
+    mgr.ctx.relocate.alias_roots = lambda: ((r"R:\Downloads", "j1", "dir", (r"R:\Downloads", )), )
+    mgr.ctx.relocate.relocating_hashes = lambda: frozenset({"HA"})
     # 单发路径
     mgr.web.commands.put(("delete_torrent", {"hash": "HA", "delete_files": True, "cmd_id": "d1"}))
     mgr.web.consume_commands()
@@ -813,8 +812,9 @@ def test_webui_delete_blocked_receipt_bulk_and_no_cmd_id(tmp_path):
     from webui_helpers import _make_grouped_manager
 
     mgr, client, key = _make_grouped_manager(str(tmp_path))
-    mgr.store.relocating_alias_roots = {r"R:\Downloads": "j1"}
-    mgr.store.relocating_hashes = {"HA", "HB"}  # R5(1) 成员分型: 整批按成员出路句回显
+    # S5 派生查询替身: 拦截数据面经 ctx.relocate 查询喂入(R5(1) 成员分型: 整批按成员出路句回显)
+    mgr.ctx.relocate.alias_roots = lambda: ((r"R:\Downloads", "j1", "dir", (r"R:\Downloads", )), )
+    mgr.ctx.relocate.relocating_hashes = lambda: frozenset({"HA", "HB"})
     # 批量路径(cmd_id 在场): 整批不发 qB, error 回执
     mgr.web.commands.put(
         ("bulk_torrents", {

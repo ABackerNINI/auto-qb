@@ -498,10 +498,11 @@ def test_module_guard_branches(tmp_path, monkeypatch):
     mod.stop()
     monkeypatch.undo()
 
-    # 无上下文: state 容器为空 dict; relocating 同步/任务线直接返回
+    # 无上下文: state 容器为空 dict; 派生查询/任务线直接返回(S5: 派生只读内存账, 不触 ctx)
     bare = type(mod)()
     assert bare._state_jobs() == {}
-    bare._sync_relocating()
+    assert bare.relocating_hashes() == frozenset() and bare.resuming_hashes() == frozenset()
+    assert bare.alias_roots() == ()
     bare.on_task_line()
     assert bare.resolve_physical("") == ""
 

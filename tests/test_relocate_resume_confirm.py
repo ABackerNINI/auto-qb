@@ -36,17 +36,18 @@
   job_from_dict 往返(旧账缺字段 = 空账)+ 重启(_load_jobs)后续跑不丢
 - test_no_resume_hashes_is_noop: 无暂停成员(豁免/直接形态)零 API 调用零挂账
 - test_dry_run_reconcile_never_writes: dry-run 下确认核对零动作(不补发不落盘)
-- test_resuming_registry_tracks_account_no_lag: resuming 登记 = 账窗口 —— 挂账拍即登记
-  (随 _note_resume_state 即时重算, 不等 _set_job 不滞后), 账闭合拍即撤登记; 老 store
-  替身无该字段自建不炸(issue 26-11-15-0441)
+- test_resuming_registry_tracks_account_no_lag: resuming 让路面 = 账窗口 —— 挂账拍即在册
+  (派生查询随账面换代即时收敛, 不等 _set_job), 账闭合拍即出册; 裸替身形状前提钉(ctx 无
+  relocate 句柄; 消费面 getattr None 分支由 test_fuse_mod 的
+  test_fuse_no_relocate_handle_yields_nothing 真实消费覆盖, S5 口径)
 ### job_id 复用结转(issue 26-11-15-0344, 计划 26-11-15-0914 S1)
 - test_carried_resume_pending_reopens_account_via_arm_chain: 旧账结转成员并入新账 resume_hashes 后,
   经 _arm 开账面(_resume_members)挂账全量 + retries 从 0 重计, 退避点补发仍停着的结转成员,
   快照回流后确认闭合(走正常补发确认链)
-- test_resuming_registry_keeps_terminal_job_and_exhausted_members: 终态挂账 job 仍登记
-  (不沿用 active_jobs 过滤); 穷尽收敛(pending 只剩仍停者)登记保持, 自愈闭合即撤
+- test_resuming_registry_keeps_terminal_job_and_exhausted_members: 终态挂账 job 仍在册
+  (不沿用 active_jobs 过滤); 穷尽收敛(pending 只剩仍停者)在册保持, 自愈闭合即出册
 - test_resuming_registry_rebuilt_on_load_jobs: 启动加载面 —— state 恢复的挂账 job(终态与否)
-  经 _load_jobs 重建登记(resume_pending 随 state 持久, 让路窗口在第一次账面变更前就在场)
+  灌回后让路面即在场(resume_pending 随 state 持久, 派生查询现算无重建挂点)
 ### 已删成员闭账(issue 26-11-15-0345, 计划 26-11-15-0914 S2)
 - test_resume_deleted_member_confirmed_closes_account: 连续 3 拍不在 store -> 判真删除闭账
   (pending/resume_hashes 双清 + 闭账日志一行, 零 qB 写)
@@ -58,8 +59,8 @@
   余量停着成员继续走补发链(预算/退避不乱)
 - test_resume_closure_adds_no_exhaustion_warning: 闭账不新增穷尽告警(穷尽告警仍每开账回合
   一笔, 闭账拍与闭账后零新增零重复)
-- test_resume_closure_recomputes_registries: 闭账后 relocating/resuming 登记即时重算正确
-  (已删成员撤出两面, 停着的余量保留)
+- test_resume_closure_recomputes_registries: 闭账后 relocating/resuming 派生即时收敛正确
+  (已删成员撤出两面, 停着的余量保留; 派生查询现算无重算挂点)
 - test_resume_closure_idempotent: 幂等: 闭账后重复拍无副作用(账面/登记零变化, 零新日志)
 - test_resume_deleted_closure_keeps_non_pending_member: 闭账只删 pending 里确认真删的成员,
   resume_hashes 上非 pending(已闭合)成员保留(kept 过滤, issue 26-11-15-1433); 把闭账口径
@@ -123,7 +124,7 @@ def test_resume_issue_failure_books_pending_and_reissues():
 
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=_resume),
-        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}),
     )
     mod._fail(_job(resume_hashes=("HA", )), "move_stalled", "停滞")  # 失败出口触发恢复, 首发即异常
 
@@ -157,7 +158,7 @@ def test_resume_reissue_only_still_stopped_members():
         store=types.SimpleNamespace(by_hash={
             "HA": _stopped("HA"),
             "HB": _running("HB")
-        }, relocating_hashes=set()),
+        }),
     )
     mod._jobs["j1"] = _job("j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", "HB"))
     mod._note_resume_state("j1", ("HA", "HB"), 0)
@@ -181,7 +182,7 @@ def test_resume_retries_exhausted_books_surplus_then_self_heals():
         store=types.SimpleNamespace(by_hash={
             "HA": _stopped("HA"),
             "HB": _stopped("HB")
-        }, relocating_hashes=set()),
+        }),
     )
     mod._fail(_job(resume_hashes=("HA", "HB")), "move_stalled", "停滞")
     issues.clear()
@@ -228,7 +229,7 @@ def test_resume_budget_shared_across_exits():
     issues = []
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
-        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}),
     )
     mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
     mod._resume_members(mod._jobs["j1"])  # armed 出口首发(成功下发, 确认未过)
@@ -260,7 +261,7 @@ def test_resume_issue_failure_at_exhausted_budget_no_empty_promise():
 
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=_boom),
-        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}),
     )
     mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
     mod._resume_members(mod._jobs["j1"])  # armed 首发(异常)
@@ -400,7 +401,7 @@ def test_exit_fail_books_pending_on_failed():
     issues = []
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
-        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}),
     )
     mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
     out = mod._fail(mod._jobs["j1"], "verify_mismatch", "不符")
@@ -491,31 +492,34 @@ def test_dry_run_reconcile_never_writes():
     assert mod._jobs["j1"].resume_pending == ("HA", )
 
 
-# ---------- resuming 登记(fuse 让路口径, issue 26-11-15-0441): 生命周期 = 账窗口 ----------
-# 口径: fuse 让路 = resume_pending 非空的账窗口(store.resuming_hashes, _sync_resuming 单点
-# 重算), 不再消费 job 级的 relocating_hashes —— 挂账拍登记在场, 闭合拍撤登记, 终态挂账
-# job 与穷尽仍停者都不漏。登记本身保留 relocating(grouping/ops_skip/qbapi 仍消费)。
+# ---------- resuming 让路面(fuse 让路口径, issue 26-11-15-0441): 生命周期 = 账窗口 ----------
+# 口径: fuse 让路 = resume_pending 非空的账窗口, 经 RelocateModule.resuming_hashes() 派生
+# 查询消费(S5 登记集退役, 计划 26-11-15-2340 刀3), 不再消费 job 级的 relocating 口径 ——
+# 挂账拍即在册, 闭合拍出册, 终态挂账 job 与穷尽仍停者都不漏。relocating 口径保留
+# (grouping/ops_skip/qbapi 仍消费)。
 
 
 def test_resuming_registry_tracks_account_no_lag():
-    """登记随落账即时重算不滞后: 挂账拍即登记(不等 _set_job —— 挂账单点不走它), 账闭合拍
-    即撤登记; 老 store 替身无 resuming_hashes 字段自建一份不炸(getattr 缺省口径)"""
+    """让路面随账面换代即时收敛: 挂账拍即在册(不等 _set_job —— 挂账单点不走它), 账闭合拍
+    即出册。替身 ctx 无 relocate 句柄 = 裸替身形状前提钉(只钉 getattr 落 None 的形状,
+    不假称覆盖消费防御分支 —— 后者由 test_fuse_mod 的 fuse 拍真实消费用例覆盖)"""
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
         store=types.SimpleNamespace(by_hash={"HA": _running()}),
     )
-    assert not hasattr(mod._ctx.store, "resuming_hashes"), "替身无该字段(老形状)"
+    relocate = getattr(mod._ctx, "relocate", None)
+    assert relocate is None, "替身 ctx 无 relocate 句柄(裸替身形状)"
     mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
     mod._note_resume_state("j1", ("HA", ), 0)  # 挂账(落账单点): 不经 _set_job
-    assert mod._ctx.store.resuming_hashes == {"HA"}, "挂账即登记(同一落账点内重算, 不滞后一拍)"
+    assert mod.resuming_hashes() == {"HA"}, "挂账即在册(派生查询现算, 无登记滞后窗)"
     mod._reconcile_resume_pending()  # 成员已回运行态(stalledUP): 确认闭合清账
     assert mod._jobs["j1"].resume_pending == ()
-    assert mod._ctx.store.resuming_hashes == set(), "账闭合即撤登记"
+    assert mod.resuming_hashes() == set(), "账闭合即出册"
 
 
 def test_resuming_registry_keeps_terminal_job_and_exhausted_members():
-    """终态挂账 job 仍登记(不沿用 relocating 的 active_jobs 过滤 —— reconcile 对账口径就是
-    终态也扫); 穷尽收敛(pending 只剩仍停者)登记保持, 全员自愈回运行态即闭合撤登记"""
+    """终态挂账 job 仍在册(不沿用 relocating 的 active_jobs 过滤 —— reconcile 对账口径就是
+    终态也扫); 穷尽收敛(pending 只剩仍停者)在册保持, 全员自愈回运行态即闭合出册"""
     issues = []
 
     def _boom(**kw):
@@ -527,21 +531,21 @@ def test_resuming_registry_keeps_terminal_job_and_exhausted_members():
     )
     mod._fail(_job(resume_hashes=("HA", )), "move_stalled", "停滞")
     assert mod._jobs["j1"].phase == ru.PHASE_FAILED, "job 已终态"
-    assert mod._ctx.store.resuming_hashes == {"HA"}, "终态挂账 job 仍登记(armed 期穷尽后同 job 终态仍挂账)"
-    for _ in range(RESUME_MAX):  # 补发穷尽(全部异常): pending 收敛到仍停者, 登记保持
+    assert mod.resuming_hashes() == {"HA"}, "终态挂账 job 仍在册(armed 期穷尽后同 job 终态仍挂账)"
+    for _ in range(RESUME_MAX):  # 补发穷尽(全部异常): pending 收敛到仍停者, 在册保持
         mod._clock.advance(RESUME_BACKOFF)
         mod._reconcile_resume_pending()
     assert mod._jobs["j1"].resume_retries == RESUME_MAX
     assert mod._jobs["j1"].resume_pending == ("HA", )
-    assert mod._ctx.store.resuming_hashes == {"HA"}, "穷尽仍停者继续登记(triggered 分支不补暂停口径保持)"
+    assert mod.resuming_hashes() == {"HA"}, "穷尽仍停者继续在册(triggered 分支不补暂停口径保持)"
     mod._ctx.store.by_hash["HA"] = _running()  # 用户手动恢复/qB 自愈
     mod._reconcile_resume_pending()
-    assert mod._ctx.store.resuming_hashes == set(), "自愈闭合即撤登记"
+    assert mod.resuming_hashes() == set(), "自愈闭合即出册"
 
 
 def test_resuming_registry_rebuilt_on_load_jobs():
-    """启动加载面: state 恢复的挂账 job(终态与否)经 _load_jobs 重建登记 —— resume_pending
-    随 state 持久, 重启后账还活着, 让路窗口在第一次账面变更前就在场(走 _sync_relocating 漏斗)"""
+    """启动加载面: state 恢复的挂账 job(终态与否)灌回后让路面即在场 —— resume_pending 随
+    state 持久, 重启后账还活着, 让路窗口在第一次账面变更前就在场(派生查询从恢复的账现算)"""
     mod = _resume_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: None))
     mod._ctx.state.data = {
         "relocate":
@@ -562,7 +566,7 @@ def test_resuming_registry_rebuilt_on_load_jobs():
             }
     }
     assert mod._load_jobs() == 2
-    assert mod._ctx.store.resuming_hashes == {"HA", "HB", "HC"}, "挂账 job(含终态 j2)的成员全部重建进登记"
+    assert mod.resuming_hashes() == {"HA", "HB", "HC"}, "挂账 job(含终态 j2)的成员派生即在册"
 
 
 def test_carried_resume_pending_reopens_account_via_arm_chain():
@@ -578,7 +582,7 @@ def test_carried_resume_pending_reopens_account_via_arm_chain():
         store=types.SimpleNamespace(by_hash={
             "HC": _running("HC"),
             "HB": _stopped("HB")
-        }, relocating_hashes=set()),
+        }),
     )
     # 上一生命周期: 终态 + 穷尽挂账(HB 未恢复, retries 已耗尽)
     mod._jobs["j1"] = _job(
@@ -621,7 +625,7 @@ def test_resume_deleted_member_confirmed_closes_account():
     issues = []
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
-        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={}),
     )
     mod._jobs["j1"] = _job(
         "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
@@ -644,7 +648,7 @@ def test_resume_snapshot_gap_resets_deleted_streak():
     issues = []
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
-        store=types.SimpleNamespace(by_hash={"HA": _stopped()}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HA": _stopped()}),
     )
     mod._jobs["j1"] = _job(
         "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
@@ -675,7 +679,7 @@ def test_resume_all_deleted_closes_via_existing_close_path():
     """全员删除 -> 连续 3 拍后闭账(双清归零), 既有闭合路径接管: 退避表/穷尽去重清掉"""
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
-        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={}),
     )
     mod._jobs["j1"] = _job(
         "j1",
@@ -702,7 +706,7 @@ def test_resume_mixed_deleted_and_stopped_only_deleted_closed():
     issues = []
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: issues.append(list(kw["torrent_hashes"]))),
-        store=types.SimpleNamespace(by_hash={"HB": _stopped("HB")}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HB": _stopped("HB")}),
     )
     mod._jobs["j1"] = _job("j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", "HB"), resume_pending=("HA", "HB"))
     with capture_logs(LOG_NAME) as cap:
@@ -728,7 +732,7 @@ def test_resume_deleted_closure_keeps_non_pending_member():
     resume_hashes, 或把 kept 写成 remaining pending, 本例必红"""
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
-        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={}),
     )
     mod._jobs["j1"] = _job(
         "j1",
@@ -752,7 +756,7 @@ def test_resume_closure_adds_no_exhaustion_warning():
     """闭账不新增穷尽告警: 穷尽告警仍每开账回合一笔, 闭账拍与闭账后零新增零重复"""
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
-        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={}),
     )
     mod._jobs["j1"] = _job(
         "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
@@ -768,10 +772,11 @@ def test_resume_closure_adds_no_exhaustion_warning():
 
 
 def test_resume_closure_recomputes_registries():
-    """闭账后 relocating/resuming 登记即时重算: 已删成员撤出两面, 停着的余量保留"""
+    """闭账后 relocating/resuming 派生即时收敛(派生查询现算, 无重算挂点可漏):
+    已删成员撤出两面, 停着的余量保留"""
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
-        store=types.SimpleNamespace(by_hash={"HB": _stopped("HB")}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={"HB": _stopped("HB")}),
     )
     mod._jobs["j1"] = _job(
         "j1",
@@ -782,20 +787,19 @@ def test_resume_closure_recomputes_registries():
         resume_pending=("HA", "HB"),
         resume_retries=RESUME_MAX,
     )
-    mod._sync_relocating()  # 预挂登记: relocating = hashes ∪ resume_hashes
-    assert mod._ctx.store.relocating_hashes == {"HM", "HA", "HB"}
-    assert mod._ctx.store.resuming_hashes == {"HA", "HB"}
+    assert mod.relocating_hashes() == {"HM", "HA", "HB"}, "relocating = hashes ∪ resume_hashes(派生)"
+    assert mod.resuming_hashes() == {"HA", "HB"}
     for _ in range(DELETED_TICKS):  # HA 连续 3 拍不在 store -> 闭账
         mod._reconcile_resume_pending()
-    assert mod._ctx.store.relocating_hashes == {"HM", "HB"}, "已删 HA 撤出 relocating, 现场成员 HM 与余量 HB 保留"
-    assert mod._ctx.store.resuming_hashes == {"HB"}, "已删 HA 撤出 resuming; 停着的 HB 保留"
+    assert mod.relocating_hashes() == {"HM", "HB"}, "已删 HA 撤出 relocating, 现场成员 HM 与余量 HB 保留"
+    assert mod.resuming_hashes() == {"HB"}, "已删 HA 撤出 resuming; 停着的 HB 保留"
 
 
 def test_resume_closure_idempotent():
-    """幂等(黄金法则 1): 闭账后重复拍无副作用 —— 账面/登记零变化, 零新日志"""
+    """幂等(黄金法则 1): 闭账后重复拍无副作用 —— 账面/让路面零变化, 零新日志"""
     mod = _resume_mod(
         api=types.SimpleNamespace(torrents_resume=lambda **kw: None),
-        store=types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        store=types.SimpleNamespace(by_hash={}),
     )
     mod._jobs["j1"] = _job(
         "j1", phase=ru.PHASE_FAILED, resume_hashes=("HA", ), resume_pending=("HA", ), resume_retries=RESUME_MAX
@@ -804,13 +808,13 @@ def test_resume_closure_idempotent():
         mod._reconcile_resume_pending()
     job = mod._jobs["j1"]
     assert job.resume_pending == () and job.resume_hashes == (), "闭账已完成(用例自证)"
-    resuming_before = set(mod._ctx.store.resuming_hashes)
+    resuming_before = mod.resuming_hashes()
     with capture_logs(LOG_NAME) as cap:
         for _ in range(3):  # 重复拍
             mod._reconcile_resume_pending()
     assert mod._jobs["j1"] is job, "重复拍不重建账面对象"
     assert mod._jobs["j1"].resume_pending == () and mod._jobs["j1"].resume_hashes == ()
-    assert set(mod._ctx.store.resuming_hashes) == resuming_before, "登记零变化"
+    assert mod.resuming_hashes() == resuming_before, "让路面零变化"
     assert ("j1", "HA") not in mod._deleted_streak, "streak 已随闭账清掉"
     assert cap.messages == [], f"重复拍零新日志: {cap.messages}"
 

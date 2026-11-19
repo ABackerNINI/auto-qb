@@ -7,7 +7,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_file_links_keep_group_together: 活跃 job 作用域内, 指向 src 的成员与已到 dst 的 mover 同组
-- test_relocating_skips_missing_scan: relocating 登记内的组不触发缺文件扫描(不暂停/不打标)
+- test_relocating_skips_missing_scan: relocating 派生窗口内的组不触发缺文件扫描(不暂停/不打标)
 - test_new_member_joins_alias_group: 别名期间新增同内容辅种并进同一组
 - test_cross_group_conflict_still_blocks: 同名不同内容(文件集不同)仍被交叉检测拦下并暂停下载方
 - test_third_party_junction_joins_group: 第三方目录 junction 的种子按解析后物理目录并组
@@ -55,7 +55,7 @@ def test_file_links_keep_group_together(tmp_path):
 
 
 def test_relocating_skips_missing_scan(tmp_path):
-    """2. 搬迁窗口: 组内成员在 relocating 登记内 ⇒ 跳过错文件扫描(不暂停、不打 MISSING)"""
+    """2. 搬迁窗口: 组内成员在 relocating 派生窗口内 ⇒ 跳过错文件扫描(不暂停、不打 MISSING)"""
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     grouping._assign_new_torrent("HA")
@@ -64,13 +64,13 @@ def test_relocating_skips_missing_scan(tmp_path):
     for f in os.listdir(content):  # 模拟 qB 正在把文件搬走(此刻盘上确实没有)
         os.remove(os.path.join(content, f))
     client.calls.clear()
-    mgr.store.relocating_hashes = {"HA", "HB"}
+    mgr.ctx.relocate.relocating_hashes = lambda: frozenset({"HA", "HB"})  # 搬迁窗口在册(喂派生查询替身)
     grouping._scan_triggered_groups({key}, dry_run=False)
     assert not any(c[0] in ("stop", "pause") for c in client.calls), client.calls
     assert mgr.config.grouping.missing_tag not in mgr.store.by_hash["HA"].tags_set
 
     # 反证: 不在搬迁窗口时同一现场会被判缺失(整组暂停 + 打标), 证明上面是「让路」不是「坏了」
-    mgr.store.relocating_hashes = set()
+    mgr.ctx.relocate.relocating_hashes = lambda: frozenset()  # 窗口出册
     grouping._scan_triggered_groups({key}, dry_run=False)
     assert any(c[0] in ("stop", "pause") for c in client.calls), client.calls
 
