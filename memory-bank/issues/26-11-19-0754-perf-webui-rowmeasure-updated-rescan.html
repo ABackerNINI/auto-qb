@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>columns_grid.js _measureRowH 经 updated() 每收敛拍对全窗行无条件 gBCR(签名未变也重探): 首访指纹 55→~155 的直接来源 · perf · 计划外问题</title>
+<meta name="issue-slug" content="webui-rowmeasure-updated-rescan">
+<meta name="issue-stamp" content="26-11-19-0754">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="webui-rowmeasure-updated-rescan">
+<meta name="doc-refs" content="memory-bank/issues/26-11-19-0258-test-e2e-perf-3000-first-visit-fingerprint-drift.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="columns_grid.js _measureRowH 经 updated() 每收敛拍对全窗行无条件 gBCR(签名未变也重探): 首访指纹 55→~155 的直接来源">
+<meta name="issue-summary" content="首访估算开窗的逐行量高在每次 updated() 收敛拍都全窗重探(签名判定只管作废、不管跳过), gBCR 次数 = 窗行数 x 收敛拍数; 引擎侧把 e2e 首访路径指纹从档案值 55 抬到 143-158 —— 量具面预算已按拍板重标定(issue 26-11-19-0258), 本条记引擎优化面, 修后可回抬预算余量">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· perf</div>
+<h1>columns_grid.js _measureRowH 经 updated() 每收敛拍对全窗行无条件 gBCR(签名未变也重探): 首访指纹 55→~155 的直接来源</h1>
+<p class="lede">首访估算开窗的逐行量高在每次 updated() 收敛拍都全窗重探(签名判定只管作废、不管跳过), gBCR 次数 = 窗行数 x 收敛拍数; 引擎侧把 e2e 首访路径指纹从档案值 55 抬到 143-158 —— 量具面预算已按拍板重标定(issue 26-11-19-0258), 本条记引擎优化面, 修后可回抬预算余量</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-19-0754-perf-webui-rowmeasure-updated-rescan</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 07:54</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>修量具 issue <a href="26-11-19-0258-test-e2e-perf-3000-first-visit-fingerprint-drift.html">26-11-19-0258</a>(首访路径指纹预算重标定)的取证轮撞见: e2e/perf.spec.mjs 首访路径指纹的 gBCR 计数从档案值 55 涨到 143-158(300/600/3000 种子档同量级)。取证轮先怀疑测量窗被背景轮询污染, 做了停轮询结构隔离试验(A/B bench 同款手法)—— 数字逐位不变, 排除轮询污染; 逐元素打点坐实全部计数来自首访自身的 updated() 收敛拍逐行量高, 即本条记录的引擎构成。触发条件: 种子视图首访(估算开窗档), 与种子档位无关(窗口行数恒定)。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-19(临时打点 + 结构隔离试验, e2e/perf.spec.mjs 首访路径指纹用例, 视口 1440x900)
+隔离试验(测量窗前 stopPolling+stopEvents+影子化 scheduleNext, 打点实证窗内 polls.main=false/
+  _es=false/_verTimer=false): 隔离前后数字逐位相同 —— 轮询贡献为零
+隔离后实测(3 轮逐位相同, 双皮): 300 档 prism 143 / atlas 146; 3000 档 prism 155 / atlas 158
+构成(逐元素打点, 3000 档 prism 窗内 155 次): .torrent-row 级 ~139 + 非行级 ~16(BODY/sticky-head/
+  group-table/statusbar); distinct rows 恒 32(= f(视口 1440x900), 与种子档无关) —— 每行 ~4 遍
+rowWin=false 对照: 窗内 gBCR=1(关窗不逐行量) —— 计数全部来自窗口化路径的量高拍
+对照档案: 2026-11-02 引入时实测 gbr≈55(窗口 ~24 行时代)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>种子视图首访(估算开窗档), 每次进页必现; 与种子档位无关(窗口行数恒定)</td></tr>
+    <tr><td>影响范围</td><td>主表行高测量路径: 首访 gBCR(= 强制同步布局)次数为旧基线 ~3x(55 → 143-158); 随每次 updated() 收敛拍全窗重探, 收敛拍越多放大越多(滚动补行/窗口重算等亦触发同路径)</td></tr>
+    <tr><td>严重度</td><td>中(首访多 ~100 次全窗逐行 gBCR, 单次小但属无谓重复; 量具面已按拍板重标定, 本条修后预算余量可回抬)</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+  <ul class="todo">
+    <li><code>src/auto_qb/webui/static/shared/columns_grid.js:566</code> 附近（取证 2026-11-19 07:54）· <code>_measureRowH</code> · grep <code>_measureRowH</code> / <code>_rowHs</code>(量高循环 <code>for (const r of rows) ... r.getBoundingClientRect()</code> 无条件发 gBCR)</li>
+    <li>触发链: <code>updated()</code>(lifecycle.js)每收敛拍调 <code>_measureRowH</code> · grep <code>_measureRowH</code> lifecycle.js; 签名判定(列集合/窗宽代)只管作废存量值、不管跳过未变行 —— grep <code>签名</code> columns_grid.js</li>
+    <li>量具侧断言: <code>e2e/perf.spec.mjs</code> · grep <code>首访路径指纹</code> / <code>FIRST_VISIT_GBR_BUDGET</code>(重标定注)</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">已定位: <code>_measureRowH</code> 的量高循环对 <code>querySelectorAll(sel)</code> 命中的每一行无条件调 <code>r.getBoundingClientRect()</code>, 行高存值仅在 |差|&gt;0.5 时覆盖 —— 即"签名未变的行也逐拍重探"。首访期间 updated() 收敛拍有 ~4 拍(页签切换渲染 + 窗口填充 + <code>_rowHVer</code> 收敛重算), 32 行 x ~4 拍 + reprobe + 非行级 ≈ 155。已排除: 背景轮询混入(隔离试验数字逐位不变)、种子档位放大(distinct rows 恒 32, 300/3000 档同量级)、rowWin 关窗路径(关窗 gBCR=1)。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+  <p>签名未变行跳过: 量高循环前先按行签名(窗宽代 + 行键 + 已存值在案)过滤, 只对"无存值 / 签名作废 / 窗口新进"的行发 gBCR, 存值在案的未变行直接复用 <code>_rowHs</code>。注意与既有机制共存: 签名作废面(列集合/窗宽变化翻 <code>_winMeasured</code>)与 <code>_reprobeRenderedRowH</code> 的 render 拍真值修正语义不变 —— 跳过的是"未变行每拍重探", 不是"存值永不复核"; reprobe 拍的逐行修正保留(它是首访后唯一的真值收敛面)。代价: 判定逻辑加一拍哈希比对, 换掉的是物理 gBCR(强制同步布局)。修后量具面收益: 首访指纹从 ~155 回落到 ~"行数 x 实际变化拍 + reprobe", e2e/perf.spec.mjs 的 <code>FIRST_VISIT_GBR_BUDGET</code> 可回抬余量(该注已声明联动)。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-19 07:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-19-0754-perf-webui-rowmeasure-updated-rescan.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

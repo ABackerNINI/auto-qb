@@ -76,6 +76,12 @@ import { INST, readInst } from './lib/vm.mjs';
  * bench 前拆主轮 + 推送通道 + 影子化 scheduleNext(bench 轮内 refresh 尾部续拍会重新 arm),
  * P1-3 的 gbr 计数改 benchRun 分段口径(判据只看 on 侧); P1-2 判据与预算公式零放松。
  * 机制与动作清单见测试内 quiesce 注释块与 P1-3 分段计数注。
+ *
+ * -- P1-2 首访路径指纹预算重标定(issue 26-11-19-0258 修法, 2026-11-19): 150 -> 185 ——
+ * 取证(停轮询隔离试验 + 逐元素打点)证明数字为 updated() 收敛拍的固有合法构成(轮询贡献为零,
+ * 跨种子档恒定, 3 轮逐位相同), 档案值 55 / 旧预算 150 被引擎演化作废; 判据语义不变, 视口
+ * 依赖已被 config 1440x900 钉住; 引擎侧冗余重探另入池 issue 26-11-19-0754。构成与新余量
+ * 见 FIRST_VISIT_GBR_BUDGET 常量注。
  */
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
@@ -130,6 +136,20 @@ const measureWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * 与 ROW_WIN_MIN 合并; 低于此值窗口化本身关闭(off 全量渲染), win==full 恒等平凡成立。
  */
 const ROW_WIN_EST_MIN = 200;
+
+/**
+ * 首访路径指纹 gBR 预算(2026-11-19 重标定: 150 -> 185, issue 26-11-19-0258; 引入时档案值 55
+ * 已被引擎演化作废): 取证证明该数字为引擎首访 updated() 收敛拍的**固有合法构成**, 与背景轮询
+ * 无关(测量窗停轮询隔离试验前后逐位相同)且跨种子档恒定(300 档 143/146, 3000 档 155/158,
+ * 双皮, 3 轮逐位相同) —— 构成 = 渲染窗 ~32 行 x 收敛拍逐行量高 ~4 遍 + _reprobeRenderedRowH
+ * + 非行级 ~16, distinct rows 恒 32 与 tTotal 无关, 故取单一扁平预算不分档。
+ * 32 行 = f(视口), 视口由 playwright.config.mjs 单 chromium 项目钉死 1440x900(config 注:
+ * 版式类断言对宽度敏感) —— 跨机漂移面已被配置钉住, 改视口须连带重标定本预算。
+ * 185 的双向余量: 实测上限 158 留 ~1.17x / 误切精确冷启动最小档(200 行 ≈228)留 ~1.23x ——
+ * 比旧 150 时代的 2x 级窄, 余量收窄已获拍板接受(2026-11-19 主会话: 构成已证合法, 预算重标定
+ * 入量具面); 引擎侧冗余重探另入池 issues/26-11-19-0754(修后本预算可回抬余量)。
+ */
+const FIRST_VISIT_GBR_BUDGET = 185;
 
 /** 进种子视图并等行渲染(块B 所有用例的共同 arrange, 旧脚本 nav[1] 点击同口径)。 */
 async function gotoTorrents(page, skin) {
@@ -337,12 +357,16 @@ for (const skin of SKINS) {
       await awaitMainSettled(page);  // 旧 600ms 睡等「等 updated 量齐拍结束」→ poll 等行集/总高稳态, 计数稳定
       const gbr = await page.evaluate(() => window.__gbr0);
       const tTotal = await readInst(page, 'vm.filteredTorrents.length');
-      /* 判别依据(2026-11-02 实测): 估算开窗首访只对窗口内 ~24 行量高, gbr≈55 且**与行数无关**
-       * (1000/3000 档均 55); 误退回精确冷启动则对全表逐行量齐, gbr≈行数(200 档 228 / 300 档 325 /
-       * 999 档 1051)。上界 150 居中 —— 对估算路径余量 2.7x, 对误切精确的最小档(200 行)余量 1.5x,
-       * 两条路径都留判别余量; 占位总高粗界对"误切精确"(比值 1.0)无判别力, 全靠本条兜住。 */
+      /* 判别依据(2026-11-19 重标定取证, issue 26-11-19-0258; 原 2026-11-02 口径"窗口 ~24 行
+       * gbr≈55 且与行数无关"已被引擎演化作废): 隔离试验证明与轮询无关, 实测 = 渲染窗 ~32 行
+       * 的 updated() 收敛拍逐行量高(~4 遍/行) + _reprobeRenderedRowH + 非行级 ~16 —— 300 档
+       * 143/146、3000 档 155/158(双皮, 3 轮逐位相同), 与行数无关; 误退回精确冷启动则对全表
+       * 逐行量齐, gbr≈行数(200 档 228 / 300 档 325 / 999 档 1051)。预算 FIRST_VISIT_GBR_BUDGET
+       * =185(常量注: 新构成依据 / 视口已由 config 1440x900 钉死 / 余量收窄拍板)。
+       * 占位总高粗界对"误切精确"(比值 1.0)无判别力, 全靠本条兜住。 */
       expect(gbr, `首访路径指纹(估算开窗): gBR ${gbr} 次 / 行数 ${tTotal} —— ` +
-        '接近行数说明误退回精确冷启动(全量渲染+逐行量齐, 200 行即 334ms longtask)').toBeLessThan(150);
+        '接近行数说明误退回精确冷启动(全量渲染+逐行量齐, 200 行即 334ms longtask)')
+        .toBeLessThan(FIRST_VISIT_GBR_BUDGET);
     });
 
     test('P1-2 占位总高 == 全量渲染(窗口化只少渲染 DOM, 不改布局高度)', async ({ page }) => {

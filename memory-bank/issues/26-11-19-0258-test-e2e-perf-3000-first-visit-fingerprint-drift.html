@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-19-0258">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-perf-3000-first-visit-fingerprint-drift">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/issues/26-11-19-0754-perf-webui-rowmeasure-updated-rescan.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="perf 3000 档「P1-2 首访路径指纹」双皮确定性红: gbr 152/158 &gt; 预算 150, 档案值 55 被引擎演化作废">
 <meta name="issue-summary" content="3000 种子档 perf.spec 首访路径指纹断言双皮红, pristine 基线 78022b2a 实测同样红(非本分支引入), 300 档绿 —— 判据档案值与当前引擎实测脱节, 属量具基线漂移待校准">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0258-test-e2e-perf-3000-first-visit-fingerprint-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 02:58</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -151,11 +151,14 @@ pristine 对照: 本轮修复前基线(stash 修法后)同样红 —— 非该�
   <ul>
     <li>2026-11-19 02:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-19 — 补充证据（600 种子档，见 §02 第二段）：同断言双皮红且 600 档是 dev.e2e-perf-serial 串行门禁的默认档 —— 漂移面从「3000 抽验」扩到「量具常规门禁」；300 档仍绿。状态保持 <strong>Open</strong></li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验 2026-11-19 07:5x(修复轮, 双皮): 仍复现且数字确定性 —— 300 档 prism 143 / atlas 146(勉强绿), 3000 档 prism 155 / atlas 158(穿 150 预算), 3 轮逐位相同; 600 档与 3000 档同值(取证轮 + 修复验证轮各 1-2 轮双皮绿)。逐元素打点坐实构成 = 渲染窗 ~32 行(视口 1440x900)的 updated() 收敛拍逐行量高 ~4 遍 + reprobe + 非行级 ~16。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法 = 量具面预算重标定</strong>(e2e/perf.spec.mjs): 150 -&gt; 185(新常量 <code>FIRST_VISIT_GBR_BUDGET</code>), 判据语义(<code>toBeLessThan</code>)不变, 档案值 55 注释改写为新构成档案(数字/构成/确定性/视口钉死依据见常量注)。</p>
+  <p><strong>改道说明</strong>: 建议修法是「按坑档纪律重校准(结构隔离优先)」; 实际先按首选做了结构隔离试验(测量窗前 stopPolling/stopEvents + 影子化 scheduleNext, A/B bench 同款手法)—— 隔离生效(窗内 polls.main/_es/_verTimer 打点全死, 强围栏排除在途拍泄漏)但数字逐位不变, 证明 143-158 为引擎 updated() 收敛拍固有合法构成、轮询贡献为零 —— 结构隔离修向排除, 退到重校准: 预算定 185(对实测上限 158 留 ~1.17x, 对误切精确最小档 200 行 ≈228 留 ~1.23x), 余量比旧 2x 级窄已获拍板接受(2026-11-19 主会话); 视口依赖(playwright.config.mjs 单 chromium 项目钉死 1440x900)已注记防跨机漂移。引擎侧冗余重探(每收敛拍全窗行无条件 gBCR)另入池 <a href="26-11-19-0754-perf-webui-rowmeasure-updated-rescan.html">26-11-19-0754</a>(互认, 修后本预算可回抬余量)。</p>
+  <p><strong>验证</strong>(全走 <code>commands run dev.e2e-perf-serial</code>, 串行): 3000 档 2 轮双皮 + 600 档 1 轮双皮 + 300 档 1 轮双皮, 指纹断言全绿; 300 档全量串行量具套件(perf + drawer-content-perf + traffic-fx-frames)回归 33 passed / 4 skipped(&gt;500 门控跳过) / 0 failed。</p>
 </section>
 
 <footer>
