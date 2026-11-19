@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>SSE 推送候选全景盘点: 流量图/错误日志/长任务/抽屉的推送化机会与排除项 · feat · 计划外问题</title>
+<meta name="issue-slug" content="webui-sse-candidate-inventory">
+<meta name="issue-stamp" content="26-11-20-0408">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="webui-sse">
+<meta name="doc-refs" content="memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="SSE 推送候选全景盘点: 流量图/错误日志/长任务/抽屉的推送化机会与排除项">
+<meta name="issue-summary" content="盘点 /api/events 基建之外可用 SSE 优化的功能面, 标出 P0-P3 候选与不宜推送的轮询面">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· feat</div>
+<h1>SSE 推送候选全景盘点: 流量图/错误日志/长任务/抽屉的推送化机会与排除项</h1>
+<p class="lede">盘点 /api/events 基建之外可用 SSE 优化的功能面, 标出 P0-P3 候选与不宜推送的轮询面</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-20-0408-feat-webui-sse-candidate-inventory</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 04:08</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-20 04:00 左右，用户问「哪些功能可以使用 SSE 优化，可参考 memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html 以及已有的 SSE 基建」。按只读检索纪律（kb.active → memory-bank/README.md 路由 → grep 兜底）核对计划、<code>runtime_stream.py</code> / <code>routes/events.py</code> / 前端轮询面及相关 issue 后，产出了候选清单。触发条件：WebUI 打开且流量图 raw 窗 / 抽屉页签 / 主列表 / 错误日志面板处于活跃状态；无平台或配置开关依赖。</p>
+  <p>本件只记录「哪些面值得推送化、哪些不值得」，不主张现在实施；流量图已有独立计划，其余为待排期候选。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">取证 2026-11-20 04:00，基线 HEAD <code>7bd4e7f4</code>；以下为代码/文档原文摘录。</p>
+<pre><code># 现有 SSE 基建(已交付)
+src/auto_qb/webui/runtime_stream.py:26   def subscribe(self):  # 订阅队列 maxsize=EVENT_QUEUE_MAX
+src/auto_qb/webui/runtime_stream.py:48   def issue_event_ticket(self):  # 一次性短 TTL 票据, 满额回 ""
+src/auto_qb/webui/runtime_stream.py:103  def notify(self, etype, payload):  # q.put_nowait(ev), 慢消费者丢事件
+src/auto_qb/webui/server/routes/events.py:34  @router.get("/api/events")  # text/event-stream, 心跳, X-Accel-Buffering: no
+src/auto_qb/webui/static/shared/polling.js:54   async startEvents()  # 监听 cmd / truth / skip_check / ver
+
+# 仍在轮询的面(候选来源)
+src/auto_qb/webui/static/shared/polling.js:317       this.startPoll("main", { chain: true, ms: () =&gt; this.currentPollMs(), fn: () =&gt; this.refresh(), guard: () =&gt; this.authOk });
+src/auto_qb/webui/static/shared/qb_traffic_chart.js:1972  this.startPoll(`qb:${scope}`, { immediate: true, ms: () =&gt; this._qbPollMs(scope), fn: () =&gt; this._qbLoad(scope), ... });
+src/auto_qb/webui/static/shared/drawer_store.js:183   this.startPoll("drawer", { ms: () =&gt; this.currentPollMs(), fn: () =&gt; { ... _fetchDrawerTrackers / _fetchDrawerPeers ... } });
+src/auto_qb/webui/static/shared/lifecycle.js:13      const ERR_POLL_INTERVAL_MS = 60000;
+src/auto_qb/webui/static/shared/lifecycle.js:614     this._errPollTimer = setInterval(() =&gt; this._pullErrlog(true), ERR_POLL_INTERVAL_MS);
+
+# 计划与既有结论(原文摘句)
+memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html §03②:
+  "专用 SSE 端点 GET /api/traffic/qb/stream?scope=global|torrent:&lt;hash&gt;|group:&lt;key&gt;&amp;ticket=… ... 不扩全局 /api/events 枢纽(E1)"
+  "事件带单调 seq; 前端断档/静默(&gt;3×si)→ 立即全量 GET 重拉; 另加低频 GET 对账(30s)"
+memory-bank/issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html:
+  §01: "2026-11-01 认领复验后, 原归因被推翻"
+  §02-C: "⇒ 慢的不是「前端不知道」, 是「服务端快照里还没有」。"
+memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html §04:
+  "推送已按 SSE 交付 ... WebSocket 不再规划；剩余：多用户"</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>WebUI 开着、对应面板/页签活跃：流量图 raw(1m-24h)、抽屉 trackers/peers、主列表、错误日志 60s 补拉；后台标签由轮询骨架恒等守卫挡住。</td></tr>
+    <tr><td>影响范围</td><td>WEBUI 表现层与 <code>webui/server</code> 事件面；涉及 <code>startPoll("main"|"drawer"|"qb:*")</code> 与 errlog 定时器。存储面、agg(3d+)、主循环单写线程纪律不在范围内。</td></tr>
+    <tr><td>严重度</td><td>低~中：性能与观感延迟；流量图另有尾端持有失真的正确性问题。无数据损坏风险。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">符号名 + grep 关键词 + 取证当时行号（2026-11-20 04:00，HEAD <code>7bd4e7f4</code>）。</p>
+  <ul>
+    <li><code>src/auto_qb/webui/runtime_stream.py:26/48/103</code>（取证 2026-11-20 04:00）· <code>StreamMixin.subscribe / issue_event_ticket / notify</code> · grep <code>def notify</code></li>
+    <li><code>src/auto_qb/webui/server/routes/events.py:21/34</code> · <code>api_events_ticket / api_events</code> · grep <code>@router.get("/api/events")</code></li>
+    <li><code>src/auto_qb/webui/static/shared/polling.js:54/80-102/317</code> · <code>startEvents / es.addEventListener / scheduleNext</code> · grep <code>startPoll("main"</code></li>
+    <li><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js:1950/1970</code> · <code>_qbPollMs / _qbPollStart</code> · grep <code>_qbPollStart</code></li>
+    <li><code>src/auto_qb/webui/static/shared/drawer_store.js:181</code> · <code>_startDrawerPoll</code> · grep <code>startPoll("drawer"</code></li>
+    <li><code>src/auto_qb/webui/static/shared/lifecycle.js:13/612/614</code> · <code>ERR_POLL_INTERVAL_MS / _startErrPoll / _pullErrlog</code> · grep <code>ERR_POLL_INTERVAL_MS</code></li>
+    <li><code>memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html</code> §02「可复用的既有基建」、§03②「传输面」、§06 E1/E4/E7</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查——本件是候选盘点，不是缺陷根因调查。<br>已排除：① 批量添加种子可见延迟并非 SSE 掉线所致（issue 26-10-30-0626 已复验推翻，瓶颈在 qB session 建种管线）；② 主列表全量状态推送不可取（「只推信号与小真值」是既有设计纪律，3000 种子一轮全量约 63ms）；③ WebSocket 不再作为推送方案（issue 26-10-01-1946 已收敛为 SSE）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>共同纪律：复用一次性票据 / 心跳 / 满额 503 退轮询；事件只带小真值或信号；带单调 seq，断档与静默走全量重拉 + 低频对账；发布点只在主循环线程（沿用活尾快照模式）；高频专用通道优先于扩 <code>/api/events</code> 枢纽；不加配置键。</p>
+  <table>
+    <tr><th>优先级</th><th>功能</th><th>当前机制</th><th>推送化形态 / 代价</th></tr>
+    <tr><td>P0（已立项）</td><td>流量图 raw 段窗 1m-24h</td><td><code>startPoll("qb:*")</code>，节拍 = <code>meta.sample_interval_s</code>（生产 1.5s）</td><td>计划 26-11-18-0037 的专用 <code>/api/traffic/qb/stream</code> + seq + 30s 对账 + 503 兜底；收益是尾端无持有失真与毫秒级管线，前端重写面大（R1），需后端前端同提交硬切。agg(3d+)不动。</td></tr>
+    <tr><td>P1</td><td>后端错误日志 / 通知中心</td><td><code>setInterval</code> 60s 拉 <code>/api/errlog?after=</code></td><td>后端已有 <code>err_log_since(after)</code> 与 seq 环；新增 <code>errlog</code> 事件推增量，60s GET 降为对账。载荷极小，重启 seq 归零逻辑可复用；前端需去重与未读计数接线。</td></tr>
+    <tr><td>P2</td><td>长任务两段回执（relocate 探针 / transfer 验证）</td><td>受理后 <code>waitCmd</code> 与轮询赛跑，等单段终态</td><td>复用 <code>cmd</code> 事件补发终态/进度，payload 带 <code>cmd_id</code> 由前端过滤（现网 <code>notify</code> 是广播）。相关方向已在计划 26-11-10-2350 D8 / 26-11-20-0127 D5b 拍板，实施前先与计划合流，避免重复立项。</td></tr>
+    <tr><td>P3</td><td>抽屉详情 trackers / peers</td><td><code>startPoll("drawer")</code> 按主节拍 1.5/2/3s 直拉</td><td>「变化才推」可免空转，但上游 qB 自身有 1s/2s 缓存，推送快过缓存无收益；建议等 P0 的 per-scope 通道落地后复用其纪律再评估。</td></tr>
+  </table>
+  <p><b>明确排除</b>：主列表 <code>/api/state</code> 全量推送（已是 <code>ver</code> 驱动 + delta + 轮询兜底，优化空间仅 60ms 去抖）；<code>search_rev</code> 自动刷新（随每轮 status 回传，不额外发请求）；FX 时钟 <code>setInterval</code>、限速托管 <code>loadSpeedMode</code>、web flags / 快捷键加载（本地时钟或一次性取数）；批量添加种子（瓶颈在服务端 qB 管线）；流量图 agg 3d+（计划 D4 明确不动）。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-20 04:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>2026-11-20 04:00 已按 HEAD <code>7bd4e7f4</code> 逐条核对 §04 锚点；认领后重跑对应 grep 关键词确认锚点仍有效，并按当时的面板状态确认轮询面仍存在。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">待实施：本件是候选清单，实际落地应拆到各功能的计划/issue；实施时在此回写「实际修法 / 验证方式 / 测试数字」，与建议修法不同则保留原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-20-0408-feat-webui-sse-candidate-inventory.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
