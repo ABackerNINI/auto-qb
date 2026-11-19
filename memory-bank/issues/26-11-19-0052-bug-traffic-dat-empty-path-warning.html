@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="traffic-dat-empty-path-warning">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="流量快照空 dat 路径未按「取不到」契约特判, 每 refresh_interval 误报文件缺失 WARNING">
 <meta name="issue-summary" content="traffic_source 无有效来源(段缺失/dat_path 空/GTM 指针缺席)时 refresh() 把空路径直塞 read_source_rows, 每 600s 一条「No such file or directory: &#x27;&#x27;」误导性 WARNING, 应按 paths.py 空串契约走「数据源不可得」特判">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0052-bug-traffic-dat-empty-path-warning</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 00:52</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">core/traffic_source + modules/traffic_snapshot_mod</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">优雅停 38s 排查轮(26-11-18-2350)顺带发现</div></div>
 </div>
@@ -141,11 +141,12 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 00:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-19 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-19 07:50 仍复现 —— <code>traffic_snapshot_mod.py</code> 的 <code>refresh()</code> 在 <code>read_source_rows</code> 前无空路径特判(:234 取路径直塞 :235), <code>paths.py</code> 空串契约与 <code>unavailable_reason</code> 文案单点均在, 与取证时点一致(仅行号微漂)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>(与 §06 建议同向): <code>refresh()</code> 在 <code>read_source_rows</code> 前特判 <code>if not dat_path</code> —— 不读盘, 发布 <code>source=stale</code> + 新契约码 <code>source_missing</code>(常量落 <code>reader.py</code>, 与 <code>dat_missing/dat_empty</code> 同一 reasons.code 取值契约面), 人读文案逐字复用 <code>paths.unavailable_reason()</code>; 日志取「一次性 WARNING + 之后 DEBUG」(缺省常态每 600s 一条是排障噪音, 首条留排障轨迹; 实例级标志, 重启重响一条)。另补自动恢复弧: 配好来源后下一轮正常发布 ok。<b>曲线侧同族同修</b>(用户拍板 2026-11-19: 影响面表的触发形态在曲线已配置时同样命中 <code>speed_curve_mod</code> 的读盘点): <code>handle_speed_limit_curve</code> 加同构特判 —— 不读盘, <code>limit=stale</code> + <code>source_missing</code>, 文案同走 <code>unavailable_reason</code> 单点, 一次性 WARNING 标志同款(曲线 interval 缺省更短, 刷屏面更大); 至此消费侧三个调用面(快照/曲线/规则表达式)口径齐平, 与 <code>rules/expr/env.py</code> 的空路径特判先例一致。<b>验证</b>: <code>test_traffic_snapshot.py</code> 新增 3 用例(不读盘红验 + 一次性 WARNING + GTM 指针缺席文案), <code>test_speed_curve_traffic.py</code> 新增 2 用例(曲线侧同款契约+日志一次性+恢复弧 / GTM 缺席文案); 评审 3 轮(1 minor 修 + 2 轮零 actionable); <code>commands run test.quick</code> 全量 6489 passed / 2 skipped(2026-11-19 08:31 实测)。</p>
 </section>
 
 <footer>

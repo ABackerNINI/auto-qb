@@ -22,7 +22,9 @@ dat(工具来源是运行期事实, 不在配置里), 按每条 period 曲线聚
   记一条 INFO, 之后同一状态每 `_MANUAL_REMIND_GAP` 才再提醒一次, 被去重的轮次降 DEBUG ——
   逐轮 INFO 会刷屏(判据见 pitfalls/ops/alert-levels.md 2.4.); 可见性另由 Web UI 的
   `reasons`(code=manual)承载, 不依赖这行日志
-- 数据源文件缺失/整体无法解析 -> warning, 本轮不动限速(任务保留), limit 段落 stale;
+- 来源路径取不到(dat_path 空串契约) -> 本轮不动限速, limit 段落 stale + source_missing,
+  文案走 unavailable_reason(26-11-19-0052): **不读盘**, WARNING 一次性(之后 DEBUG);
+  数据源文件缺失/整体无法解析 -> warning, 本轮不动限速(任务保留), limit 段落 stale;
   来源总开关关闭 -> **不发布**(来源态归来源模块, 见 A4), 直接让位
 - dat 有行但当前 period 窗口内无数据(如今天行尚未写入) -> 累计视为 0, 自动回落放宽
 - dry_run: 只计算并输出日志, 不读当前、不写 qB
@@ -42,7 +44,7 @@ from ..state import prune_day_keys
 from ..taskqueue import REQUEUE, Task
 from ..traffic_source import paths as traffic_paths
 from .traffic_snapshot_mod import TrafficSnapshotModule
-from ..traffic_source.reader import read_source_rows
+from ..traffic_source.reader import CODE_SOURCE_MISSING, read_source_rows
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,10 @@ class SpeedCurveModule(BaseModule):
         # 手动保护日志节流: {方向: (手动值 KiB/s, 上次记 INFO 时刻)} —— 模块实例自持
         # (手动值是持续状态, 状态变化才报 + 周期提醒; 退出手动保护时清键, 见 _log_manual_skip)
         self._curve_manual_log: dict = {}
+        #: 空路径 WARNING 一次性标志(26-11-19-0052, 与快照模块同款口径): 曲线启用而来源
+        #: 未配置是**配置矛盾**形态, 首条 WARNING 指路, 之后降 DEBUG 防每 interval 刷屏;
+        #: 内存态, 重启后重响一条(排障入口)
+        self._source_missing_warned = False
 
     def sections(self) -> tuple[str, ...]:
         # 消费两个配置段: 曲线本体 + 顶层数据源(计划 26-10-17-0339 S15, dat 路径取自 traffic_source)
@@ -173,6 +179,21 @@ class SpeedCurveModule(BaseModule):
         # 1. 读取数据源(路径走取数单点 traffic_source.paths.dat_path: 工具来源是运行期事实,
         #    不在配置里; 读法与失败判据单点在 traffic_source.reader)
         dat_path = traffic_paths.dat_path(self._ctx.config)
+        if not dat_path:
+            # 空路径 = 来源取不到(paths.dat_path 空串契约的调用侧半边, issue 26-11-19-0052
+            # 曲线侧同族, 用户拍板与快照侧同修): 不读盘 —— 空串塞 open() 会误报「No such
+            # file or directory: ''」, 把「未配置/工具缺席」说成「文件读不到」。文案复用
+            # unavailable_reason 单点(与快照侧/env.py 规则表达式特判同源); stale 发布与
+            # dat_missing 轮同形。WARNING 一次性: 曲线启用而来源未配置是配置矛盾, 首条
+            # 响亮指路, 之后降 DEBUG(曲线 interval 更短, 刷屏面比快照侧更大)。
+            reason = traffic_paths.unavailable_reason(self._ctx.config)
+            if self._source_missing_warned:
+                logger.debug(f"限速曲线 | {reason}, 本轮不动")
+            else:
+                self._source_missing_warned = True
+                logger.warning(f"限速曲线 | {reason}, 本轮不动")
+            self._publish_limit("stale", reasons=[{"dir": "", "code": CODE_SOURCE_MISSING, "text": reason}])
+            return REQUEUE
         rows, bad, fail = read_source_rows(dat_path)
         if fail is not None:
             logger.warning(f"限速曲线 | {fail['log']}, 本轮不动")

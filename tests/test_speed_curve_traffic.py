@@ -6,6 +6,10 @@
 - test_traffic_view_manual_reason_on_odd_kib
 - test_traffic_view_ok_reports_limits
 - test_traffic_view_stale_when_dat_missing_or_empty
+- test_traffic_view_source_missing_when_dat_path_empty: 空路径(26-11-19-0052 曲线侧同族)不读盘 ->
+  stale + source_missing + unavailable_reason 文案, WARNING 一次性(之后 DEBUG), 配好来源恢复
+- test_traffic_view_source_missing_gtm_pointer_absent: GTM 指针缺席形态文案走工具分支
+  (「数据源不可得」开头, 与快照侧/取数分支同源)
 """
 
 import copy
@@ -166,3 +170,64 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     assert _run_curve(mgr) is True
     assert mgr.web.traffic_view["state"] == "stale"
     assert mgr.web.traffic_view["limit"]["reasons"] == [{"dir": "", "code": "dat_empty", "text": "流量数据无有效记录"}]
+
+
+def test_traffic_view_source_missing_when_dat_path_empty(tmp_path, monkeypatch):
+    """空路径 = 来源取不到(26-11-19-0052 曲线侧同族): 不读盘(空串塞 open() 是误报源),
+    limit 段 stale + source_missing, 文案复用 unavailable_reason(「数据源未配置」指路口径,
+    修复前每 interval 误报「No such file or directory: ''」); WARNING 一次性(曲线启用而
+    来源未配置是配置矛盾, 首条响亮, 之后 DEBUG); 配好来源下一轮恢复"""
+    import auto_qb.core.modules.speed_curve_mod as scm
+
+    real_read = scm.read_source_rows
+
+    def _boom(*_a, **_k):
+        raise AssertionError("空路径不许读盘(空串塞 open() 是误报源)")
+
+    monkeypatch.setattr(scm, "read_source_rows", _boom)
+
+    gslc = _gslc("", _pc("day", up=_points(FULL_UPLOAD)))  # dat_path 空 = 来源未配置形态
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    with capture_logs("auto_qb.core.modules.speed_curve_mod") as cap:
+        assert _run_curve(mgr) is True
+    tv = mgr.web.traffic_view
+    assert tv["state"] == "stale"
+    assert tv["limit"]["state"] == "stale"
+    assert tv["limit"]["target"] == {"up": None, "down": None}
+    r0 = tv["limit"]["reasons"][0]
+    assert set(r0) == {"dir", "code", "text"}, f"reasons 键面必须是 dir/code/text 三键: {r0}"
+    assert r0["dir"] == "" and r0["code"] == "source_missing"
+    assert r0["text"].startswith("数据源未配置"), f"文案必须是 unavailable_reason 的指路口径: {r0['text']}"
+    assert client.transfer.calls == [], "空路径轮不读不写 qB(本轮不动)"
+    assert sum(1 for rec in cap.records if rec.levelno == logging.WARNING) == 1, "首条必须 WARNING"
+    assert any("数据源未配置" in msg for msg in cap.messages), "WARNING 文案必须指到该配哪里"
+
+    # 第二轮起降 DEBUG(钉到原因文案, 不吃模块内其它 DEBUG 行); 之后仍逐轮发 stale
+    with capture_logs("auto_qb.core.modules.speed_curve_mod") as cap:
+        assert _run_curve(mgr) is True
+    assert mgr.web.traffic_view["limit"]["state"] == "stale"
+    assert not [rec for rec in cap.records if rec.levelno >= logging.WARNING], "第二轮起不得再响 WARNING"
+    assert any(
+        rec.levelno == logging.DEBUG and "数据源未配置" in msg for rec, msg in zip(cap.records, cap.messages)
+    ), "降级后仍留 DEBUG 轨迹(钉到原因文案)"
+
+    # 配好来源自动恢复(桩还原后走真读盘路径, 与快照侧恢复弧同款)
+    monkeypatch.setattr(scm, "read_source_rows", real_read)
+    mgr.config.traffic_source.traffic_monitor.dat_path = write_dat(tmp_path, [(date.today(), 15 * GIB, 0)])
+    assert _run_curve(mgr, dry_run=True) is True
+    tv = mgr.web.traffic_view
+    assert tv["limit"]["state"] == "dry_run" and tv["limit"]["target"] == {"up": 5120, "down": None}
+
+
+def test_traffic_view_source_missing_gtm_pointer_absent(tmp_path, monkeypatch):
+    """GTM 指针缺席形态(26-11-19-0052 触发表第三形态, 曲线侧): 文案走 unavailable_reason
+    的工具分支(「数据源不可得」开头) —— 与快照侧/规则表达式特判同源(verdict-scope-parity)"""
+    mgr, _client = _make_mgr(tmp_path, _gslc("", _pc("day", up=_points(FULL_UPLOAD))))
+    mgr.config.traffic_source.provider = "global_traffic_monitor"
+    # 指针缺席钉死为受控事实(默认 endpoint_path 指向用户级平台目录, 不受本用例控制)
+    monkeypatch.setattr(traffic_paths.agent, "endpoint_path", lambda: str(tmp_path / "absent" / "endpoint.json"))
+    assert _run_curve(mgr) is True
+    r0 = mgr.web.traffic_view["limit"]["reasons"][0]
+    assert r0["code"] == "source_missing"
+    assert r0["text"].startswith("数据源不可得"), "工具分支文案必须指到 GTM 状态/拉起入口"

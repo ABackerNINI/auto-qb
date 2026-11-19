@@ -19,6 +19,10 @@ from .. import curves
 #: 读不到文件 / 解析不出行时的原因码(快照 reasons.code 的契约面, 前端按码分流文案)
 CODE_DAT_MISSING = "dat_missing"
 CODE_DAT_EMPTY = "dat_empty"
+#: 来源取不到(paths.dat_path 空串契约, issue 26-11-19-0052)的原因码 —— **不由
+#: read_source_rows 产出**: 空路径在调用方特判(不读盘), 常量放这里是 reasons.code 取值
+#: 契约的单点(与 dat_missing/dat_empty 同一面, 曲线等其它调用方将来复用同一字面量)。
+CODE_SOURCE_MISSING = "source_missing"
 
 
 def read_source_rows(dat_path: str) -> Tuple[List[curves.HistoryRow], int, Optional[dict]]:
@@ -47,4 +51,4 @@ def read_source_rows(dat_path: str) -> Tuple[List[curves.HistoryRow], int, Optio
     return rows, bad, None
 
 
-__all__ = ["CODE_DAT_EMPTY", "CODE_DAT_MISSING", "read_source_rows"]
+__all__ = ["CODE_DAT_EMPTY", "CODE_DAT_MISSING", "CODE_SOURCE_MISSING", "read_source_rows"]

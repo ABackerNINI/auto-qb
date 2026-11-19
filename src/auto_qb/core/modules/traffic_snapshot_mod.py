@@ -36,7 +36,7 @@ from ..traffic_source import paths as traffic_paths
 
 if TYPE_CHECKING:
     from ...config import Config
-from ..traffic_source.reader import read_source_rows
+from ..traffic_source.reader import CODE_SOURCE_MISSING, read_source_rows
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +156,10 @@ class TrafficSnapshotModule(BaseModule):
         #: 读盘 ok 分支把 dat 当日值回种进这里(issue R1#64: 只由事件写入时, 重启后
         #: `_hw` 空/偏低, 挡不住「读盘先立高位 -> 偏低 catch-up 事件刷回」)。
         self._hw: dict = {}
+        #: 空路径 WARNING 一次性标志(26-11-19-0052): 来源未配置是**缺省常态**而非异常, 首条
+        #: WARNING 留排障轨迹, 之后降 DEBUG 防每 refresh_interval 刷屏; 内存态, 重启后重响
+        #: 一条(重启后的第一条恰好是排障最有用的时刻)
+        self._source_missing_warned = False
 
     def sections(self) -> tuple[str, ...]:
         """**只**消费来源段 —— 不声明 `global_speed_limit_curve` 正是解耦的判据(A1 守阵):
@@ -222,7 +226,7 @@ class TrafficSnapshotModule(BaseModule):
 
         三种结局:
         - 来源总开关关 -> 发布 off 快照(不读盘), 返回 False(没有新数据);
-        - 数据源不可用(缺文件/无有效行) -> 发布 source=stale(清 periods/history), 返回 False;
+        - 数据源不可用(路径取不到/缺文件/无有效行) -> 发布 source=stale(清 periods/history), 返回 False;
         - 正常 -> 发布 source=ok + history/periods, 返回 True。
         """
         if not traffic_paths.source_enabled(self._ctx.config):
@@ -232,6 +236,20 @@ class TrafficSnapshotModule(BaseModule):
         # 告警段先取(失败即返回, 不覆盖旧段), 随后照常读 dat —— 取数异常不得中断流量发布
         self._refresh_anomaly()
         dat_path = traffic_paths.dat_path(self._ctx.config)
+        if not dat_path:
+            # 空路径 = 来源取不到(paths.dat_path 空串契约的调用侧半边, issue 26-11-19-0052):
+            # 不读盘 —— 空串塞 open() 会误报「No such file or directory: ''」, 把「未配置/工具
+            # 缺席」说成「文件读不到」。发布 stale + source_missing, 人读文案复用
+            # unavailable_reason 单点(覆盖「未配置/GTM 指针缺席」两形态; 关源已在入口提前
+            # return)。WARNING 只响一次: 缺省常态每 refresh_interval 一条是排障噪音。
+            reason = traffic_paths.unavailable_reason(self._ctx.config)
+            if self._source_missing_warned:
+                logger.debug(f"流量快照 | {reason}")
+            else:
+                self._source_missing_warned = True
+                logger.warning(f"流量快照 | {reason}")
+            self.publish_source([], SOURCE_STALE, [{"dir": "", "code": CODE_SOURCE_MISSING, "text": reason}])
+            return False
         rows, bad, fail = read_source_rows(dat_path)
         if fail is not None:
             logger.warning(f"流量快照 | {fail['log']}")

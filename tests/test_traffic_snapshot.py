@@ -54,6 +54,15 @@ W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-a
 覆盖率第三轮 T2b 补测(26-11-05):
 - test_publish_source_without_day_row_tolerates_hw: ok 发布 periods 无 day 行时不炸照常发布, 钳制只在 day 行在场时生效(313->315)
 
+空路径特判(issue 26-11-19-0052, 2026-11-19): dat_path() 得 "" = 来源取不到(paths.py 空串契约
+的调用侧半边), 不读盘、发布 stale + source_missing, 文案复用 unavailable_reason 单点 ——
+- test_refresh_empty_dat_path_publishes_source_missing_without_reading: 不读盘(桩 raise 红验) +
+  reasons 三键契约 + 「数据源未配置」文案 + 配好来源自动恢复
+- test_refresh_empty_dat_path_warns_once_then_debug: 首条 WARNING 之后降 DEBUG(缺省常态不刷屏),
+  配好再删不重响(实例级一次性标志)
+- test_refresh_empty_dat_path_gtm_pointer_absent_reason: GTM 指针缺席形态文案走工具分支
+  (「数据源不可得」开头, 与取数分支同源)
+
 事件高水位三源钳制(issue 26-11-07-0527 R1#64, 2026-11-08):
 - test_publish_event_no_regress_after_higher_file_read: 读盘先立高位 -> 偏低 catch-up 事件不回退
   (`_hw` 不落盘, 只钳它会漏掉「重启后读盘高位 -> 低事件刷回」; 现 day 行也在钳制源内 + 读盘回种 `_hw`)
@@ -304,6 +313,80 @@ def test_refresh_source_off_publishes_off_without_reading(tmp_path):
     mgr.config.traffic_source.traffic_monitor.dat_path = write_dat(tmp_path, [(date.today(), 1, 1)])
     assert _mod(mgr).refresh() is True
     assert mgr.web.traffic_view["source"]["state"] == SOURCE_OK
+
+
+def test_refresh_empty_dat_path_publishes_source_missing_without_reading(tmp_path, monkeypatch):
+    """空路径 = 来源取不到(26-11-19-0052): dat_path() 得 "" 时**不读盘**(空串塞 open()
+    是误报源), 发布 source=stale + source_missing, 文案复用 unavailable_reason; 配好来源
+    下一轮自动恢复 —— 修复前该形态每 refresh_interval 误报「No such file or directory: ''」
+    (dat_missing 文案把「未配置」说成「文件读不到」)"""
+    real_read = tsm.read_source_rows
+
+    def _boom(*_a, **_k):
+        raise AssertionError("空路径不许读盘(空串塞 open() 是误报源)")
+
+    monkeypatch.setattr(tsm, "read_source_rows", _boom)
+
+    mgr = _mgr(tmp_path)  # 缺 dat_path 形态: source_enabled 恒 True, dat_path() 得 ""
+    mod = _mod(mgr)
+    assert mod.refresh() is False
+    tv = mgr.web.traffic_view
+    assert tv["source"]["state"] == SOURCE_STALE
+    r0 = tv["source"]["reasons"][0]
+    assert set(r0) == {"dir", "code", "text"}, "reasons 键契约损坏(前端按键取值)"
+    assert r0["dir"] == "" and r0["code"] == "source_missing"
+    assert r0["text"].startswith("数据源未配置"), "文案必须是 unavailable_reason 的指路口径"
+    assert tv["state"] == "stale" and tv["history"] == []
+    assert [(p["period"], p["up"], p["down"]) for p in tv["periods"]] == [
+        ("day", 0, 0), ("month", 0, 0)
+    ], "stale 的 periods 与 dat_missing 轮同形(两行全 0), 不是 off 的清空"
+
+    # 配好来源自动恢复(桩还原后走真读盘路径, 与关源用例的开关恢复弧同款)
+    monkeypatch.setattr(tsm, "read_source_rows", real_read)
+    mgr.config.traffic_source.traffic_monitor.dat_path = write_dat(tmp_path, [(date.today(), 1, 1)])
+    assert mod.refresh() is True
+    assert mgr.web.traffic_view["source"]["state"] == SOURCE_OK
+
+
+def test_refresh_empty_dat_path_warns_once_then_debug(tmp_path):
+    """空路径 WARNING 一次性(26-11-19-0052): 首条 WARNING 留排障轨迹, 之后每轮降 DEBUG
+    —— 未配置是缺省常态, 每 refresh_interval 一条 WARNING 是排障噪音; 配好来源再删也不
+    重响(实例级一次性标志), stale 状态面仍逐轮发布"""
+    mgr = _mgr(tmp_path)
+    mod = _mod(mgr)
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert mod.refresh() is False
+    assert sum(1 for rec in cap.records if rec.levelno == logging.WARNING) == 1, "首条必须 WARNING"
+    assert any("数据源未配置" in msg for msg in cap.messages), "WARNING 文案必须指到该配哪里"
+
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert mod.refresh() is False
+    assert not [rec for rec in cap.records if rec.levelno >= logging.WARNING], "第二轮起不得再响 WARNING"
+    assert any(
+        rec.levelno == logging.DEBUG and "数据源未配置" in msg for rec, msg in zip(cap.records, cap.messages)
+    ), "降级后仍留 DEBUG 轨迹(钉到原因文案, 不吃 _refresh_anomaly 的同 logger DEBUG 行)"
+
+    # 配好来源(走 ok 分支)再删掉: 标志不重置, 依旧不响 WARNING
+    mgr.config.traffic_source.traffic_monitor.dat_path = write_dat(tmp_path, [(date.today(), 1, 1)])
+    assert mod.refresh() is True
+    mgr.config.traffic_source.traffic_monitor.dat_path = ""
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert mod.refresh() is False
+    assert not [rec for rec in cap.records if rec.levelno >= logging.WARNING], "一次性标志不按状态切换重置"
+
+
+def test_refresh_empty_dat_path_gtm_pointer_absent_reason(tmp_path, monkeypatch):
+    """GTM 指针缺席形态(26-11-19-0052 触发表第三形态): provider=global_traffic_monitor 且指针
+    缺席 -> 文案走 unavailable_reason 的工具分支(「数据源不可得」开头) —— 与取数分支同源
+    (verdict-scope-parity), 不再是「文件读不到」的误导口径"""
+    mgr = _mgr(tmp_path)
+    mgr.config.traffic_source.provider = "global_traffic_monitor"
+    # 指针缺席钉死为受控事实(默认 endpoint_path 指向用户级平台目录, 不受本用例控制)
+    monkeypatch.setattr(tsm.agent, "endpoint_path", lambda: str(tmp_path / "absent" / "endpoint.json"))
+    assert _mod(mgr).refresh() is False
+    r0 = mgr.web.traffic_view["source"]["reasons"][0]
+    assert r0["code"] == "source_missing"
+    assert r0["text"].startswith("数据源不可得"), "工具分支文案必须指到 GTM 状态/拉起入口"
 
 
 def test_refresh_publish_logs_at_debug(tmp_path):
