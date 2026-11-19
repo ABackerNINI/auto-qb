@@ -2,7 +2,7 @@
  *
  * plan 26-10-03-0946 方案C §07 P5a/P5b。一个「双系列(上传/下载)时间曲线」封装, 三图(全局/单种/
  * 分组)共用: uPlot options 样板(axes/series/scales/cursor)收在 _qbChartBuild 单点, 调用方只给
- * points + 容器; null 桶 = 断线不连线(uPlot spanGaps:false, §5.2 拍板语义)。
+ * points + 容器; 缺口点(旧契约 null 桶 / schema=2 显式空值点) = 断线不连线(uPlot spanGaps:false, §5.2 拍板语义)。
  *
  * 约定与 dialogs.js / hr_status.js 同范式: 挂到 window.AQB_QB_TRAFFIC, 由 app.js 末尾
  * app.mixin(window.AQB_QB_TRAFFIC) 注入同一个 Vue 实例 —— 方法体里的 this 仍是那个组件实例。
@@ -78,13 +78,15 @@
  * _qbChartInjectCss 单点注入(四皮肤零侵入); 元件随图建/随图清(_qbChartDestroy 显式清记录,
  * 元件本体在 u.root 内随 u.destroy 拆除 —— 换肤/重建零残留)。
  *
- * 判定帧补尾格(F5, plan 26-11-15-1104 §03 F5/§06 D2): 整格滚动拍把上一拍首桶点(真实历史
- * 观测, 不造数)补进显示列头部再摆回 —— 摆回视图下曲线左端贴住左缘(滑动期间被左缘裁剪恒贴
- * 0px), 消灭 G-B「摆回固有左缺口瞬移」(旧: 新数据首点右移一格 + 同帧摆回旧视图 = 左端从 0px
- * 跳进一格再滑回); 摆回拍收敛帧补点出列(真窗口交还 auto), 下一拍重复。伴随 rewin 判据改造
- * (_qbRollJudge 单点): 跨窗换档 = 桶宽 step 变化 或 窗起点跳出 ±2 格滚动域 —— 旧裸点数比较
- * st.n !== n 在补点(+1)与非整倍窗 floor+1 桶数相位翻动(497<->498)下都会误判成换档(该拍
- * 动画不播 = 周期性瞬跳), 新判据下两类拍照常播 L0; 桶边仍钉绝对时刻倍数(F2 floor 对齐不动)。
+ * 判定帧补尾格(F5, plan 26-11-15-1104 §03 F5/§06 D2; 变长点列适配 26-11-18-0037 阶段 3):
+ * 滚动拍把上一拍已滚出的头部真值点(真实历史/缺口观测, 不造数)补进显示列头部再摆回 ——
+ * 摆回视图下曲线左端贴住左缘(滑动期间被左缘裁剪恒贴 0px), 消灭 G-B「摆回固有左缺口瞬移」
+ * (旧: 新数据首点右移 + 同帧摆回旧视图 = 左端从 0px 跳进空隙再滑回); 摆回拍收敛帧补点出列
+ * (真窗口交还 auto), 下一拍重复。伴随 rewin 判据改造(_qbRollJudge 单点): 跨窗换档 = 组距
+ * 标称 step 变化 或 真窗起点跳出 ±2 组距滚动域 —— 旧裸点数比较 st.n !== n 与旧 xs[1]-xs[0]
+ * 等距 step 假设在样本分组点列(相位 ±1 + 缺口标记, 点数/间距都浮动)下都会误判(该拍动画
+ * 不播 = 周期性瞬跳), 新判据下两类拍照常播 L0; 补点/滚出点数按点列真值现数, 摆回 min 锚 =
+ * 显示列首点真值(无等距算术记账面)。
  *
  * 面板接线(S3, plan §05.3/§05.4/§06 S3 行 + D21): cfg.ease 消费端 —— 数值插值曲线选择单点
  * _qbFxCurve, 判定帧冻结进 anim.easeF(拍内不换式, 下一拍起用), 帧循环经 _qbFxShown 单次施加
@@ -111,7 +113,7 @@
  * 不裁剪数据 —— _qbYRange)。偏好**三作用域各自独立**落 localStorage(qbYAxisStoreKey)。
  * 注解层走 uPlot draw/drawClear 钩子画在**同一张画布**上(共享图面, 三挂点 + 经典/所有变体
  * 全生效): 限速虚线(上下载各一条, 只画落在可视值域内的限速 —— 自动模式下峰值未超限速时线在
- * 顶沿之上, 自然不画)+ 缺口斜纹(null 桶游程铺 45 度斜纹, 画在系列之下)。
+ * 顶沿之上, 自然不画)+ 缺口斜纹(缺口点游程铺 45 度斜纹, 画在系列之下)。
  * !2026-10-08 修「缺口斜纹几乎不可分辨」: 斜纹原走 tk.grid(--hairline, alpha 仅 0.05~0.08 的
  * 装饰性 1px 发丝线令牌), 再叠 globalAlpha 0.5 => 有效不透明度约 3%, 深色底上等于没画(亮主题
  * 同理)。改走**专用高对比令牌 --qb-gap-hatch**(0.18~0.25), 并去掉多余的 globalAlpha 折半;
@@ -366,21 +368,18 @@ const _QB_SCOPES = {
   },
 };
 
-/* 桶序 -> uPlot 数据(模块级纯函数, 供 node 单测探针, 同 hrsCompareRows 先例)。
- * API 响应 points 是「桶值 | null」定长数组, null 元素没有 t; 栅格按 meta.interval_s 等距
- * 重建(锚 = 首个非 null 点): xs[i] = t0 + (i - k) * interval, 再用非 null 点携带的真值 t
- * 覆写(等距视图恒等; all 视图月行按行间隔 28-31 天非等距, 必须按真值落点)。null 槽 y 置
- * null(uPlot spanGaps:false 断线), x 在两真值点之间线性内插、窗端外侧按 interval 等距外推
- * (等距视图下与栅格公式同值 —— 缺口位置不漂移)。
- * 全 null(后端已归一为 points: [], 防御)或 interval 非法 -> null(调用方回落空态)。 */
+/* 点列 -> uPlot 数据(模块级纯函数, 供 node 单测探针, 同 hrsCompareRows 先例)。
+ * schema=2 样本分组契约(raw 段窗, 26-11-18-0037 D6/E3): points = [{t, dl, up}, ...] 升序
+ * 每点必带 t(组末样本 ts; 缺口 = 显式空值点 {t, dl:null, up:null}; 尾组 = 最新样本 ts, 恒
+ * 真值)—— 三列**直读**: xs[i] = points[i].t, 空值点 y = null(uPlot spanGaps:false 断线)。
+ * 旧「桶值 | null」定长数组(agg 段窗 3d+, D4 零改动)仍兼容: null 元素没有 t, 沿旧栅格
+ * 重建(锚 = 首个非 null 点, 真值点按 t 落点覆写; null 槽 x 在两真值点之间线性内插、窗端
+ * 外侧按 interval 等距外推 —— all 月行按行间隔非等距, 真值点恒按真值落点)。
+ * 空列(后端已归一为 points: [], 防御)或 interval 非法(旧契约内插需要; 新契约纯直读也一并
+ * 防御) -> null(调用方回落空态)。anchor = { xs } 全列真值时刻(悬停取值锚, _qbBucketTs 消费)。 */
 function _qbPointsToData(points, interval) {
   const n = points.length;
-  let k = -1;
-  for (let i = 0; i < n; i++) {
-    if (points[i]) { k = i; break; }
-  }
-  if (k < 0 || !(interval > 0)) return null;
-  const t0 = points[k].t;
+  if (!n || !(interval > 0)) return null;
   const xs = new Array(n);
   const up = new Array(n);
   const dl = new Array(n);
@@ -391,21 +390,24 @@ function _qbPointsToData(points, interval) {
     up[i] = p ? p.up : null;
     dl[i] = p ? p.dl : null;
   }
+  if (!known.length) return null;
   let seg = 0;  // 已消费的真值段游标(known 有序, 单遍推进)
   for (let i = 0; i < n; i++) {
     if (seg < known.length && known[seg] === i) {
-      xs[i] = points[i].t;  // 真值覆写
+      xs[i] = points[i].t;  // 真值直读(新契约每点必带 t; 旧契约非 null 桶按真值落点)
       seg++;
     } else if (seg === 0) {
-      xs[i] = t0 - (known[0] - i) * interval;  // 首个真值点前的外推
+      // 旧契约(agg 段窗)首个真值点前的外推(新契约无 null 元素, 本支不达)
+      xs[i] = points[known[0]].t - (known[0] - i) * interval;
     } else if (seg >= known.length) {
-      xs[i] = points[known[known.length - 1]].t + (i - known[known.length - 1]) * interval;  // 末尾外推
+      // 旧契约末尾外推(同上)
+      xs[i] = points[known[known.length - 1]].t + (i - known[known.length - 1]) * interval;
     } else {
-      const a = known[seg - 1], b = known[seg];  // 两真值点之间线性内插
+      const a = known[seg - 1], b = known[seg];  // 旧契约两真值点之间线性内插(同上)
       xs[i] = points[a].t + (points[b].t - points[a].t) * (i - a) / (b - a);
     }
   }
-  return { xs, up, dl, anchor: { k, t0, interval, xs } };
+  return { xs, up, dl, anchor: { xs } };
 }
 
 /* 孤点索引(两侧皆 null 的非 null 桶; uPlot points.filter 约定 = 返回要画点标的索引数组)。
@@ -429,8 +431,9 @@ function _qbYRange(dmax, cap) {
   return [0, cap > 0 ? Math.max(cap, top) : top];
 }
 
-/* 缺口游程(连续 null 桶的 [起, 止] 索引对; 模块级纯函数供 node 单测)。
- * 判据 = **上下载皆 null**(后端整桶 null 时两列同 null; 单列 null 防御性不误判成缺口)。 */
+/* 缺口游程(连续缺口点的 [起, 止] 索引对; 模块级纯函数供 node 单测)。
+ * 判据 = **上下载皆 null**(schema=2 显式空值点 {t, dl:null, up:null} 与旧契约 null 桶经
+ * _qbPointsToData/_qbPointsColumns 转列后同为双 null; 单列 null 防御性不误判成缺口)。 */
 function _qbGapRuns(up, dl) {
   const out = [];
   let s = -1;
@@ -446,8 +449,8 @@ function _qbGapRuns(up, dl) {
   return out;
 }
 
-/* 数据链边界: 首/末个非空桶下标(全系列无观测 -> [-1, -1]) —— 「数据链」= 本帧实际
- * 有观测的那段连续区间。
+/* 数据链边界: 首/末个非空点下标(全系列无观测 -> [-1, -1]) —— 「数据链」= 本帧实际
+ * 有观测的那段连续区间(显式空值点/旧契约 null 桶转列后皆双 null, 不算观测)。
  * !这条边界**只认本次取到的 points**, 不用种子 added_on 推算: added_on 是「最近一次
  *   被加进 qB」的时刻(跳检即删同 hash 再重加 —— core/modules/ops_mod.py 的 delete ->
  *   add, hr/resolve.py 据 added_on 变化识别该语义), 而流量按 infohash 长期留存
@@ -478,8 +481,10 @@ function _qbChainBounds(up, dl) {
 function _qbGapZone(i, first, last) {
   return i < first || i > last ? "outside" : "mid";
 }
-/* points([{t, up, dl} | null]) -> 画布同形状的两列([up], [dl]); hover 侧因此能直接复用
- * _qbChainBounds/_qbGapZone(与 _qbDrawGaps 直读 u.data[1]/u.data[2] 同判据)。 */
+/* points([{t, dl, up} | null]) -> 画布同形状的两列([up], [dl]); hover 侧因此能直接复用
+ * _qbChainBounds/_qbGapZone(与 _qbDrawGaps 直读 u.data[1]/u.data[2] 同判据)。
+ * schema=2 样本分组契约下 points 元素恒为字典(显式空值点 = 双 null 列位); 旧契约 null 桶
+ * 元素照旧转双 null —— 两种形态共用同一缺口判据(E3)。 */
 function _qbPointsColumns(points) {
   const up = [];
   const dl = [];
@@ -492,18 +497,22 @@ function _qbPointsColumns(points) {
 }
 
 /* 重启缝提示判据(plan 26-10-15-0829 P4, 模块级纯函数供 node 单测; 左端口径修订 26-10-16,
- * issue 26-10-16-0954): 「数据链末点早于右沿且重启贴近链末」 -> 返回 { startedAt }, 否则 null。
- * - 数据链末点 = 最后一个非 null 桶; 尾部未观测区存在 <=> 末非 null 下标 < n-1(链已到
- *   右沿 = 无尾区, 不提示 —— 正常尾桶观测/当前桶未采完都不是缝);
+ * issue 26-10-16-0954; 右沿改真值 t 直读 26-11-18-0037 阶段 3): 「数据链末点早于右沿且重启
+ * 贴近链末」 -> 返回 { startedAt }, 否则 null。
+ * - 数据链末点 = 最后一个**有真值**的点(schema=2 显式空值点 {t, dl:null, up:null} 与旧契约
+ *   null 桶都不算观测 —— 按列值判, 不按元素真值判); 尾部未观测区存在 <=> 末非空下标
+ *   < n-1(链已到右沿 = 无尾区, 不提示 —— 正常尾组观测不是缝);
  * - 重启贴近链末 <=> meta.server_started_at(后端进程出生时刻, traffic_qb._SERVER_STARTED_AT)
- *   ∈ [链末桶前一桶起点 t-interval, 右沿] 内(左端含)。原口径左端 = 链末桶覆盖端 t+interval,
- *   其隐含前提「链末桶晚于重启时刻 => 链已接续、无误读面」在「重启后首采已入账、随后立即
- *   进入开放零游程」形态下不成立(实测帧: 重启 04:45:01 -> 首采桶 04:45:02, 04:45:04 起整片
- *   斜纹到右沿却零提示): 首采(恒落在重启后 <= 一个 main_tick)总归进链末桶, 但尾区仍在 ——
- *   「链在重启处断」与「重启后首采桶即链末」在桶粒度上不可分, 左端须放宽一桶宽; 反方向
- *   链末桶起点晚于重启 + 1 个桶宽以上 = 链确已接续, 不提示。重启晚于右沿不可能(右沿 = 响应
- *   构建时刻, 防御);
- * - meta 无新键(旧后端)/全 null/interval 非法 -> null(不猜, 向后兼容: 旧前端忽略新键,
+ *   ∈ [链末点前一个组距起点 t-interval, 右沿] 内(左端含)。原口径左端 = 链末覆盖端 t+interval,
+ *   其隐含前提「链末晚于重启时刻 => 链已接续、无误读面」在「重启后首采已入账、随后立即
+ *   进入开放零游程」形态下不成立(实测帧: 重启 04:45:01 -> 首采 04:45:02, 04:45:04 起整片
+ *   缺口到右沿却零提示): 首采(恒落在重启后 <= 一个 main_tick)总归进链末组, 但尾区仍在 ——
+ *   「链在重启处断」与「重启后首采即链末」在组粒度上不可分, 左端须放宽一个组距; 反方向
+ *   链末点起点晚于重启 + 1 个组距以上 = 链确已接续, 不提示。重启晚于右沿(末点真值 t)=
+ *   链在重启前已断/重启尚未产生观测, 不提示属预期(断连语义走徽标面, 不混读 —— D3);
+ * - 右沿 = 末点真值 t(schema=2 每点必带 t, 尾部显式空值点的 t 即缺口折叠位 —— 旧等距外推
+ *   (n-last)*interval 退役); 旧契约末桶无 t(agg 段窗 null 元素)时按 interval 等距外推承袭;
+ * - meta 无新键(旧后端)/全空/interval 非法 -> null(不猜, 向后兼容: 旧前端忽略新键,
  *   新前端遇旧后端也不提示)。all 月视图非等距, 端点用标称月长近似 —— 但月视图
  *   末桶(当前月)由活尾 pending 行常态覆盖(last == n-1), 实际不达判据面。 */
 function _qbSeamHint(points, interval, meta) {
@@ -511,15 +520,19 @@ function _qbSeamHint(points, interval, meta) {
   const n = points.length;
   let last = -1;
   for (let i = n - 1; i >= 0; i--) {
-    if (points[i]) {
+    const p = points[i];
+    if (p && (p.up != null || p.dl != null)) {
       last = i;
       break;
     }
   }
-  if (last < 0 || last >= n - 1) return null;  // 全 null(空态面)/链已到右沿: 无尾部未观测区
+  if (last < 0 || last >= n - 1) return null;  // 全空(空态面)/链已到右沿: 无尾部未观测区
   const started = Number(meta.server_started_at);
-  const chainPrevStart = points[last].t - interval;  // 链末桶前一桶起点 = 判据左端(重启与链末不可分带下界)
-  const rightEdge = points[last].t + (n - last) * interval;  // 末桶覆盖端 = 右沿(等距栅格)
+  const chainPrevStart = points[last].t - interval;  // 链末点前一个组距起点 = 判据左端(重启与链末不可分带下界)
+  const lastP = points[n - 1];
+  const rightEdge = lastP && Number(lastP.t) > 0
+    ? lastP.t  // 右沿 = 末点真值 t(新契约每点必带 t —— 26-11-18-0037 阶段 3)
+    : points[last].t + (n - last) * interval;  // 旧契约末桶无 t: 等距外推承袭(agg 段窗)
   if (started < chainPrevStart || started > rightEdge) return null;
   return { startedAt: started };
 }
@@ -664,56 +677,61 @@ function _qbFxCellPx(plotCssWidth, nPoints) {
 function _qbFxShouldShift(cellPx) {
   return cellPx >= _QB_FX_CELL_MIN_PX;
 }
-/* 拍几何判定单点(F5, plan 26-11-15-1104 §03 F5/§07 R5; 模块级纯函数供 node 电池)。
- * 替换旧 rewin 裸点数比较(st.n !== n, 点数变化 = 重定标): 点数在两个 +1 来源下都会波动而
- * 窗没换 —— (a)判定帧补尾格使显示列 +pad 格; (b)非整倍窗(6h/12h/24h)floor+1 桶数随轮询相位
- * 497<->498 翻动 —— 裸点数比较把两类拍都误判成跨窗换档(该拍动画不播/瞬时落地 = 周期性瞬跳,
- * 同族抖动的最后一个残留源)。真跨窗换档 = 窗几何不连续, 判据两条:
- *   1 桶宽 step 变了(换窗/采样档变更 -> 重定标);
- *   2 真窗起点跳出连续滚动域(|dx0| > 2 格 —— 换窗跳位/停摆多格补拍)。
- * 其余(0/+1/+2 格平移, 含翻动拍与补点拍)一律按连续拍走 L0/L1。桶边仍钉绝对时刻倍数
- * (F2 点位归属与封口桶不可变依赖 floor 对齐, 本判据不改窗首锚定)。
- * 入参 xs = 显示列(头部可能带补点), pad = 头部补点格数; 全部输出按**真窗口**语义
- * (补点不计): n = 真窗口点数 / x0 = 真窗起点 / dx0 = 真窗起点位移 / roll = 连续滚动拍
- * (L0 候选 —— 是否真摆回再由 cellPx/shift 档决定)。 */
-function _qbRollJudge(st, xs, pad) {
+/* 拍几何判定单点(F5, plan 26-11-15-1104 §03 F5/§07 R5; 变长点列适配 26-11-18-0037 阶段 3;
+ * 模块级纯函数供 node 电池)。
+ * 替换旧 rewin 裸点数比较(st.n !== n, 点数变化 = 重定标): schema=2 样本分组点列本就变长
+ * (相位 ±1 + 缺口标记), 点数恒不是窗几何信号; 旧 xs[1]-xs[0] 等距 step 假设同批退役 ——
+ * 点列间距随组相位/缺口折叠浮动, 不再承担「格宽」语义。真跨窗换档 = 窗几何不连续, 判据两条:
+ *   1 组距标称 step 变了(stepNom = meta.interval_s, schema=2 = k x si / agg = 桶宽;
+ *     换窗/采样档变更/分组口径 k 上调 -> 重定标);
+ *   2 真窗起点跳出连续滚动域(|dx0| > 2 step —— 换窗跳位/缺口折叠多格补拍)。
+ * 其余(0/+1/+2 组距平移, 含缺口标记滚出与补点拍)一律按连续拍走 L0/L1。
+ * 窗右沿锚末样本(D1 全步进): 滚动推进以**末样本 t 位移(dxN)**为主信号 —— 尾组 t = 最新
+ * 样本 ts 每 tick 推进, k>1 时首端成组滚出(dx0 呈 0/step 阶跃)而尾端逐拍推进, 两端位移
+ * 分离记账(F5)下各自独立成立; 摆回/滑动的 min/max 锚各按 dx0/dxN 走。
+ * 入参 xs = 显示列(头部可能带补点), pad = 头部补点点数, stepNom = meta 组距标称
+ * (缺/非法回落真窗口首间距 —— 防御, meta 恒在场时不达); 全部输出按**真窗口**语义
+ * (补点不计): n = 真窗口点数 / x0 = 真窗起点 / dx0 = 真窗起点位移 / dxN = 末样本位移 /
+ * roll = 连续滚动拍(L0 候选 —— 是否真摆回再由 cellPx/shift 档决定)。 */
+function _qbRollJudge(st, xs, pad, stepNom) {
   const p = pad || 0;
   const n = xs.length - p;
   const x0 = p > 0 ? xs[p] : xs[0];
   const xN = xs[xs.length - 1];
-  const step = xs.length >= 2 ? xs[1] - xs[0] : 0;
+  const step = Number(stepNom) > 0 ? Number(stepNom)
+    : (n >= 2 ? xs[p + 1] - xs[p] : 0);
   const dx0 = st.xs0 != null ? x0 - st.xs0 : 0;
-  // 末端位移与首端分离(F5): 翻动拍一(窗起点 +1 格、窗末点不动, 非整倍窗相位跨左边界)下
-  // dx0 = +step 而 dxN = 0; 翻动拍二(窗起点不动、窗末点 +1 格, 相位跨右边界)下 dx0 = 0 而
-  // dxN = +step —— L0 摆回/滑动的 min/max 锚必须各按 dx0/dxN 走, 否则摆回视图窄一格(右端
-  // 瞬跳, G-B 的镜像)。旧拍无 xN0 记账时回落 dx0(整格滚动的两端位移恒相等)。
   const dxN = st.xN0 != null ? xN - st.xN0 : dx0;
   const rewin = st.n != null && ((st.step != null && st.step !== step)
     || Math.abs(dx0) > step * 2);
-  // roll = 连续滚动拍(L0 候选): 任一端有正向位移且两端位移都不出 ±2 格滚动域 —— 翻动拍二
-  // (dx0=0、dxN=+1 格)由此入列(F5 评审轮1: 右缘扩格照播 L0, 消灭 ~58 拍一次的右缘瞬跳);
-  // 零变化拍(两端 0)与停摆多格(>2 格)/窗回退不滚。2 格恰边界承袭 S9b 口径(<=)。
+  // roll = 连续滚动拍(L0 候选): 任一端有正向位移且两端位移都不出 ±2 组距滚动域 —— 缺口
+  // 折叠点多格滚出(dx0 > 2 step)与停摆多拍补齐(dxN > 2 step)不滚, 瞬时落地;
+  // 零变化拍(两端 0)不滚。2 组距恰边界承袭 S9b 口径(<=)。
   const roll = !rewin && step > 0 && (dx0 > 0 || dxN > 0)
     && Math.abs(dx0) <= step * 2 && Math.abs(dxN) <= step * 2;
   return { n, x0, xN, step, dx0, dxN, rewin, roll };
 }
-/* 判定帧补尾格列构造(F5/D2, 模块级纯函数供 node 电池; G-B「摆回固有左缺口瞬移」的根治)。
+/* 判定帧补尾格列构造(F5/D2, 模块级纯函数供 node 电池; G-B「摆回固有左缺口瞬移」的根治;
+ * 变长点列适配 26-11-18-0037 阶段 3)。
  * 收敛帧 auto x range 精确 = [xs[0], xs[n-1]](vendor xn() 无 padding), 旧曲线贴左缘; 下一拍
- * 判定帧 setData 换新数据(首点右移一格)+ 同帧摆回旧视图 -> 新数据左缘留一格空隙 -> 曲线左端
- * 同帧从 0px 跳进一格再随 L0 滑回。修法: 整格滚动拍把上一拍显示列头部的真值桶(真实历史观测,
- * 不造数 —— null 桶照实补)补进新数据头部再落袋, 摆回后曲线左端恰贴住视图左缘, 滑动期间被
- * 左缘裁剪恒贴 0px; 摆回拍收敛帧把补点摘除(真窗口交还 auto, 补点此后出视图), 下一拍重复。
+ * 判定帧 setData 换新数据(首点右移)+ 同帧摆回旧视图 -> 新数据左缘留出空隙 -> 曲线左端
+ * 同帧从 0px 跳进空隙再随 L0 滑回。修法: 滚动拍把上一拍显示列头部**已滚出的真值点**(真实
+ * 历史/缺口观测, 不造数 —— 显式空值点照实补)补进新数据头部再落袋, 摆回后曲线左端恰贴住
+ * 视图左缘, 滑动期间被左缘裁剪恒贴 0px; 摆回拍收敛帧把补点摘除(真窗口交还 auto, 补点此后
+ * 出视图), 下一拍重复。
  * 补点条件(全满足才补, 否则返回 null 原列落袋):
- *   - 本拍窗几何连续(_qbRollJudge: !rewin 且 dx0 恰 = k x step, k = 0..2; k=0 = 翻动拍二/
- *     零变化, 无新格可补, 只做下述携带);
- *   - 上一拍显示列可读且其头部真值桶末格 t 恰 = 新窗起点 - 一格(记账自洽校验: 相位翻动拍一
- *     (窗起点 +1 格/末点不动)照补 —— 旧首桶确已出列; 翻动拍二/零变化(窗起点不动)下旧首桶
- *     仍在新数据里, 补了重键, 由 k=0 + 携带门天然不补)。
+ *   - 本拍窗几何连续(_qbRollJudge: !rewin —— 滚动域 ±2 组距内);
+ *   - 滚出点数按点列真值**现数**(变长点列如实适配): 上一拍真值列头部 t < 新窗起点 x0 的点
+ *     即已滚出, k = 0..2(等距栅格下与旧 round(dx0/step) 恒等; 相位/缺口浮动下按数据事实计,
+ *     旧「dx0 恰 = k x step」严丝合缝校验随之退役 —— 补点本就取滚出点真值, 无缝可言);
+ *     k=0 = 尾组推进拍/零变化(窗起点不动), 无点可补, 只做下述携带。
  * 携带门(F5 评审轮1 finding2): 上一拍是非摆回拍(instant/reduce/长窗)时其补点列滞留到静止态
- * (_qbPad = pIdx > 0), 首个摆回拍必须**携带**旧补点(total = pIdx + k, 从列首起切)并让摆回
- * min 计 padPrev 偏移(见 _qbBeatStart), 否则 t=0 视口/曲线左端跳 pIdx 格。携带只在「本拍会
- * 摆回」(willShift —— 收敛帧会摘全部补点, 不累积)或「无新格」(k=0, 携带不增长)时发生;
- * 非摆回有新增拍(instant/reduce 滚动)重置为 k 格, 补点数恒有界。
+ * (_qbPad = pIdx > 0), 首个摆回拍必须**携带**旧补点(total = pIdx + k, 从列首起切), 否则
+ * t=0 视口/曲线左端跳 pIdx 点。携带只在「本拍会摆回」(willShift —— 收敛帧会摘全部补点,
+ * 不累积)或「无新点」(k=0, 携带不增长)时发生; 非摆回有新增拍(instant/reduce 滚动)重置为
+ * k 点, 补点数恒有界。
+ * 不变量: 补点整体落在新窗起点左侧(末点 t < x0) —— t=0 摆回视图 min 锚 = 显示列首点真值
+ * (见 _qbBeatStart dxMin0), 曲线左端恰贴视图左缘与上一拍逐像素连续。
  * 返回 [xs, up, dl] 三列(新数组, 不改写入参 —— data.xs/anchor.xs 同引用, 悬停取值锚必须
  * 保持真值列); 补点不参与 tooltip/悬停取值锚(R5, setCursor 按 _qbPad 扣回真值索引)。 */
 function _qbPadTailColumns(prev, data, j, willShift) {
@@ -723,15 +741,17 @@ function _qbPadTailColumns(prev, data, j, willShift) {
     || !j || j.rewin) return null;
   const pIdx = prev._qbPad || 0;
   if (!(pIdx >= 0) || pIdx >= cols[0].length) return null;
-  const k = j.step > 0 ? Math.round(j.dx0 / j.step) : 0;
-  if (k < 0 || k > 2 || Math.abs(j.dx0 - k * j.step) > 1e-6) return null;
+  const x0 = data.xs[0];
+  let k = 0;
+  while (pIdx + k < cols[0].length && cols[0][pIdx + k] < x0) k++;
+  if (k > 2) return null;  // 多点滚出 = 滚动域之外(judge rewin 同界; 防御)
   const carry = (willShift || k === 0) && pIdx > 0;
   const total = carry ? pIdx + k : k;
   if (total < 1 || total > cols[0].length) return null;
   const from = carry ? 0 : pIdx;
   const padXs = cols[0].slice(from, from + total);
   if (padXs.length !== total || padXs[total - 1] == null
-    || Math.abs(padXs[total - 1] - (data.xs[0] - j.step)) > 1e-6) return null;
+    || !(padXs[total - 1] < x0)) return null;  // 补点必须整体在新窗起点左侧(无缝贴左缘)
   const padCol = (col) => (col ? col.slice(from, from + total) : new Array(total).fill(null));
   return [padXs.concat(data.xs), padCol(cols[1]).concat(data.up), padCol(cols[2]).concat(data.dl)];
 }
@@ -1215,7 +1235,7 @@ window.AQB_QB_TRAFFIC = {
       return s ? this[_QB_SCOPES[s].window] : "24h";
     },
     /* 悬停取值(对齐 dialogs.js histHover 十字先例): 时刻 + 上/下载速率(fmtSpeed 同源);
-     * null 桶不出速率, 出缺口文案(qbCurGapText, 按区段 × 作用域 —— 2026-10-30 起不再对
+     * 缺口点不出速率, 出缺口文案(qbCurGapText, 按区段 × 作用域 —— 2026-10-30 起不再对
      * 所有缺口一视同仁地归因); 0 桶状态行在 drawer.html 模板侧(up+dl==0)。left/flip 由
      * 十字线 px 折算。 */
     qbCurHover() {
@@ -1239,9 +1259,9 @@ window.AQB_QB_TRAFFIC = {
       if (s === "group") return "该时段无该分组数据";
       return "该时段无数据";
     },
-    /* 窗口内累计(totals 非空桶求和; 断线/重置桶本就 null 不计 —— §5.1 差分语义) */
+    /* 窗口内累计(totals 真值点求和, 与 points 等长同构; 缺口/断线/重置向本就 null 不计 —— §5.1 差分语义) */
     /* 重启缝提示(P4, plan 26-10-15-0829; 左端口径修订 26-10-16, issue 26-10-16-0954):
-     * 数据链末点早于右沿且重启贴近链末(meta 新键 server_started_at ∈ [链末桶前一桶起点, 右沿])
+     * 数据链末点早于右沿且重启贴近链末(meta 新键 server_started_at ∈ [链末点前一个组距起点, 右沿])
      * 时给「数据接缝中」提示, 不与停机洞混读; 判据单点 _qbSeamHint(纯函数, node 单测),
      * null = 非缝(纯停机洞/链确已接续/旧后端)。
      * 断线语义不变: null 桶照旧断线不连线 + 斜纹, 提示只是追加一行状态注解。 */
@@ -1311,12 +1331,14 @@ window.AQB_QB_TRAFFIC = {
     qbFxPeriodS() {
       return (this._qbFxCurPeriodMs() / 1000).toFixed(1);
     },
-    /* F6 显示口径(plan 26-11-14-1313): 「采样」读 meta.sample_interval_s(B1 只增键, 生效采样
-     * 间隔), 与 meta.interval_s(桶宽)不等时两值「X s · 桶宽 Y s」; 相等或缺失回落现状单值
-     * (qbFxPeriodS = _qbPollMs 实算)。两值面读 raw meta(采样间隔/桶宽都是事实值,
-     * 不吃轮询夹取 —— hour 段窗桶宽 3600s 夹到 600s 就读错值了)。F7(plan 26-11-15-1104 D6)
-     * 后 beat/轮询派生量单点锚 _qbFxCurPeriodMs 同读 sample_interval_s 夹取 —— 状态行两组值
-     * (采样/beat·周期)同源一致, 本 computed 只改显示文案不改节律。 */
+    /* F6 显示口径(plan 26-11-14-1313; 组距语义 26-11-18-0037 阶段 3): 「采样」读
+     * meta.sample_interval_s(生效采样间隔), 与 meta.interval_s 不等时两值形态。schema=2
+     * 样本分组契约(raw 段窗)下 interval_s = 组距标称 k x si(桶面已退役)—— 二值出
+     * 「X s · 组距 Y s」; agg 段窗(D4 零改动)无 schema 键, 二值仍是「X s · 桶宽 Y s」。
+     * 相等或缺失回落现状单值(qbFxPeriodS = _qbPollMs 实算)。两值面读 raw meta(采样间隔/
+     * 组距·桶宽都是事实值, 不吃轮询夹取)。F7(plan 26-11-15-1104 D6)后 beat/轮询派生量
+     * 单点锚 _qbFxCurPeriodMs 同读 sample_interval_s 夹取 —— 状态行两组值(采样/beat·周期)
+     * 同源一致, 本 computed 只改显示文案不改节律。 */
     qbFxSampleText() {
       const s = this.qbCurScope;
       const d = s ? this[_QB_SCOPES[s].data] : null;
@@ -1324,6 +1346,7 @@ window.AQB_QB_TRAFFIC = {
       const si = Number(m && m.sample_interval_s);
       const iv = Number(m && m.interval_s);
       if (!(si > 0) || !(iv > 0) || Math.abs(si - iv) < 1e-9) return this.qbFxPeriodS + " s";
+      if (Number(m && m.schema) === 2) return si.toFixed(1) + " s · 组距 " + iv.toFixed(1) + " s";
       return si.toFixed(1) + " s · 桶宽 " + iv.toFixed(1) + " s";
     },
     qbFxBeatMs() {
@@ -1900,17 +1923,14 @@ window.AQB_QB_TRAFFIC = {
       // 等 v-if 分支进 DOM 再建图(uPlot 要量容器宽); 轮询间隔随新 meta 重排(换窗/间隔变更)
       this.$nextTick(() => this._qbChartBuild(scope));
     },
-    /* 悬停桶的时刻(null 桶也能定位: 建图时的锚携带整列真值 xs(月行按行间隔非等距);
-     * 旧锚形状无 xs 时回退等距公式推算) */
+    /* 悬停点的时刻(锚面 = _qbPointsToData 产出的全列真值 xs —— schema=2 每点带 t 直读,
+     * 旧契约 null 槽由内插/外推补齐; 锚缺席(防御)回落该点真值 t, 旧契约 null 槽无 t = 0) */
     _qbBucketTs(scope, i) {
       const a = this._qbAnchors && this._qbAnchors[scope];
-      if (!a) {
-        const d = this[_QB_SCOPES[scope].data];
-        const p = d && d.points ? d.points[i] : null;
-        return p ? p.t : 0;
-      }
-      if (a.xs) return a.xs[i];
-      return a.t0 + (i - a.k) * a.interval;
+      if (a && a.xs) return a.xs[i];
+      const d = this[_QB_SCOPES[scope].data];
+      const p = d && d.points ? d.points[i] : null;
+      return p ? p.t : 0;
     },
     _qbHoverOf(scope) {
       const def = _QB_SCOPES[scope];
@@ -1923,7 +1943,10 @@ window.AQB_QB_TRAFFIC = {
       const W = (this._qbChartWs && this._qbChartWs[scope]) || 0;
       const flip = W > 0 && this[def.hoverLeft] > W * 0.62;
       const lim = _qbLimitAt(d.limits || [], ts);  // D7: 悬停时刻生效的当时限速(缺口也给 —— 时间真值)
-      if (!p) {
+      // 缺口判据(E3, 26-11-18-0037 阶段 3): 旧契约 null 槽与 schema=2 显式空值点({t,
+      // dl:null, up:null})同判 —— 双 null 即缺口, 不出速率不出「0 B/s 空闲」(空闲 = (0,0)
+      // 真实观测点, 与缺口可辨)。
+      if (!p || (p.up == null && p.dl == null)) {
         // 缺口: 交付**区段判据**(数据链之外 vs 链中间的洞); 文案由 qbCurGapText 按
         // 「区段 × 作用域」给 —— webui.md 单点口径, 模板只引用不重算原因
         const [first, last] = _qbChainBounds(..._qbPointsColumns(d.points));
@@ -2015,7 +2038,7 @@ window.AQB_QB_TRAFFIC = {
       u.ctx.scale(px, px);
       return px;
     },
-    /* 缺口斜纹(drawClear 钩子 = 画在系列**之下**): 只给**数据链中间**的缺口(null 桶游程,
+    /* 缺口斜纹(drawClear 钩子 = 画在系列**之下**): 只给**数据链中间**的缺口(缺口点游程,
      * _qbGapZone === "mid")铺 45 度斜纹 —— 斜纹是「中断」的视觉记号, 只配给中断。
      * !2026-10-30: 链外的空白(该对象第一次采样之前 / 最后一次之后)留白不铺 —— 它同样是「不
      *   知道原因的没有数据」, 铺斜纹等于在视觉上重复一遍 tooltip 已经纠掉的归因错误。
@@ -2778,18 +2801,19 @@ window.AQB_QB_TRAFFIC = {
     },
     /* ================= 节拍调度器(S1, plan 26-11-12-1139 §03 L0/L1 + §06) =================
      * 判定帧 = 每次 _qbLoad 成功落袋(续拉快路 setData 之后同帧触发, 见 _qbChartBuild 快路)。
-     * F5(plan 26-11-15-1104)判定帧补尾格 + rewin 判据改造: 整格滚动拍由快路把上一拍首桶点
-     * (真实历史观测)补进显示列头部(_qbPadTailColumns 单点, u._qbPad 记账格数)再落袋 —— 摆回
-     * 视图下曲线左端贴住左缘, 滑动期间被左缘裁剪恒贴 0px(G-B「摆回固有左缺口瞬移」根治);
-     * 摆回拍的收敛帧把补点摘除(真窗口交还 auto, 补点出视图), 下一拍重复。拍几何判定单点
-     * _qbRollJudge: 跨窗换档 = 桶宽 step 变化 或 真窗起点跳出 ±2 格滚动域(旧裸点数比较
-     * st.n !== n 退役 —— 补点 +1 与非整倍窗 497<->498 相位翻动不再误判成换档, 翻动拍照常播
-     * L0); 补点不参与 tooltip/悬停取值锚(setCursor 扣回真值索引 —— R5)与纵轴档位(dmax 扫描
-     * 从真窗口起步)。
+     * F5(plan 26-11-15-1104)判定帧补尾格 + rewin 判据改造(变长点列适配 26-11-18-0037 阶段 3):
+     * 滚动拍由快路把上一拍已滚出的头部真值点(真实历史/缺口观测)补进显示列头部(_qbPadTailColumns
+     * 单点, u._qbPad 记账点数, 滚出点数按点列真值现数)再落袋 —— 摆回视图下曲线左端贴住左缘,
+     * 滑动期间被左缘裁剪恒贴 0px(G-B「摆回固有左缺口瞬移」根治); 摆回拍的收敛帧把补点摘除
+     * (真窗口交还 auto, 补点出视图), 下一拍重复。拍几何判定单点 _qbRollJudge: 跨窗换档 =
+     * 组距标称 step 变化 或 真窗起点跳出 ±2 组距滚动域(旧裸点数比较 st.n !== n 与等距
+     * xs[1]-xs[0] step 假设退役 —— 样本分组点列相位 ±1/缺口标记下点数与间距都浮动, 不再
+     * 误判成换档, 滚动拍照常播 L0); 补点不参与 tooltip/悬停取值锚(setCursor 扣回真值索引
+     * —— R5)与纵轴档位(dmax 扫描从真窗口起步)。
      * 每拍两件事, 驱动源解耦(D2):
      *   L0 视口偏置左移(I8, 数据刷新语义): 真窗口已 setData 落袋(data / _qbAnchors / tooltip
-     *     全部真值), 绘制视口先摆回旧位置 setScale("x", {min: xs[pad]-dx0, max: xs[n-1]-dxN})
-     *     (F5: min/max 锚都在真窗口上, dxN = 窗末点位移 —— 翻动拍 0), 再按 easeOut 在 shiftMs
+     *     全部真值), 绘制视口先摆回旧位置 setScale("x", {min: xs[pad]-dxMin0, max: xs[n-1]-dxN})
+     *     (F5: min/max 锚都在真窗口上, dxN = 末样本位移 —— 尾组推进拍 dx0=0), 再按 easeOut 在 shiftMs
      *     内归零; 过渡期不重建 xs、不改 up/dl、不碰 _qbAnchors;
      *     收敛帧 setData(resetScales 默认 true) 显式交还 auto range(摆回拍同步摘除头部补点)。
      *   L1 双轨数值收敛(纯数据语义, 非装饰): 两列独立 {prev,target,shown,delta,level,live},
@@ -2815,19 +2839,21 @@ window.AQB_QB_TRAFFIC = {
       // reduce 判定单点读 AQB_FX_CFG(S0-b 已带有效值 on = enabled && !reduce): on 为假有
       // 两个分量 —— reduce(系统要求减弱动效)才短路, enabled=false(用户关总开关)不短路
       const reduce = !!(cfg && cfg.enabled === true && cfg.on === false);
-      // F5 补尾格记账: 快路落袋的显示列头部可能带上一拍补的尾格(u._qbPad 格, 真实历史观测)。
+      // F5 补尾格记账: 快路落袋的显示列头部可能带上一拍补的点(u._qbPad 点, 真实历史观测)。
       // 拍几何一律经 _qbRollJudge 按**真窗口**语义判定(补点不计): st.n/st.xs0 跨拍记账同为
-      // 真值 —— 补点的 +1 与非整倍窗相位翻动(497<->498)不再误判成跨窗换档(旧裸点数比较
-      // st.n !== n 退役, 判据单点 = 桶宽 step 变化 或 窗起点跳出 ±2 格滚动域)。
-      // st.padPrev = 上一拍显示列的补点格数(快路覆写 _qbPad 前记账)—— 非摆回拍遗留的补点
-      // 占位, 摆回 min/帧循环 min 锚按它偏移(评审轮1 finding2)。
+      // 真值 —— 补点与缺口标记引起的点数浮动不再误判成跨窗换档(旧裸点数比较 st.n !== n
+      // 退役; 等距 xs[1]-xs[0] step 假设同批退役, 26-11-18-0037 阶段 3), 判据单点 = 组距
+      // 标称 step 变化 或 真窗起点跳出 ±2 组距滚动域; step 取 meta.interval_s(样本分组契约
+      // = k x si, agg = 桶宽), meta 缺席回落真窗口首间距(防御)。
       const pad = u._qbPad || 0;
-      const padPrev = st.padPrev || 0;
-      const j = _qbRollJudge(st, xs, pad);
+      const dSrc = this[_QB_SCOPES[scope].data];
+      const j = _qbRollJudge(st, xs, pad, Number(dSrc && dSrc.meta && dSrc.meta.interval_s));
       if (!j.n) return;
-      // L0 几何: dx0 = 新窗起点 - 旧窗起点(uPlot distr=1 时间量纲, 已读 vendor 确认 setScale
-      // min/max 走时间戳)。等距窗滚动 = 一格; 月行非等距/跨月按实差; 同网格(agg 桶未进新桶) = 0。
-      // 跨窗换档(窗几何不连续 = 重定标, 尾桶已不是同一个桶, 不播过渡)与多桶滚动(>2 格)瞬时落地。
+      // L0 几何: dx0 = 新窗起点 - 旧窗起点 / dxN = 新末样本 - 旧末样本(uPlot distr=1 时间
+      // 量纲, 已读 vendor 确认 setScale min/max 走时间戳)。等距窗滚动 = 一格; 样本分组点列
+      // (schema=2)首端按组滚出(dx0 呈 0/step 阶跃)、尾组 t 逐拍推进(dxN 每 tick 增);
+      // 月行非等距/跨月按实差; 同窗无新样本 = 0。
+      // 跨窗换档(窗几何不连续 = 重定标)与滚动域外(>2 组距)瞬时落地。
       const rewin = j.rewin;
       const dx0 = j.dx0;
       const dxN = j.dxN;
@@ -2837,6 +2863,10 @@ window.AQB_QB_TRAFFIC = {
       st.n = j.n;
       st.step = step;
       st.xN0 = j.xN;
+      // min 侧总位移(摆回锚 = 上一拍视图 min): 补点拍 = 显示列首点真值到真窗起点的实距
+      // (变长点列按数据事实计, 旧 dx0 + padPrev·step 等距算术退役 —— 显示列头部补点即上一拍
+      // 视图 min, 携带门保证连续); 无补点拍 = dx0(上一拍真窗起点位移)。
+      const dxMin0 = pad > 0 ? xs[pad] - xs[0] : dx0;
       // 面板状态行「上次真实拍 Xs 前」镜像(§05.3 状态行格式, S3): 真拍判定帧到达即写当前 scope
       // 的墙钟时间(每拍一笔, 非热路径); 只镜像面板浮着的图(scope 对齐 qbCurScope), 其余挂点
       // 的拍不写。Date.now 而非 performance.now: 展示面要墙钟语义(隐藏期冻结的动画时钟不参与)。
@@ -2893,7 +2923,7 @@ window.AQB_QB_TRAFFIC = {
         // 保持 anim 形态与主路同构)。
         const fx = this._qbFxSpawn(u, tl, dxN, false, yMax);
         if (fx) {
-          st.anim = { dx0: 0, dxN: 0, dxMin0: 0, padPrev, needsShift: false, needsTail: false,
+          st.anim = { dx0: 0, dxN: 0, dxMin0: 0, needsShift: false, needsTail: false,
             n, pad, tl, yMax, clock: 0, lastT: 0, lastDx: null, lastDxMax: null, fx,
             phase: "impact", easeF: _qbFxCurve(cfg ? cfg.ease : undefined) };
           st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
@@ -2916,12 +2946,12 @@ window.AQB_QB_TRAFFIC = {
         if (tr.dl.live && tr.dl.prev !== tr.dl.target) u.data[2][n - 1] = tr.dl.prev;
       }
       if (needsShift) {
-        // F5: 摆回锚 = 上一拍视图(min = 真窗起点 - dx0 - padPrev·step, max = 真窗末点 - dxN
-        // —— 翻动拍一 dxN=0 max 恒驻/翻动拍二 dx0=0 min 恒驻) —— 补点格恰在视图左缘外展,
-        // 曲线左端贴住摆回视图左缘(上一拍视图的 0px 位置), G-B 左缺口瞬移与其右缘镜像一起
-        // 消失。padPrev·step = 上一拍非摆回遗留补点占位(评审轮1 finding2: 快路覆写 _qbPad 前
-        // 记账, 携带式补点拍 min 锚计偏移 —— t=0 视口与曲线左端双连续)。
-        u.setScale("x", { min: xs[pad] - dx0 - padPrev * step, max: xs[n - 1] - dxN });
+        // F5: 摆回锚 = 上一拍视图(min = 真窗起点 - dxMin0, max = 真窗末点 - dxN —— 翻动拍一
+        // dxN=0 max 恒驻/尾组推进拍 dx0=0 min 恒驻) —— 补点恰在视图左缘外展, 曲线左端贴住
+        // 摆回视图左缘(上一拍视图的 0px 位置), G-B 左缺口瞬移与其右缘镜像一起消失。
+        // dxMin0 = 显示列首点真值到真窗起点的实距(变长点列按数据事实计; 旧 padPrev·step
+        // 等距算术退役, 26-11-18-0037 阶段 3)。
+        u.setScale("x", { min: xs[pad] - dxMin0, max: xs[n - 1] - dxN });
         u.setScale("y", { min: 0, max: yMax });  // 与 x 成对: 该提交不得按偏置可视窗重推 y
       }
       // S2 装饰状态(V1 色彩/V2 形状/V3 粒子/N 层/D3 仲裁 + S2-b T2 光带/T4 扫描束/R6 横向
@@ -2939,7 +2969,7 @@ window.AQB_QB_TRAFFIC = {
       const fx = this._qbFxSpawn(u, tl, dxN, needsShift, yMax);   // F5: tip 位移按 max 侧(评审轮1 finding3)
       // easeF = 判定帧冻结的数值插值曲线(S3, _qbFxCurve 单点): 本拍全程只用它, 拍中改 ease
       // 不换式(D21 例外条款) —— L1 帧循环经 _qbFxShown(track, 原始进度, easeF) 消费。
-      st.anim = { dx0, dxN, dxMin0: dx0 + padPrev * step, padPrev, needsShift, needsTail, n, pad,
+      st.anim = { dx0, dxN, dxMin0, needsShift, needsTail, n, pad,
         tl, yMax, clock: 0, lastT: 0,
         lastDx: needsShift ? dx0 : null, lastDxMax: needsShift ? dxN : null, fx, phase: "impact",
         easeF: _qbFxCurve(cfg ? cfg.ease : undefined) };
@@ -3013,11 +3043,10 @@ window.AQB_QB_TRAFFIC = {
         // 令 uPlot splits 首刻位低一格的单帧回跳(issue 26-11-17-0936; 阈值见 _QB_FX_L0_SNAP_REM)
         const r = rem < _QB_FX_L0_SNAP_REM ? 0 : rem;
         const dx = r * a.dx0;
-        // F5: 末端位移 dxN 与首端分离(翻动拍一 dxN=0: max 恒驻真窗末点, 只 min 滑一格;
-        // 翻动拍二 dx0=0: min 恒驻真窗起点, 只 max 滑一格); dxMax 缺参回落 dx0(旧 anim 形态/
-        // 预览 anim 无 dxN —— 整格滚动两端位移恒相等)。min 侧总位移 dxMin0 = dx0 +
-        // padPrev·step(评审轮1 finding2: 非摆回遗留补点随滑动按比例退役, 滑动终点恰落真窗
-        // 起点 —— 收敛帧摘补点零跳变)。
+        // F5: 末端位移 dxN 与首端分离(首端滚出拍 dxN 可小于 dx0; 尾组推进拍 dx0=0: min 恒驻
+        // 真窗起点, 只 max 滑); dxMax 缺参回落 dx0(旧 anim 形态/预览 anim 无 dxN —— 整格
+        // 滚动两端位移恒相等)。min 侧总位移 dxMin0 = 显示列首点真值到真窗起点的实距(判定帧
+        // 记账; 携带补点随滑动按比例退役, 滑动终点恰落真窗起点 —— 收敛帧摘补点零跳变)。
         const dxMin = r * (a.dxMin0 != null ? a.dxMin0 : a.dx0);
         const dxMax = r * (a.dxN != null ? a.dxN : a.dx0);
         if (dx !== a.lastDx || dxMax !== a.lastDxMax) {
@@ -3349,21 +3378,19 @@ window.AQB_QB_TRAFFIC = {
       if (prev && prev.root && prev.root.isConnected && prev.root.parentElement === host) {
         this._qbAnchors[scope] = data.anchor;  // 悬停取值锚随新数据换新
         prev._qbLimits = (d && d.limits) || [];  // 限速事件随快路同步换(否则变更要等整图重建才可见)
-        // F5 判定帧补尾格(G-B 摆回固有左缺口瞬移的根治): 整格滚动拍把上一拍首桶点(真实历史
-        // 观测, 不造数)补进显示列头部再落袋 —— 滑动期间曲线左端贴住左缘; 摆回拍的收敛帧把
-        // 补点摘除(真窗口交还 auto, 补点出视图), 下一拍重复。判据/构造单点 _qbPadTailColumns
-        // (走 _qbRollJudge): 相位翻动拍二/换窗拍不补(旧首桶仍在列内或几何不连续);
-        // prev._qbPad = 显示列头部补点格数(悬停索引扣回/收敛摘除/下拍补点定位共用)。
-        // F5 评审轮1 finding2: 覆写 _qbPad 前把旧值记账进 st.padPrev —— 上一拍是非摆回拍时其
-        // 补点列滞留到静止态, 首个摆回拍的摆回 min/帧循环 min 锚按 padPrev 偏移(t=0 视口与
-        // 曲线左端双连续); 携带门(willShift/k=0)在 _qbPadTailColumns, 摆回门走 _qbFxShiftGate
-        // 与判定帧 needsShift 同一单点。
+        // F5 判定帧补尾格(G-B 摆回固有左缺口瞬移的根治): 滚动拍把上一拍已滚出的头部真值点
+        // (真实历史/缺口观测, 不造数)补进显示列头部再落袋 —— 滑动期间曲线左端贴住左缘;
+        // 摆回拍的收敛帧把补点摘除(真窗口交还 auto, 补点出视图), 下一拍重复。判据/构造单点
+        // _qbPadTailColumns(走 _qbRollJudge, 滚出点数按点列真值现数): 尾组推进拍/换窗拍不补
+        // (窗起点不动或几何不连续); prev._qbPad = 显示列头部补点点数(悬停索引扣回/收敛摘除/
+        // 下拍补点定位共用); 摆回 min 锚 = 显示列首点真值(变长点列按数据事实计, 无 padPrev
+        // 等距记账面 —— 26-11-18-0037 阶段 3)。携带门(willShift/k=0)在 _qbPadTailColumns,
+        // 摆回门走 _qbFxShiftGate 与判定帧 needsShift 同一单点。
         const cfgF = window.AQB_FX_CFG;
         const reduceF = !!(cfgF && cfgF.enabled === true && cfgF.on === false);
-        const jPad = _qbRollJudge(prev._qbBeat, data.xs, 0);
+        const jPad = _qbRollJudge(prev._qbBeat, data.xs, 0, Number(d.meta && d.meta.interval_s));
         const padCols = _qbPadTailColumns(prev, data, jPad,
           !reduceF && _qbFxShiftGate(cfgF, prev, jPad));
-        prev._qbBeat.padPrev = prev._qbPad || 0;
         prev.setData(padCols || [data.xs, data.up, data.dl]);
         prev._qbPad = padCols ? padCols[0].length - data.xs.length : 0;
         this._qbBeatStart(scope, prev);  // S1 判定帧: 真窗口已落袋, 同帧起拍(L0 左移 + L1 收敛)
@@ -3457,13 +3484,15 @@ window.AQB_QB_TRAFFIC = {
       u._qbLimits = (d && d.limits) || [];  // 限速事件暂存在图记录上(u.data 只有三列, D4 数据通路)
       // S1 节拍底座初值(图记录面, 同 _qbLimits 款不进 Vue state): 拍时钟/视口偏置空, 双轨以
       // 建图数据尾点为显示值(首拍 prev 接续 = 建图尾值, 领先沿不回跳);
-      // step = 建图桶宽(F5 rewin 判据的跨拍对照值), _qbPad = 头部补点格数(建图列恒真值 0)。
+      // step = 组距标称 meta.interval_s(schema=2 = k x si; agg = 桶宽; meta 缺席回落首间距
+      // 防御 —— F5 rewin 判据的跨拍对照值), _qbPad = 头部补点点数(建图列恒真值 0)。
+      const stepNom0 = Number(d.meta && d.meta.interval_s);
       u._qbBeat = {
         raf: 0,
         anim: null,
         xs0: data.xs[0],
         n: data.xs.length,
-        step: data.xs.length >= 2 ? data.xs[1] - data.xs[0] : 0,
+        step: stepNom0 > 0 ? stepNom0 : (data.xs.length >= 2 ? data.xs[1] - data.xs[0] : 0),
         xN0: data.xs[data.xs.length - 1],
         tracks: {
           up: _qbFxTrackNext(null, data.up[data.up.length - 1], 0),
