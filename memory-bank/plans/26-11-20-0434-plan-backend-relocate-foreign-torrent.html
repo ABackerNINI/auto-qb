@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组移动外部旧路径种子零破坏处置 (IYUU 辅种冲突)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="backend-relocate-foreign-torrent">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-20-0434">
+<meta name="doc-updated" content="26-11-20-0434">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: backend-relocate-foreign-torrent</div>
+<h1>整组移动外部旧路径种子零破坏处置 (IYUU 辅种冲突)</h1>
+<p class="lede">本篇只回答: 整组移动收尾窗前后, IYUU 等外部工具经 qB WEBUI 按旧路径添加的辅种种子如何被识别与处置——收尾窗内零破坏纳入收尾、收尾后只通知; 全程不删种、不重加、不跳检、不静默全量校验。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-20-0434 · <b>doc-updated</b> 26-11-20-0434 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-20 会话: 三轮只读子代理取证 (relocate 机制 / 种子发现与跳检 / 纳入可行性核查) + grilling 四轮 14 问拍板 (D1-D14) + 用户三次改判 (默认开启 / 场景 B 只通知 / 无周期兜底)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>IYUU 按其缓存的本地种子 save_path 经 qB WEBUI 直接添加跨站辅种种子。整组移动 (relocate) 会改变组内种子的路径, 移动后旧路径先后经历「别名桥接 → 别名删除」两个阶段, IYUU 用旧路径加的新种子在两个阶段各有一种坏法 (§02)。</p>
+
+<h3>目标 (三条全达成 = 完成)</h3>
+<ol>
+  <li>收尾窗内到达的旧路径同内容种子自动纳入在途收尾, 收尾不再被它们卡死;</li>
+  <li>收尾后到达的旧路径种子 100% 被发现并通知 (含数据现位置提示);</li>
+  <li>对种子与组数据零破坏。</li>
+</ol>
+
+<h3>设计底线 (不变量)</h3>
+<ul>
+  <li>零破坏性动作: 不删种、不重加、不跳检、绝不静默跑全量校验 (D8/D9);</li>
+  <li>文件清单不一致的种子绝不自动处置, 只告警 (D4);</li>
+  <li>处置不依赖 tracker 配置命中, 与 IYUU 具体添加形态无关 (D6);</li>
+  <li>全量扫描只在时机触发, 无周期兜底 (D12/D13);</li>
+  <li>一切处置动作进事件日志 (D14)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>relocate 收尾机制三段 (现状)</h3>
+<ol>
+  <li><b>搬迁</b>: qB setLocation 搬 mover 数据 → 新位置有数据, 其余成员 save_path 仍是旧路径;</li>
+  <li><b>桥接</b>: moved 相位末在旧路径建别名 (junction/symlink/hardlink), 穿透校验通过转 armed 后, 旧路径成员经别名继续做种;</li>
+  <li><b>收尾</b>: qB 下线窗 daemon 改写 BT_backup fastresume (save_path → 新路径) → 重启 qB → 核验全员到位 → 删链门扫「还有谁依赖旧路径」→ 删别名 → done。</li>
+</ol>
+
+<h3>痛点</h3>
+<ul>
+  <li><b>场景 A (收尾窗内到达)</b>: 新种子 save_path = 旧路径, 数据经别名可达、能正常做种, 但它不是 job 成员 ⇒ ① 删链门把它当第三方依赖, 收尾卡在 armed 不结束; ② fastresume 改写不覆盖它, 永远到不了新路径; ③ 「删链门扫描 → 删链」窄窗内到达则删链后立即文件丢失。<span class="wr">用户实际撞到的是本场景。</span></li>
+  <li><b>场景 B (收尾完成后到达)</b>: IYUU 服务端缓存移动前路径, 下次辅种仍按旧路径加; 别名已删 ⇒ 立即缺文件。qB 对 skip_checking 添加也做基础文件检查 (D11), 故呈 missingFiles 而非假种, 但种子不可用。</li>
+  <li><b>链式再迁移 (A→B→C)</b>: IYUU 缓存最老的第 A 代路径, 需把终态 job 账的 src→dst 边拼成传递闭包; 终态账滚动保留 20 条, 老映射会消失。</li>
+  <li><b>侦测面限制</b>: 新增种子事件管线在 tracker 域名未命中配置时直接跳过 (qbmanager.py:1057-1071), 事件收不到; relocate 目前无新增种子订阅。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p><b>落点</b>: relocate 模块内新面 (<code>relocate_foreign.py</code> + 配置键挂 relocate 段), 复用 job 账 / 别名 / 收尾机器, 不建独立模块 (D7)。</p>
+
+<p><b>侦测 (D12)</b>: 每拍消费同步层原始 added 差集 (store 现算, 未经 tracker 过滤门) —— 成本 O(本拍新增), 与库里种子总数无关; 全量扫描只在四个时机触发 (启动首轮 / job arm / 开关翻转 / qB 重连首轮), 无周期兜底 (D13)。</p>
+
+<p><b>处置分流</b> (均以「路径命中 + 文件清单一致」为前提, D4):</p>
+<ul>
+  <li>场景 A (活跃 job 作用域命中) → <b>零破坏纳入收尾</b> (S3): 追加 state <code>job.hashes</code> + <code>spec.members</code> 双面; pre-armed 到达纳入即暂停、arm 随成员恢复 (D10); 待收尾标签增量补打。</li>
+  <li>场景 B (终态账旧根命中, 含链式闭包) → <b>只通知</b> (S5): 告警含数据现位置; 处置留给用户 (D8)。</li>
+</ul>
+
+<p><b>纳入后的自动覆盖面</b> (实时派生自 job.hashes): fastresume 改写清单 (spec 双写后)、核验覆盖、删链门成员豁免、缺文件扫描让路、跳检让路、既有删种拦截面 (计划 26-11-05-0808 的 D16)。需手补的只有: spec 双写、pending_tag 增量、pre-armed 暂停/恢复、核验悬挂放宽 (S4)。</p>
+
+<p><b>明确不做</b>: 删种重加、跳检、自动全量校验、场景 B 种子自动迁移 (D8/D9)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>配置面: <code>relocate.foreign_torrent</code> (bool, 默认 true; 名可实施时微调) 进 schema/ + validate_config 聚合校验 + 文案</td><td>配置校验测试红绿; 缺键报错清晰</td></tr>
+  <tr><td>S2</td><td>侦测面 <code>relocate_foreign.py</code>: 每拍消费同步层原始 added 差集 (store 暴露最近一拍 added, 不过 tracker 门); 四时机全量兜底; 候选 = 路径命中 (活跃 job scope 单点 / 终态账旧根闭包) → 文件清单比对 (rec.files vs job.plan.files, 同归一口径含大小); 去重 (在 job.hashes 幂等跳过; 已通知 hash 记 state <code>relocate.foreign.notified</code>, 种子消失清理); 单拍处理有界 FIFO</td><td>单测: 未匹配 tracker / skip 与非 skip / stopped / 带分类各形态全兜住; 清单不一致只告警; 差集消费 O(新增)</td></tr>
+  <tr><td>S3</td><td>场景 A 纳入: 追加 job.hashes + 读-改-写 <code>spec["members"]</code> (hash_v1/v2 双 hash, 复用 <code>_torrent_v2_of</code>), journal 零写; pre-armed 到达 <code>torrents_pause</code> + 入 resume_hashes (arm 走既有恢复确认账); pending_tag 增量补打</td><td>单测: 改写清单含新成员 / 删链门豁免 / 标签补打; spec 双写幂等</td></tr>
+  <tr><td>S4</td><td>收尾守卫 + 链式映射: 纳入成员改写未回流时核验按 WAIT, 不触发 reset_rewrites 重放与永久悬挂; 终态账 src→dst 边 + plan.inherited 闭包解析器 (同根多条按 job_rank 取新)</td><td>红绿: 收尾不再被纳入种子卡死; 悬挂不再被纳入种子触发; 链式 A→C 映射单测</td></tr>
+  <tr><td>S5</td><td>场景 B 通知面: WARNING 日志 + WebUI relocate 面板「旧路径外部种子」列表/计数, 文案含数据现位置或「映射已过期」; 通知去重随种子消失清理</td><td>e2e/桩: 通知呈现与去重</td></tr>
+  <tr><td>S6</td><td>收尾: 全量绿 + 基线切片; 分批评审; 架构文档 relocate 篇回写</td><td>test.full 全绿 (见 kb.baseline)</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 四轮已全部拍板 (§06)。实施中撞到需新决策的点先停下来问用户, 不自行扩范围。</p>
+
+<h2><span class="no">§06</span>拍板记录 (2026-11-20)</h2>
+
+<table>
+  <tr><th>D</th><th>结论</th></tr>
+  <tr><td>D1</td><td>范围 = 场景 A + B + 链式旧根全管 (实际撞到的是 A)</td></tr>
+  <tr><td>D2</td><td>链式映射尽力而为 (终态账闭包), 映射不出只告警</td></tr>
+  <tr><td>D3</td><td>场景 A 处置 = 零破坏纳入收尾 (否决删种重加路线)</td></tr>
+  <tr><td>D4</td><td>识别 = 路径命中 + 文件清单一致 (含大小) 才处置; 不一致只告警</td></tr>
+  <tr><td>D5</td><td>功能默认开启 (改判, 原推荐默认关)</td></tr>
+  <tr><td>D6</td><td>不绑定 IYUU 具体配置, 所有添加形态兜住</td></tr>
+  <tr><td>D7</td><td>落点 = relocate 模块内新面, 配置挂 relocate 段</td></tr>
+  <tr><td>D8</td><td><span class="wr">改判</span> 场景 B 只通知; 全程无删种/重加/跳检 (Q8 分层 / Q9 分片哈希门 / Q10 数据在场闸随之作废)</td></tr>
+  <tr><td>D9</td><td><span class="wr">改判</span> 全量校验绝不静默自动跑; 判坏种子通知 + 用户手动 (Q12b 作废)</td></tr>
+  <tr><td>D10</td><td>pre-armed 相位到达纳入即暂停, arm 随成员恢复; armed 后到达不动</td></tr>
+  <tr><td>D11</td><td><span class="wr">事实纠正</span> qB 对 skip_checking 添加也做基础文件检查 (用户实证); 场景 B 到达呈 missingFiles 而非假种</td></tr>
+  <tr><td>D12</td><td><span class="wr">修正</span> 侦测 = 同步层原始 added 差集 (不过 tracker 门) + 四时机全量兜底; 逐拍全量扫被否 (5000 种子场景形状错误)</td></tr>
+  <tr><td>D13</td><td>无周期兜底 (接受: 差集漏消费要等下一次时机触发自愈)</td></tr>
+  <tr><td>D14</td><td>呈现 = 事件日志 + WebUI relocate 面板</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1 核验悬挂放大</td><td>纳入成员改写迟迟不回流, 触发单次重放闸后永久悬挂</td><td>S4 守卫: 按 journal rewrite 状态区分 WAIT 与 VERIFY_FAILED</td></tr>
+  <tr><td>R2 删链窄窗漏侦测</td><td>「删链门扫描 → 删链」之间到达, 差集已消费但处理未及</td><td>自愈: 落场景 B 通知; 不扩大自动动作</td></tr>
+  <tr><td>R3 差集漏消费</td><td>单拍差集异常跳过且无周期兜底 (D13)</td><td>接受边界: 下次时机触发自愈; 场景 A 漏纳的可见后果 = 删链门卡住收尾 (良性态); 频率异常时再议兜底</td></tr>
+  <tr><td>R4 IYUU 突发批量加种</td><td>一拍差集数十条</td><td>单拍有界 FIFO 分拍处理, 主循环不被拖长</td></tr>
+  <tr><td>R5 清单不一致种子写穿目录别名</td><td>目录别名形态下同目录异内容种子落旧路径</td><td>既有已确认行为 (迁移确认框明示), 只告警不改</td></tr>
+  <tr><td>R6 内容不同但大小相同的跨站种</td><td>罕见重打包场景</td><td>属 IYUU/跳检自身域, 不新增校验; 文档记边界</td></tr>
+  <tr><td>R7 终态账滚动丢映射</td><td>20 条滚出最老 done 账</td><td>通知文案降级「映射已过期」; 不新增持久账 (D2)</td></tr>
+  <tr><td>R8 spec 第二写者</td><td>armed 后读-改-写 spec</td><td>仅主循环线程写 + 原子读改写; journal 零写 (改写清单 = spec.members − 已收口 现算)</td></tr>
+  <tr><td>R9 纳入成员被用户删</td><td>收尾窗内用户删除纳入种子</td><td>absence_shrink 既有机制正确收缩 (静默缺席不计数), 无新机制</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-20-0434</span> 初版。来源: 2026-11-20 会话三轮取证 + grilling 四轮 14 问 (D1-D14, 含三次改判)。主线: 场景 A 零破坏纳入收尾 + 场景 B 只通知; 侦测走同步层 added 差集 + 时机兜底, 无周期兜底。</li>
+</ul>
+
+</div>
+</body>
+</html>
