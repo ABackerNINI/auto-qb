@@ -148,6 +148,61 @@ for (const skin of SKINS) {
       expect(stale, '导航焦点: 键盘切页后旧页签不残留焦点框').toBe(0);
     });
 
+    test('Esc 归还鼠标遗留焦点: 多类按钮点击后按 Esc 不留残留焦点框 @fast', async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(tab(page, 'shows')).toBeVisible({ timeout: 15_000 });
+
+      /* 报障(26-11-19): 鼠标点击按钮类控件后按 Esc 会多一个边框。机制 = 鼠标点击时按钮持焦但
+       * fv=false(无框), Esc 的 keydown 分发期 Chromium 把焦点元素重估为 fv=true => 画出残留
+       * outline(fv 分发期已翻转, 无法当场辨来源, 见坑档 nav-focus-stale-ring.md)。修法在
+       * lifecycle.js::focusin 当场按 modality 记账 + Esc 退栈尾归还鼠标遗留焦点; 键盘焦点不入账。
+       * 覆盖用户列举的多类控件: 主标签 / 主表名称列表头 / 状态栏按钮。均为点击后焦点稳定的控件
+       * (不改视图、不开抢焦弹层), 保证"鼠标点击持焦"这一步可观测。 */
+      const targets = [
+        { name: '主标签', sel: 'nav.tabs [data-view="shows"]' },
+        { name: '主表表头', sel: '.h-cell.sortable' },
+        { name: '状态栏按钮', sel: '.sb-kbd-sw' },
+      ];
+      for (const t of targets) {
+        const el = page.locator(t.sel).first();
+        await expect(el).toBeVisible({ timeout: 10_000 });
+        await el.click({ force: true });
+        /* 鼠标点击: 持焦且无 focus-visible 框(修法的记账前提, 也钉住"鼠标来源"语义) */
+        await expect.poll(async () => page.evaluate((sel) => {
+          const b = document.querySelector(sel);
+          return b ? { focused: document.activeElement === b, fv: b.matches(':focus-visible') }
+            : { focused: false, fv: true };
+        }, t.sel), { message: `${t.name}: 鼠标点击后持焦且无焦点框` }).toEqual({ focused: true, fv: false });
+
+        /* Esc 后: 该控件不再持焦或无 fv 框(残留框已归还 body) */
+        await page.keyboard.press('Escape');
+        await expect.poll(async () => page.evaluate((sel) => {
+          const b = document.querySelector(sel);
+          if (!b) return true;
+          return document.activeElement !== b || !b.matches(':focus-visible');
+        }, t.sel), { message: `${t.name}: Esc 后不留残留焦点框` }).toBe(true);
+      }
+
+      /* 反向边界(评审 minor 守卫): 鼠标点按钮后再按一个不移动焦点的实键(End), modality 已转
+       * 键盘、焦点仍在按钮且 fv=true(标准键盘焦点框) —— 此时 Esc 不该把这个键盘焦点框抹掉
+       * (坑档 nav-focus-stale-ring.md: 抹它伤键盘可达性)。_onKeyModalityTrack 在实键时清账,
+       * 保证 _mouseFocusEl 已空 => Esc 归还逻辑不触发。 */
+      const kbSel = 'nav.tabs [data-view="shows"]';
+      const kbBtn = page.locator(kbSel);
+      await kbBtn.click();
+      await page.keyboard.press('End');
+      await expect.poll(async () => page.evaluate((sel) => {
+        const b = document.querySelector(sel);
+        return !!b && document.activeElement === b && b.matches(':focus-visible');
+      }, kbSel), { message: '前置: End 转键盘 modality, 焦点仍在按钮且显示焦点框' }).toBe(true);
+      await page.keyboard.press('Escape');
+      await expect.poll(async () => page.evaluate((sel) => {
+        const b = document.querySelector(sel);
+        return !!b && document.activeElement === b && b.matches(':focus-visible');
+      }, kbSel), { message: '键盘 modality 下 Esc 不抹掉标准焦点框' }).toBe(true);
+    });
+
     test('Esc 退出搜索框聚焦: 焦点归还、搜索词保留、列表键位复活 @fast', async ({ page }) => {
       collectRuntimeErrors(page);
       await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });

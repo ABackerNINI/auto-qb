@@ -86,6 +86,13 @@ window.AQB_LIFECYCLE = {
     // 显示全交给 CSS(body.kbd-persist 驱动开关高亮), 切换零重绘(D4); 初值由 mounted 从本机
     // 偏好恢复(见 _kbdPersistStored)。
     this._kbdPersistOn = false;
+    /* ESC 残留焦点框(26-11-19 报障, 坑档 web-ui/nav-focus-stale-ring.md 同型扩大版):
+     * 鼠标点按钮类控件会让它持焦但 :focus-visible=false(无框); 按 Esc 时 Chromium 在 keydown
+     * 分发期把焦点元素重估为 :focus-visible=true, 画出残留 outline。分发期 matches 已翻转、
+     * 无法辨别焦点来源(坑档实测), 故在 focusin **当场**按 modality 记账: 鼠标焦点
+     * (:focus-visible=false)记下元素, 键盘 Tab 焦点(true)清空 —— 后者是标准焦点语义, 不动。
+     * 纯缓存不进 data(P1-2 口径); Esc 时把鼠标遗留焦点归还 body。 */
+    this._mouseFocusEl = null;
   },
   async mounted() {
     /* P1-2: 视口高度 + 页面滚动监听(被动 + rAF 合帧, 滚动本身不做任何布局读取) */
@@ -210,8 +217,39 @@ window.AQB_LIFECYCLE = {
         this.clearFilters();
         this.toast("已清除全部筛选: 搜索词保留", "ok", 2500);
       }
+      /* ESC 残留框归还(26-11-19 报障, 坑档 nav-focus-stale-ring.md 同型扩大版): 鼠标点过的
+       * 按钮类控件持焦, Esc 的 keydown 分发被 Chromium 重估为 :focus-visible=true => 画出残留
+       * outline。焦点来源已在 focusin 当场记下(_mouseFocusEl, 见 _onFocusInTrack) —— 这里只归还
+       * 鼠标来源的遗留焦点; 键盘 Tab 焦点从未入账, 原样保留(标准焦点语义, 不伤 Tab 序)。无条件
+       * 置于退栈链之后: 本次 Esc 无论是否关闭了浮层, 只要焦点仍是鼠标遗留就归还 body; 输入框
+       * 分支(搜索框)已 blur 且输入框 focusin 时 fv=true 本不入账, 不冲突。 */
+      const focused = document.activeElement;
+      if (focused && focused === this._mouseFocusEl) {
+        this._mouseFocusEl = null;
+        focused.blur();
+      }
     };
     document.addEventListener("keydown", this._onEscKey);
+    /* 焦点来源记账(ESC 残留框修复, 26-11-19): focusin 当场 :focus-visible 尚未被后续按键重估,
+     * 能正确反映 modality —— 鼠标点击聚焦 => false(记下元素), 键盘 Tab 聚焦 => true(清空)。
+     * 捕获级保证先在业务处理器前记账; 与 _onEscKey 同一 NODE 生命周期, unmounted 一并撤除。 */
+    this._onFocusInTrack = (e) => {
+      const el = e.target;
+      this._mouseFocusEl = (el && el !== document.body && el !== document.documentElement &&
+        el.matches && !el.matches(":focus-visible")) ? el : null;
+    };
+    document.addEventListener("focusin", this._onFocusInTrack, true);
+    /* 键盘 modality 配对守卫(ESC 残留框修复): 鼠标点按钮入账后, 若用户在同一元素上又按了
+     * 别的实键(modality 转键盘、焦点未移动 => 无新 focusin 来清账), 该焦点框已转成标准键盘
+     * 焦点语义 —— 坑档 nav-focus-stale-ring.md: 抹掉它伤键盘可达性。故非 Escape 实键一律
+     * 清账; 纯修饰键(Shift/Ctrl/Alt/Meta)不切 modality, 不清。Escape 自己留给 _onEscKey
+     * 的归还逻辑(本监听注册在其后, Escape 时归还先跑, 这里直接 return 不动账)。 */
+    this._onKeyModalityTrack = (e) => {
+      if (e.key === "Escape" || e.key === "Shift" || e.key === "Control" ||
+          e.key === "Alt" || e.key === "Meta") return;
+      this._mouseFocusEl = null;
+    };
+    document.addEventListener("keydown", this._onKeyModalityTrack);
     // 键盘快捷键引擎(计划 26-09-28-0354 W1): 必须注册在 Esc 退栈链**之后**(注册序 = 触发序);
     // 引擎自身对 Escape 也直接放行, 双保险。句柄存实例, unmounted 撤掉防热重载堆叠。
     this._kbKeyDown = (e) => this._kbOnKeyDown(e);
@@ -361,6 +399,17 @@ window.AQB_LIFECYCLE = {
       document.removeEventListener("keydown", this._onEscKey);
       this._onEscKey = null;
     }
+    // ESC 残留框修复(26-11-19): focusin 来源记账监听随组件销毁撤掉(同上, 防热重载句柄堆叠),
+    // 鼠标焦点缓存一并清(元素可能已随 DOM 卸载, 不留悬空引用)
+    if (this._onFocusInTrack) {
+      document.removeEventListener("focusin", this._onFocusInTrack, true);
+      this._onFocusInTrack = null;
+    }
+    if (this._onKeyModalityTrack) {
+      document.removeEventListener("keydown", this._onKeyModalityTrack);
+      this._onKeyModalityTrack = null;
+    }
+    this._mouseFocusEl = null;
     if (this._onWinResizeDebounced) {
       window.removeEventListener("resize", this._onWinResizeDebounced);
       this._onWinResizeDebounced = null;

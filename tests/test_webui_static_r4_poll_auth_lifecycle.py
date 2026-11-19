@@ -6,7 +6,7 @@
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
-- test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归; S1(计划 26-11-14-0041)反引号显影链新增 document keydown(第 4 条)/keyup + window blur 三支监听, 同样注册/撤除对称(keydown 计数 3->4), 并真跑显影 handler 核对六约束判定面(合法反引号加 class / 反引号 repeat 维持按住不隐 / IME·输入态·录制态不加 / 每次非反引号 keydown 自愈 / keyup·blur·visibilitychange(hidden) 兜底清 / 不吞事件 I5); S5(同计划)常驻开关同电池: 挂载读本机偏好恢复开关态(刷新保留)/ 开挂 body.kbd-persist 且偏好落盘 autoqb.ui.kbdPersist / 常驻态按住反引号不叠加 kbd-reveal(两态互斥)/ 关后回到仅显影 / unmounted 清两态 body class
+- test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归; S1(计划 26-11-14-0041)反引号显影链新增 document keydown(第 4 条)/keyup + window blur 三支监听, 同样注册/撤除对称(keydown 计数 3->4), 并真跑显影 handler 核对六约束判定面(合法反引号加 class / 反引号 repeat 维持按住不隐 / IME·输入态·录制态不加 / 每次非反引号 keydown 自愈 / keyup·blur·visibilitychange(hidden) 兜底清 / 不吞事件 I5); S5(同计划)常驻开关同电池: 挂载读本机偏好恢复开关态(刷新保留)/ 开挂 body.kbd-persist 且偏好落盘 autoqb.ui.kbdPersist / 常驻态按住反引号不叠加 kbd-reveal(两态互斥)/ 关后回到仅显影 / unmounted 清两态 body class; 26-11-19 ESC 残留框修复新增 document focusin(第 5 支 keydown = modality 记账)两支监听, 同电池核注册/撤除对称(keydown 4->5 + focusin x1), 并真跑三 handler 记账语义(鼠标焦点 fv=false 入账/键盘焦点 true 不入账/body·空 target 不入账 / Esc 归还鼠标遗留焦点 blur+清账 / 实键 End 清账/修饰键 Shift 与 Escape 自身不清账 / 键盘焦点不被 Esc 抹掉=标准语义保留)
 - test_r4_webflags_boot_retry_and_ensure: issue 26-11-11-0633 —— loadWebFlags boot 韧性 node 电池真跑: boot 期(loadWebFlagsBoot)失败 1s/3s 退避各补一发共三发(穷尽止/中间态保持 fail-closed)、登出态(e.auth)不重试不排定时器、flagsLoaded 态(成功收口/"未取到"可分)、惰性补拉 ensureWebFlags(已取到返回 null 零副作用/未取到补一发)、并发单飞(同档同帧与退避窗口期并入复用同一 promise 不叠发)、档位分槽(boot 链在途时惰性补拉异档另起单发不骑退避链、惰性结算不挤占 boot 槽, 请求计数钉 3 发)
 - test_r4_truth_snapshot_materialized_members: S2a ingestion 物化缝(计划 26-11-11-0630 §03)× 乐观真值快照 node 电池真跑 —— S2a 后 _snapshotTruth 的组员源从服务端成员字典换成客户端物化拷贝, 此前该缝 tests/ 零命中。前置两断言钉 spike 裁决不变式(组员 = **独立浅拷贝**非平铺行引用, 同 hash 多命中各为独立对象; applyOptimisticPatch 经 _forEachRow 平铺行与组员拷贝同拍命中); 三个绿色向: 全量轮(命令在途)物化源 = 载荷平铺行 = 服务端真值 → 快照逐键比对不误判收敛(hold 保留)且 op.prev 保鲜为真值(兜底回滚不打到补丁值) / 全量轮真值落地 kind 对齐 → 正常收敛(撤 hold 出口) / 增量轮组未脏 → 组不进 d.groups → 快照无该 hash → 宁可慢收不误判(3s 兜底)。*已知边界(电池内注释, 不落断言)*: 误判窗口 = 组脏(**他员变化**使组进 d.groups)+ 该组另有成员 pending —— 物化源落到本地已打补丁行, 快照可能读到补丁值提前撤 hold(op.prev 同窗被污染); 影响如实两分支: 成功路径真值落地即收敛, 失败/停滞路径补丁值停留至该成员下次变化或下一次全量轮(回滚与 3s 兜底同被跳过, 长期滞留而非一轮弹回, 已确认接受该残留) —— S2a 报告「混合组未脏」表述以此修正: **组完全未脏是安全向**(即第三个绿色断言); 三入口接线覆盖落点(P5 评审修复后如实): delta 桶序 + 重组后 members 仍物化对象形 = S4 e2e 乐观用例(组员拷贝补丁不触字段 state == 平铺真值行的新鲜度档 + 暂停真值轮 delta.groups 形状钉, e2e/group-hash-ref.spec.mjs), 待补清账 drain 赋值后时序 = 本文件 test_r4_remat_drain_after_assign_two_beat, auth.js bootstrap 同缝 = 本函数静态钉(_materializeGroupRows 调用先于 this.groups 赋值, 跨度比较钉顺序) —— e2e 桩恒免鉴权(ui_harness skip_local_verify), 登录快照轮 e2e 不可达, 不再声称由 e2e 覆盖; 「先物化后赋值」的响应式时序半边(物化挪到赋值后产物相同, 仅 Vue 代理旁路差异)无直接断言面, 由 polling.js 注释声明 + e2e 产物面(组行 members 物化形)间接覆盖
 - test_r4_remat_drain_after_assign_two_beat: S2a delta 分支待补清账时序(P3 major 修复点「_rematDrain 必须在 this.groups 赋值之后」)node 电池真跑 —— 两拍缺项 delta 直调 applyStateRows(delta-sync.spec 行级语义直测同款载荷形状): 第一拍组行带未知 hash 成员(缺项保留 hash 串 + 登记 _rematQueue), 第二拍 torrents 桶补齐 + 组桶非空(物化索引入口的触发前提; 补物化组不在组桶, 只能走待补队列)→ 断言第一拍登记组行 members 补物化齐; **drain 挪回赋值前即红**(登记行当轮未进 this.groups, cur.includes 恒 false 被当轮丢弃, 第二拍队列空转 members 停 hash 串) —— 把 P3 修复语义钉进 node 层
@@ -522,10 +522,12 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   await LC.mounted.call(ctx);
 
   // mounted: 全部监听在册(scroll/resize 具名 + click/Esc/防抖 resize/可见性/右键/storage x2
-  //   + keydown x4: Esc 退栈/快捷键引擎/刷新守卫/反引号显影链 + 显影链 keyup x1 + window blur x1)
+  //   + keydown x5: Esc 退栈/快捷键引擎/刷新守卫/反引号显影链/ESC 残留框 modality 记账
+  //   + focusin x1(ESC 残留框焦点来源记账) + 显影链 keyup x1 + window blur x1)
   const cnt = (scope, type) => reg.filter((l) => l[0] === scope && l[1] === type).length;
   ok("mounted: click 收层监听在册", cnt("window", "click") === 1);
-  ok("mounted: keydown 恰四条(Esc 退栈 + 快捷键引擎 + 刷新守卫 + 反引号显影链)", cnt("document", "keydown") === 4);
+  ok("mounted: keydown 恰五条(Esc 退栈 + 快捷键引擎 + 刷新守卫 + 反引号显影链 + ESC modality 记账)", cnt("document", "keydown") === 5);
+  ok("mounted: focusin 恰一条(ESC 残留框焦点来源记账)", cnt("document", "focusin") === 1);
   ok("mounted: keyup 恰一条(反引号显影链 keyup 移除)", cnt("document", "keyup") === 1);
   ok("mounted: window blur 恰一条(显影链丢 keyup 兜底)", cnt("window", "blur") === 1);
   ok("mounted: resize 恰两条(具名 + 防抖)", cnt("window", "resize") === 2);
@@ -613,11 +615,61 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ctx.kbPersistToggle();  // 复置常驻态, 供 unmounted 清理断言
   ok("常驻: unmounted 前置态已挂", bodyCls.has("kbd-persist"));
 
+  // ESC 残留框记账电池(26-11-19 报障): 真跑 focusin/keydown/Esc 三支 handler 核对 modality
+  // 记账语义 —— 鼠标焦点入账 / 键盘 Tab 焦点不入账 / Esc 归还鼠标遗留焦点 / 实键转键盘 modality
+  // 后清账(Esc 不再抹键盘焦点框) / 修饰键不清账 / 非按钮元素(body)不入账。
+  const mkEl = (fv) => ({ matches: (s) => (s === ":focus-visible" ? fv : false), blurred: 0,
+    blur() { this.blurred += 1; if (document.activeElement === this) document.activeElement = document.body; },
+    classList: { toggle(c, force) { force ? bodyCls.add(c) : bodyCls.delete(c); } } });
+  const mouseBtn = mkEl(false);    // 鼠标点击聚焦: :focus-visible=false
+  const kbdBtn = mkEl(true);       // 键盘 Tab 聚焦: :focus-visible=true
+  document.body = mkEl(false);
+  // focusin 记账: 鼠标焦点入账, 键盘焦点清空
+  ctx._onFocusInTrack({ target: mouseBtn });
+  ok("ESC 框: 鼠标焦点(fv=false)入账", ctx._mouseFocusEl === mouseBtn);
+  ctx._onFocusInTrack({ target: kbdBtn });
+  ok("ESC 框: 键盘焦点(fv=true)不入账", ctx._mouseFocusEl === null);
+  ctx._onFocusInTrack({ target: document.body });
+  ok("ESC 框: body 焦点不入账", ctx._mouseFocusEl === null);
+  ctx._onFocusInTrack({ target: null });
+  ok("ESC 框: 空 target 不入账", ctx._mouseFocusEl === null);
+  // Esc 归还: activeElement 是鼠标遗留焦点 -> blur 且清账; 走空退栈链(所有分支默认 false)
+  Object.assign(ctx, { modal: { visible: false }, addOpen: false, statsOpen: false, speedOpen: false,
+    mgrOpen: false, metaOpen: false, moveOpen: false, hrsOpen: false, kbFullOpen: false,
+    relChain: { open: false }, filePrio: { visible: false }, drawerMenu: { visible: false },
+    fxPanel: { visible: false }, historyOpen: false, drawerVisible: false, headMenu: { visible: false },
+    colMenuOpen: false, uiMenuOpen: false, searchHelpOpen: false, kbHelpOpen: false, errPanelOpen: false,
+    relPop: { open: false }, filterMenu: "", menu: { visible: false }, selGroups: [], selMembers: [],
+    expandedKey: null, expandedShowEp: null, expandedShows: [], authOk: false, page: "groups",
+    hrPop: { open: false }, facetsActive: false, clearSelection() {}, clearFilters() {}, toast() {} });
+  const escEv = (o) => Object.assign({ key: "Escape", target: { closest: () => null }, isComposing: false, keyCode: 27 }, o);
+  ctx._onFocusInTrack({ target: mouseBtn });
+  document.activeElement = mouseBtn;
+  ctx._onEscKey(escEv());
+  ok("ESC 框: Esc 归还鼠标遗留焦点(blur + 清账)", mouseBtn.blurred === 1 && ctx._mouseFocusEl === null);
+  // 键盘 modality: 实键(End)清账 -> 后续 Esc 不 blur 键盘焦点框; 修饰键不清账
+  ctx._onFocusInTrack({ target: mouseBtn });
+  ctx._onKeyModalityTrack({ key: "End" });
+  ok("ESC 框: 实键清账(modality 转键盘)", ctx._mouseFocusEl === null);
+  ctx._onFocusInTrack({ target: mouseBtn });
+  ctx._onKeyModalityTrack({ key: "Shift" });
+  ok("ESC 框: 修饰键不清账", ctx._mouseFocusEl === mouseBtn);
+  ctx._onKeyModalityTrack({ key: "Escape" });
+  ok("ESC 框: Escape 自身不改账(留给归还逻辑)", ctx._mouseFocusEl === mouseBtn);
+  // 键盘来源焦点: 鼠标焦点入账后 Tab 到键盘按钮(fv=true) -> 不入账 -> Esc 不 blur 它
+  ctx._onFocusInTrack({ target: kbdBtn });
+  document.activeElement = kbdBtn;
+  ctx._onEscKey(escEv());
+  ok("ESC 框: 键盘焦点不被 Esc 抹掉(标准焦点语义保留)", kbdBtn.blurred === 0);
+  ctx._mouseFocusEl = null;  // 复位, 不干扰后续
+
   LC.unmounted.call(ctx);
 
-  // unmounted: 五支监听撤净(R5#3 修复面) + 显影链三支(keydown/keyup/blur)同撤 + 既有撤除面零回归
+  // unmounted: 五支监听撤净(R5#3 修复面) + 显影链三支(keydown/keyup/blur)同撤
+  //   + ESC 残留框两支(focusin 记账/keydown modality)同撤 + 既有撤除面零回归
   ok("unmounted: click 撤除", cnt("window", "click") === 0);
-  ok("unmounted: keydown 撤净(Esc 退栈 + 引擎 + 守卫 + 显影链)", cnt("document", "keydown") === 0);
+  ok("unmounted: keydown 撤净(Esc 退栈 + 引擎 + 守卫 + 显影链 + ESC modality 记账)", cnt("document", "keydown") === 0);
+  ok("unmounted: focusin 撤净(ESC 残留框焦点来源记账)", cnt("document", "focusin") === 0);
   ok("unmounted: keyup 撤净(显影链)", cnt("document", "keyup") === 0);
   ok("unmounted: window blur 撤除(显影链)", cnt("window", "blur") === 0);
   ok("unmounted: resize 撤净(具名 + 防抖)", cnt("window", "resize") === 0);
