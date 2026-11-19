@@ -2,6 +2,7 @@
 
 > 摘要: transfer 验证异步化 S5 守阵收口全量基线
 > 基线时间: 2026-11-20 06:38
+**Refs:** memory-bank/tasks/26-11-20-backend-transfer-verify-async.md
 
 ## 验收数字
 

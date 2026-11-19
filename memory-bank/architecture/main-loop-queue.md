@@ -9,7 +9,7 @@
 
 - **启动**: `materialize_schema_migration`(配置 schema 启动物化, 磁盘落后才写; dry-run 只探测) → `ctx.state.load()` + state 迁移物化 + 周期落盘起点(**必须在 `start_all` 之前**, issue 26-11-17-0214: reload 整体替换语义下, 启动期模块写点落在它之后才不被丢弃; reload 零连接依赖) → `host.start_all(dry_run)`(模块 start 按装配序: web 服务器/HR 端点/全局任务自注册; 移入 try 后启动期致命错误也走 finally → stop_all + 释放锁) → 首连(非托管失败抛 `QbConnectError` 干净退出; 托管 `--tray` 按 tick 重试) → 规则加载。
 - **每轮**(while True, 各线可独立到期):
-  - **命令线** `host.run_command_line()`: 消费 Web 命令 + 在途汇报确认; 有命令且非 dry-run 时本轮强制补一次同步。
+  - **命令线** `host.run_command_line()`: 消费 Web 命令 + 在途汇报确认 + transfer 验证中心回灌结论(尾部 drain, 见下「异步转移验证」); 有命令且非 dry-run 时本轮强制补一次同步。
   - **同步线** `_sync_line`(间隔 `sync_interval` 默认 1.5s; 快档 > 任务档时钳制到 main_tick): 只 `_refresh_torrents` 刷快照 + 视图发布, 不跑任务。
   - **任务线** `_task_line`(间隔 `main_tick` 默认 2s): `task_queue.run_due` 到期任务执行 + 任务线收尾(错误原因预取 → 视图发布 → 搜索索引推进)。
   - 两线同拍 → `_tick` = 完整一轮, 视图只重建一次。另有**微步线** `run_micro_line`: 跳检相位机每轮推进一步, 无固定节拍。
@@ -36,9 +36,13 @@
 
 不靠工作线程改队列: 主循环发 recheck API(同步返回, qB 后台异步校验), 队列中的 `check` 轮询子任务每 2s 读 store 快照判结果 —— 成功: `on_success` 后 `add_task(origin, keep_progress=True)` 断点续跑后续动作; 失败: `add_task(origin)` 默认重置重走完整决策链(当日连续失败达上限后冷却); 种子已删: 重入后由 origin 自己的删除守卫判死。发起入口 `OpsModule.ops_recheck`(`core/modules/ops_mod.py`; 在途登记或快照 checking 态即拒绝重复提交, 全来源生效)。
 
+### 异步转移验证 — daemon worker + 结论回灌(计划 26-11-20-0127)
+
+transfer 批次的目标侧整段(add→验证→pause)不在主循环等: `_cmd_transfer_run`(`webui/commands.py`)只跑生产段(读源→状态门→导出→准备; 全批无验证作业走快路径现场写回执), 验证作业与已结算结果经 `submit_batch` 递交 `webui/runtime_transfer.py` 的 TransferVerifyCenter —— 单 daemon worker FIFO 逐种子执行, 结论经 `queue.Queue` 回灌, 由命令线尾部(`consume_commands` 尾部调 `drain`, 暂停分支也跑)在主循环线程消费: 删源(成功且非 keep_source)→填槽→批次齐写回执, 删源并入 `cmd_changed_state` 白享 P0-5 补刷新; 单段终态回执契约不变(truth 逐字节同形), 前端零改动。关停: stop Event 让轮询等待即时醒(`Event.wait(poll_interval)`), 退出不 join; stop 后队列余量不再处理、在途验证自然结算但回执不写, 已验证未删源逐条 WARNING 丢弃清单(绝不自动删源), 验证任务/删除意图不持久化(重启不续跑)。worker 零共享态写(只碰作业/结果两队列 + 批次级自建目标 adapter, 不与主循环共用 Session); 兜底双保险: worker 循环级全异常合成 UNEXPECTED 回灌 + drain 对超龄未结算批次按 VERIFY_TIMEOUT 口径兜底结算。
+
 ## 单写线程约束
 
-**主循环所在线程是唯一修改任务队列结构与 state_file 的线程, 全程无锁。** 控制台模式下即主线程; `--tray` 模式下主循环整体移入后台线程(主线程为 UI), 约束语义不变。异步效果一律落"子任务轮询"模型, 不开工作线程写共享结构 —— 这是免锁的前提, 也是黄金法则「单一写线程」的落点。
+**主循环所在线程是唯一修改任务队列结构与 state_file 的线程, 全程无锁。** 控制台模式下即主线程; `--tray` 模式下主循环整体移入后台线程(主线程为 UI), 约束语义不变。异步效果落两个模型: 「子任务轮询」(队列任务后续 tick 到期)与「daemon worker + 结果队列回灌、主循环消费」(transfer 验证中心, 见上) —— 共同点是**不开工作线程写共享结构**, 这是免锁的前提, 也是黄金法则「单一写线程」的落点。
 
 ## 落盘时机 (state_file)
 

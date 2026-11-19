@@ -203,7 +203,7 @@ finally: self.host.stop_all() -> ctx.state.save() -> self._lock.release()
       <td>单次转移批次从「主循环停几十秒」变成「零等待」。触发频率中低（用户手动发起），但一次卡得最久，且是<strong>拆分面最小</strong>的一项。</td>
       <td>① <code>_delete_source</code> 走主 <code>QbApi.torrents_delete</code> → <code>store.remove_torrent</code>（<code>qbapi.py:214-216</code>），必须留主循环；② 回执别把「还在等」写成 ok，也别丢失「目标已受理但验证失败」的详情（现有回执会保留添加受理信息）；③ 等待要配叫停口，否则关停白等 10s（<code>concurrency.md</code> 第一条）；④ 结论丢失 / 目标侧已建好而源没删，要保住「源保留、数据文件永不删」的语义。</td>
       <td>先定「结论丢失」兜底（按 <code>VERIFY_TIMEOUT</code> 结算，源一律保留）。验：多目标慢响应下 <code>[cmd] 排队 &lt; 500ms</code>；逐条回执结果正确；关停耗时 &lt; N 秒；源种子不被误删。</td>
-      <td><span class="wr">P1</span> · <strong>已出正式实施计划，本件只记判断与验收面，待认领开工</strong>（<code>26-11-20-0127</code>，Open；grilling D1-D8 已拍板）</td>
+      <td><span class="wr">P1</span> · <strong>已完成</strong>（计划 <code>26-11-20-0127</code> S1-S6 实施落地，2026-11-20；实际修法 / 验证方式 / 测试数字见下方「行 1 实施留痕」）</td>
     </tr>
     <tr>
       <td>2</td>
@@ -246,6 +246,7 @@ finally: self.host.stop_all() -> ctx.state.save() -> self._lock.release()
       <td>P3 · 提前拆雷，待排期</td>
     </tr>
   </table>
+  <div class="callout"><strong>行 1 实施留痕（2026-11-20，计划 <code>26-11-20-0127</code> S1-S6 落地）</strong>——<strong>实际修法</strong>：目标侧整段（add→验证→pause）进 <code>webui/runtime_transfer.py</code> TransferVerifyCenter 单 daemon worker（FIFO 逐种子），生产段（读源→状态门→导出→准备）留主循环（<code>_cmd_transfer_run</code>，无验证作业批次走快路径现场写回执）；结论经 <code>queue.Queue</code> 回灌，由命令线尾部（<code>consume_commands</code> 尾部 drain，暂停分支也跑）在主循环线程消费——删源/回执/批次聚合全在主循环，单段终态回执契约不变，前端零改动。<strong>与建议修法的改道</strong>：目标 add 不留主循环、整段进线程（grilling D1 案甲）——建议原文「主循环只做源侧读、导出、目标 add」被否，同 adapter 两线程 Session 并发风险（案乙）；删源/回执消费挂点落命令线尾部（D6，与建议同形）。<strong>验证方式</strong>：慢目标桩四判据守阵——<code>[cmd] 排队 &lt; 500ms</code>、web 停止整段不阻塞（不 join）、逐条回执正确、源种子零误删。<strong>测试数字</strong>：全量 6543P/6S/0F 覆盖率 99%（基线切片 <code>26-11-20-0638-transfer-verify-async-s5</code>）。</div>
 
   <h3>§06.2 不值得 / 不该移（留痕，免得以后重复论证）</h3>
   <table>
@@ -297,6 +298,7 @@ finally: self.host.stop_all() -> ctx.state.save() -> self._lock.release()
     <li>2026-11-11 00:39 — 聚合清单落档：五条值得做 + 八条排除项 + 通用风险与验收方式；明确不认领、不出计划、不改代码，具体实施等待后续排期。</li>
     <li>2026-11-11 — 评审修复：与计划 26-11-10-2350 拍板 D1 的口径冲突、关联件漏列正式计划、「不提交」措辞、基线推进后的状态漂移标注、CMD_SLOW_MS 定义处归属；本文件随本批提交入库。</li>
     <li>2026-11-20 — 行 1（transfer_run 验证等待）出正式实施计划 <code>26-11-20-0127</code>-plan-transfer-verify-async（Open，待认领开工）：grilling 单轮 D1-D8 拍板，目标侧整段进 daemon 线程、命令线尾部消费；本件仍是聚合清单、状态保持 Open，行 1 认领以该计划为准。行 2 指针不变（26-11-10-2350 已 Superseded 并入 26-11-15-2340，其反指关系在那边维护）。</li>
+    <li>2026-11-20 — 行 1 <strong>实施完成</strong>：计划 <code>26-11-20-0127</code> S1-S6 落地（四笔提交 <code>8089ff4f</code> / <code>4bb05ce0</code> / <code>fcee007a</code> / <code>0a14d6ed</code>）——目标侧整段进 TransferVerifyCenter daemon 线程、生产段留主循环、结论队列回灌命令线尾部 drain 消费（详见 §06.1 行 1 实施留痕与该计划 §10 R3）；本件状态保持 Open（行 2-5 未动）。</li>
   </ul>
   <h3>复验</h3>
   <p class="todo">TODO: 认领后先重跑 §04 锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」；表内行号按「当时」对待，靠符号与 grep 重新定位。</p>

@@ -7,9 +7,9 @@
 <title>transfer_run 验证等待异步化: 目标侧整段进 daemon 线程(结果队列回灌 + 命令线尾部消费)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="transfer-verify-async">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-20-0127">
-<meta name="doc-updated" content="26-11-20-0205">
+<meta name="doc-updated" content="26-11-20-0657">
 <meta name="doc-refs" content="memory-bank/issues/26-11-11-0039-perf-main-loop-blocking-candidates.html, memory-bank/plans/26-10-31-0306-plan-torrent-transfer.html, memory-bank/tasks/26-11-20-backend-transfer-verify-async.md, memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>transfer_run 验证等待异步化: 目标侧整段进 daemon 线程(结果队列回灌 + 命令线尾部消费)</h1>
 <p class="lede">本篇只回答: issue 26-11-11-0039 §06.1 行 1 的「transfer_run 验证等待」如何移出主循环——目标侧整段(add→验证→pause)进 daemon 线程,源侧读/门/导出留主循环,结论经队列回灌由命令线尾部消费(删源+回执),消除转移批次期间 N×10s 量级的主循环阻塞。两段回执(即时受理+终态补发)已拍板为后续阶段,不在本计划实施。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-20-0127 · <b>doc-updated</b> 26-11-20-0205 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-20-0127 · <b>doc-updated</b> 26-11-20-0657 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-11-20,单轮八问 D1-D8 拍板:Q1-Q4/Q6-Q8 按推荐,Q5 改判「两段回执降为后续阶段」) · 认领 issue 26-11-11-0039-perf-main-loop-blocking-candidates(§06.1 行 1,P1) · 先例:计划 26-11-10-2350(探针异步,已 Superseded 并入 26-11-15-2340 第二批未实施,D1-D10 范式沿用) · 取证基线 <code>a14e1e20</code>
 </div>
 
@@ -125,32 +125,32 @@
 <table>
   <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
   <tr>
-    <td>S1</td>
+    <td>S1 · <code>8089ff4f</code></td>
     <td>orchestrator 拆分:生产函数 / worker 侧函数抽出(<code>run_batch</code> 外部语义不变,保留为参考实现);验证作业数据结构定义</td>
     <td>既有 <code>test_transfer_orchestrator</code> 43 用例全绿(注入内联,零语义变化);生产段各门/快路径判定纯函数新增用例</td>
   </tr>
   <tr>
-    <td>S2</td>
+    <td>S2 · <code>4bb05ce0</code></td>
     <td>TransferVerifyCenter:作业/结果队列 + daemon worker(stop Event)+ drain + 批次聚合;接进 runtime(<code>consume_commands</code> 尾部)</td>
     <td>单测:回灌结算、槽位聚合、回执按批齐写、多批次 FIFO 共存、stop Event 即时退、worker 全异常合成结果;adapter 独占断言(worker 与主循环不同时调用同一 adapter);同 hash 双批次反序交错用例(后删者静默成功口径钉住,见 D3)</td>
   </tr>
   <tr>
-    <td>S3</td>
+    <td>S3 · <code>fcee007a</code></td>
     <td>命令面改造:<code>_cmd_transfer_run</code> 生产段+递交+快路径;drain 删源+回执+<code>cmd_changed_state</code> 并入</td>
     <td>web_commands 既有用例全绿;快路径(全跳过/全失败批次)回执时机与内容与今天一致;慢目标桩下 <code>[cmd] 排队 &lt; 500ms</code></td>
   </tr>
   <tr>
-    <td>S4</td>
+    <td>S4 · <code>fcee007a</code>(与 S3 同笔)</td>
     <td>关停与告警面:web 停止接线 stop Event;已验证未删清单 WARNING;worker 生命周期日志(递交/结算/丢弃)</td>
     <td>关停耗时 &lt; N 秒(不 join,Event 即时醒);丢弃清单落日志(hash +「目标已建,源未删」文案);源种子零误删守阵</td>
   </tr>
   <tr>
-    <td>S5</td>
+    <td>S5 · <code>0a14d6ed</code></td>
     <td>回归+守阵收口:慢目标桩守阵(排队&lt;500ms / 关停&lt;N s / 逐条回执正确 / 源不误删),全量回归</td>
     <td><code>commands run test.full</code> 全绿;<code>kb.new baseline --total &lt;实测&gt;</code></td>
   </tr>
   <tr>
-    <td>S6</td>
+    <td>S6 · 回写轮(随本专题入库)</td>
     <td>回写:issue 0039 行 1 实施留痕(实际修法/验证方式/测试数字);架构文档(<code>main-loop-queue</code>/<code>concurrency</code>)按实现面回写;本计划翻 Done</td>
     <td><code>kb.check</code>/<code>kb.docmap</code> 过;复评裁决后零 actionable</td>
   </tr>
@@ -255,6 +255,7 @@
   <li><span class="tag">R0 · 26-11-20-0127</span> 初版。来源:会话 grilling(2026-11-20,issue 0039 §06.1 行 1 立项)——单轮八问拍板 D1-D8(七按推荐,Q5 改判「两段回执降为后续阶段」)。要点:案甲目标侧整段进 daemon 线程(adapter 批次级独占)+ 生产段留主循环(残余记录在案)+ 不设单飞单 worker FIFO + 退出不 join 不持久化(丢弃只丢「删」不丢「保」)+ 单段回执契约前端零改动 + 命令线尾部消费(删源白享 P0-5);分期 S1-S6 + 后续阶段(两段回执,未排期)。取证基线 <code>a14e1e20</code>,行号按当日。</li>
   <li><span class="tag">R1 · 26-11-20-0148</span> 评审修复(R1): D3 补同 hash 跨批次反序交错口径(同目标 qB 去重跳过/异目标后删者失真注记, 终态无差)并纳入 S2 验收用例; 风险表残词「重heck」改 recheck</li>
   <li><span class="tag">R2 · 26-11-20-0205</span> 评审修复(R2): D3 异目标分支按实际删源语义改写(后删者删源为静默无操作 _delete_source 返 True, 回执无注记纯 SUCCESS; 既有注记仅 torrents_delete 抛异常时出现, store.remove_torrent pop-None 静默), 失真面改判「无提示的成功」; 同目标去重路径加条件括注(5.2 形 409→探针命中成立, 未命中响应形落 SUCCESS 终态仍无差); S2 交错用例钉面同步</li>
+  <li><span class="tag">R3 · 26-11-20-0657</span> 实施完成, 状态翻 Done(S1-S6 四笔提交 + S6 回写): 8089ff4f S1 orchestrator 拆分(produce_transfer_job/run_verify_job/TransferVerifyJob, run_batch 保留参考实现; 评审轮 2 零 actionable) → 4bb05ce0 S2 TransferVerifyCenter(落点 webui/runtime_transfer.py, 作业/结果双队列+单 daemon worker FIFO+stop Event 即时醒+批次聚合+drain 超龄兜底; 新组件 20 用例; 评审轮 3 修 10) → fcee007a S3+S4 命令面+关停面(生产段+递交+快路径判据单点, 真实端口接线删源/回执, 结论回灌带显式槽位下标, drain 删源并入 cmd_changed_state 白享 P0-5, web 停止首步 center.stop() 不 join+丢弃清单 WARNING; 新增 13 用例; 评审轮 2 修 7) → 0a14d6ed S5 守阵收口(慢目标桩四判据全钉, 补 web 停止整段不阻塞守阵; 评审轮 1 零修); 全量回归全绿(基线切片 26-11-20-0638, 见 kb.baseline); 后续阶段 D5b 两段回执仍未排期, 不在本计划实施面; S6 回写面核实: concurrency(pitfalls/backend/concurrency.md)经核无漂移面未动; overview.md 不变量 1 一并回写(不在 S6 行原清单内)</li>
 </ul>
 
 </div>

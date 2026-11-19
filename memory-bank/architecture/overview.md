@@ -9,7 +9,7 @@ auto-qb 是 qBittorrent 的规则驱动管理守护进程: 周期同步 qB 种�
 
 ## 四条设计不变量
 
-1. **2s tick 主循环**: 主循环固定节拍 `main_tick`(默认 2s, `config/models.py:559`)驱动任务线; 同步线以 `sync_interval`(默认 1.5s)只刷快照不跑任务, 两线同拍合成完整一轮。所有异步效果都落在"队列任务在后续 tick 到期"这一个模型里, 不为此引入并发。
+1. **2s tick 主循环**: 主循环固定节拍 `main_tick`(默认 2s, `config/models.py:559`)驱动任务线; 同步线以 `sync_interval`(默认 1.5s)只刷快照不跑任务, 两线同拍合成完整一轮。异步效果默认落在"队列任务在后续 tick 到期"这一个模型里, 不为此引入并发; 明确定的例外面走「daemon worker + 结果队列回灌、主循环消费」(transfer 验证中心, 展开见 main-loop-queue.md), 同样不开工作线程写共享结构。
 2. **单一写线程**: 主循环所在线程是唯一修改任务队列结构与 state_file 的线程, 全程无锁(展开见 main-loop-queue.md)。任何新功能都必须维持这个假设。
 3. **增量同步 rid 语义**: 种子快照走 qB `/api/v2/sync/maindata` rid 增量(展开见 data-state.md); 漏 tick / rid 错位 / qB 重启都自愈为一次全量, 不丢数据。
 4. **fail-fast 配置校验**: 配置在 `config.validation.core.validate_config`(`config/validation/core.py:280`)全量校验并聚合报错, 之后的代码假定配置正确 —— 校验通过后不再散布防御分支。
