@@ -572,6 +572,8 @@ def _WIN_USER32_SIGNATURES():
         ("SetForegroundWindow", [HWND], BOOL),
         ("BringWindowToTop", [HWND], BOOL),
         ("SwitchToThisWindow", [HWND, BOOL], None),  # 非公开导出, 老系统可能没有
+        # keybd_event 第4参 dwExtraInfo 是 ULONG_PTR(指针宽度) —— 必须按指针宽度绑, 传 None 即 NULL
+        ("keybd_event", [wintypes.BYTE, wintypes.BYTE, DWORD, ctypes.c_void_p], None),
         ("ShowWindow", [HWND, INT], BOOL),
         ("SetWindowPos", [HWND, HWND, INT, INT, INT, INT, UINT], BOOL),
         ("GetWindowThreadProcessId", [HWND, PDWORD], DWORD),
@@ -713,7 +715,7 @@ def _win_switch_to_this_window(hwnd) -> bool:
     """兜底硬切: `user32.SwitchToThisWindow`(Win95 起在 user32 里导出, Win11 仍在)
 
     它绕的是前台锁本身( shell 内部切窗口就走这条路), 因此比 AttachThreadInput 那套更硬;
-    代价是非公开接口 —— 取不到就 False, 绝不因为少了它影响前面两层的成果。
+    代价是非公开接口 —— 取不到就 False, 绝不因为少了它影响前面各层的成果。
     """
     user32 = _win_user32()
     if user32 is None:
@@ -725,15 +727,45 @@ def _win_switch_to_this_window(hwnd) -> bool:
         return False
 
 
+def _win_alt_unlock_foreground(hwnd) -> bool:
+    """合成一次裸 ALT 按下-抬起解锁前台锁后重试 SetForegroundWindow; 返回是否真的拿到前台。
+
+    为何需要这一层(2026-11-19 用户报障"焦点没有落到文件管理器"真机取证): 前台是 Electron/
+    Chrome 系窗口(浏览器 / ZCode 本体)时, **AttachThreadInput 即使成功(ret=1)也借不到权限**
+    —— 随后的 SetForegroundWindow 依旧被前台锁拒绝(ret=0), 4 次重试全灭; 表现为窗口已抬到
+    顶层但键盘焦点留在原前台应用, 方向键进不了文件列表。经典解锁手段是合成一次裸 ALT 键击:
+    系统把"刚发生过输入事件"记在调用进程头上, 前台锁随之放行 —— 2026-11-19 真机复测
+    (schtasks 起的冷后台进程, 前台=ZCode/Electron): 借权限路线 SetForegroundWindow ret=0,
+    合成 ALT 后 ret=1 且稳定持住前台。
+    键击本身落在**当时的焦点窗口**上, 裸 ALT 不构成组合键, 绝大多数应用忽略之, 副作用一次性;
+    且只在前面"不合成输入"的手段失败后才走到这里。失败静默返回 False 交给硬切兜底 —— 置前
+    仍属锦上添花, 绝不影响打开本体。
+    """
+    user32 = _win_user32()
+    if user32 is None:
+        return False
+    try:
+        VK_MENU, KEYEVENTF_KEYUP = 0x12, 0x0002
+        user32.keybd_event(VK_MENU, 0, 0, None)
+        user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, None)
+        user32.SetForegroundWindow(hwnd)
+        return user32.GetForegroundWindow() == hwnd
+    except (AttributeError, OSError):
+        return False
+
+
 def _win_force_foreground(hwnd) -> bool:
     """把窗口抬到顶层并争取前台焦点; 返回它是否**真的**成了前台窗口。
 
-    三层升级, 每层独立失败静默、互不为前置条件(见 `_win_topmost_once` 的为何必须):
+    四层升级, 每层独立失败静默、互不为前置条件(见 `_win_topmost_once` 的为何必须):
       1. **Z 序**(必定受理): TOPMOST -> NOTOPMOST 提升 —— 用户看到的"不弹到顶层"由这层解决;
       2. **焦点**(可能被拒): AttachThreadInput 借前台线程的权限 -> SetForegroundWindow -> 拆开;
-      3. **硬切**(兜底): 仍没拿到焦点才试 `SwitchToThisWindow`。
+      3. **ALT 解锁**(可能被拒): 合成一次裸 ALT 键击放行前台锁 -> 重试 SetForegroundWindow
+         —— Electron/Chrome 系前台窗口下借权限路线失效(实测 ret=1 借到、取焦仍 ret=0),
+         见 `_win_alt_unlock_foreground`;
+      4. **硬切**(兜底): 仍没拿到焦点才试 `SwitchToThisWindow`。
     窗口不可见 / 最小化的先还原、先显示 —— 被别的手段藏起来的窗口拿到焦点也看不见。
-    三步跑完仍没焦点也**不算失败**: 它已经压在所有普通窗口之上, 用户点一下即可 —— 重试由
+    各层跑完仍没焦点也**不算失败**: 它已经压在所有普通窗口之上, 用户点一下即可 —— 重试由
     调用方按 `_EXPLORER_FG_RETRY` 封顶地做, 这里不做无限执念。
     """
     user32 = _win_user32()
@@ -759,6 +791,8 @@ def _win_force_foreground(hwnd) -> bool:
             if attached:
                 user32.AttachThreadInput(cur, fg_thread, False)
         if user32.GetForegroundWindow() == hwnd:
+            return True
+        if _win_alt_unlock_foreground(hwnd):
             return True
         _win_switch_to_this_window(hwnd)
         user32.BringWindowToTop(hwnd)

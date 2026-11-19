@@ -70,6 +70,11 @@
   (本 shell 自带 `TMPDIR=H:\Temp`), `unset TMPDIR` 后干净重跑。为什么没命中: 评审、包生成、文档
   回填每一步都盯住了, 唯独把「跑 pytest 前先清 TMPDIR」留成失败后的补救动作 —— 与复发 3/5/6/7/8
   完全同款; 前缀必须挂在 `test.full` 命令本身, 不等失败行提示。
+- **复发**: 11(2026-11-19)—— 置前焦点修复轮: ①首次聚焦 pytest(`uv run pytest tests/test_utils_windows.py`)
+  直跑 rc=4(本 shell 自带 `TMPDIR=C:\Users\…\AppData\Local\Temp`); ②加了前缀跑测试后, **评审前置链
+  `commands run ship.gate` 又裸跑**, 闸门内部 test.quick 同 env 再 rc=4 一次(同复发 4/9 的间接调用教训)。
+  为什么没命中: AGENTS.md 顶部警告读过, 但没把「跑任何 pytest 前先 `env -u TMPDIR`」和「前缀挂整条
+  组合命令开头」当固定动作, 两次都是失败行提示后补的 —— 该动作必须在开工读 AGENTS.md 时就挂上。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

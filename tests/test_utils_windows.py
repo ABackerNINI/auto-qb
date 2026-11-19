@@ -30,7 +30,9 @@
 - test_win_shell_enter_pidl_routes: 进入目录经 ShellExecuteExW(结构体契约 fMask/lpVerb/PIDL/nShow/cbSize) + 失败降级 + 无导出兜底
 - test_win_user32_and_kernel32_bind_signatures: user32/kernel32 惰性句柄绑定与缓存
 - test_win_explorer_hwnds_and_topmost_and_switch: Explorer 枚举/TOPMOST 开关/SwitchToThisWindow + 失败静默
-- test_win_force_foreground_matrix: 三层升级矩阵(还原/显示/焦点/借线程/硬切/异常)
+- test_win_alt_unlock_foreground_contract: ALT 解锁层契约(VK_MENU 按下-抬起成对 + SFG 重试 + 真拿到前台才 True; 缺导出/缺席静默 False)
+- test_win_force_foreground_alt_layer_before_hard_switch: 借权限被拒(Electron/Chrome 前台实测)后走 ALT 解锁, 成功即不走硬切兜底
+- test_win_force_foreground_matrix: 四层升级矩阵(还原/显示/焦点/借线程/硬切/异常)
 - test_win_reuse_and_wait_explorer: 复用窗口标题匹配/差集新窗口/超时 None/置前重试封顶
   (本组 Shell 测试全部用假替身, 不碰真窗口; _win_shell_open 直调经 sidefx._saved 取回原函数避开记账假阳性;
    平台差异: 涉及 Windows 分支的用例一律 monkeypatch sys.platform, 并用 `_shim_posix_ctypes` 在 POSIX 上
@@ -865,6 +867,9 @@ class _P1FakeUser32:
     def SwitchToThisWindow(self, hwnd, toggle):
         self.calls.append("SwitchToThisWindow")
 
+    def keybd_event(self, vk, scan, flags, extra):
+        self.calls.append(f"keybd_event:{flags}")
+
     def ShowWindow(self, hwnd, cmd):
         self.calls.append(f"ShowWindow:{cmd}")
         return True
@@ -931,8 +936,54 @@ def test_win_explorer_hwnds_and_topmost_and_switch(monkeypatch):
     assert utils._win_window_text(1) == "目标 - 文件资源管理器"
 
 
+def test_win_alt_unlock_foreground_contract(monkeypatch):
+    """ALT 解锁层契约: 裸 ALT(VK_MENU=0x12)按下-抬起成对 + SetForegroundWindow 重试,
+    且**真的**拿到前台才 True; keybd_event / user32 缺席一律静默 False(置前是锦上添花)
+
+    2026-11-19 真机取证: 前台是 Electron/Chrome 系窗口时 AttachThreadInput 借权限无效,
+    合成 ALT 后 SetForegroundWindow 才放行 —— 本层是那次报障的修复本体。
+    """
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
+    # 成功: 拿到前台(True), ALT down+up 成对且先按后抬
+    fake = _P1FakeUser32(fg=101)
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_alt_unlock_foreground(101) is True
+    assert "keybd_event:0" in fake.calls and "keybd_event:2" in fake.calls, "裸 ALT 按下(0)与抬起(2)必须成对"
+    assert fake.calls.index("keybd_event:0") < fake.calls.index("keybd_event:2"), "先按下后抬起"
+    assert fake.calls.count("SetForegroundWindow") == 1, "解锁后恰一次重试"
+    # 前台始终是别人: 如实 False, 交给硬切兜底
+    fake = _P1FakeUser32(fg=202)
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_alt_unlock_foreground(101) is False
+    # 缺 keybd_event 导出 / user32 缺席: 静默 False, 绝不外抛
+    monkeypatch.setattr(utils, "_win_user32", lambda: SimpleNamespace())
+    assert utils._win_alt_unlock_foreground(101) is False
+    monkeypatch.setattr(utils, "_win_user32", lambda: None)
+    assert utils._win_alt_unlock_foreground(101) is False
+
+
+def test_win_force_foreground_alt_layer_before_hard_switch(monkeypatch):
+    """借权限被拒(Electron/Chrome 前台实测形态)后走 ALT 解锁层: 成功即返回 True, 不再走硬切
+
+    拍点(GetForegroundWindow 调用序): 借权限前(202, 借错对象) -> 取焦后判定(202, 借了也白借)
+    -> ALT 解锁后判定(101, 放行)。硬切 SwitchToThisWindow 是非公开导出的最后兜底, 前面拿到
+    前台就绝不多走一步。
+    """
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
+    fake = _P1FakeUser32(fg=lambda seq: 101 if seq >= 3 else 202)
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_force_foreground(101) is True
+    assert "keybd_event:0" in fake.calls and "keybd_event:2" in fake.calls, "ALT 解锁层必须走到"
+    assert "SwitchToThisWindow" not in fake.calls and "BringWindowToTop" not in fake.calls, "拿到前台就到头了"
+
+
 def test_win_force_foreground_matrix(monkeypatch):
-    """三层升级矩阵: 不可还原 / 最小化先还原 / 隐藏先显示 / 焦点成功 / 借线程失败硬切 / 异常 False"""
+    """四层升级矩阵: 不可还原 / 最小化先还原 / 隐藏先显示 / 焦点成功 / 借线程失败硬切 / 异常 False
+
+    (ALT 解锁层的成对键击与硬切互斥拍点另有专项: test_win_alt_unlock_foreground_contract /
+    test_win_force_foreground_alt_layer_before_hard_switch; 本矩阵替身 fg 脚本恒为他人窗口,
+    ALT 解锁后的取焦判定恒失败, 故第 4 拍照旧走到硬切兜底。)
+    """
     monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
     # 1) 焦点直接成功
     fake = _P1FakeUser32(fg=lambda seq: 101 if seq >= 2 else 202)
