@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate S6 探测异步化真机复验轮(RM11) 执行计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-rm11-s6-probe-verify">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-21-0223">
+<meta name="doc-updated" content="26-11-21-0315">
+<meta name="doc-refs" content="memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-rm11-s6-probe-verify</div>
+<h1>relocate S6 探测异步化真机复验轮(RM11) 执行计划</h1>
+<p class="lede">本篇只回答: relocate S6 探测异步化(计划 26-11-10-2350, 代码已落地)的三项真机复验判据怎么在环境2 落地成可执行用例——每项的精确判据、造法、观测面阈值与执行序; 修复类问题不在本篇范围(单测/仿真面已全绿)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-21-0223 · <b>doc-updated</b> 26-11-21-0315 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 主会话派遣(2026-11-21): S6 真机复验轮 RM11 准备阶段; 派遣即钉三项(范围仅 S6 三项 / ③行为面代理判据零产品代码改动 / 本机=C盘机环境2 —— 见 §06 D1-D3); 前置只读取证后按代码事实定稿
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>: S6 探测异步化五笔提交(0c1b7d5b/c964278d/120b14df/20540c53/1cd04a20, hash 按母计划 26-11-15-2340 R7 映射表换算; 并轨 26-11-10-2350 R3, 母计划 26-11-15-2340 R5)已过单测/仿真验收(test.full 全绿, 基线 26-11-20-2348), 锚 issue 26-11-10-0638 留三项真机复验待办。本轮回真机把三项闭合, PASS 后 issue 才可置 Done。</p>
+<p><b>三项精确判据(引代码实况, 2026-11-21 复核)</b>:</p>
+<table>
+<tr><th>#</th><th>判据</th><th>代码锚点(文件:行号)</th></tr>
+<tr><td>①</td><td>dry-run 冒烟: 闸决策表 dry-run 分支零副作用 + notes 含「dry-run: 跳过强探测」; 回执面无 probing 桶(item 无 <code>PROBE_GATE_PROBING_KEY</code> 判别键)</td><td><code>relocate_exec.py:1974-1976</code>(note+None, 位次在单成员组 :1972 之后、缓存/未命中之前); 判别键消费面 <code>commands_torrents.py:448-449</code>; 单测形态 <code>tests/test_relocate_exec_probe_gate.py:270-274</code>; dry-run 收尾 note「dry-run: 未下发搬迁」<code>relocate_exec.py:2339-2345</code></td></tr>
+<tr><td>②</td><td>受理段 warn 全链: 多成员组迁移撞探测未命中 → 回执 warn「已受理: 同机探测进行中 N 项, 探测结论到达后自动续跑」→ verdict 消费日志 → 自动续跑重放 → 迁移终态成功</td><td>warn 受理 <code>commands_torrents.py:472-480</code>(_set_web_result :478); 武装+单发 <code>commands_torrents.py:498-505/:507-519</code>(origin="web", receipt_cmd_id); verdict 消费日志 <code>relocate_exec.py:169</code>; 重放 :189-196; 终态补发 :250-257 → <code>relocate_mod.py:397</code> → <code>runtime_commands.py:338</code>(挂点 <code>webui/module.py:221</code>)</td></tr>
+<tr><td>③</td><td>FS 不可达探测窗内主循环零可感知停摆(单步预算 50ms 纪律, <code>relocate_common.py:18</code>); 代码无运行时 tick 打点 → 按 D2 拍板用<b>行为面代理判据</b>(观测面阈值见 §04 RM04-37)</td><td>探测预算 证读10s/证写10s/清理5s <code>relocate_probe.py:63-65</code>; daemon 线程+单飞 <code>relocate_probe.py:469-502/:571-576</code>; 独立 qB client :505-524; 全异常合成 runner_crashed env=True :641-646; 超龄兜底 120s :71-74</td></tr>
+</table>
+<p><b>判据① dry-run 形态核实结论(任务预授权「以代码为准设计并报告」)</b>: 原判据表述「web 全链回执 + dry-run note」<b>结构性不可达</b>——<code>_dry_run()</code> 只有两个来源(<code>relocate_lifecycle.py:587-591</code>): start 期透传的 <code>self._dry</code>(:39)与 <code>ctx.dry_run</code>, 二者都只来自全局 <code>--dry-run</code>(<code>cli.py:305</code> → <code>core/module.py:373-376</code> 全量透传); RelocateConfig(<code>config/models.py:529-562</code>)<b>无 dry_run 键</b>, relocate_execute 签名无 dry_run 参数; WEB 启动闸 <code>webui/module.py:139</code> 是 <code>if dry_run or not web.enabled: return</code> —— 全局 dry-run 与 WEB 互斥; web 预检命令(<code>commands_torrents.py:353</code> → <code>relocate_plan.py:125-218</code>)只读且<b>不过探测闸</b>(:212-216 仅 evaluate_group), 不是 dry-run 形态入口。评审终审(R4 26-11-21-0025)已校准过同方向事实(dry-run 下「探测中」受理结构性不出现)。<b>设计: ①拆两腿</b> —— ①a dry-run 冒烟走模块直连真机形态(RM04-11/12 先例 + 单测同款进入点 <code>module._dry=True</code> = 产品 start 期透传的真实入口), 断言闸分支 note+零副作用+无 probing 键; ①b「web 全链回执管线正常」面由 ②(非 dry-run, WEB 全链)承载。与 26-11-10-2350 R4 校准后的三项表述不冲突。</p>
+<p><b>设计底线/不变量</b>: 零产品 src/ 代码改动; 闸语义 D5(passed 前零建账零 setLocation)/D6(无旁路)/D7(缓存决策表)逐条不因测试构造被绕过; 探测造法零产品改动、零真实种子、零 taskkill; 真实 PT 种子禁入测试环境。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>现状</b>: 探测异步化产品面已完整——意图入队+单飞 kick+「探测中」gate(relocate_exec.py:2028 起)、verdict 消费/重放/防自环/终态补发全链在位。三项真机复验是验收最后一段。</p>
+<p><b>痛点证据</b>: 修复前形态 = run_probe 三段 time.sleep 在主循环线程同步执行, FS 不可达单次阻塞约 25s+(上界 ~35s; issue 26-11-10-0638 复验 2026-11-10 实证)。真机复验要证的就是这个形态消失且闸语义没变。</p>
+<p><b>造法核实结论(③的输入)</b>: 任务提示的「幽灵盘 save_path → 证写 10s 超时」造法<b>与代码不符, 双向都到不了探测</b>: 幽灵 src ⇒ 组级 GATE_SOURCE_MISSING 先拦(<code>relocate_units.py:1041-1046</code>, 声明文件 exists=False), 即使绕过组闸, 探测第一步 <code>os.makedirs</code> 本地写即失败(local_write_failed, <b>env=True 秒级</b>, 非目标形态); 幽灵 dst ⇒ GATE_SPACE 先拦(<code>relocate_common.py:40-58</code> _volume_free_resolved 上溯全链失败 → target_free=None)。26-11-01-2113 基线 :49/:56 的幽灵盘是「qB free_space_on_disk=-1 同卷证明解锁」记录, 不是探测窗造法。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 用例清单与执行序(编号已定案: 并入 rm04_relocate 片续号, 见 §06 D4)</h3>
+<table>
+<tr><th>序</th><th>用例</th><th>判据</th><th>档位</th><th>一句话</th></tr>
+<tr><td>1</td><td>RM04-35</td><td>①</td><td><b>L3</b></td><td>dry-run 冒烟(模块直连真机): A 腿 _dry=True 零副作用+notes; B 对照腿 _dry=False 同拓扑真探测受理(红验)</td></tr>
+<tr><td>2</td><td>RM04-36</td><td>①b+②</td><td>L2</td><td>受理段 warn 全链: warn → verdict 消费 → 自动续跑 → 迁移终态 done(finalized)</td></tr>
+<tr><td>3</td><td>RM04-37</td><td>③</td><td>L2</td><td>FS 不可达行为面代理: 句柄锁造法 + 7 项观测面阈值断言 + 缓存污染面清理</td></tr>
+</table>
+<p><b>执行序理由 = 指纹缓存污染面</b>: RM04-37 的 failed env=False 会写指纹缓存(relocate_exec.py:164-166), 污染后续同指纹判定 ⇒ 放最后; RM04-35 的 B 腿也会真探测(passed 写缓存)但用独立 case data_dir 且测试侧清 pending/队列, 不跨用例泄漏。</p>
+<p><b>切片划分</b>: 用例登记进既有 rm04_relocate 片(real-machine.md §05 规则1: 落既有片 glob 并入, 不开新片); 本轮<b>逐条 <code>real.run --case RM04-3x --yes</code></b>, 不走 real.suite --slice RM04(会连跑旧 34 条, 超出「仅 S6 三项」范围)。单片预算沿用上轮半天口径(3 条 × ~10 分钟级 + 排障余量)。</p>
+<h3>3.2 环境2钉死表(2026-11-21 real.env/real.guard 首跑实测)</h3>
+<table>
+<tr><th>项</th><th>值</th></tr>
+<tr><td>实例</td><td>主 56589(pid 5984)/副 56590(pid 5932), qBittorrent v5.2.3, 均 firewalled; BT 监听 27049/32719</td></tr>
+<tr><td>exe</td><td>主 <code>C:\Programs\qBittorrent-testing\qbittorrent.exe</code> / 副 <code>C:\Programs\qBittorrent-testing2\qbittorrent.exe</code>(portable 自带 profile/; bt_backup 由 <code>guard.EXE[SECONDARY]</code> 派生 <code>.../profile/qBittorrent/data/BT_backup</code>, 不手抄)</td></tr>
+<tr><td>鉴权</td><td>四实例免鉴权(「跳过本地验证」), 零凭据直连; 收 401/403 = 设置被重置 ⇒ fail-closed 修环境, 不加绕行</td></tr>
+<tr><td>盘符</td><td>本机现存仅 <b>C:</b>(实测 67.0GB free, 2026-11-21); D: 空光驱无介质, R: 缺席(26-11-01-2113 基线同)。幽灵盘符池 = C 之外任一(对照腿留痕用 Z:, 沿用 RM04-05 先例字母); 本轮主造法(句柄锁)不用幽灵盘</td></tr>
+<tr><td>假种子落点</td><td>无 R: ⇒ 全部落 <code>tests-real/.work/rm04/async/</code> 真写盘(256K-512K 级); real-fake 标签</td></tr>
+<tr><td>真实种子面</td><td>56589 真实种子 0 个; 56590 真实种子 210 个(全程 paused, guard 看门狗守护)——产品进程只连 56590, 写配置断言不指向 56589</td></tr>
+<tr><td>测试配置</td><td>schema_version: 8 + relocate.enabled + relocate.bt_backup(必带, 缺它先撞部署闸 fail-fast) + grouping.enabled + trackers 假域名; 全落 case 目录(data_dir 落 case), 仓库根 config.yml 零触碰</td></tr>
+<tr><td>证据落点</td><td>用例取证 <code>tests-real/.work/rm04/async/</code>(gitignored, 时刻后缀防覆写); guard/try 输出 tee <code>tests-real/.work/rm04/rm11_prep_*_attemptN.log</code>; 切片 <code>memory-bank/testing/real-baselines/&lt;stamp&gt;-real-rm11-sliceA.md</code>(kb.wrap 建)</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>4.0 准备阶段(本轮已完成)</h3>
+<ul>
+<li>代码事实复核: §01 三项判据全部按当前 HEAD(2b63237e)逐行核实; 编号冲突(RM05-01/02/03 已被 rm05_tracker_tags 片占用, runner._cases 按 id 建 dict 会静默覆盖)已定案续号 RM04-35/36/37(§06 D4)。</li>
+<li>D2 用例代码: <code>tests-real/rm04_relocate/test_rm04_relocate_probe_async.py</code>(三用例, 头部 docstring 含「## 测试计划」清单), pytest 收集级自检通过; 未真跑真机步骤。</li>
+<li>D3 环境自检: real.env + real.guard 首跑通过(§3.2 表), tee 落盘。</li>
+</ul>
+<h3>4.1 RM04-35 [S6-①] dry-run 冒烟(模块直连真机)</h3>
+<p class="aside">形态: 不起产品进程, 测试进程内构造 RelocateModule 直连 56590(RM04-11/12 同款 _ctx: 真 Client+真 TorrentStore+真 state 容器+RelocateConfig(enabled, bt_backup))。<code>module._dry=True</code> 就是产品 dry-run 的真实进入点(start 期透传), 与单测 :270-274 同款入口升到真机。</p>
+<p><b>前置</b>: 56590 在线免鉴权; 无 real-fake 残留; 2 枚带数据假种子(多文件子目录布局 pack/sub/a.bin+b.bin, 同内容异 piece_len 共享物理文件)落 .work 成组校验完成; store.refresh 收录真记录。</p>
+<p><b>断言(A 腿, _dry=True)</b>: relocate_execute([h1,h2], dst, confirm=True) 返回恰 1 条 item —— cls=="ok" + notes 同时含「dry-run: 跳过强探测」与「dry-run: 未下发搬迁」+ 全 items 无 PROBE_GATE_PROBING_KEY(probing 桶判别键) + qB 两成员 save_path 不变(零 setLocation) + qB/两侧目录零 aqb-probe-* 痕 + state 无 probes/probe_pending 条目。<span class="wr">注: dry-run 下 job 账仍会登记并 _persist(relocate_exec.py:2328-2337 先登记、:2339 才早退, move_issued 未置)——这是产品现行行为, 本用例不对 job 账做空断言, 只记进计划防误判。</span></p>
+<p><b>对照腿(B, L3 红验, _dry=False, 异 dst2 免幂等 skip)</b>: 同拓扑同指纹 → 闸未命中 → 断言受理面: item cls=="blocked" 且 PROBE_GATE_PROBING_KEY=True(「探测中」回执)+ probe_pending 恰 1 条 + daemon 线程真探测(56590 出现 TAG_PROBE 种子→证读证写→自清理)+ verdict 队列取到 passed/ok/env=False(模块直连无消费线, 测试侧 get(timeout=30)); 收尾: 清 probe_pending + slot release + 队列排空, 断言槽空闲。B 腿证明 A 腿的 dry-run 分支真实承重(不是恒绿)。</p>
+<p><b>副作用/回滚</b>: 副实例加 2 枚假种子(连数据删); B 腿一次真探测(自建临时探针目录, 自清理, 不搬用户数据); case 目录删净。</p>
+<p><b>失败判据</b>: A 腿任一 note 缺失/cls 非 ok/出现 probing 键/save_path 被动/探针残留; B 腿未出现「探测中」受理或 verdict 未达(30s)。</p>
+<h3>4.2 RM04-36 [S6-①b+②] 受理段 warn 全链(产品进程, WEB 全链)</h3>
+<p><b>拓扑前提(探测闸真实命中的关键)</b>: 多成员组必须<b>子目录布局</b>(内容根下只有目录子项): D 级列目录元数据比对对子目录全剔除(<code>relocate_proof.py:225-230</code>)→ UNAVAILABLE → B′ 元数据 size 比对(弱, <code>:257-278</code>)→ 未证明 ⇒ 执行链一次性强探测(<code>relocate_plan.py:644-656</code>)。数据文件须真在盘(源侧三态干净, 否则 GATE_SOURCE_MISSING :1041 先拦)。文件数 2 &lt; 阈值 8 ⇒ FORM_FILE_LINKS 且 <b>needs_confirm=False</b>(<code>relocate_units.py:565-569</code>)——自动续跑重放 relocate_execute 不带 confirm(<code>relocate_exec.py:191-196</code>), 需确认形态会停在 confirm 项不续跑, 故不可用目录别名拓扑。用例先经 relocate_precheck WEB 命令自证前提(note 含「一次性强探测」), 不成立显式红。</p>
+<p><b>断言链(逐环)</b>: A1 受理段: POST /api/torrents/{h1}/location {location: dst, confirm:true} → 回执 status="warn" + 文案含「已受理: 同机探测进行中 1 项, 探测结论到达后自动续跑」+ truth.summary {probing:1, started:0}; A2 窗内零执行: 消费日志出现前「迁移发起」计数不增(probing≠started); A3 verdict 消费: 产品日志出现 <code>probe verdict 消费: 指纹 &lt;fp8&gt; 结论 passed/ok(缓存已写(passed))</code>(relocate_exec.py:169); A4 自动续跑: 消费行之后「迁移发起」出现; 同 cmd_id 回执被终态补发覆盖(runtime_commands.py:338 drain, 主循环每轮必经, 延迟至多一轮)→ status="ok" + truth.results 含 started(带 job_id) + summary.probing==0; A5 迁移终态: mover save_path→dst(qB 真搬)+ dst 文件 size 对齐; member2 测试侧 qb.set_location 助推(RM04-05 同款)后 job 相位 done + reason=finalized(<b>相位取数单点 = GET /api/torrents/{hash} 的 relocate.phase</b>, state.json 30s 落盘迟滞不作断言源); A6 指纹缓存: 优雅停机后 state.json relocate.probes 含 passed 条目。</p>
+<p><b>副作用/回滚</b>: 产品进程起停(start/stop 优雅); 副实例 2 枚假种子(连数据删); qB 真搬数据(用例目录内); 删链接只 os.rmdir 本体(purge_tree 不递归删穿); case 树删净。</p>
+<p><b>失败判据</b>: 回执直接 started(闸被绕过/缓存误命中)或直接 blocked; warn 文案/summary 桶形不符; 无消费日志; 续跑不发生; 终态补发未覆盖同 cmd_id; job 不终态(90s); 探针残留。</p>
+<h3>4.3 RM04-37 [S6-③] FS 不可达行为面代理(句柄锁造法, 零产品改动)</h3>
+<p><b>造法(写死)</b>: 组拓扑同 RM04-36(真实 save_path + 真实 dst); POST 受理后测试进程以 50ms 间隔轮询组 save_path 下 <code>aqb-probe-*</code> 目录出现 → 对探针文件 <code>save_path/aqb-probe-&lt;tok&gt;/aqb-probe-&lt;tok&gt;.bin</code>(run_probe :379-391)立即 <code>open(path,'rb')</code> 持句柄。Windows 语义: 句柄无 FILE_SHARE_DELETE ⇒ qB 同卷搬迁 rename 失败 / copy 后 delete 失败 ⇒ 证写轮询「dst 一致且 src 消失」(<code>relocate_probe.py:447-460</code>)10s 超时 → failed <b>env=False</b>(<code>relocate_probe.py:449</code> 单点, timeout 与 mismatch 皆 env=False)→ 写指纹缓存(relocate_exec.py:164-166)。句柄读共享不阻 recheck(证读照过); 探针文件写于流程最初、setLocation 在证读完成后(时机裕度 ~1s, 50ms 轮询必赶上); <code>_cleanup</code> 尽力不抛(docstring: 失败不抛不改变探测结论)⇒ verdict 不会被 runner_crashed 覆盖。</p>
+<p><b>观测面(7 项, 阈值写死; main_tick=2S, sync 1.5S, 探测预算 10+10+5s)</b>:</p>
+<table>
+<tr><th>#</th><th>观测面</th><th>断言方式与阈值</th><th>旧形态对照</th></tr>
+<tr><td>W1</td><td>受理不阻塞</td><td>POST→warn 回执落定 ≤5s; 且缓存条目 at(挂钟 epoch 秒, clock 单点)与受理 POST 时刻差 ≥8s(证写 10s 预算特征; failed 路径无 elapsed_s, relocate_probe.py:451 仅 passed 路径写)</td><td>旧同步: 回执延迟≈整窗 25-35s</td></tr>
+<tr><td>W2</td><td>窗内主循环活性</td><td>warn 落定后、消费日志出现前, 对第三枚假种子发 pause WEB 命令: 回执 ≤8s 且 qB 态 stopped 可见(4 个 main_tick 裕度)</td><td>旧同步: 命令线停摆 ≥25s 必红</td></tr>
+<tr><td>W3</td><td>verdict 按窗期特征到达</td><td>POST 后 ≤25s 内产品日志出现「probe verdict 消费: 指纹 &lt;fp8&gt; 结论 failed/&lt;write_proof_timeout|write_mismatch&gt;(缓存已写(failed, FS 不可达方向))」(预算上界 ~35s 的 0.7; reason 两态皆 env=False, 都接受并留证)</td><td>旧同步: 消费即发起线程内完成, 无独立窗期</td></tr>
+<tr><td>W4</td><td>终态补发(D7-1 面)</td><td>同 cmd_id 回执被覆盖为 error + 文案含「上次同机探测失败」与「已缓存」(重放撞 failed 缓存 → blocked, relocate_exec.py:2012-2027); 消费日志后 ≤10s</td><td>—</td></tr>
+<tr><td>W5</td><td>缓存污染面</td><td>优雅停机后 state.json relocate.probes 含 failed 条目(evidence.reason/at 留证)→ 测试侧停机态删除 relocate.probes 键并复核为空(主会话任务指定的清理手段; case data_dir 独立, 清理防同目录重跑撞缓存)</td><td>—</td></tr>
+<tr><td>W6</td><td>零迁移副作用(D5)</td><td>全 case 零「迁移发起」; state 无 jobs 账; 两成员 save_path 不变; dst 树未建</td><td>—</td></tr>
+<tr><td>W7</td><td>探针核净</td><td>句柄关闭后 case 内 aqb-probe-* 目录删净 + 56590 TAG_PROBE 种子零残留</td><td>—</td></tr>
+</table>
+<p><b>开工预检(R1 对策, 5 分钟)</b>: 直连 56590 裸探针手工复现句柄锁形态(run_probe 直调 + 句柄锁, 验 verdict=write_proof_timeout/write_mismatch 且 env=False); 若 qB 对句柄内文件仍 rename 成功 ⇒ 本造法在该 qB 版本不成立 ⇒ 显式 BLOCKED 报告主会话, 不硬闯不改阈值。</p>
+<p><b>副作用/回滚</b>: 3 枚假种子(第三枚仅供 W2, 连数据删); 探测种子自建自清(句柄残留由测试侧 finally 关闭后清); state.relocate.probes 测试侧清理; case 树删净。</p>
+<p><b>失败判据</b>: W1-W7 任一不满足; 预检造法不成立; 探针种子/目录残留。</p>
+<h3>4.4 升档计划(§08: 每轮至少 1 条)</h3>
+<p>RM04-35 = <b>L3</b>(A 腿 L2 自动断言 + B 对照腿红验: 同拓扑关掉 dry-run 必须真实受理, 故意造「闸不在干跑态」验证分支承重)。RM04-36/37 = L2。RM04-37 的 L3 负向对照(复现旧版 25s 主循环阻塞形态)必须改产品代码, 与 D2 拍板(零产品代码改动)冲突 ⇒ 明写不做, 本轮升档由 RM04-35 承担。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— 范围/③测法/本机环境在任务派遣时已拍板; 用例编号冲突(D4)与 dry-run 形态拆两腿(D5)已按授权定案, 记录迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>结论</th><th>日期/来源</th></tr>
+<tr><td>D1</td><td>范围 = 仅 S6 三项; 上轮遗留 RM04-05 L490 / RM04-13 不碰</td><td>2026-11-21 主会话派遣(用户拍板)</td></tr>
+<tr><td>D2</td><td>③ 测法 = 行为面代理判据, 零产品代码改动; 观测面与阈值由准备阶段按代码事实定死(§4.3 W1-W7)</td><td>2026-11-21 主会话派遣(用户拍板)</td></tr>
+<tr><td>D3</td><td>本机 = C盘机(环境2, 56589/56590); 环境1 不使用</td><td>2026-11-21 主会话派遣(用户拍板)</td></tr>
+<tr><td>D4</td><td>用例编号: RM05-01/02/03 与既有 rm05_tracker_tags 片撞号(runner._cases 按 id 建 dict 静默覆盖, real.run --case RM05-01 会静默跑 tracker_tags 旧用例)⇒ 并入 rm04_relocate 片续号 RM04-35/36/37(real-machine.md §05 规则1+编号不复用); 轮次标签改用 RM11(RM00-RM10 已全占用)</td><td>2026-11-21 准备阶段按代码事实定案(主会话任务预授权)</td></tr>
+<tr><td>D5</td><td>判据① dry-run 形态: 「web 全链回执+dry-run note」同轮结构性不可达(§01 核实结论)⇒ 拆两腿: ①a 模块直连真机 dry-run 冒烟(RM04-35)+①b web 全链回执管线由 ②(RM04-36)承载; 任务预授权「以代码为准设计并报告」</td><td>2026-11-21 准备阶段按代码定案(任务预授权)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>#</th><th>风险/坑(来源)</th><th>触发条件与处置</th></tr>
+<tr><td>R1</td><td><b>句柄锁造法依赖 qB 搬迁失败语义(本轮新)</b></td><td>触发: 4.3 开工预检发现 qB 对被锁文件仍 rename 成功。处置: 显式 BLOCKED 报告主会话(造法不可用, 不硬闯); 备选造法(幽灵 src/dst)已证不可达(§02), 无第三造法时不降级伪装。</td></tr>
+<tr><td>R2</td><td><b>B′ 弱证据拓扑依赖 qB app_get_directory_content 对子目录 content_root 的返回形态</b></td><td>触发: RM04-36 前提自证(relocate_precheck note)不成立。处置: 用例显式红不伪装 PASS; 探针实验校准后改版计划(R4 行)。</td></tr>
+<tr><td>R3</td><td><b>探测窗时长波动</b></td><td>触发: HTTP/清理抖动致 W1 的 at 差或 W3 消费时刻超出阈值。处置: 红即如实记观察项, 不放宽阈值(阈值即判据); 复跑 1 次仍红再定性。</td></tr>
+<tr><td>R4</td><td><b>模块直连 B 腿的 verdict 无人消费</b></td><td>触发: RM04-35 B 腿探测完成后槽/pending/队列残留。处置: 测试侧收尾 get verdict + probe_pending 清空 + slot release + 断言槽空闲(写进用例 finally)。</td></tr>
+<tr><td>R5</td><td><b>上轮实锤①: 同 case 追加式日志撞旧行</b>(wait_web/wait_log 假阳性)</td><td>处置: case 目录一律新建(rm04_35/36/37 各自独立 case_dir, fresh); 重启类等待按「新行计数」(RM04-06 先例), 不裸 findall。</td></tr>
+<tr><td>R6</td><td><b>上轮实锤②: 未停净存活进程致假红</b></td><td>处置: 每条用例 finally p.stop(优雅)+核 rc; 收尾 guard 复跑+进程比对(开工=收尾); 禁 taskkill, 残留端口走 dev.port-kill(白名单端口)。</td></tr>
+<tr><td>R7</td><td><b>上轮实锤③: armed 相位 journal 恒无文件</b></td><td>处置: 相位取数单点 = GET /api/torrents/{hash} 的 relocate.phase; state.json 30s 落盘迟滞不作断言源(仅 W5 停机态读缓存用)。</td></tr>
+<tr><td>R8</td><td><b>上轮实锤④: WEB 回执等待 30s 贴线</b>(下线窗上界 ≈29s)</td><td>处置: 本轮无 qB 停机窗(不 real.down); RM04-36 终态补发等待放宽 90s、RM04-37 同(cmd_post_and_wait 显式 timeout)。</td></tr>
+<tr><td>R9</td><td><b>上轮实锤⑤: real.seed.clean --dir 误删证据</b></td><td>处置: 收尾先 ls 盘点 .work 顶层非本轮所建内容; 证据目录(rm04/async/)不在 clean 白名单形态内, 需清的子树 --dir 显式指名逐处。</td></tr>
+<tr><td>R10</td><td><b>上轮实锤⑥: suite 失败级联环境级 skip</b></td><td>处置: 本轮逐条 real.run 不整片 suite; conftest environment 失败=整片 skip 的形态已知悉, 单条失败不级联。</td></tr>
+<tr><td>R11</td><td><b>真实种子禁入 + 401/403 + taskkill 红线</b></td><td>处置: guard 前置 pause-all+看门狗(本轮 guard 实测 56590 真实种子 210 个已全暂停); 收 401/403 fail-closed 修环境不绕行; 进程起停只 real.up/real.down; 测试配置零触碰仓库根 config.yml 与 auto-qb-data/。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-21-0223</span> 初版: 主会话派遣的 S6 真机复验轮准备阶段产物。三项判据按 HEAD 2b63237e 逐行复核定稿; dry-run 形态核实结论(结构性互斥, 拆两腿)、FS 不可达造法核实结论(幽灵盘双向不可达, 改句柄锁)、用例编号定案(续 RM04-35/36/37)为本版三个关键定案; 环境2 钉死表按 real.env/real.guard 首跑实测填写。执行轮完成后在此追加 R3 记实测数字与三态。</li>
+  <li><span class="tag">R1 · 26-11-21-0241</span> 主会话复核必修两项: (a) 轮次标签 RM05→RM11 —— RM00-RM10 已全占用(tests-real/ 实存 rm00_infra…rm10_notify), 文件名/doc-topic/标题/来源/切片命名同步改, 用例编号 RM04-35/36/37 不变; (b) D4 归属校正(诚信面): 用例编号是准备阶段按代码事实的定案(主会话任务预授权), 用户决定面仅 D1-D3 三项。</li>
+  <li><span class="tag">R2 · 26-11-21-0315</span> 批A评审修复 8 条(#2-#9; #1 REFUTE 不计 —— 用例文件系主会话拆批评审临时移树, 非缺失): W1 断言改缓存条目 at 差(挂钟 epoch 秒, failed 路径无 elapsed_s)/W5 留证字段改 evidence.reason/at/五笔 hash 按母计划 2340 R7 映射表换算/GATE_SPACE 锚点订正 relocate_common.py:40-58/env=False 锚点订正 relocate_probe.py:449/单测锚点统一 :270-274(判据① 行+§4.1 两处)/母计划 2340 doc-refs 回链本计划(双向闭环)/meta doc-updated 两处对齐。注记: 母计划 2340 的回链随本批落, 其 R8 记账待执行轮完成后追加; 用例文件断言面(W1/W5 代码)由主会话随批B同步。</li>
+</ul>
+
+</div>
+</body>
+</html>
