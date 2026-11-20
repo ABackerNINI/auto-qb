@@ -8,4 +8,5 @@
 
 - **触发**: 写/改「真绑定 + `_free_port()` 选基底」的用例, 尤其持连号段或断言精确绑定端口的(候选表语义: 首位被占顺延次位 / 三候选全占返回 False); 排查「全量并行偶发红、单跑/复跑恒绿」的 bind 失败或 bound_port 断言红。
 - **判别**: 失败点在 `bind`/`bound_port`/候选顺延断言; 端口来自 `_free_port()` 当拍探测而非模型默认; 同批并行里还有别族真绑定用例(webui bind/桩服务/hr 全占断言)。与 [fixed-port-test-collision.md](fixed-port-test-collision.md) 区分 —— 那条是**模型默认固定端口**(18788)被真实实例/其它 worker 占; 本条端口是动态选的, 红在选完之后的窗口。同文件 docstring 已写「动态空闲端口当基底」仍会中, 就是本条。
+- **复发**: +1 (2026-11-20, WEBUI 列风格 S3/S6a 两轮): test_hr_discovery.py::test_runtime_discovery_bind_failure_keeps_data_endpoint 并行偶发红两次(B3 提交闸门 / B6a 首轮 test.quick), 均单跑定向复绿后复跑闸门即过 —— 全程按本条处置走(定向复跑定性, 没追假 bug), 属本坑固有碰撞面内的记账命中(立档前摘要所记 T3/T5/T6/T8c 四轮系立档前史, 不计入本编号)。
 - **处置**: 排查期先单跑复跑定性 —— 恒绿即并行碰撞, 不是代码缺陷, 别顺着堆栈追假 bug; 改用例缩短窗口: 持段动作提前(先 hold 后断言)/断言放宽到「落在候选集内」/同族真绑定用例挂 xdist 串行组; 全占断言类(`test_start_all_busy_*`)碰撞面最大(3 位全要空), 复跑前确认无本机真实实例共享端口段。
