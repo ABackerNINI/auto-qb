@@ -717,7 +717,7 @@ def test_bulk_partial_group_location_armed_not_gated():
         mgr.config.relocate.enabled = True
         seen = []
 
-        def _exec(hashes, location, confirm=False, origin="unknown"):
+        def _exec(hashes, location, confirm=False, origin="unknown", receipt_cmd_id=""):
             seen.append((list(hashes), location, confirm, origin))
             return [{"hash": "HA", "cls": "skip", "reasons": [], "notes": ["幂等"]}]
 

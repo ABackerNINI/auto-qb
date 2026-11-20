@@ -5,6 +5,7 @@ move-only 自 commands.py 切出(计划 26-11-02-2342 §07 R5), 未改语义。
 import time
 from typing import List, Optional, Tuple
 
+from ..core.modules.relocate_units import PROBE_GATE_PROBING_KEY
 from ..core.qbapi import DeleteBlockedError
 from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
 
@@ -424,6 +425,13 @@ class TorrentsMixin:
         (目录别名「以后新增也落新位置」)/ blocked=闸门拒绝。blocked 给 error 回执并带
         首条自解释原因, confirm 给 ok + truth(由前端据 summary 开确认框)。
 
+        probing 桶(T4 受理段, 计划 26-11-10-2350 D8): item[PROBE_GATE_PROBING_KEY]=True
+        的「探测中」gate(T2 异步化, cls 仍是 blocked)单独计数、不计入 blocked —— 它是
+        受理事实不是闸门拒绝。仅探测中(无 started/skip/confirm)时回执 warn「已受理」
+        形态(reannounce 已受理·推迟同款词汇, 前端 warn = 非失败终结态), 不再当 blocked
+        错误呈现; 终态由 verdict 消费面经出站面补发(runtime_commands.drain_probe_receipts
+        对同 cmd_id 二次写覆盖本回执)。
+
         missing_msgs(issue 26-11-07-0536 #3): 批量入口的缺失计数文案段(_bulk_missing_msgs
         拼装, 单发入口不传), 非空时回执 error 带该文案 —— 与 bulk 其余动作同契约(handler
         文档「仍有缺失时回执 error 带缺失计数, 部分成功也报错」); truth 照常带 items+summary,
@@ -434,9 +442,13 @@ class TorrentsMixin:
         (待确认/已发起/幂等跳过/被拒)按 summary 以「; 另有 N 项待确认 / 已发起 M 项」形态
         追加进文案(批C评审), 用户可见层不丢事实。
         """
-        summary = {"started": 0, "skip": 0, "confirm": 0, "blocked": 0}
+        summary = {"started": 0, "skip": 0, "confirm": 0, "blocked": 0, "probing": 0}
         for it in items:
-            summary[it.get("cls", "blocked")] = summary.get(it.get("cls", "blocked"), 0) + 1
+            # 「探测中」gate 单独成桶(T4): 键判别单点 relocate_units.PROBE_GATE_PROBING_KEY
+            if isinstance(it, dict) and it.get(PROBE_GATE_PROBING_KEY) is True:
+                summary["probing"] += 1
+            else:
+                summary[it.get("cls", "blocked")] = summary.get(it.get("cls", "blocked"), 0) + 1
         if not cmd_id:
             return
         if missing_msgs:
@@ -447,6 +459,8 @@ class TorrentsMixin:
                 counts.append(f"已发起 {summary['started']} 项")
             if summary["skip"]:
                 counts.append(f"幂等跳过 {summary['skip']} 项")
+            if summary["probing"]:
+                counts.append(f"另有 {summary['probing']} 项同机探测进行中")
             if summary["blocked"]:
                 counts.append(f"另有 {summary['blocked']} 项被闸门拒绝")
             msg = "; ".join(missing_msgs)
@@ -454,6 +468,15 @@ class TorrentsMixin:
                 msg = f"{msg}; " + " / ".join(counts)
             self._set_web_result(cmd_id, "error", msg, truth={"results": items, "summary": summary})
             logger.info(f"WEB UI | {what}: {msg}")
+            return
+        if summary["probing"] and not (summary["started"] or summary["skip"] or summary["confirm"]):
+            # 受理段(D8, T4): 仅探测中(可混真实 blocked)回 warn「已受理」—— 迁移意图已
+            # 受理排队, 结论到达后自动续跑(T3), 终态补发段覆盖本回执
+            msg = f"已受理: 同机探测进行中 {summary['probing']} 项, 探测结论到达后自动续跑"
+            if summary["blocked"]:
+                msg += f"; 另有 {summary['blocked']} 项被闸门拒绝"
+            self._set_web_result(cmd_id, "warn", msg, truth={"results": items, "summary": summary})
+            logger.info(f"WEB UI | {what}: 已受理(同机探测进行中 {summary['probing']} 项; 拒绝 {summary['blocked']} 项)")
             return
         if summary["blocked"] and not (summary["started"] or summary["skip"] or summary["confirm"]):
             reason = ""
@@ -466,8 +489,10 @@ class TorrentsMixin:
             self._set_web_result(cmd_id, "error", reason or "整组迁移被闸门拒绝", truth={"results": items, "summary": summary})
             return
         self._set_web_result(cmd_id, "ok", truth={"results": items, "summary": summary})
+        # 探测中段(T4): 混合形态(部分组已发起 + 部分组探测中)日志不吞受理事实
+        probing_seg = f" / 探测中 {summary['probing']}" if summary["probing"] else ""
         logger.info(
-            f"WEB UI | {what}: 已发起 {summary['started']} / 幂等跳过 {summary['skip']} / 需确认 {summary['confirm']} / 拒绝 {summary['blocked']}"
+            f"WEB UI | {what}: 已发起 {summary['started']} / 幂等跳过 {summary['skip']} / 需确认 {summary['confirm']} / 拒绝 {summary['blocked']}{probing_seg}"
         )
 
     def _relocate_armed(self) -> bool:
@@ -486,7 +511,11 @@ class TorrentsMixin:
             raise ValueError("location 不能为空")
         if self._relocate_armed():
             # 开: 走整组迁移闸门 + 执行体(字节一律由 qB 搬, auto-qb 只建别名与收尾)
-            items = self.ctx.relocate.relocate_execute([hash], location, confirm=bool(confirm), origin="web")
+            # receipt_cmd_id(T4 受理段): 探测闸走「探测中」分支时把 cmd_id 绑进 pending
+            # 条目, verdict 消费后向本 cmd_id 补发终态(D8 两段回执)
+            items = self.ctx.relocate.relocate_execute(
+                [hash], location, confirm=bool(confirm), origin="web", receipt_cmd_id=cmd_id
+            )
             self._relocate_receipt(cmd_id, items, f"移动位置(整组迁移) {hash[:8]}")
             return
         self.api.torrents_set_location(torrent_hashes=[hash], location=location)
@@ -804,7 +833,10 @@ class TorrentsMixin:
             # —— 仍有缺失时回执 error 带缺失计数(部分成功也报错), 明细照常经 truth 带出;
             # 缺失 hash 不交 relocate_execute(known 已按快照过滤, gone 分桶是预检/直调的兜底面)
             msgs = self._bulk_missing_msgs(missing, len(req), missing_groups, len(keys))
-            items = self.ctx.relocate.relocate_execute(known, extra["location"], confirm=bool(confirm), origin="web")
+            # receipt_cmd_id(T4 受理段): 同单发入口 —— 探测中分支绑 cmd_id, 终态补发同回执
+            items = self.ctx.relocate.relocate_execute(
+                known, extra["location"], confirm=bool(confirm), origin="web", receipt_cmd_id=cmd_id
+            )
             self._relocate_receipt(cmd_id, items, f"批量移动位置(整组迁移) {len(known)} 个", missing_msgs=msgs)
             return
         if action == "skip_check":

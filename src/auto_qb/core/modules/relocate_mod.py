@@ -26,6 +26,7 @@ import copy
 import os
 import shutil
 import time
+from collections import deque
 from dataclasses import replace
 from types import MappingProxyType
 from typing import Any, Optional
@@ -40,7 +41,7 @@ from .relocate_common import logger
 from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
 from .relocate_exec import ExecMixin, arm_members_of
-from .relocate_probe import new_probe_salt
+from .relocate_probe import PROBE_RECEIPT_OUTBOX_MAX, new_probe_salt
 
 # 同机强探测(E1)结论的合法取值(计划 26-11-04-0055 §03.2); 其余一律按坏条目/未命中处理
 _PROBE_STATUSES = ("passed", "failed")
@@ -98,6 +99,13 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         # _set_job 置 _jobs_loaded -> stop() 整段重写清掉 legacy 账)。清位 = 下次成功
         # _load_jobs(_load_jobs 尾部)或重启; 内存态不入 state_file。
         self._hot_enable_rejected = False
+        # web 两段回执的出站面(T4, 计划 26-11-10-2350 D8; 并轨 26-11-15-2340 刀4):
+        # verdict 消费面把「web 命令的终态摘要」投进来, webui 侧经 probe_receipts_take()
+        # 排空取走后自己 set_result 补发 —— 层次方向钉死: relocate 只投数据不碰 webui
+        # (不 import webui 任何东西), 表现层消费单点在 webui 命令线。纯内存 deque,
+        # drop-oldest 封顶 PROBE_RECEIPT_OUTBOX_MAX(64); 重启即空 = 已投未取的终态随
+        # 进程消亡不补发(与 webui results 同生灭, 前端重启自愈清在途命令)。
+        self._probe_receipt_outbox: deque = deque(maxlen=PROBE_RECEIPT_OUTBOX_MAX)
 
     def sections(self) -> tuple:
         # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块
@@ -193,6 +201,23 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         return box
 
     @staticmethod
+    def _probe_receipt_ids_as_list(value: Any) -> list:
+        """存储值 -> cmd_id 列表(值级容错单点, 与 _probe_hashes_as_list 同款口径)
+
+        list/tuple/set 容器原样迭代(str 归一 + 空白元素丢弃); 非容器(str/int/None/坏值)
+        或迭代异常一律按空列表 —— receipt_ids 是机器判别面(键存在性 = 有无 web 受理回执),
+        坏值不参与判别但也不得从读(_probe_pending_copy)/合并(merge_intent 直读真身, 生产
+        热路径)/出站面(publish 的 ids 推导)三处炸出去。与 hashes 不同 str 不按单值收:
+        cmd_id 关联是列表语义, 单串真身属漂移形态不猜。
+        """
+        if not isinstance(value, (list, tuple, set)):
+            return []
+        try:
+            return [str(x) for x in value if str(x or "").strip()]
+        except TypeError:
+            return []
+
+    @staticmethod
     def _probe_hashes_as_list(value: Any) -> list:
         """存储值 -> hash 列表(值级容错单点): str 按 [该串] 单 hash、非可迭代按空 list
 
@@ -208,17 +233,30 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             return []
 
     def _probe_pending_copy(self, entry: dict) -> dict:
-        """条目副本(hashes 列表单层深拷) —— 调用方改不动队列真身(与 probe_get 副本口径一致)"""
+        """条目副本(hashes/receipt_ids 列表单层深拷) —— 调用方改不动队列真身(与 probe_get 副本口径一致)
+
+        receipt_ids 是 T4 的可选回执提示字段: 副本里经容错单点归一(_probe_receipt_ids_as_list),
+        缺省键的条目(规则路径意图)副本同样不带该键 —— 键的存在性本身就是「有无 web 受理
+        回执」的判别面, 副本不得无中生有。
+        """
         copied = dict(entry)
         copied["hashes"] = self._probe_hashes_as_list(entry.get("hashes"))
+        if "receipt_ids" in copied:
+            copied["receipt_ids"] = self._probe_receipt_ids_as_list(copied.get("receipt_ids"))
         return copied
 
-    def probe_pending_append(self, fingerprint: str, hashes: Any, src: str, dst: str, origin: str) -> dict:
+    def probe_pending_append(
+        self, fingerprint: str, hashes: Any, src: str, dst: str, origin: str, receipt_id: str = ""
+    ) -> dict:
         """入队一条迁移意图(队尾; 返回条目副本)
 
         条目 {fingerprint, hashes, src, dst, origin, ts}: 只存意图不存快照(D6); hashes 去重
         保序(字符串按单 hash 容错, 空白 hash 丢弃); origin 是触发来源标记("web"/"rule" 形态,
         容器只透传); ts = 入队 epoch 秒(probe_put.at 同钟面, 超龄兜底判据)。
+
+        receipt_id(T4 可选): web 命令的回执关联 id(cmd_id), 非空时条目携带 receipt_ids=[id]
+        —— verdict 消费面据此向出站面投终态补发; 空(规则路径/未带 id 的调用)则键不出现,
+        消费面零补发动作(键的存在性 = 「有无 web 受理回执」的判别面)。
         """
         if isinstance(hashes, str):  # 字符串按单 hash 容错(逐字符拆分是真实 footgun)
             hashes = [hashes]
@@ -230,6 +268,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             "origin": str(origin or ""),
             "ts": int(self._clock.now()),
         }
+        rid = str(receipt_id or "").strip()
+        if rid:
+            entry["receipt_ids"] = [rid]
         self._state_probe_pending().append(entry)
         return self._probe_pending_copy(entry)
 
@@ -269,7 +310,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
                 return True
         return False
 
-    def probe_pending_merge_intent(self, fingerprint: str, src: str, dst: str, hashes: Any) -> bool:
+    def probe_pending_merge_intent(
+        self, fingerprint: str, src: str, dst: str, hashes: Any, receipt_id: str = ""
+    ) -> bool:
         """同意图合并(精确三元组): 指纹+源+目标都一致的既有条目并入 hashes(去重保序)
 
         S2 _ensure_probe 的合并单点(计划 26-11-10-2350 落点段「同指纹合并」的落地口径):
@@ -279,6 +322,12 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         匹配归一走 ru._norm fold_case=False(判定面归一单点, 与本文件 job dst 比较同款);
         条目真身存的仍是原文(replay/setLocation 消费原文, 归一只用于匹配)。无匹配返回
         False(调用方改走 probe_pending_append)。
+
+        receipt_id(T4 可选): 非空时并入命中条目的 receipt_ids(去重) —— 同一迁移意图的
+        多个 web 命令(连点)各带各的 cmd_id, 终态补发对每个 cmd_id 各投一条(同 id 多条
+        由 webui set_result 覆盖语义收口); 规则路径/空 id 只并 hashes 不动 receipt_ids
+        (规则意图被 web 命令合并时, 条目由此获得 web 回执关联 —— 合法: 该意图完成后
+        web 用户的命令理应收到终态)。
         """
         fp = str(fingerprint or "")
         want_src = ru._norm(str(src or ""), fold_case=False)
@@ -292,6 +341,13 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             ):
                 continue
             self._probe_pending_merge_into(entry, hashes)
+            rid = str(receipt_id or "").strip()
+            if rid:
+                # ids 推导走容错单点(直读真身是生产热路径: 闸每次未命中都经此), 坏值真身
+                # 顺带修复为规范列表 + 新 id
+                ids = self._probe_receipt_ids_as_list(entry.get("receipt_ids"))
+                if rid not in ids:
+                    entry["receipt_ids"] = [*ids, rid]
             return True
         return False
 
@@ -325,6 +381,46 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         n = len(box)
         box.clear()
         return n
+
+    # ---------- web 两段回执的出站面(T4, 计划 26-11-10-2350 D8) ----------
+    # 补发通道形态钉死(候选 a+b 组合, R5 并轨适配留痕): cmd_id 随意图走 —— web 命令经
+    # relocate_execute(receipt_cmd_id=..) 把 cmd_id 绑进 pending 条目的可选 receipt_ids 字段
+    # (候选 a), verdict 消费面(T3 _consume_probe_verdict)对被消费条目的 receipt_ids 逐个把
+    # 终态摘要投进本出站面(候选 b); webui 在自己命令线 tick 经 ctx.relocate 公开面
+    # probe_receipts_take() 排空取走并 set_result 补发(同 cmd_id 覆盖 + notify 主动推)。
+    # 层次方向: relocate 只投 (cmd_id, 终态摘要) 数据、绝不 import webui 或直写 webui
+    # 内部状态(interface guard P4 精神); defer_receipt 不复用(其 truth_pending 机制绑死
+    # RESYNC_COMMANDS 的 cmd/args 真值查询面, 探测终态没有对应查询面), 真正复用的是
+    # set_result 的同 id 覆盖语义(计划 §07 风险表「无通道则加最小补发通道(按命令 id 更新)」)。
+    # 出站面条目形状: {"cmd_id": str, "items": list(重放回执明细, 失败形态为空), "error": str}。
+
+    def probe_receipts_take(self) -> list:
+        """排空式取走出站面全部待补发终态(webui 命令线消费单点); FIFO 序, 空面返回 []
+
+        纯内存(deque), 重启即空 —— 已投未取的终态随进程消亡, 不跨进程补发(webui results
+        同为内存面, 上一世 cmd_id 无人轮询; 前端重启自愈清在途命令)。只应在主循环线程调用
+        (生产挂点 webui 模块 on_command_line; 黄金法则#5)。
+        """
+        out = list(self._probe_receipt_outbox)
+        self._probe_receipt_outbox.clear()
+        return out
+
+    def _probe_receipt_publish(self, receipt_ids: Any, items: list, error: str = "") -> int:
+        """向出站面投递终态补发(verdict 消费面单点; 返回投递条数)
+
+        receipt_ids 为空 = 规则路径/未绑 cmd_id 的意图: 零动作(规则路径回执形态不变)。
+        items/error 由调用方定形: 正常重放带 items 且 error 空(表现层按明细出受理同款
+        回执); 重放异常/防自环终止带 error 文案且 items 空(无明细可带, 不让「探测中」
+        回执冒充终态)。drop-oldest 由 deque(maxlen) 自带 —— 消费面缺失的病态堆积封顶
+        PROBE_RECEIPT_OUTBOX_MAX(64)。
+        """
+        ids = self._probe_receipt_ids_as_list(receipt_ids)
+        if not ids:
+            return 0
+        payload = {"items": list(items or []), "error": str(error or "")}
+        for rid in ids:
+            self._probe_receipt_outbox.append({"cmd_id": rid, **payload})
+        return len(ids)
 
     def probe_salt(self) -> str:
         """读指纹盐(只读面): state 无盐返回空串, 绝不在读路径生成/持久化

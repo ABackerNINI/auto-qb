@@ -52,8 +52,23 @@ test_relocate_probe_gate_async 的注入形态(独立 runner: 独立结果队列
 - test_start_recovers_pending_and_chain_continues: 重启恢复端到端 —— pending 落盘(超龄+新鲜
   两笔) -> 新实例 start 重载(队列空/槽空闲/缓存无 verdict) -> 超龄清扫+审计、队首重 kick ->
   verdict 到达 -> on_task_line 消费链重放续跑建账 setLocation
+- test_consume_publishes_terminal_receipts_for_bound_cmd_ids: T4 补发段 —— 绑定 receipt_ids
+  的条目消费时向出站面投终态(每 cmd_id 一条, 正常重放带 items 且 error 空), webui 侧
+  probe_receipts_take 排空取走
+- test_consume_unbound_intent_publishes_zero: 规则路径/无 cmd_id 的意图(条目无 receipt_ids
+  键)消费时出站面零动作(键的存在性 = 判别面, 规则路径回执形态不变)
+- test_consume_env_failure_publishes_error_terminal: 防自环形态的终态补发 —— env=True 失败
+  未缓存 -> 条目丢弃终止自动链, 出站面投 error 文案(带 verdict reason)且 items 空
+  (「探测中」明细不冒充终态)
+- test_consume_replay_exception_publishes_error_when_not_rearmed: 重放异常且未重武装(槽被本
+  指纹占着的自然路径 + 尾部汇总位抛异常)-> 条目照常清 + 出站面投 error 文案(items 空);
+  重武装形态(re_armed)不投, 终态待新 verdict 正常消费
+- test_consume_rearm_does_not_publish_terminal: 重武装不投终态 —— crash verdict 重放重起探测
+  时条目保留(receipt_ids 保留), 出站面空; 新 verdict 正常消费后才投
 - test_apply_hot_enable_recovers_pending: 热启用(假->真)同款恢复(与 start 分支口径对称):
   disabled 启动不 kick, apply 热启用后队首重 kick + verdict 到达消费链续跑
+- test_recover_strips_receipt_ids_from_survivors: 启动恢复清存活条目的 receipt_ids(T4 重启
+  语义: 上一世 web 回执关联不跨进程补发), 出站面零动作; 超龄清扫条目连带 receipt_ids 消失
 """
 
 import queue
@@ -258,6 +273,99 @@ def test_consume_rearm_keeps_entry_when_replay_restarts_probe(monkeypatch):
     assert slot.in_flight() is None and len(calls) == 1, "槽释放(pending 空不 kick), 无第二次探测"
 
 
+def test_consume_publishes_terminal_receipts_for_bound_cmd_ids(monkeypatch):
+    """T4 补发段: 绑定 receipt_ids 的条目消费时向出站面投终态(每 cmd_id 一条, 正常重放带 items)"""
+    mod, locs = _gate_env(monkeypatch)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    fp = _fp_of(mod)
+    mod.probe_pending_append(fp, ["HA", "HB"], "R:/src", "R:/dst", "web", receipt_id="cmd-1")
+    mod.probe_pending_merge_intent(fp, "R:/src", "R:/dst", ["HA"], receipt_id="cmd-2")  # 连点同款: 双 cmd_id
+    slot.try_acquire(fp)
+    q.put((fp, _passed()))
+    mod._consume_probe_verdict()
+    out = mod.probe_receipts_take()
+    assert [r["cmd_id"] for r in out] == ["cmd-1", "cmd-2"], "每个绑定的 cmd_id 各投一条(同 id 多条由 webui 覆盖收口)"
+    assert all(r["error"] == "" for r in out), "正常重放: error 空"
+    assert all(r["items"] and r["items"][0].get("cls") == "started" for r in out), "items = 重放回执明细(已发起)"
+    assert locs and locs[0]["location"] == "R:/dst", "重放续跑建账(setLocation)"
+    assert mod.probe_receipts_take() == [], "排空式: take 后面空"
+
+
+def test_consume_unbound_intent_publishes_zero(monkeypatch):
+    """规则路径/无 cmd_id 的意图(条目无 receipt_ids 键): 消费面零出站动作(规则路径回执形态不变)"""
+    mod, _locs = _gate_env(monkeypatch)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    fp = _fp_of(mod)
+    mod.probe_pending_append(fp, ["HA", "HB"], "R:/src", "R:/dst", "rule")  # 无 receipt_id
+    slot.try_acquire(fp)
+    q.put((fp, _passed()))
+    mod._consume_probe_verdict()
+    assert (mod.probe_get(fp) or {}).get("status") == "passed" and len(mod.active_jobs()) == 1, "消费链照常(续跑不受影响)"
+    assert mod.probe_receipts_take() == [], "无绑定条目: 出站面零动作"
+
+
+def test_consume_env_failure_publishes_error_terminal(monkeypatch):
+    """防自环形态的终态补发: env=True 失败未缓存 -> 条目丢弃, 出站面投 error 文案(items 空)"""
+    mod, _locs = _gate_env(monkeypatch)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    fp = _fp_of(mod)
+    mod.probe_pending_append(fp, ["HA", "HB"], "R:/src", "R:/dst", "web", receipt_id="cmd-env")
+    slot.try_acquire(fp)
+    q.put((fp, _env_failed("add_rejected")))
+    mod._consume_probe_verdict()
+    out = mod.probe_receipts_take()
+    assert len(out) == 1 and out[0]["cmd_id"] == "cmd-env", "防自环终止也补发终态(用户命令不能无终态挂起)"
+    assert out[0]["items"] == [], "「探测中」明细不冒充终态(items 空)"
+    assert "add_rejected" in out[0]["error"] and "终止" in out[0]["error"
+                                                               ], f"error 带 verdict reason 与终止语义: {out[0]['error']}"
+    assert mod.probe_pending_list() == () and calls == [], "防自环行为不变(条目丢弃不再自动链)"
+
+
+def test_consume_replay_exception_publishes_error_when_not_rearmed(monkeypatch):
+    """重放异常且未重武装(槽被本指纹占 + 尾部汇总位抛异常): 条目清 + 出站面投 error(items 空)"""
+    mod, _locs = _gate_env(monkeypatch)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    fp = _fp_of(mod)
+    mod.probe_pending_append(fp, ["HA", "HB"], "R:/src", "R:/dst", "web", receipt_id="cmd-exc")
+
+    def _boom(items):
+        raise RuntimeError("replay 汇总位故障")
+
+    monkeypatch.setattr(mod, "_summ", _boom)
+    slot.try_acquire(fp)  # 自然路径: 槽被占 -> 重放命中 passed 缓存放行(不起探测, 槽跃迁不成立)
+    q.put((fp, _passed()))
+    mod._consume_probe_verdict()
+    out = mod.probe_receipts_take()
+    assert len(out) == 1 and out[0]["cmd_id"] == "cmd-exc", "未重武装的异常消费: 补发 error 终态"
+    assert out[0]["items"] == [] and "replay 汇总位故障" in out[0]["error"], "items 空 + 异常文案带出"
+    assert mod.probe_pending_list() == (), "条目照常清(异常不拖垮消费链)"
+    assert slot.in_flight() is None, "槽照常释放(未重武装形态)"
+
+
+def test_consume_rearm_does_not_publish_terminal(monkeypatch):
+    """重武装不投终态: 条目保留(receipt_ids 保留)出站面空, 新 verdict 正常消费后才投"""
+    mod, _locs = _gate_env(monkeypatch)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    fp = _fp_of(mod)
+    mod.probe_pending_append(fp, ["HA", "HB"], "R:/src", "R:/dst", "web", receipt_id="cmd-rearm")
+    crash = ProbeResult("failed", PROBE_RUNNER_CRASHED_REASON, True, {"method": "e1", "error": "boom"})
+    q.put((fp, crash))  # 槽空闲(线程启动失败形态): 重放重起探测 = 重武装
+    mod._consume_probe_verdict()
+    assert len(mod.probe_pending_list()) == 1 and mod.probe_pending_list()[0]["receipt_ids"] == ["cmd-rearm"], \
+        "重武装: 条目与 receipt_ids 保留(终态待新 verdict)"
+    assert mod.probe_receipts_take() == [], "重武装不投终态(防止半程结论冒充终态)"
+    assert wait_until(lambda: q.qsize() == 1), "重起的探测 verdict 到达"
+    mod._consume_probe_verdict()  # 第二拍: 新 verdict 正常消费
+    out = mod.probe_receipts_take()
+    assert len(out) == 1 and out[0]["cmd_id"] == "cmd-rearm" and out[0]["items"], "新 verdict 消费后正常投终态"
+    assert len(mod.active_jobs()) == 1, "续跑建账照常"
+
+
 def test_on_task_line_consumes_verdict_before_stepping(monkeypatch):
     """D9 挂点: on_task_line 先消费(条目清/缓存写/建账)后步进; 空队列二拍相位推进照常"""
     mod, locs = _gate_env(monkeypatch)
@@ -343,6 +451,31 @@ def test_recover_skips_sweep_when_verdict_pending_or_slot_held(fake_clock):
     mod._consume_probe_verdict()  # 既有 verdict 的正常消费链接续
     assert mod.probe_pending_list() == () and (mod.probe_get(fp) or {}).get("status") == "passed"
     assert slot.in_flight() is None, "消费面释放槽(pending 空, 无 kick)"
+
+
+def test_recover_strips_receipt_ids_from_survivors(fake_clock):
+    """T4 重启语义: 启动恢复清存活条目的 receipt_ids(上一世 web 回执关联不跨进程补发)
+
+    续跑完成的消费面因此零出站动作(出站面本就随进程重启清空, 与 webui results 同生灭);
+    超龄清扫掉的条目连带 receipt_ids 一起消失(零投递)。
+    """
+    mod = RelocateModule(clock=fake_clock)
+    mod._ctx = types.SimpleNamespace(state=types.SimpleNamespace(data={}))
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    mod.probe_pending_append("fpDead", ["HA"], "R:/s1", "R:/d1", "web", receipt_id="cmd-dead")
+    fake_clock.advance(PROBE_PENDING_MAX_AGE_S + 1.0)  # 首条超龄(清扫, receipt_ids 随条目消失)
+    mod.probe_pending_append("fpLive", ["HB"], "R:/s2", "R:/d2", "web", receipt_id="cmd-live")
+    mod._probe_pending_recover()
+    entries = mod.probe_pending_list()
+    assert [e["fingerprint"] for e in entries] == ["fpLive"], "超龄条目清(连带 receipt_ids), 存活条目保留"
+    assert all("receipt_ids" not in e for e in entries), "存活条目的 receipt_ids 已清(不跨进程补发)"
+    assert mod.probe_receipts_take() == [], "恢复面零出站动作"
+    assert wait_until(lambda: len(calls) == 1), "队首重 kick 照常(D7 恢复语义不变)"
+    # 续跑完成后消费: 无 receipt_ids => 零投递(清绑生效)
+    assert wait_until(lambda: q.qsize() == 1), "kick 起的探测 verdict 到达"
+    mod._consume_probe_verdict()
+    assert mod.probe_receipts_take() == [], "续跑完成: 清绑后的条目消费零出站动作"
 
 
 def test_consume_replay_exception_keeps_rearm_slot(monkeypatch):

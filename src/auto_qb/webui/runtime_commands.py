@@ -335,6 +335,44 @@ class CommandsMixin:
             "ts": self._clock.now(),
         }
 
+    def drain_probe_receipts(self) -> None:
+        """消费 relocate 出站面的探测终态补发(T4 补发段, 计划 26-11-10-2350 D8; 每轮排空一次)
+
+        两段回执的补发半边: relocate 的 verdict 消费面把「web 命令的终态摘要」投进它的内存
+        出站面(relocate_mod._probe_receipt_publish), 本侧在命令线 tick 经 ctx.relocate 公开面
+        probe_receipts_take() 排空取走, 对每条 (cmd_id, items, error) 二次写同 cmd_id 回执
+        (set_result 覆盖受理段回执)并 notify 主动推 —— 层次方向钉死: relocate 只投数据、
+        不 import webui 不直写表现层状态, 消费单点在本方法(主循环线程)。
+
+        终态定形(与 relocate 消费面约定): error 非空 = 重放异常/防自环终止(无明细可带,
+        items 恒空)→ error 回执(走本 runtime 自己的 set_result); error 空 = 正常重放 →
+        items 交宿主 _relocate_receipt 按明细出回执(blocked/started/confirm/skip 语义与
+        受理段同款 —— 正常重放 items 不含「探测中」gate, 防自环形态已在 relocate 侧折进
+        error)。回执的**格式化面**(_relocate_receipt)在宿主命令 mixin 上(与受理段同一份
+        实现), 本门面只做转发 —— 与 consume_commands 经 host._web_command_handlers() 分发
+        同款宿主取用形态。挂点 = WebUIModule.on_command_line(consume_commands/check_pending
+        之后); host 无 ctx / relocate 缺位(web_env 替身、模块未装配)时零动作。
+        """
+        mod = getattr(getattr(self._host, "ctx", None), "relocate", None)
+        take = getattr(mod, "probe_receipts_take", None)
+        if not callable(take):
+            return
+        receipt = getattr(self._host, "_relocate_receipt", None)
+        if not callable(receipt):
+            return  # 宿主无 relocate 回执格式化面(替身形态): 零动作(替身也不会有出站面)
+        for rec in take():
+            if not isinstance(rec, dict):
+                continue
+            cmd_id = str(rec.get("cmd_id") or "")
+            if not cmd_id:
+                continue  # 无 cmd_id 的出站条目不可达(relocate 侧空 id 零投递), 防御跳过
+            error = str(rec.get("error") or "")
+            if error:
+                self.set_result(cmd_id, "error", error)
+                logger.warning(f"WEB UI | relocate 探测终态补发(失败): {cmd_id}: {error}")
+            else:
+                receipt(cmd_id, rec.get("items") or [], "整组迁移(探测结论自动续跑)")
+
     @staticmethod
     def _truth_landed(cmd: str, args: dict, truth: Optional[dict]) -> bool:
         """真值是否已**落地**(命令的效果是否已经在种子状态上体现)

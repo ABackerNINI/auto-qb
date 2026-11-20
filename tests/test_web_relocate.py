@@ -52,14 +52,40 @@
 - test_relocate_module_start_and_apply_probe_wiring
 - test_relocate_precheck_no_false_dir_link_note
   混合计数; precheck_add 回执 truth=单 item
+- test_relocate_receipt_probing_acceptance_not_error: T4 受理段(D8) —— 仅探测中回 warn
+  「已受理」非 blocked 错误(probing 桶独立计数, blocked 桶排除探测中); 探测中+真实拒绝
+  仍 warn 带「另有 N 项被闸门拒绝」; 探测中+已发起混合走 ok; 缺失计数文案带探测中段
+- test_web_relocate_probe_receipt_cmd_id_wired: 受理段绑定接线 —— 单种/批量两个调用点把
+  cmd_id 传给 relocate_execute(receipt_cmd_id), 探测中 items 经命令全链出 warn 受理回执
+- test_web_relocate_probe_two_phase_full_chain: 两段回执全链 —— web 命令受理(warn + cmd_id
+  绑进 pending 条目 receipt_ids) -> verdict 消费重放建账 -> 出站面 -> WebUIModule
+  on_command_line 排空补发(同 cmd_id 二次写覆盖 warn 为 ok + notify 推两次 cmd 事件)
+- test_web_relocate_probe_terminal_drain_error_and_defense: 补发段 error 形态与防御面 ——
+  重放异常/防自环终止的 error 回执(items 空不冒充终态); 无 cmd_id 条目跳过; relocate
+  缺位/无 probe_receipts_take 时零动作
+- test_web_relocate_probe_split_group_terminal_maps_ok: 拆组形态(R5 评审修复) —— passed
+  verdict 但重放按新 save_path 拆组出混合 items(本组 started + 拆出组 probing gate):
+  终态照常投 items 非 error(判别真值来源 = verdict 本体), drain 映射 ok(started+probing)
+- test_web_relocate_probe_terminal_last_write_wins: 同一 cmd_id 绑多条 pending 条目(批量
+  双组受理)-> 逐条各投终态 -> 一次 drain 二次写同 id 收敛 last-write-wins(后投条目明细),
+  cmd 事件计数 = 受理 1 + 终态 2
 """
 import json
 import os
+import queue
 import shutil
 
-from auto_qb.core.modules.relocate_units import RelocateJob
+from auto_qb.core.modules.relocate_units import PHASE_MOVING, RelocateJob
+
+from clock import wait_until
 
 from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, relocate_env, seed_store
+
+from relocate_exec_support import _spy_spawn
+
+from test_relocate_exec_probe_gate import _passed
+
+from test_relocate_probe_consume import _recording_probe, _wire_async
 
 
 def test_relocate_module_precheck_ok_and_confirm(tmp_path, monkeypatch):
@@ -1124,3 +1150,280 @@ def test_web_relocate_confirm_passthrough_routes(web_env):
         if confirm:
             want["confirm"] = True
         assert payload == want, (payload)
+
+
+def _probing_item(hashes=("HA", )):
+    """「探测中」gate 回执(S2 异步化形态, T4 受理段的输入面): cls=blocked + 机器判别键"""
+    return {
+        "hashes": list(hashes),
+        "mover": hashes[0],
+        "name": "Show",
+        "save_path": "R:/src",
+        "target": "R:/dst",
+        "cls": "blocked",
+        "probing": True,
+        "reasons": [{
+            "gate": "same_fs",
+            "cls": "blocked",
+            "text": "同机探测已入队(探测进行中或等位)"
+        }],
+        "notes": ["同机探测已入队: 同机强探测进行中, 迁移将在探测结论到达后自动续跑"],
+    }
+
+
+def test_relocate_receipt_probing_acceptance_not_error(tmp_path, monkeypatch):
+    """T4 受理段(D8): 仅探测中回 warn「已受理」非 blocked 错误; probing 桶独立计数; 混合/缺失形态
+
+    用宿主命令 mixin 的 _relocate_receipt(与生产 handler 同一份实现)直驱: 探测中 item(cls
+    仍是 blocked)按机器判别键单独成桶, 不再进 blocked 桶 —— 仅探测中(可混真实拒绝)出 warn
+    受理形态; 探测中+已发起混合走既有 ok; 缺失计数文案追加探测中段(26-11-07-0536 契约不变)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, _client, _src, _dst, _content, _files = relocate_env(tmp_path, file_count=2, data_dir=False)
+    started = {"cls": "started", "job_id": "j1", "hashes": ["HA"], "form": "file_links", "reasons": []}
+    blocked = {
+        "cls": "blocked",
+        "hashes": ["HB"],
+        "reasons": [{
+            "gate": "target_conflict",
+            "cls": "blocked",
+            "text": "目标已存在"
+        }]
+    }
+    # 仅探测中: warn 受理, 不再当 blocked 错误呈现
+    mgr._relocate_receipt("c-accept", [_probing_item()], "测试受理")
+    rec = mgr.web.results["c-accept"]
+    assert rec["status"] == "warn", rec
+    assert "已受理" in rec["error"] and "同机探测进行中 1 项" in rec["error"], rec["error"]
+    assert rec["truth"]["summary"] == {"started": 0, "skip": 0, "confirm": 0, "blocked": 0, "probing": 1}, rec["truth"]
+    # 探测中 + 真实闸门拒绝: 仍 warn 受理(受理是主事实), 文案带拒绝计数, 明细在 truth
+    mgr._relocate_receipt("c-accept-mixed", [_probing_item(), blocked], "测试受理混合")
+    rec2 = mgr.web.results["c-accept-mixed"]
+    assert rec2["status"] == "warn" and "另有 1 项被闸门拒绝" in rec2["error"], rec2
+    assert rec2["truth"]["summary"]["blocked"] == 1 and rec2["truth"]["summary"]["probing"] == 1
+    # 探测中 + 已发起混合: 走既有 ok(部分成功不报错), probing 桶照常计数
+    mgr._relocate_receipt("c-accept-started", [_probing_item(), started], "测试受理已发起")
+    rec3 = mgr.web.results["c-accept-started"]
+    assert rec3["status"] == "ok" and rec3["truth"]["summary"]["started"] == 1 and rec3["truth"]["summary"]["probing"
+                                                                                                           ] == 1
+    # 纯真实拒绝(无探测中): blocked error 形态不变(D8 只改探测中呈现)
+    mgr._relocate_receipt("c-blocked", [blocked], "测试拒绝")
+    assert mgr.web.results["c-blocked"]["status"] == "error"
+    assert mgr.web.results["c-blocked"]["error"] == "目标已存在"
+    # 缺失计数契约(批量): error 文案追加「同机探测进行中」段
+    mgr._relocate_receipt("c-missing", [_probing_item()], "测试缺失", missing_msgs=["1 个 hash 不在快照"])
+    rec5 = mgr.web.results["c-missing"]
+    assert rec5["status"] == "error" and "另有 1 项同机探测进行中" in rec5["error"], rec5["error"]
+
+
+class _StubRelocateExecute:
+    """relocate 模块替身(仅 relocate_execute 面): 记录 kwargs 并回给定 items"""
+    def __init__(self, items):
+        self.items = items
+        self.calls = []
+
+    def relocate_execute(self, hashes, location="", confirm=False, origin="unknown", receipt_cmd_id=""):
+        self.calls.append(
+            {
+                "hashes": list(hashes),
+                "location": location,
+                "confirm": confirm,
+                "origin": origin,
+                "receipt_cmd_id": receipt_cmd_id
+            }
+        )
+        return [dict(it) for it in self.items]
+
+
+def test_web_relocate_probe_receipt_cmd_id_wired(tmp_path, monkeypatch):
+    """受理段绑定接线(T4): 单种/批量两个调用点把 cmd_id 传给 relocate_execute(receipt_cmd_id)
+
+    探测中 items 经命令全链(consume_commands -> handler -> _relocate_receipt)出 warn 受理
+    回执; 绑定语义本身(receipt_cmd_id -> pending 条目 receipt_ids -> 出站面)由
+    test_relocate_probe_async / test_relocate_probe_consume 的容器与消费面用例钉死。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, _client, _src, _dst, _content, _files = relocate_env(tmp_path, file_count=2, data_dir=False)
+    stub = _StubRelocateExecute([_probing_item()])
+    mgr.ctx.relocate = stub
+    mgr.web.commands.put(("set_torrent_location", {"hash": "HA", "location": "R:/dst", "cmd_id": "c-s1"}))
+    mgr.web.commands.put(
+        ("bulk_torrents", {
+            "hashes": ["HB"],
+            "action": "location",
+            "location": "R:/dst",
+            "cmd_id": "c-b1"
+        })
+    )
+    mgr.web.consume_commands()
+    assert [c["receipt_cmd_id"] for c in stub.calls] == ["c-s1", "c-b1"], \
+        f"两个调用点都把 cmd_id 传给 relocate_execute: {stub.calls}"
+    assert all(c["origin"] == "web" for c in stub.calls)
+    for cid in ("c-s1", "c-b1"):
+        rec = mgr.web.results[cid]
+        assert rec["status"] == "warn" and "已受理" in rec["error"], rec
+
+
+def test_web_relocate_probe_two_phase_full_chain(tmp_path, monkeypatch):
+    """两段回执全链(D8): 受理(warn + cmd_id 绑 pending) -> verdict 消费重放建账 -> 出站面 ->
+    WebUIModule.on_command_line 排空补发(同 cmd_id 二次写覆盖 warn 为 ok + notify 两次 cmd 事件)"""
+    pin_disk_usage(monkeypatch)
+    _stub_bprime_unavailable(monkeypatch)
+    mgr, _client, _src, dst, _content, _files = relocate_env(tmp_path, file_count=2)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    q, _slot = _wire_async(mod, _recording_probe([]))
+    sub = queue.Queue()
+    mgr.web._subscribers.append(sub)  # 捕获 notify 事件(真实通路)
+    # 受理段: web 命令 -> relocate_execute 探测闸未命中(异步) -> 探测中回执 -> warn 受理
+    mgr.web.commands.put(("set_torrent_location", {"hash": "HA", "location": dst, "cmd_id": "c-full"}))
+    mgr.web.consume_commands()
+    rec = mgr.web.results["c-full"]
+    assert rec["status"] == "warn" and "已受理" in rec["error"], rec
+    entries = mod.probe_pending_list()
+    assert len(entries) == 1 and entries[0]["receipt_ids"] == ["c-full"], "cmd_id 已绑进 pending 条目"
+    # 终态: verdict 到达 -> on_task_line 消费(probe_put + 重放建账 + 出站面投递)
+    assert wait_until(lambda: q.qsize() == 1), "探测替身 verdict 到达"
+    mod.on_task_line()
+    jobs = mod.active_jobs()
+    assert len(jobs) == 1 and jobs[0].phase == PHASE_MOVING, "重放命中 passed 缓存续跑建账"
+    assert mgr.web.results["c-full"]["status"] == "warn", "补发前回执仍是受理态"
+    # 补发段: 生产挂点 = WebUIModule.on_command_line(排空出站面 -> 同 cmd_id 二次写)
+    mgr.host.get("webui").on_command_line()
+    rec2 = mgr.web.results["c-full"]
+    assert rec2["status"] == "ok" and rec2["truth"]["summary"]["started"] == 1, f"终态覆盖受理态: {rec2}"
+    evs = []
+    while not sub.empty():
+        evs.append(sub.get_nowait())
+    cmd_evs = [e for e in evs if e["type"] == "cmd" and e["payload"].get("cmd_id") == "c-full"]
+    assert len(cmd_evs) >= 2, f"受理段与终态各推一次 cmd 事件(set_result notify): {len(cmd_evs)}"
+    assert mod.probe_receipts_take() == [], "出站面已排空(不重复补发)"
+
+
+def test_web_relocate_probe_terminal_drain_error_and_defense(tmp_path, monkeypatch):
+    """补发段 error 形态与防御面: error 回执(items 空不冒充终态) / 无 cmd_id 跳过 / relocate 缺位零动作"""
+    pin_disk_usage(monkeypatch)
+    mgr, _client, _src, _dst, _content, _files = relocate_env(tmp_path, file_count=2, data_dir=False)
+    mod = mgr.host.get("relocate")
+    # relocate 缺位替身(ctx.relocate 无 probe_receipts_take): 零动作不炸
+    mgr.ctx.relocate = _StubRelocateExecute([])
+    mgr.web.drain_probe_receipts()
+    mgr.ctx.relocate = None
+    mgr.web.drain_probe_receipts()
+    assert mgr.web.results == {}, "缺位/无取走面: 零动作"
+    mgr.ctx.relocate = mod
+    # error 终态(防自环终止/重放异常形态): items 空, error 文案直达
+    mod._probe_receipt_publish(["c-err"], [], "同机探测失败(add_rejected): 自动续跑已终止(环境性失败未缓存)")
+    mgr.web.drain_probe_receipts()
+    rec = mgr.web.results["c-err"]
+    assert rec["status"] == "error" and "add_rejected" in rec["error"], rec
+    assert "truth" not in rec, "error 形态无 items 不带 truth(不冒充明细)"
+    # 无 cmd_id 条目跳过(不可达形态, 防御面); 正常条目照常
+    mod._probe_receipt_publish([""], [], "ghost")  # 空 id 零投递(relocate 侧已拦, 双保险)
+    mod._probe_receipt_outbox.append({"cmd_id": "", "items": [], "error": "orphan"})  # 直塞坏条目
+    mod._probe_receipt_publish(["c-ok2"], [{"cls": "skip", "hashes": ["HA"], "reasons": [], "notes": []}], "")
+    mgr.web.drain_probe_receipts()
+    assert "orphan" not in str(mgr.web.results.get("", "")), "无 cmd_id 条目跳过"
+    rec2 = mgr.web.results["c-ok2"]
+    assert rec2["status"] == "ok" and rec2["truth"]["summary"]["skip"] == 1, "正常条目照常出回执"
+    assert mod.probe_receipts_take() == [], "排空式语义(防重复补发)"
+
+
+def test_web_relocate_probe_split_group_terminal_maps_ok(tmp_path, monkeypatch):
+    """拆组形态(R5 评审修复 #1): passed verdict 但重放拆组出混合 items -> 终态投 items 非 error
+
+    重放经 relocate_execute 按当前 save_path 重新分组: 探测窗口内组员 save_path 变了就拆组,
+    重放 items 可能是「本组缓存命中 started + 拆出组闸未命中 probing gate」混合 —— 消费面
+    防自环 error 判别的真值来源 = verdict 本体(failed env=True), 不是 any-probing, 否则
+    passed verdict 会被折成「同机探测失败」。混合 items 交宿主 _relocate_receipt 重计:
+    started+probing 出 ok; 拆出条目无 receipt_ids 后续不再补发(该 probing 组的进展由
+    job 视图承载)。防自环语义不变: env=True 失败时重放必回 probing 回执(test_consume_
+    env_failure_publishes_error_terminal 钉住)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, _client, src, dst, _content, _files = relocate_env(tmp_path, file_count=2)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    from auto_qb.core.modules.relocate_probe import probe_fingerprint
+
+    q, slot = _wire_async(mod, _recording_probe([]))
+    fp = probe_fingerprint(mgr.config.qbittorrent, mod.probe_salt_ensure())
+    mod.probe_pending_append(fp, ["HA", "HB"], src, dst, "web", receipt_id="c-split")
+    slot.try_acquire(fp)
+    q.put((fp, _passed()))
+
+    started = {"cls": "started", "job_id": "j-own", "hashes": ["HA"], "reasons": []}
+    split_probing = _probing_item(("HB", ))
+    replay_calls = []
+
+    def _split_replay(hashes, location="", confirm=False, origin="unknown", receipt_cmd_id=""):
+        # 重放面桩: 探测窗口内组员 save_path 变了 -> 按新 save_path 拆组
+        replay_calls.append({"hashes": list(hashes), "receipt_cmd_id": receipt_cmd_id})
+        return [dict(started), dict(split_probing)]
+
+    monkeypatch.setattr(mod, "relocate_execute", _split_replay)
+    mod.on_task_line()  # 消费: probe_put(passed) + 重放(拆组桩) + 出站面投递
+    assert replay_calls == [{"hashes": ["HA", "HB"], "receipt_cmd_id": ""}], "重放不携带 cmd_id(D6 意图重放)"
+    out = list(mod._probe_receipt_outbox)  # 非排空窥视(排空归 webui 命令线)
+    assert len(out) == 1 and out[0]["cmd_id"] == "c-split", "拆组形态照常投终态(不折成 error)"
+    assert out[0]["error"] == "" and [it["cls"] for it in out[0]["items"]] == ["started", "blocked"], \
+        "items 原样带出(started + probing gate), 交宿主按明细重计"
+    assert mod.probe_pending_list() == () and slot.in_flight() is None, "条目清 + 槽释放照常"
+    # drain 映射: started+probing -> ok 受理(不是 error「同机探测失败」)
+    mgr.host.get("webui").on_command_line()
+    rec = mgr.web.results["c-split"]
+    assert rec["status"] == "ok", rec
+    assert rec["truth"]["summary"] == {"started": 1, "skip": 0, "confirm": 0, "blocked": 0, "probing": 1}, rec["truth"]
+    assert "同机探测失败" not in rec["error"], "passed verdict 不得被折成探测失败文案"
+
+
+def test_web_relocate_probe_terminal_last_write_wins(tmp_path, monkeypatch):
+    """同一 cmd_id 绑多条 pending 条目 -> 逐条各投终态 -> 一次 drain 二次写同 id 收敛
+
+    批量跨两组受理(cmd_id 绑两条意图)时, 每条意图的 verdict 各投一条终态(同 cmd_id),
+    webui 一次 drain 顺序二次写 —— set_result 覆盖语义收口为 last-write-wins(后投条目
+    明细), cmd 事件计数 = 受理 1 + 终态 2。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, _client, src, _dst, _content, _files = relocate_env(tmp_path, file_count=2)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    from auto_qb.core.modules.relocate_probe import probe_fingerprint
+
+    q, slot = _wire_async(mod, _recording_probe([]))
+    fp = probe_fingerprint(mgr.config.qbittorrent, mod.probe_salt_ensure())
+    # 一条 web 命令(批量)跨两组受理: 同 cmd_id 绑两条意图(同指纹异目标, 追加等位)
+    mod.probe_pending_append(fp, ["HA"], src, "R:/dst-a", "web", receipt_id="c-multi")
+    mod.probe_pending_append(fp, ["HB"], src, "R:/dst-b", "web", receipt_id="c-multi")
+    # 受理段: 仅探测中 -> warn「已受理」+ truth, notify 推第 1 次 cmd 事件
+    sub = queue.Queue()
+    mgr.web._subscribers.append(sub)
+    mgr._relocate_receipt("c-multi", [_probing_item(("HA", )), _probing_item(("HB", ))], "批量双组受理")
+    assert mgr.web.results["c-multi"]["status"] == "warn"
+    # 终态: 逐条 verdict -> 逐条重放(桩, 按 hash 出可区分明细)-> 逐条投递
+    replayed = []
+
+    def _replay(hashes, location="", confirm=False, origin="unknown", receipt_cmd_id=""):
+        tag = "A" if "HA" in list(hashes) else "B"
+        replayed.append(f"j-{tag}")
+        return [{"cls": "started", "job_id": f"j-{tag}", "hashes": list(hashes), "reasons": []}]
+
+    monkeypatch.setattr(mod, "relocate_execute", _replay)
+    slot.try_acquire(fp)
+    q.put((fp, _passed()))
+    mod._consume_probe_verdict()  # 条目 A: 重放 -> 投 {c-multi, j-A} -> 清 -> kick B
+    assert wait_until(lambda: q.qsize() == 1), "kick 下一条(B)的 verdict 到达"
+    mod._consume_probe_verdict()  # 条目 B: 重放 -> 投 {c-multi, j-B} -> 清
+    assert replayed == ["j-A", "j-B"], "FIFO 逐条消费"
+    out = list(mod._probe_receipt_outbox)  # 非排空窥视(排空归 webui 命令线)
+    assert [r["cmd_id"] for r in out] == ["c-multi", "c-multi"], "同 cmd_id 各投一条"
+    assert [r["items"][0]["job_id"] for r in out] == ["j-A", "j-B"], "两条终态明细可区分"
+    # 一次 drain: 二次写同 cmd_id, last-write-wins 收敛为后投条目明细
+    mgr.host.get("webui").on_command_line()
+    rec = mgr.web.results["c-multi"]
+    assert rec["status"] == "ok" and rec["truth"]["results"][0]["job_id"] == "j-B", f"last-write-wins: {rec}"
+    evs = []
+    while not sub.empty():
+        evs.append(sub.get_nowait())
+    cmd_evs = [e for e in evs if e["type"] == "cmd" and e["payload"].get("cmd_id") == "c-multi"]
+    assert len(cmd_evs) == 3, f"cmd 事件计数 = 受理 1 + 终态 2: {len(cmd_evs)}"

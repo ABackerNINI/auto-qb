@@ -61,6 +61,11 @@ PROBE_POLL_INTERVAL_S = 0.25  # 轮询间隔(报告 §11.2 实测口径)
 # 归 T3, 本常量与条目 ts 字段(relocate_mod.probe_pending_append)是其容器与常量位。
 PROBE_PENDING_MAX_AGE_S = 120.0
 
+# web 终态补发出站面上限(T4, 计划 26-11-10-2350 D8): relocate 持有的内存出站面按 drop-oldest
+# 封顶, 防 webui 侧补发消费面缺失的病态堆积(正常面: 消费面每 resolve 至多投 1 条, webui 命令线
+# 每轮排空, 常态在飞 0~几条)。64 对齐 WEB_RESULT_MAX 的护栏精神, 非调优值。
+PROBE_RECEIPT_OUTBOX_MAX = 64
+
 # 探测结论合法取值(与 relocate_mod._PROBE_STATUSES 对齐)
 STATUS_PASSED = "passed"
 STATUS_FAILED = "failed"

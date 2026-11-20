@@ -169,6 +169,8 @@ class ExecMixin:
         replayed = False
         probing = False
         re_armed = False
+        replay_items: list = []  # 重放回执明细(T4 终态补发带出; 异常/防自环形态恒空)
+        replay_error = ""  # 重放异常文案(T4 终态补发的 error 形态; 正常重放恒空)
         if head is not None and str(head.get("fingerprint") or "") == fingerprint:
             # (2) 重放队首条目(意图重放, relocate_execute 全闸链幂等面全新鲜; 风险表第 5 行:
             # 探测窗口内组状态已变的过期意图由既有幂等 skip/闸门自然短路, 零新增幂等风险)。
@@ -179,8 +181,10 @@ class ExecMixin:
                     location=str(head.get("dst") or ""),
                     origin=str(head.get("origin") or "") or "unknown",
                 )
-                probing = any(isinstance(it, dict) and it.get(PROBE_GATE_PROBING_KEY) is True for it in items)
+                replay_items = items if isinstance(items, list) else []
+                probing = any(isinstance(it, dict) and it.get(PROBE_GATE_PROBING_KEY) is True for it in replay_items)
             except Exception as e:  # noqa: BLE001 - 重放异常=自动链终止(与逐 job 推进同护栏)
+                replay_error = str(e)
                 logger.exception(
                     f"relocate | probe verdict 重放异常({e}) —— 条目丢弃终止自动链"
                     f"(缓存已按 D7 处置, 下次真实触发重试; 指纹 {fingerprint[:8]})"
@@ -211,12 +215,33 @@ class ExecMixin:
         if replayed and not re_armed:
             # (3) 清条目(队首 = 被 kick 的意图, FIFO kick 序保证): 正常消费完成面; 防自环时
             # 即「丢弃条目终止自动链」
-            self.probe_pending_pop()
+            popped = self.probe_pending_pop()
             if probing and not re_armed:
                 logger.warning(
                     f"relocate | probe verdict 防自环: 重放仍是「探测中」回执(env=True 失败未缓存, D7 2) —— "
                     f"条目已丢弃终止自动链, 下次真实触发(规则 tick/用户)再试(指纹 {fingerprint[:8]})"
                 )
+            # T4 终态补发段(D8, 补发通道形态见 relocate_mod._probe_receipt_publish): 被消费
+            # 条目的 receipt_ids(web 命令 cmd_id, 受理段绑定)逐个向出站面投终态摘要, webui
+            # 命令线取走后向同 cmd_id 补发回执。规则路径条目无 receipt_ids 键 => publish 零
+            # 动作(规则路径回执形态不变)。终态定形: 重放异常/防自环终止 => error 文案(items
+            # 空 —— 「探测中」明细不冒充终态); 正常重放 => 重放 items(表现层按明细出受理
+            # 同款回执)。重武装(re_armed)不投: 条目保留 receipt_ids, 终态待新 verdict 消费。
+            # 防自环 error 的判别真值来源 = verdict 本体(failed env=True = 未缓存的那次失败,
+            # R5 评审修复): 不用 any-probing —— 重放按当前 save_path 重新分组, 拆组形态下
+            # 本组缓存命中(started/skip/confirm)+ 拆出组闸未命中(probing gate)混合时,
+            # any-probing 会把整笔终态折成 error(passed verdict 显示成「探测失败」、已发起
+            # 明细被吞)。env=True 失败时重放必回 probing 回执(T2/T3 已证), 真值前置不漏
+            # 真防自环; 混合 items 交宿主 _relocate_receipt 的 probing 桶重计(started+
+            # probing 出 ok / 纯 probing 出 warn 受理), 拆出条目无 receipt_ids 不再补发。
+            rids = (popped or {}).get("receipt_ids") or []
+            if rids:
+                if replay_error:
+                    self._probe_receipt_publish(rids, [], f"同机探测结论重放异常({replay_error}): 本意图自动链终止, 已发起部分由任务线照常接管")
+                elif verdict.status == STATUS_FAILED and verdict.env:
+                    self._probe_receipt_publish(rids, [], f"同机探测失败({verdict.reason}): 自动续跑已终止(环境性失败未缓存), 下次迁移触发重试")
+                else:
+                    self._probe_receipt_publish(rids, replay_items, "")
         # (4) 单飞槽释放 -> kick 下一条: 只在槽空闲或被「本 verdict 的已完结探测」占着时做
         # (重武装/异指纹在飞时槽不动, 盲放会破坏全局单飞 D3)
         inflight_now = slot.in_flight()
@@ -252,6 +277,10 @@ class ExecMixin:
           会撞上消费面防自环判别(条目被丢 = 恢复被拆), 且重放链的 blocked/confirm 回执会让
           条目滞留 pending 而无探测在飞(挂死到下次清扫); 直接 try_start 是最小重武装面,
           续跑判定全部交给 verdict 后的正常消费链。
+        - web 回执关联不跨进程(T4 重启语义): 存活条目的 receipt_ids(上一世 web 命令受理段
+          绑定的 cmd_id)一律清空 —— 上一世的 web 回执作废不补发(webui results 同为内存面,
+          上一世 cmd_id 已无人轮询, 前端重启自愈清在途命令), 续跑完成的消费面因此零出站面
+          动作; 超龄清扫掉的条目连带 receipt_ids 一起消失(零投递)。
         dry-run 零动手(清扫是 state 写、kick 是真起线程; 与 sweep_probe_residue 同判)。
         """
         if self._dry_run():
@@ -286,6 +315,16 @@ class ExecMixin:
                     f"{str(e.get('fingerprint') or '')[:8]}({e.get('src')}->{e.get('dst')})"
                     for e in swept if isinstance(e, dict)
                 )
+            )
+        # T4 重启语义: 存活条目的 receipt_ids 一律清空(web 回执关联不跨进程, 见 docstring)
+        stripped = 0
+        for entry in kept:
+            if isinstance(entry, dict) and entry.pop("receipt_ids", None) is not None:
+                stripped += 1
+        if stripped:
+            logger.info(
+                f"relocate | probe pending 启动恢复: 清除上一世 web 回执关联 {stripped} 条"
+                "(receipt_ids 不跨进程补发, 前端重启自愈清在途命令)"
             )
         pending = self.probe_pending_list()
         if not pending:
@@ -1784,7 +1823,12 @@ class ExecMixin:
     # ---------- P3 执行入口(三入口共用) ----------
 
     def relocate_execute(
-        self, hashes: Iterable[str] | None, location: str = "", confirm: bool = False, origin: str = "unknown"
+        self,
+        hashes: Iterable[str] | None,
+        location: str = "",
+        confirm: bool = False,
+        origin: str = "unknown",
+        receipt_cmd_id: str = "",
     ) -> list:
         """整组迁移执行入口(三入口共用): 预检 -> 暂停 -> qB 搬 -> (后续相位由任务线推进)
 
@@ -1793,6 +1837,9 @@ class ExecMixin:
         搬字节一律由 qB 完成(D2), 本方法绝不复制/移动任何数据文件。
 
         origin = 发起入口(web / rule / cli 保留值), 只随 job 落账供 WebUI 展示归属, 不参与判定。
+        receipt_cmd_id(T4 可选): web 命令的回执关联 id —— 探测闸走「探测中」分支时绑进
+        pending 条目 receipt_ids, verdict 消费面据此向出站面投终态补发(webui 取走后向同
+        cmd_id 补发回执, 计划 26-11-10-2350 D8); 规则路径不传(缺省空串)零绑定零补发。
         """
         req = [str(h) for h in (hashes or []) if h]
         target = str(location or "").strip()
@@ -1868,7 +1915,7 @@ class ExecMixin:
             if ru.at_dst(target, records[0].save_path, fold_case=False):
                 items.append({**verdict, "cls": "skip", "notes": list(verdict["notes"]) + ["已在目标位置(幂等): 未发起迁移"]})
                 continue
-            gate = self._ensure_probe(records, facts, verdict, origin=origin)
+            gate = self._ensure_probe(records, facts, verdict, origin=origin, receipt_cmd_id=receipt_cmd_id)
             if gate is not None:
                 items.append(gate)
                 continue
@@ -1876,11 +1923,14 @@ class ExecMixin:
         logger.info(f"relocate | 迁移执行({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
 
-    def _ensure_probe(self,
-                      records: List[TorrentRecord],
-                      facts: GroupFacts,
-                      verdict: dict,
-                      origin: str = "unknown") -> Optional[dict]:
+    def _ensure_probe(
+        self,
+        records: List[TorrentRecord],
+        facts: GroupFacts,
+        verdict: dict,
+        origin: str = "unknown",
+        receipt_cmd_id: str = ""
+    ) -> Optional[dict]:
         """执行链一次性同机强探测闸(计划 26-11-04-0055 §04 P3 行后半 + §06 D1-D7; S2 异步化 26-11-10-2350)
 
         位置契约(D5): 必须在建账(_start_job)与任何 torrents_set_location 之前调用 ——
@@ -2007,8 +2057,15 @@ class ExecMixin:
         # 兑现(起 daemon 线程探测); 槽被占返回 False 即等位(verdict 消费后由 T3 kick 下一条),
         # 两种情形回执同形, 不以 kick 结果区分(T3/T4 只按 PROBE_GATE_PROBING_KEY 分流)。
         member_hashes = [r.hash for r in records]
-        if not self.probe_pending_merge_intent(fp, facts.save_path, facts.target, member_hashes):
-            self.probe_pending_append(fp, member_hashes, facts.save_path, facts.target, origin)
+        # receipt_cmd_id(T4): web 命令的回执关联 id 随意图入队(可选 receipt_ids 字段, 空串
+        # = 规则路径不绑不补发); 消费面据此向出站面投终态, webui 命令线取走后向同 cmd_id
+        # 补发(D8 两段回执的补发段)。
+        if not self.probe_pending_merge_intent(
+            fp, facts.save_path, facts.target, member_hashes, receipt_id=receipt_cmd_id
+        ):
+            self.probe_pending_append(
+                fp, member_hashes, facts.save_path, facts.target, origin, receipt_id=receipt_cmd_id
+            )
         runner.try_start(self._ctx, fp, facts.save_path, facts.target)
         return {
             **verdict,

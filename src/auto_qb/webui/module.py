@@ -207,14 +207,18 @@ class WebUIModule(BaseModule):
     # ---------- loop hooks(主循环按装配序调用) ----------
 
     def on_command_line(self) -> bool:
-        """命令线: 消费控制命令 + 检查在途汇报确认; 返回本批是否改了 qB 种子状态(P0-5 判据)
+        """命令线: 消费控制命令 + 检查在途汇报确认 + 排空探测终态补发出站面; 返回本批是否改了 qB 种子状态(P0-5 判据)
 
         命令表分发/回执/写序号/自投递判据都在门面; SELF_POSTED_COMMANDS 不唤醒的语义
         也由门面 post_command 承担 —— 内核只取"是否改了状态"这一个结果。
+        探测终态补发(T4, 计划 26-11-10-2350 D8): relocate 的 verdict 消费面把 web 命令
+        终态投进它的出站面, 本命令线经 ctx.relocate 公开面取走并二次写同 cmd_id 回执
+        (drain_probe_receipts) —— 主循环每轮必经本 hook, 补发延迟至多一轮。
         """
         web = self._manager.web
         changed = web.consume_commands()
         web.check_pending()
+        web.drain_probe_receipts()
         return changed
 
     def on_sync_line(self, force: bool) -> None:

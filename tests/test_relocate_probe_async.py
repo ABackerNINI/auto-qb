@@ -24,6 +24,9 @@ src, dst, origin, ts}...](FIFO, 只存意图不存快照 D6, 持久化 D7, 补�
 - test_probe_pending_pop_drop_clear_fifo_semantics: pop 队首 FIFO/drop 按指纹摘除幂等/clear 整箱清空返条数
 - test_probe_pending_survives_restart_via_shared_state: 重启重载: 共享 state 上新模块实例原样读到条目(序/ts 不变, 无内存镜像旁路)
 - test_probe_pending_bad_shapes_tolerated: 坏箱(非 list)读空 + 写路径原位修复; 上下文整体缺失全静默; 坏条目(非 dict)读跳过/pop 丢弃续弹
+- test_probe_pending_receipt_ids_optional_field: T4 可选回执提示字段(relocate_execute receipt_cmd_id 的容器落点) —— 无 id 键不出现(6 键面不变); 带 id 落 receipt_ids=[id]; merge_intent 同意图并入去重/异意图不串/空 id 只并 hashes; 副本与真身 receipts 列表不别名; state 真身含键
+- test_probe_pending_receipt_ids_bad_values_tolerated: receipt_ids 值级容错(R5 评审修复 #2) —— 真身坏值(int/str)读/合并/弹出按空处理不炸; 容器迭代 str 归一+空白丢弃; merge 直读真身顺带修复; 出站面 ids 推导非容器零动作
+- test_probe_receipt_outbox_take_and_drop_oldest: 出站面(T4 补发通道) —— publish 空 ids 零动作; FIFO 排空式 take; 超 PROBE_RECEIPT_OUTBOX_MAX drop-oldest 封顶不破
 - test_probe_pending_max_age_constant_groundwork: 超龄兜底常量位(T3 清扫接线前置): >= 探测预算上界(证读x2+证写+清理)x2, 钉 120.0 文档值
 """
 
@@ -37,6 +40,7 @@ from auto_qb.core.modules.relocate_probe import (
     PROBE_CLEANUP_TIMEOUT_S,
     PROBE_PENDING_MAX_AGE_S,
     PROBE_READ_TIMEOUT_S,
+    PROBE_RECEIPT_OUTBOX_MAX,
     PROBE_RUNNER_CRASHED_REASON,
     PROBE_SLOT,
     PROBE_VERDICT_QUEUE,
@@ -381,6 +385,119 @@ def test_probe_pending_bad_shapes_tolerated():
     popped = mod2.probe_pending_pop()
     assert popped is not None and popped["fingerprint"] == "fpA", "坏队首丢弃续弹"
     assert mod2.probe_pending_pop() is None, "弹到空返回 None"
+
+
+def test_probe_pending_receipt_ids_optional_field(fake_clock):
+    """T4 可选回执提示字段(receipt_ids): 无 id 键不出现 / 带 id 落单元素列表 / merge_intent 并入去重 / 副本不别名
+
+    relocate_execute 的 receipt_cmd_id(web 命令 cmd_id)经 _ensure_probe 落到本容器: 规则
+    路径(无 id)条目键面不变(D6 六键), 终态补发按 receipt_ids 判决(空 = 零动作)。
+    """
+    mod = _mod(clock=fake_clock)
+    rule = mod.probe_pending_append("fp1", ["HA"], "R:/s", "R:/d", "rule")
+    assert "receipt_ids" not in rule, "规则路径(无 id)条目不带键: 键的存在性 = 有无 web 受理回执"
+    assert list(rule) == ["fingerprint", "hashes", "src", "dst", "origin", "ts"], "六键面不变(D6)"
+    web = mod.probe_pending_append("fp2", ["HB"], "R:/s2", "R:/d2", "web", receipt_id="cmd-web-1")
+    assert web["receipt_ids"] == ["cmd-web-1"], "带 id 条目落 receipt_ids=[id]"
+    box = mod._ctx.state.data["relocate"]["probe_pending"]
+    assert box[1]["receipt_ids"] == ["cmd-web-1"], "state 真身含键(持久面)"
+    # 同意图合并: id 并入去重; 重复 id 不重复; 空 id 只并 hashes 不动 receipt_ids
+    assert mod.probe_pending_merge_intent("fp2", "R:/s2", "R:/d2", ["HB", "HC"], receipt_id="cmd-web-2") is True
+    assert mod.probe_pending_merge_intent("fp2", "R:/s2", "R:/d2", ["HC"], receipt_id="cmd-web-2") is True, "重复 id 去重"
+    assert mod.probe_pending_merge_intent("fp2", "R:/s2", "R:/d2", ["HD"]) is True, "空 id(规则路径)只并 hashes"
+    merged = mod.probe_pending_list()[1]
+    assert merged["hashes"] == ["HB", "HC", "HD"] and merged["receipt_ids"] == ["cmd-web-1", "cmd-web-2"]
+    # 异意图(同指纹异目标)不串: merge 不命中(调用方 _ensure_probe 改走 append), 各带各的 id
+    assert mod.probe_pending_merge_intent("fp2", "R:/s2", "R:/other", ["HZ"], receipt_id="cmd-web-3") is False
+    mod.probe_pending_append("fp2", ["HZ"], "R:/s2", "R:/other", "web", receipt_id="cmd-web-3")
+    entries = mod.probe_pending_list()
+    assert len(entries) == 3 and entries[2]["receipt_ids"] == ["cmd-web-3"], "异意图不合并(id 不串条目)"
+    assert entries[1]["receipt_ids"] == ["cmd-web-1", "cmd-web-2"]
+    # 副本口径: 改副本 receipts 不穿透真身
+    web["receipt_ids"].append("mutated")
+    assert box[1]["receipt_ids"] == ["cmd-web-1", "cmd-web-2"], "副本 receipts 列表与真身不别名"
+
+
+def test_probe_pending_receipt_ids_bad_values_tolerated():
+    """receipt_ids 值级容错(R5 评审修复 #2): 真身坏值读/合并/弹出/出站面全不炸按空处理
+
+    容错单点 _probe_receipt_ids_as_list(与 _probe_hashes_as_list 同款口径): list/tuple/set
+    容器原样迭代(str 归一+空白丢弃), 非容器(str/int/None)按空列表 —— cmd_id 关联是列表
+    语义, 单串真身属漂移形态不猜。merge 直读真身(生产热路径)顺带把坏值修复为规范列表。
+    """
+    mod = _mod(
+        state_data={
+            "relocate":
+                {
+                    "probe_pending":
+                        [
+                            {
+                                "fingerprint": "fpInt",
+                                "hashes": ["HA"],
+                                "ts": 1,
+                                "receipt_ids": 7
+                            },
+                            {
+                                "fingerprint": "fpStr",
+                                "hashes": ["HB"],
+                                "ts": 2,
+                                "receipt_ids": "cmd-str"
+                            },
+                            {
+                                "fingerprint": "fpList",
+                                "hashes": ["HC"],
+                                "ts": 3,
+                                "receipt_ids": ["cmd-ok", "", 9]
+                            },
+                        ]
+                }
+        }
+    )
+    entries = mod.probe_pending_list()
+    assert entries[0]["receipt_ids"] == [], "int 坏值按空列表(非容器)"
+    assert entries[1]["receipt_ids"] == [], "str 非容器按空列表(cmd_id 关联是列表语义, 不猜单值)"
+    assert entries[2]["receipt_ids"] == ["cmd-ok", "9"], "容器迭代: str 归一 + 空白丢弃(int 元素 coerce 保留)"
+    assert mod.probe_pending_pop()["fingerprint"] == "fpInt", "坏值条目 pop 不炸"
+    # merge 直读真身(生产热路径): 坏值不炸 + 顺带修复为规范列表 + 新 id
+    assert mod.probe_pending_merge_intent("fpStr", "R:/s", "R:/d", ["HB"], receipt_id="cmd-fix") is False, \
+        "src/dst 不匹配(种子数据缺字段)不命中 —— 容错面只在命中分支"
+    box = mod._ctx.state.data["relocate"]["probe_pending"]
+    box[0]["src"] = "R:/s"  # pop 后 fpStr 是队首(索引随 FIFO 位移)
+    box[0]["dst"] = "R:/d"
+    assert mod.probe_pending_merge_intent("fpStr", "R:/s", "R:/d", ["HB"], receipt_id="cmd-fix") is True
+    assert box[0]["receipt_ids"] == ["cmd-fix"], "str 坏值真身被合并修复为规范列表"
+    assert mod.probe_pending_merge_intent("fpInt", "R:/s", "R:/d", ["HA"], receipt_id="cmd-fix2") is False
+    # 出站面 ids 推导: 非容器按空零动作; 容器内空白/falsy 丢弃
+    assert mod._probe_receipt_publish(7, [], "") == 0, "int 形参按空零动作"
+    assert mod._probe_receipt_publish("cmd-str", [], "") == 0, "str 形参按空零动作"
+    assert mod._probe_receipt_publish(["c1", "", 0], [], "") == 1, "容器: 空白/falsy 元素丢弃"
+
+
+def test_probe_receipt_outbox_take_and_drop_oldest():
+    """出站面(T4 补发通道): 空 ids 零动作 / FIFO 排空式 take / drop-oldest 封顶
+
+    正常面 = 消费面每 verdict 至多投 len(receipt_ids) 条 + webui 命令线每轮排空, 在飞常态
+    0~几条; 上限只在 webui 消费面缺失的病态堆积下生效(对齐 WEB_RESULT_MAX 护栏精神)。
+    """
+    mod = _mod()
+    assert mod.probe_receipts_take() == [], "空面 take 返回空"
+    assert mod._probe_receipt_publish([], [], "") == 0, "空 receipt_ids 零动作(规则路径形态)"
+    assert mod._probe_receipt_publish(["", "  "], [], "") == 0, "全空白 id 同样零动作"
+    assert mod._probe_receipt_publish(["c1", "c2"], [{"cls": "started"}], "") == 2, "同批多 id 各投一条"
+    out = mod.probe_receipts_take()
+    assert [r["cmd_id"] for r in out] == ["c1", "c2"], "FIFO 序"
+    assert out[0]["items"] == [{"cls": "started"}] and out[0]["error"] == "", "条目形状 (cmd_id, items, error)"
+    assert mod.probe_receipts_take() == [], "排空式: take 后面空(不重复补发)"
+    # drop-oldest 封顶: 超上限丢最旧, 面长恒 <= PROBE_RECEIPT_OUTBOX_MAX
+    for i in range(PROBE_RECEIPT_OUTBOX_MAX + 5):
+        mod._probe_receipt_publish([f"old-{i}"], [], "")
+    out = mod.probe_receipts_take()
+    assert len(out) == PROBE_RECEIPT_OUTBOX_MAX, f"封顶 {PROBE_RECEIPT_OUTBOX_MAX}"
+    assert out[0]["cmd_id"] == "old-5" and out[-1]["cmd_id"] == f"old-{PROBE_RECEIPT_OUTBOX_MAX + 4}", "丢最旧(drop-oldest)"
+    # error 形态: items 空带文案(防自环/重放异常的终态定形)
+    assert mod._probe_receipt_publish(["c3"], [], "boom") == 1
+    rec = mod.probe_receipts_take()[0]
+    assert rec == {"cmd_id": "c3", "items": [], "error": "boom"}
 
 
 def test_probe_pending_max_age_constant_groundwork():
