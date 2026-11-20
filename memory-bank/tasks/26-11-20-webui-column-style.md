@@ -1,9 +1,9 @@
 # 26-11-20-webui-column-style — WEBUI 列风格切换(进度条样式/分档色阶/单位色组)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-20
 **Updated:** 2026-11-20
-**Summary:** WEBUI 列风格切换五维(进度条样式/进度条颜色/速度色阶/数值列色阶/单位色组)立项: grilling 三轮 19 问拍板 D1-D14, 计划 26-11-20-0009 入库 Open(S1-S6 待显式开工); 零代码改动。
+**Summary:** WEBUI 列风格切换五维(进度条样式/进度条颜色/速度色阶/数值列色阶/单位色组)收口: S1-S6 七批落地(colstyle.v1 引擎+表头菜单+进度/速度/数值/单位四渲染面+node 电池/静态守阵/e2e 测试面), 计划 26-11-20-0009 Done; 五维默认=现状零视觉变化, 配置侧零改动, 计划外发现 2 条入池。
 **Topics:** webui-column-style
 **Refs:** memory-bank/plans/26-11-20-0009-plan-webui-column-style.html
 
@@ -31,7 +31,7 @@
 
 ## 实现计划
 
-计划 §04, 六期各自可收口(均待显式开工):
+计划 §04, 六期各自可收口(全部落地, 落点见子任务状态表):
 
 - **S1** 引擎与存储: colstyle.v1 单键 + ui_prefs 登记 + state 注入 + html 五枚 data-cs-* 属性同步 + 跨标签 storage 监听(范式抄 timeFmt)。
 - **S2** 表头菜单面: 根菜单尾 5 维度项(page==='torrent' 门控)+ 各自二级 flyout(radio+色样)+ openSub 钳位锚参数化 + 写链 headMenuStyle*。
@@ -44,12 +44,12 @@
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | 引擎与存储(colstyle.v1/ui_prefs/state/data-cs-*/跨标签) | Open |
-| S2 | 表头菜单面(5 维度项+flyout+色样+openSub 参数化) | Open |
-| S3 | 进度条两维(样式常规/LED+颜色 20% 分档×4 谱) | Open |
-| S4 | 速度色阶与数值列色阶(分档/over/语义类) | Open |
-| S5 | 单位拆分(parts 家族+双 span)与 8 色组 | Open |
-| S6 | 测试面收口+docs 回写+基线 | Open |
+| S1 | 引擎与存储(colstyle.v1/ui_prefs/state/data-cs-*/跨标签) | Done · 158384b6 |
+| S2 | 表头菜单面(5 维度项+flyout+色样+openSub 参数化) | Done · e3420f00 |
+| S3 | 进度条两维(样式常规/LED+颜色 20% 分档×4 谱) | Done · 2587c27a |
+| S4 | 速度色阶与数值列色阶(分档/over/语义类) | Done · 94066579 |
+| S5 | 单位拆分(parts 家族+双 span)与 8 色组 | Done · 725becb2 |
+| S6 | 测试面收口(a4254294 电池+守阵 / 4ff09f16 e2e)+docs 回写+基线(本批) | Done · a4254294 + 4ff09f16 |
 
 ## 进度日志
 
@@ -60,5 +60,9 @@
 ### R1 · 评审收口 (2026-11-20)
 
 分面评审 3 轮(正确性/事实面 + 安全/测试缺口面, 串行 2 派/轮)至零 actionable: 轮 1 送检 16 全过检(review.check 引文逐字)全修(4 major: HR 伴值类事实修正与 D10 共存优先规则 / member 行模型显式纳入 D5 排除 / e2e SKINS_ALL 写死 / 模板类→CSS 新守阵; 8 minor: state.js:96、lifecycle.js:321-327、flux 143-149 行号纠错与令牌计数 13; 4 nit); 轮 2 复评 6 条 minor/nit 全修(修复句自身行号/枚举精度, 引文以修复 Edit 的逐字匹配锚等价核验); 轮 3 双面零发现, 6 项修复逐一确认成立。安全面三收口零命中(无凭据/域名/内网路径, 红线约束句在位)。计划 kb.bump 抬 R1(26-11-20-0052)。
+
+### R2 · 实施收口 (2026-11-20)
+
+七批流水全部落地(逐批 code-review 至 blocker 0, 发现分级处置): **S1** 158384b6 引擎与存储五落点(app.js 常量+容错读 / colstyle.js 属性同步+写入口 / state 注入+watch / lifecycle 首帧+storage 监听+回场补齐 / ui_prefs 登记), 评审 1 轮零发现; **S2** e3420f00 表头菜单五维项+flyout 色样+openSub 钳位锚 hostRef 参数化+五写链, 评审 2 轮修 1(flyout 重开残留先修 openHeadMenu 开层清链, 行为本体计划外入池); **S3** 2587c27a 进度条两维(--cs-fill 机制变量拆形态与颜色+csb-* 档位类×4 谱映射)+progBand 电池 20 断言, 评审 2 轮修 2, 入池 26-11-20-0321; **S4** 94066579 速度色阶(speedBand over 档)+数值列色阶三件(cst-* 语义类+HR 让位), 评审 4 轮修 2(含入池文案迭代), 入池 26-11-20-0404; **S5** 725becb2 单位拆分(parts 家族, 梯子下沉 _fmtLadderParts 单点)+主表 19 格双 span+8 色组, 评审 1 轮零发现, 拆分文本逐字一致经 vue 渲染对照 58 renders 实证; **S6a** a4254294 引擎 node 电池 26 检查项+模板类→CSS 配对守阵(47 used ⊆ 四皮肤 defined, 红验双向实证), 评审 2 轮修 1; **S6b** 4ff09f16 e2e colstyle.spec.mjs 24 例(引擎面+SKINS_ALL 四皮肤计算色, 现读 CSS 变量零写死色值), 评审 2 轮修 6 复评零新增, 容器 e2e 24/24。收口批(本批): docs 回写(architecture「列风格引擎」节 / conventions 机制变量与片段模板配对两纪律 / 根 README Web UI 一句) + 计划 kb.status 翻 Done(R2 记录补 §10) + 本档案翻 Done + 基线切片。
 
 - 2026-11-20 00:14 立项轮: 双只读子代理取证(渲染链/表头菜单与令牌) + grilling 三轮 19 问拍板 D1-D14 + 计划 26-11-20-0009 入库 Open(S1-S6 待显式开工) + 档案立档; 零代码改动

@@ -1,7 +1,7 @@
 # WEB UI 产出口径与令牌
 
-> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、流量图节拍动效与数值面板、HTML dark 主题、迁移状态展示 —— 前端产出口径的唯一出处。各主题已外迁到 `attachments/webui-*.md`, 见下方主题地图。
-> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 键位提示, 键帽, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion, 节拍动效, 流量图动效, beat, 左移, 扫描束, fx-panel, qbFx, 迁移状态, rel-pair, relocate_pop, --path-src, _pathPositions, 位置集
+> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、流量图节拍动效与数值面板、HTML dark 主题、迁移状态展示、列风格机制变量与片段模板配对 —— 前端产出口径的唯一出处。各主题已外迁到 `attachments/webui-*.md`, 见下方主题地图。
+> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 键位提示, 键帽, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion, 节拍动效, 流量图动效, beat, 左移, 扫描束, fx-panel, qbFx, 迁移状态, rel-pair, relocate_pop, --path-src, _pathPositions, 位置集, 列风格, colstyle, --cs-fill, 机制变量, cs- 命名空间, 片段模板, 配对守阵
 **Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html, memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
 ## 写 WebUI 前必读(硬规则)
@@ -14,6 +14,8 @@
 - **悬浮提示**: 新元素继续写原生 `title`, 由 `.aq-tip` 委托层接管; 不新造浮层。例外(计划 26-11-12-0344 D10/I4): 键位提示不走 title/.aq-tip —— 键帽是常驻 DOM、取数链现算(口径见 `memory-bank/architecture/webui.md`「键位现场提示」节), 仅限键帽面。边界(D11): 控件自身功能说明不属键位提示(如状态栏开关钮的原生 `title`「按住 ` 显影 / 点此常驻」), 仍按惯例写 `title`。边界(2026-11-15 用户报障): 层级高于 `.aq-tip`(z90) 的浮层内部**不写** `title` —— 右键菜单 `.ctx-menu`(z100) 会把自绘提示整个盖住, 抽屉右键「合并页签」项的 `:title` 已移除(置灰原因靠 `.is-gated` 表达, 行为层 `dtToggleMerge` 再拦一道)。
 - **菜单勾选态**: 开关项的勾只读**开关自身的真值**(合并开关 = `dtMergeOn` / `drawerMerge`), 不得绑「该项是否出现」的形态判据(`dtMenuMergeOn` = 种子详情形态恒真 ⇒ 勾永远在, 2026-11-15 用户报障); 宽度门只做置灰遮蔽, 不撤销标志。
 - **共用规则族**: 四皮肤逐字节相同的规则族进 `shared/console_hub.css` 尾段单点; 皮肤内保留真差异, 不许顺手抹平。
+- **列风格机制变量 `--cs-fill`**(计划 26-11-20-0009, 2026-11-20 起): 表格填充色要「默认回落皮肤基线(--st 状态色链) + 用户显式选档才换色」时, 不在皮肤里写平行色规则 —— 皮肤基线消费位原位改行取 `var(--cs-fill, <原兜底>)`, 选档面只注**机制变量**不注颜色, 未选档变量无定义 = 零视觉变化。判定与着色的分工不变式: JS 恒不产颜色值, 渲染器只产档位类名(csb-/csp-/cst-/csu- 族), 颜色由 `html[data-cs-*] × 档位类` 派生映射选令牌; 列风格类名(cs-* 族与菜单色样 cs-*)是与既有 tone-/m-pair 链独立的命名空间, 不得复用既有类名扩义(引擎机理见 `memory-bank/architecture/webui.md`「列风格引擎」节)。
+- **片段模板类→CSS 配对守阵**(计划 26-11-20-0009): 既有挂件闸 `_scan_page_class_wiring` 只扫 `<main>` 标签挂件类(实际命中 settings.html 等页壳, 四皮肤 index.html 无 `<main>`), **覆盖不到片段模板**(shared/tpl/ctx-menus.html / xtpl-cells.html 等手写块)新挂的类名 —— 在片段模板新增样式类时, 必须在四皮肤**各自**的有效级联面(皮肤 css 或 shared 聚合)都有定义, 并同步配对守阵的 used 面(`tests/test_webui_static_skins_skin.py::test_frontend_colstyle_tpl_class_css_paired`, 现只扫列风格 cs- 前缀类; 后续其它片段模板新族照此模式扩展, 不掀历史类)。
 - **状态栏速度组数值定宽**(计划 26-11-16-0130): `.sb-spd` 的 `.val`/`.lim` 各 13ch 定宽槽(`.val` 右对齐 / `.lim` 左对齐; 13 = fmtSpeed 最长形「1023.99 KiB/s」的精确上界)单点在 `shared/console_hub_panels.css` 尾段; 窄屏 `@media (max-width: 900px)` 把 `.lim` 退 4ch(只保 `.sb-speed` 右缘不动)。皮肤层任何命中 `.sb-spd ... .val/.lim` 的规则不得声明 min-width —— 机理: 数值串随量级变("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符)而右钉组宽度跟随文本时整组左缘平移(2026-11-15 用户报障)。守阵 `_scan_statusbar_speed_width`(分层钉值)+ `e2e/statusbar-speed-geometry.spec.mjs`(真浏览器逐帧几何); 同族机理先例见 `pitfalls/web-ui/progress-bar.md`。
 - **动效隔离**: 走 `data-fx` / `data-fx-preset` + `window.AQB_FX` 单挂载器; 每个 `@keyframes` 配 `prefers-reduced-motion` 降级; atlas/prism/console 对 `shared/fx/` 零引用。
 - **HTML 产出**: 一律 dark 主题(深色底 + 浅色字), 样式里必须写 `color-scheme: dark`。
