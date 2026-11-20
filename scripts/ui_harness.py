@@ -290,6 +290,143 @@ def _install_search_refresh_probe(app, mgr, site_conf, groups_cap: int | None = 
     app.router.routes[0:0] = probes
 
 
+def _install_traffic_stream_probe(app, mgr) -> None:
+    """流量步进 SSE 事件泵控制端点(plan 26-11-18-0037 阶段 3 e2e 面; 仅回环测试桩, 不进生产)
+
+    动机: T4a 后前端取数主路 = SSE 流(票据 -> EventSource -> traffic 帧), 判定帧节拍源 =
+    事件到达 —— e2e 要按用例**脚本化节拍/停推/恢复/数值**才能测步进渲染(A5 冻结期终点=末
+    样本不动、徽标滞后、事件到达->渲染延迟)。票据与 /api/traffic/qb/stream 两端点桩上本就
+    在(真 create_app), 缺的是**事件源**: 生产事件源 = 采样 handler(主循环线程), 桩没有主
+    循环 —— 本泵把每 tick 显示点真值按到与生产**同一发布点**(WebUIRuntime.publish_traffic_
+    batch, hub 侧做 scope 扇出/seq 占号/队列满丢弃), 帧走真 SSE 线(一次性票据/心跳/
+    StreamingResponse 全真)。
+
+    与生产事件源的偏差(诚实划界): 生产点 = 差分链输出(delta/覆盖/摊配), 泵直接给显示点
+    {t, dl, up} —— 差分语义由 pytest 电池钉, e2e 面只消费「帧到达 -> 渲染」管线。发布发生在
+    泵线程(非主循环线程): hub 订阅表自带锁 + put_nowait 非阻塞, 桩无主循环故不触碰黄金法则
+    5 的主循环单写面(任务队列/state_file 泵一概不碰)。
+
+    POST /__harness__/traffic_stream(查询串参数, 与既有探针同形态):
+      mode=start  scope=torrent:<hash>|global  si=<帧间隔秒>  t0=<首帧 epoch 秒>
+                  steps=<0=不限>  up=<B/s>  dl=<B/s>  ttl_s=<安全自停秒, 默认 45>
+        start = 顶掉旧泵(单槽, 用例间互不残留); 启动后**首帧立即落**, 此后每 si 秒一帧,
+        每帧 t 前进 si(泵内 t 只按 si 脚本化步进, 不读墙钟); ttl 到点或 steps 采满自停,
+        防失败用例残留泵污染下一用例。t0 由调用方锚当前墙钟(e2e/lib/traffic-stream.mjs
+        pumpT0: floor(now/si)*si + si, 评审 T4b #1) —— 事件 lastT 跟住墙钟, 前端 watchdog
+        (D9 静默重拉)与「滞后 Ns」徽标量纲不误触发。
+      mode=stop    停泵(幂等)。
+      mode=status  -> {running, scope, si, steps, pushed, last_t, last_push_at, last_hit, subs};
+        last_push_at = 末次 publish 墙钟(time.time) —— 渲染延迟断言以它为「样本落地」时刻,
+        与页面侧 fxBeatAt(Date.now)同主机时钟对读; last_hit = 末次 publish 送达的订阅队列数
+        (0 = 无订阅者, 帧被静默丢弃 —— hub 契约: 静默是停流信号); subs = 当前流量步进订阅
+        队列总数(排障「帧没到」第一眼)。
+    """
+    first_probe = len(app.router.routes)
+    _pump_lock = threading.Lock()
+    _pump_slot: dict = {"cfg": None}
+
+    def _stop_locked() -> None:
+        cfg = _pump_slot["cfg"]
+        if cfg is not None:
+            cfg["stop"].set()
+            _pump_slot["cfg"] = None
+
+    def _pump_loop(cfg: dict) -> None:
+        """泵线程: 首帧立即, 之后每 si 秒一帧; steps 采满/ttl 到点/stop 置位三出口。"""
+        try:
+            t = float(cfg["t0"])
+            si = float(cfg["si"])
+            deadline = time.time() + float(cfg["ttl_s"])
+            pushed = 0
+            while not cfg["stop"].is_set():
+                try:
+                    cfg["last_hit"] = mgr.web.publish_traffic_batch(
+                        {cfg["scope"]: {
+                             "t": t,
+                             "dl": cfg["dl"],
+                             "up": cfg["up"]
+                         }}
+                    )
+                except Exception:
+                    cfg["last_hit"] = -1
+                    print("[harness] traffic pump publish failed(帧丢失, 与生产派发同纪律不中断)", flush=True)
+                pushed += 1
+                cfg["pushed"] = pushed
+                cfg["last_t"] = t
+                cfg["last_push_at"] = time.time()
+                if cfg["steps"] and pushed >= int(cfg["steps"]):
+                    return
+                if time.time() >= deadline:
+                    return
+                if cfg["stop"].wait(si):
+                    return
+                t += si
+        finally:
+            with _pump_lock:
+                if _pump_slot["cfg"] is cfg:
+                    _pump_slot["cfg"] = None
+
+    @app.post("/__harness__/traffic_stream")
+    def _traffic_stream(
+        mode: str = "status",
+        scope: str = "",
+        si: float = 1.5,
+        t0: float = 0.0,
+        steps: int = 0,
+        up: int = 1000,
+        dl: int = 2000,
+        ttl_s: float = 45.0,
+    ):
+        if mode == "stop":
+            with _pump_lock:
+                _stop_locked()
+            return {"running": False}
+        if mode == "status":
+            with _pump_lock:
+                cfg = _pump_slot["cfg"]
+                if cfg is None:
+                    return {"running": False}
+                return {
+                    "running": True,
+                    "scope": cfg["scope"],
+                    "si": cfg["si"],
+                    "steps": cfg["steps"],
+                    "pushed": cfg.get("pushed", 0),
+                    "last_t": cfg.get("last_t", 0),
+                    "last_push_at": cfg.get("last_push_at", 0),
+                    "last_hit": cfg.get("last_hit", 0),
+                    "subs": mgr.web.traffic_stream_subscriber_count(),
+                }
+        if mode == "start":
+            if not (scope == "global" or scope.startswith("torrent:")):
+                return {"ok": False, "error": "scope must be global|torrent:<hash>"}
+            if not (0.1 <= si <= 600) or ttl_s <= 0:
+                return {"ok": False, "error": "si must be in [0.1, 600] and ttl_s > 0"}
+            with _pump_lock:
+                _stop_locked()
+                cfg = {
+                    "scope": scope,
+                    "si": float(si),
+                    "t0": float(t0),
+                    "steps": int(steps),
+                    "up": int(up),
+                    "dl": int(dl),
+                    "ttl_s": float(ttl_s),
+                    "stop": threading.Event(),
+                    "pushed": 0,
+                    "last_t": 0,
+                    "last_push_at": 0.0,
+                }
+                _pump_slot["cfg"] = cfg
+            threading.Thread(target=_pump_loop, args=(cfg, ), daemon=True, name="harness-traffic-pump").start()
+            return {"ok": True, "running": True, "scope": scope, "si": si, "steps": steps}
+        return {"ok": False, "error": "mode must be start|stop|status"}
+
+    probes = app.router.routes[first_probe:]
+    del app.router.routes[first_probe:]
+    app.router.routes[0:0] = probes
+
+
 def _inject_site_alerts(torrents) -> None:
     """站点健康两态(计划 26-10-19-2007 S3 e2e): 造 1 行缺站点配置 + 1 行 tracker 报错
 
@@ -1421,6 +1558,8 @@ def main() -> int:
     if boot_first:
         # 冷启动两跳观测控制面(plan 26-11-18-0259 S2 e2e; 仅回环测试桩, 不进生产)
         _install_boot_first_controls(app, mgr, boot_go, gate)
+    # 流量步进 SSE 事件泵(plan 26-11-18-0037 阶段 3 e2e 面; 仅回环测试桩, 不进生产)
+    _install_traffic_stream_probe(app, mgr)
     # 捕获契约(计划 26-11-03-0316 §03): Playwright `webServer.wait` 的正则从这里取实绑定口,
     # 必须形如 `[harness] http://127.0.0.1:<实端口>/...` 且 flush=True。
     print(

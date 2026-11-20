@@ -35,10 +35,12 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *        (qbInitialFxReduce 在 data() 取初值) -> cfg.on=false(JS 门)且 CSS 媒体查询同步隐藏
  *        (双保险同结果) —— 锚不出现。
  *
- * 桩口径(traffic-fx-frames 同款): 只翻 qb_traffic_enabled; /api/traffic/qb/torrent/* 造真
- * 契约形状的 60 桶帧, base 固定 + si=30(轮询 30s 一拍)—— 数据静止锚位稳定; F8 后开场
- * ~1.5s 有一发首拍重试真拍(零变化拍: 数据/锚位/显示值都不动), 其后 30s 内无真拍 ——
- * 断言读锚位与真值面, 与拍无关, 不受首拍窗口影响。
+ * 桩口径(traffic-fx-frames 同款; 26-11-18-0037 阶段 3 补 schema=2 契约键): 只翻
+ * qb_traffic_enabled; /api/traffic/qb/torrent/* 造真契约形状的 60 点列帧(schema=2/stride=1,
+ * 每点带 t —— 末点像素对齐在「窗口右沿锚末样本」下天然成立: 收敛帧 auto range 精确 =
+ * [xs0, xsN], 末样本恒贴判定线), base 固定 + si=30(节拍 30s 档)—— 数据静止锚位稳定;
+ * SSE 主路径无泵(无事件帧), 30s 对账落同一静态列 = 零变化拍, 锚位不受扰动 —— 断言读
+ * 锚位与真值面, 与拍无关。
  */
 
 const N = 60;
@@ -58,7 +60,9 @@ function makePayload(base, interval) {
     meta: {
       window: '24h',
       interval_s: interval,
-      sample_interval_s: interval,   // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔, 桩对齐生产契约
+      sample_interval_s: interval,   // F7(26-11-15-1104 D6): 节拍读生效采样间隔, 桩对齐生产契约
+      schema: 2,                     // 26-11-18-0037 D6: raw 段窗样本分组契约, 本桩 k=1
+      stride: 1,
       source: 'qb',
       stale: false,
       server_started_at: base - 3600,
@@ -73,7 +77,7 @@ async function stubFlags(page) {
   });
 }
 
-/** base 固定(数据静止) + si=30(轮询 30s 一拍; F8 后开场 ~1.5s 一发首拍重试零变化拍,
+/** base 固定(数据静止) + si=30(节拍 30s 档; SSE 主路径无泵 = 静图,
  * 数据/锚位不动, traffic-fx-frames B 用同款) */
 async function stubTrafficStill(page) {
   const interval = 30;

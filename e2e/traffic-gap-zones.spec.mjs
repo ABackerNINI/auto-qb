@@ -34,22 +34,25 @@ installRouteCleanup(test);
  *   切一刀会把跳检之前的**真实历史数据**整段标成「尚未添加」—— 与要修的失真同型反向。
  *   边界只能是「本帧数据链从哪到哪」, 这也是纯函数的判据。
  *
- * 桩口径(同族 spec 纪律: 不写 harness 共享的磁盘/config):
+ * 桩口径(同族 spec 纪律: 不写 harness 共享的磁盘/config; 26-11-18-0037 阶段 3 随
+ * schema=2 契约改写):
  *   · /api/webui/flags  —— 在真响应上**只覆盖** qb_traffic_enabled=true(流量页签入口有
  *     总门 v-if=qbTrafficOn, 桩服务没开这段 => 进不去流量页签); 其余旗标放行真值, 不连带改
  *     别的 UI 开关;
  *   · /api/traffic/qb/torrent|global —— 造一份**真契约形状**的帧(points/totals/limits/meta,
- *     键名照 /api/traffic/qb/* 契约: points 元素 = null | {t, dl, up}), 区段拓扑 = 三段。
- *   刻意偏差一处并说明: points **长度恒 60 桶**(点过「30分」后 window=30m / interval_s=30,
- *   这时 1800s / 30s = 60 桶**恰是契约实数**、零偏差; 在此之前那一下首拉仍是默认 24h, 也会
- *   拿到同一份 60 桶 —— 前端不校验「points 长度 vs window」)。为什么不真给 24h 的 2880 桶:
- *   2880 桶摊在 ~700px 图面上是 0.24px/桶, 鼠标无法稳定落在指定桶上, 而「落在哪一桶」正是
+ *     schema=2 样本分组契约: 每点必带 t, 缺口 = **显式空值点** {t, dl:null, up:null}(E3),
+ *     totals 元素 = {t, dl, up} | null(空值点位 totals = None —— 读侧发射「totals 随点
+ *     同构」)), 区段拓扑 = 三段。
+ *   刻意偏差一处并说明: points **长度恒 60 点**(点过「30分」后 window=30m / interval_s=30,
+ *   这时 1800s / 30s = 60 组**恰是契约实数**、零偏差; 在此之前那一下首拉仍是默认 24h, 也会
+ *   拿到同一份 60 点 —— 前端不校验「points 长度 vs window」)。为什么不真给 24h 的组数:
+ *   2880 点摊在 ~700px 图面上是 0.24px/点, 鼠标无法稳定落在指定点上, 而「落在哪一点」正是
  *   本 spec 的断言对象。区段拓扑与真实同形, 长度不是本轮的守阵面。
  *   · 时刻取一个**静态基准**(测试起算时算一次, 之后每轮轮询回同一帧): 轮询会让图按节拍
  *     重拉, 若 payload 跟着 Date.now() 走, 悬停落点会在两次读数之间漂移。
  */
 
-/** 帧(60 桶 · 桶宽 30s)的区段拓扑: [起点, 止点] 闭区间, 逐字对应 makePayload 的拼装序 */
+/** 帧(60 点 · 组距 30s)的区段拓扑: [起点, 止点] 闭区间, 逐字对应 makePayload 的拼装序 */
 const LEAD = [0, 14];      // 数据链首之前 -> outside
 const HEAD = [15, 24];     // 数据链(有观测)
 const MID = [25, 29];       // 数据链中间的洞 -> mid
@@ -58,18 +61,23 @@ const TRAIL = [40, 59];     // 数据链尾之后 -> outside
 const N = 60;
 const INTERVAL = 30;
 
-/** 取区段中点(而非边界桶): 标定的亚像素误差不至于落错段 */
+/** 取区段中点(而非边界点): 标定的亚像素误差不至于落错段 */
 const mid = ([a, b]) => Math.floor((a + b) / 2);
 
-/** 造一帧选定区段的 points/totals(points 元素 = null | {t, dl, up}, 契约同 /api/traffic/qb/*) */
+/** 造一帧选定区段的 points/totals(schema=2: 每点必带 t; 缺口 = 显式空值点 {t, dl:null,
+ * up:null}, totals 元素 = null —— 契约同 /api/traffic/qb/* 读侧发射面) */
 function makePayload(window, base) {
   const points = new Array(N).fill(null);
   const totals = new Array(N).fill(null);
   for (let i = 0; i < N; i++) {
     const t = base + i * INTERVAL;
     const live = (i >= HEAD[0] && i <= HEAD[1]) || (i >= TAIL_SEG[0] && i <= TAIL_SEG[1]);
-    if (!live) continue;                       // 缺口桶 = null(契约: 无观测)
-    points[i] = { t, dl: 2000, up: 1000 };     // 速率桶非零: 不走 template 的「0 B/s · 空闲/做种」行
+    if (!live) {
+      points[i] = { t, dl: null, up: null };     // 显式空值点(缺口折叠位, t 必带 —— E3)
+      totals[i] = null;                          // totals 随点同构: 空值点位 = None
+      continue;
+    }
+    points[i] = { t, dl: 2000, up: 1000 };     // 速率点非零: 不走 template 的「0 B/s · 空闲/做种」行
     totals[i] = { t, dl: 2000, up: 1000 };     // 累计增量(统计栏 qbCurSummary 求和用, 只需非 null)
   }
   return {
@@ -78,11 +86,13 @@ function makePayload(window, base) {
     limits: [],
     meta: {
       window,                                  // 回显查询串: 同一份桩跨 window 重拉也不说谎
-      interval_s: INTERVAL,                    // 30m/24h 同为 raw 段窗, 桶宽 = 采样间隔 30s(契约真值)
-      sample_interval_s: INTERVAL,             // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔
+      interval_s: INTERVAL,                    // 30m/24h 同为 raw 段窗, 组距标称 = 采样间隔 30s(k=1)
+      sample_interval_s: INTERVAL,             // F7(26-11-15-1104 D6): 节拍读生效采样间隔
+      schema: 2,                               // 26-11-18-0037 D6: raw 段窗样本分组契约
+      stride: 1,
       source: 'qb',
       stale: false,
-      // 远在「链末桶前一桶起点」之前 => _qbSeamHint 出 null(不给「数据接缝中」行)。本 spec 不
+      // 远在「链末点前一格起点」之前 => _qbSeamHint 出 null(不给「数据接缝中」行)。本 spec 不
       // 验接缝那一支(node 电池 + 静态守阵已覆盖), 这里把它排除掉免得两条注解互相干扰。
       server_started_at: base - 3600,
     },
@@ -243,24 +253,29 @@ test.describe('全局流量图 · 链外文案主语不写「此种子」', () =
 test.describe('种子流量图 · R5 末桶为进行中桶且无观测(不做伪缺口/伪接缝, plan 26-11-14-1313 §07)', () => {
   installRuntimeErrorGuard(test);
 
-  /** F3 栅格 ceil->floor+1 后, 栅格末桶恒为「进行中桶」: 停机边界(qB 停止采样)上它可能
-   * 恰好无观测 —— R5 关心的是这个新形态不被误读。拓扑: 观测 14..58 + 末桶 59 无观测
-   * (0..13 为链首前空段, 即「尾部仅末桶无观测」而非全窗仅一枚 null)。判据面不改
-   * (_qbChainBounds/_qbGapZone 逐字不动): 链末非空桶之后的 null 仍是链尾之外(outside),
-   * 出「该时段无此种子数据」, 不是「采样中断」; server_started_at 远古(非重启贴近链末)
-   * 也不出「数据接缝中」。
-   * 既有三区段用例钉的是宽 TRAIL 游程(40-59), 本用例钉「恰一枚尾 null(= 进行中桶)」的
-   * 窄形态 —— 伪缺口/伪接缝若随 floor+1 回潮, 在这里红。 */
+  /** 尾点为显式空值点(schema=2 契约): 停机边界(qB 停止采样)上窗口末位可能恰好无观测
+   * —— R5 关心的是这个形态不被误读。拓扑: 观测 14..58 + 末点 59 显式空值
+   * (0..13 为链首前空段, 即「尾部仅末点无观测」而非全窗仅一枚空值)。判据面不改
+   * (_qbChainBounds/_qbGapZone 逐字不动, 双 null 列位同判): 链末非空点之后的空值点仍是
+   * 链尾之外(outside), 出「该时段无此种子数据」, 不是「采样中断」; server_started_at
+   * 远古(非重启贴近链末)也不出「数据接缝中」。
+   * 既有三区段用例钉的是宽 TRAIL 游程(40-59), 本用例钉「恰一枚尾空值点(= 停机尾位)」的
+   * 窄形态 —— 伪缺口/伪接缝若随缺口面改写回潮, 在这里红。 */
   async function stubTailUnobserved(page) {
     const base = Math.floor(Date.now() / 1000 / INTERVAL) * INTERVAL - (N - 1) * INTERVAL;
     await page.route('**/api/traffic/qb/torrent/*', (route) => {
       const w = new URL(route.request().url()).searchParams.get('window') || '24h';
       const points = new Array(N).fill(null);
       const totals = new Array(N).fill(null);
-      for (let i = 14; i <= N - 2; i++) {
+      for (let i = 0; i < N; i++) {
         const t = base + i * INTERVAL;
-        points[i] = { t, dl: 2000, up: 1000 };     // 速率桶非零(既有用例同款, 避开空闲行)
-        totals[i] = { t, dl: 2000, up: 1000 };
+        if (i >= 14 && i <= N - 2) {
+          points[i] = { t, dl: 2000, up: 1000 };     // 速率点非零(既有用例同款, 避开空闲行)
+          totals[i] = { t, dl: 2000, up: 1000 };
+        } else {
+          points[i] = { t, dl: null, up: null };     // 显式空值点(链首前空段 + 停机尾位)
+          totals[i] = null;                          // totals 随点同构: 空值点位 = None
+        }
       }
       return route.fulfill({
         json: {
@@ -268,10 +283,12 @@ test.describe('种子流量图 · R5 末桶为进行中桶且无观测(不做伪
           meta: {
             window: w,
             interval_s: INTERVAL,
-            sample_interval_s: INTERVAL,   // F7(26-11-15-1104 D6): 轮询节奏读生效采样间隔
+            sample_interval_s: INTERVAL,   // F7(26-11-15-1104 D6): 节拍读生效采样间隔
+            schema: 2,                     // 26-11-18-0037 D6: raw 段窗样本分组契约
+            stride: 1,
             source: 'qb',
             stale: false,
-            // 远在链末桶之前 -> _qbSeamHint 出 null(「非重启贴近链末」形态, 伪接缝面的对照前提)
+            // 远在链末点之前 -> _qbSeamHint 出 null(「非重启贴近链末」形态, 伪接缝面的对照前提)
             server_started_at: base - 3600,
           },
         },
@@ -280,25 +297,25 @@ test.describe('种子流量图 · R5 末桶为进行中桶且无观测(不做伪
   }
 
   for (const skin of SKINS) {
-    test(`[${skin}] 尾部仅末桶(进行中桶)无观测(头部另含链首前空段): 悬停末桶出链尾外文案而非「采样中断」; 悬停链末桶出速率行; 无接缝提示 @fast`, async ({ page }) => {
+    test(`[${skin}] 尾部仅末点(显式空值点)无观测(头部另含链首前空段): 悬停末点出链尾外文案而非「采样中断」; 悬停链末点出速率行; 无接缝提示 @fast`, async ({ page }) => {
       await stubFlags(page);
       await stubTailUnobserved(page);
       await openApp(page, skin);
       const drawer = await openTorrentTraffic(page);
       const tip = tipLines(drawer);
 
-      /* 对照组: 链末桶(N-2, 有观测)出速率行 —— 链确实到 N-2, 末桶无观测不是整段断联 */
+      /* 对照组: 链末点(N-2, 有观测)出速率行 —— 链确实到 N-2, 末点空值不是整段断联 */
       await hoverBucket(page, drawer, 'qbTorrentHoverIdx', N - 2);
       await expect(tip).toContainText('上传');
       await expect(tip).toContainText('下载');
       await expect(tip).not.toContainText('该时段无此种子数据');
 
-      /* R5 本体: 末桶(进行中桶, 无观测)—— 判据 i > last -> outside: 只陈述事实, 不归因中断 */
+      /* R5 本体: 末点(显式空值点)—— 判据 i > last -> outside: 只陈述事实, 不归因中断 */
       await hoverBucket(page, drawer, 'qbTorrentHoverIdx', N - 1);
       await expect(tip).toContainText('该时段无此种子数据');
-      await expect(tip, '末桶无观测被误判成链中中断(伪缺口 —— R5)').not.toContainText('采样中断');
+      await expect(tip, '末点空值被误判成链中中断(伪缺口 —— R5)').not.toContainText('采样中断');
 
-      /* 伪接缝面: server_started_at 远古时末桶无观测不得出接缝提示(_qbSeamHint 的
+      /* 伪接缝面: server_started_at 远古时末点空值不得出接缝提示(_qbSeamHint 的
        * 「重启贴近链末」判据不满足; 接缝行是 .qb-seam 独立段落, 不在 tooltip 里) */
       await expect(drawer.locator('.qb-seam'), '远古 server_started_at + 尾部未观测区不得出「数据接缝中」(伪接缝 —— R5)')
         .toHaveCount(0);
