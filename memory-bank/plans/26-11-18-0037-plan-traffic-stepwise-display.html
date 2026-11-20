@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="traffic-stepwise-display">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-18-0037">
-<meta name="doc-updated" content="26-11-18-0037">
-<meta name="doc-refs" content="memory-bank/plans/26-11-15-1104-plan-webui-traffic-root-revamp.html, memory-bank/plans/26-11-14-1313-plan-webui-traffic-beat-fidelity.html, memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html">
+<meta name="doc-updated" content="26-11-21-0004">
+<meta name="doc-refs" content="memory-bank/plans/26-11-15-1104-plan-webui-traffic-root-revamp.html, memory-bank/plans/26-11-14-1313-plan-webui-traffic-beat-fidelity.html, memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/tasks/26-11-18-webui-traffic-stepwise.md, memory-bank/conventions/attachments/webui-traffic-beat.md">
 <style>
   :root {
     --bg: #10151a;
@@ -207,6 +207,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-18-0037</span> 初版。来源: grilling 会话(26-11-17/18)。要点: 用户报尾端失真 → 根因=持有克隆面+三台时钟分裂 → 拍板 D1-D9/E1-E7 → 契约(样本分组点列)/传输(SSE 专用通道)/前端(事件驱动判定帧)三层硬切方案, 分四阶段实施。</li>
+  <li><span class="tag">R1 · 26-11-21-0004</span> 实施收口: 七批全部落地 —— T1a 2d000f5e(装配纯函数 traffic_group_assembly.py + 24 用例电池) → T1b/T1c-1 2328b7a8(读侧切换 meta schema=2/stride + V4SeriesGroupCache 前缀和缓存, A4 重标定 250ms 线) → T1c-2 15fdea15(挂钟桶面退役, agg 段零改动, A4 温态断言 best-of-3 去抖) → T2 8b3a7923(SSE 专用通道 /api/traffic/qb/stream per-scope) → T3 fe715cc5(前端契约适配: 点列直读/显式空值点缺口面/stepNom roll/pad 真值现数) → T4a 5e195ee4(前端事件驱动: SSE 状态机会话代际/数据合并 GET 列+事件尾点/徽标两态/降级轮询) → T4b a26ea6b4(e2e 改写 5 spec + 新 traffic-stream.spec 3 用例, Windows 全量 @fast 全绿)。评审: 每批只读子代理累计检 64/64 修 64(T1a 11/轮3 · T1b 14/轮4 · T1c-2 10/轮2 · T2 11/轮3 · T3 3/轮2 · T4a 8/轮2 · T4b 7/轮2), 零 blocker 零入池; 接缝终审 3 条已处置(2 minor: traffic_sample_events.py / traffic_stream.py docstring「前端按 GET meta.stride 现算」失实修正 —— per-tick 样本粒度系对本计划 §03② k>1「尾组更新点+组闭合时新组点」措辞的<b>有意偏离</b>(增量语义, 摊回份额/漂移由 GET 对账校准), 前端不按 stride 折组、不消费 meta.stride; 1 major: conventions/attachments/webui-traffic-beat.md「读侧根修收口」节整节仍是退役挂钟桶面语义 —— 原节保留为历史, 新增「读侧契约换代收口(26-11-18-0037)」节为现行权威)。全量/e2e 全绿(数字权威 = testing/baselines/ 最新切片, 引用走 kb.baseline)。改约两项待环境补验(doc-status 保持 Open 待清偿): ①Docker testbed e2e(test.linux-env + test.linux-e2e, 本机无 docker); ②真机冒烟(dev.run -- config.yml --dry-run, qB 离线拒连; 启动面日志已验正常 —— 流量模块初始化/无异常栈/干净退出)。口径漂移备忘: §03 传输面表(2) 的 k>1 措辞按上述终审修正执行, 现行口径以 webui-traffic-beat.md 换代收口节为准。</li>
 </ul>
 
 </div>

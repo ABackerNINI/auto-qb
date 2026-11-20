@@ -13,8 +13,10 @@ core 调用注入对象的服务方法, 不反向依赖表现层)。hub 缺席(w
 - 每系列每 tick 恰一个新观测(r / z / n 三型; 捕获点见 _ev_capture_obs 的调用面), r/z 产
   一个差分真值点, n(null/断连)不产数据点 —— 显式空值点由 GET 读侧 _slot_null_marks 承载,
   事件流如实静默(断连分支无新样本 -> 不推数据点), 恢复后 seq 续上(帧只在有真值点时派发)。
-- 载荷 points 是 per-tick 样本粒度真值(§03 传输面表(2) 原文), 组闭合/尾组更新语义属前端按其
-  stride 现算 —— 本模块不做 stride/k 分组(与读侧 V4SeriesGroupCache 的窗内分组正交)。
+- 载荷 points 是 per-tick 样本粒度真值 —— 对计划 §03(2) k>1「尾组更新点+组闭合时新组点」
+  措辞的**有意偏离**(增量语义: 摊回份额/漂移由 GET 对账校准); 前端不按 stride 折组 ——
+  事件样本点直显为尾点, 组粒度归位 = 30s 对账 GET + seq 断档重拉; meta.stride 仅契约
+  标注, 前端不消费 —— 本模块不做 stride/k 分组(与读侧 V4SeriesGroupCache 的窗内分组正交)。
 - 聚合(scope Σ)不在本模块: batch = {系列键: 点} 交 hub, global/torrent scope 直取,
   group scope 由 hub 按 _group_merge_points 口径现查 store.groups 合并(成员集 = 派发
   时刻成员, 与 GET 读侧同口径; R3: 载荷 = scope 聚合显示点, 绝不 per-torrent 逐成员推)。

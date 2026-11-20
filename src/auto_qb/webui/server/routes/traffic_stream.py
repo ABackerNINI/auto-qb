@@ -63,9 +63,12 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         载荷帧 = {seq, scope, points:[{t, dl, up}]}(event: traffic): points = 本 tick
         该 scope 的聚合显示点(全局/单种 = 系列差分点; 组 = 成员 Σ, _group_merge_points
-        口径), per-tick 样本粒度真值 —— 组闭合/尾组更新语义由前端按 GET meta.stride
-        现算。seq 每 scope 单调递增(队列满丢弃留断档, 消费端据此重拉 + 低频 GET 对账,
-        D9)。票据: ?ticket= 一次性短时票据(POST /api/events/ticket 换取, 满额 503 ->
+        口径), per-tick 样本粒度真值(对计划 §03(2) k>1「尾组更新点+组闭合时新组点」措辞的
+        有意偏离, 增量语义: 摊回份额/漂移由 GET 对账校准) —— 前端不按 stride 折组: 事件
+        样本点直显为尾点, 组粒度归位 = 30s 对账 GET + seq 断档重拉; meta.stride 仅契约
+        标注, 前端不消费。seq 每 scope 单调递增(队列满丢弃留断档, 消费端据此重拉 +
+        低频 GET 对账, D9)。票据: ?ticket= 一次性短时票据(POST /api/events/ticket 换取,
+        满额 503 ->
         前端退 GET 轮询兜底, E7), 无效/缺参 401(全局鉴权闸 _TICKET_STREAM_PATHS,
         fail-fast 4xx); scope 缺参/非法 422/400。WARN: 经反代时已带 X-Accel-Buffering:
         no(SSE 逐帧到, 不缓冲)。

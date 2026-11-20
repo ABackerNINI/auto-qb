@@ -12,12 +12,8 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `add-partial-receipt.md` … `clip-path-clips-outer-glow.md` | 13 |
-| [2](_index-2.md) | `color-mix-alpha-weight.md` … `ctx-menu-edge-clamp.md` | 13 |
-| [3](_index-3.md) | `ctx-menu-item-state-tip.md` … `drawer-open-vs-kind.md` | 13 |
-| [4](_index-4.md) | `drawer-switch-flicker.md` … `global-mixin-basetransition-watch.md` | 13 |
-| [5](_index-5.md) | `grid-span-item-track-inflation.md` … `kbd-cursor-collapse-dangling.md` | 13 |
-| [6](_index-6.md) | `kbd-cursor-first-row-gap.md` … `password-autofill-dirty.md` | 13 |
-| [7](_index-7.md) | `perf-cadence.md` … `sort-default-asc-tristate-noop.md` | 13 |
-| [8](_index-8.md) | `sortable-gate-source-split.md` … `tpl-comment-split-orphan.md` | 13 |
-| [9](_index-9.md) | `ui-entry-tradeoff-unreported.md` … `wording-audit-surface.md` | 11 |
+| [1](_index-1.md) | `add-partial-receipt.md` … `css-var-substitution-level.md` | 23 |
+| [2](_index-2.md) | `css-zoom-coordinate-space.md` … `flip-bottom-anchored-stack.md` | 23 |
+| [3](_index-3.md) | `floating-hint-vs-notice-panel.md` … `mixin-method-call-misses-methods-layer.md` | 23 |
+| [4](_index-4.md) | `modal-mask-click-self-drag.md` … `svg-chart-mapping.md` | 23 |
+| [5](_index-5.md) | `table-resizer-handle.md` … `wording-audit-surface.md` | 21 |
