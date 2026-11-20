@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-probe-async">
 <meta name="doc-status" content="Superseded">
 <meta name="doc-added" content="26-11-10-2350">
-<meta name="doc-updated" content="26-11-15-2344">
+<meta name="doc-updated" content="26-11-21-0025">
 <meta name="doc-refs" content="memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>relocate 同机强探测异步化: run_probe 移出主循环(daemon 单飞 + FIFO 等位 + 意图重放自动续跑)</h1>
 <p class="lede">本篇只回答: relocate 的 E1 同机强探测(<code>run_probe</code>)如何移出主循环线程——daemon 单飞线程执行 + FIFO 等位队列 + 意图重放自动续跑,消除 FS 不可达时最长 ~35s 的主循环阻塞,且探测闸门语义(D5/D6/D7)逐条不变。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-10-2350 · <b>doc-updated</b> 26-11-15-2344 · <b>doc-status</b> Superseded · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-10-2350 · <b>doc-updated</b> 26-11-21-0025 · <b>doc-status</b> Superseded · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-11-10,用户认领 issue 26-11-10-0638 后三轮拍板,全按推荐) · 认领 <a href="../issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html">26-11-10-0638-bug-legacy-review4-relocate-probe-blocking</a>(R4 汇总件 26-11-07-0527 明细行 8 拆出)
 </div>
 
@@ -135,7 +135,7 @@
 <tr><td>S1</td><td>探测 runner(daemon 线程封装 + 全异常合成 verdict + 可注入)+ 结果队列 + state <code>relocate.probe_pending</code> 容器读写(主循环线程面)</td><td>单测:runner 正常路径/异常合成 verdict;容器 round-trip 与重启重载;qB client 隔离断言(探测线程自建连接,非共享主循环 Session)</td></tr>
 <tr><td>S2</td><td><code>_ensure_probe</code> 异步化:决策表「未命中」分支改入队/kick/合并/等位,返回「探测中」gate 回执;缓存命中与其余短路分支逐条不动;同步语义经注入内联保留</td><td>既有 <code>test_relocate_exec_probe_gate</code> 10 用例 + <code>test_relocate_probe</code> 36 用例全绿;新增:入队、同指纹合并去重、等位序、单飞槽互斥</td></tr>
 <tr><td>S3</td><td>verdict 消费:<code>on_task_line</code> 先消费后步进、每 tick ≤1 条;probe_put → 重放队首 → 清条目 → kick 下一条;防自环</td><td>单测:节流(两 verdict 两 tick)、重放命中 passed 续跑到 <code>_start_job</code>、重放遇 env=True 失败终止不循环、重启恢复(pending 落盘→重载→续跑)</td></tr>
-<tr><td>S4</td><td>web 两段回执:受理「探测中」+ verdict 补发终态(先核 <code>runtime_commands</code> 回执存储面现状再定通道形态)</td><td>回执面单测;真机 <code>dev.run -- config.yml --dry-run</code> 冒烟受理段</td></tr>
+<tr><td>S4</td><td>web 两段回执:受理「探测中」+ verdict 补发终态(先核 <code>runtime_commands</code> 回执存储面现状再定通道形态)</td><td>回执面单测;真机: dry-run 冒烟(web 命令全链回执管线正常且无 probing 桶, notes 含「dry-run: 跳过强探测」)+ 受理段 warn 验证挂非 dry-run 真实探测窗<br><span class="wr">评审终审校准: dry-run 短路在闸决策表第 2 位(先于缓存与未命中), --dry-run 下「探测中」受理段结构性不出现 —— 原「dry-run 冒烟受理段」判据按代码现实不可达, 受理段验证挂真实探测窗(可与 FS 不可达 tick 停摆断言同轮)</span></td></tr>
 <tr><td>S5</td><td><code>sweep_probe_residue</code> 覆盖核验:对 add 完成/证读中途/证写中途/清理中途四断点逐一核验清扫面,有洞在 sweep 补(不在退出路径补)</td><td>各断点残留态单测(sweep 能清干净)</td></tr>
 <tr><td>S6</td><td>全量回归 + 基线切片;回写 <code>memory-bank/</code> relocate 主题文档;issue 26-11-10-0638 置 Done(实际修法/验证方式/测试数字)</td><td><code>commands run test.full</code> 全绿;<code>kb.new baseline --total &lt;实测&gt;</code>;复评裁决后零 actionable</td></tr>
 </table>
@@ -176,6 +176,8 @@
   <li><span class="tag">R0 · 26-11-10-2350</span> 初版。来源:会话 grilling——用户认领 issue 26-11-10-0638 后三轮拍板(D1-D10 全按推荐)。要点:案B 线程化(run_probe 零改动)+ 意图重放自动续跑 + state pending(<code>relocate.probe_pending</code>) + 单飞 FIFO 等位 + web 两段回执 + on_task_line 消费;分期 S1-S6。</li>
   <li><span class="tag">R1 · 26-11-11-0043</span> R1 评审修复: §07 增补探测线程×主循环共享 qB client 并发风险(major, S1 钉独立 client 处置+隔离断言); 用例计数实测校正 36/10/46 三处; R4 漂移补全 run_probe 174→321(删「仅」)并同步 issue 复验行; _spawn_daemon 先例改判两形态(独立进程非线程); 拍板 D1-D10 与闸门 D1-D7 撞号加前缀区分</li>
   <li><span class="tag">R2 · 26-11-15-2344</span> 并入 relocate 结构重构计划 26-11-15-2340(记忆: 本计划 D1-D10 设计条目全保留, 执行并轨为重构计划第二批 S6; 认领链已改挂, issue 0638 随之)</li>
+  <li><span class="tag">R3 · 26-11-20-2351</span> 并轨执行完成 —— S1-S5 期经母计划 26-11-15-2340 第二批 S6(T1-T5)落地, 五笔提交 d899e91a(T1 探测 runner 基建)/9caf2675(T2 _ensure_probe 异步化)/8f129b47(T3 verdict 消费接线)/7d99ce32(T4 web 两段回执)/824f6b94(T5 sweep 四断点残留核验+两洞补扫); 设计钉死点回写: 探测中回执=cls=blocked+item[probing] 机器键(web 受理段 warn 形态), 补发通道=cmd_id 绑 pending 条目 receipt_ids+relocate 内存出站面+webui drain 取走, 合并键从「同指纹」收窄为「意图三元组」(指纹+归一 src+归一 dst —— 并轨适配点: probe_fingerprint 实为 qB 连接身份不编码 src/dst), 重启恢复=队首重 kick 形态(重放形态撞防自环判别故弃), 防自环判别=重放回执带 probing 键、消费定形判别改 verdict 真值(failed+env), 槽归属判据/热停用窗守卫/超龄清扫挂 start+apply 两分支, sweep 补 H1 目录残留根集扫描+H3 _map_local 映射并收紧目录认领自产 token 形状; 验收达成口径=单测/仿真面全绿(test.full 全绿, 数字见 kb.baseline 26-11-20-2348), 真机复验三项拍板延期待真机复验轮: ①dry-run 冒烟(web 命令全链回执管线正常且无 probing 桶, notes 含「dry-run: 跳过强探测」)②受理段 warn 验证挂非 dry-run 真实探测窗(可与③同轮)③FS 不可达时主循环 tick 停摆 &lt; 单步预算(评审终审校准: dry-run 短路在闸决策表第 2 位, 先于缓存命中与未命中分支, --dry-run 下「探测中」受理段结构性不出现, 原判据「dry-run 冒烟受理段」按代码现实不可达); §04-S6 的 issue 置 Done 判据随真机复验延期顺延(issue 保持 Open, 复验 PASS 后关); doc-status 保持 Superseded 不变(已并入母计划)</li>
+  <li><span class="tag">R4 · 26-11-21-0025</span> 评审终审 6 发现全修(判据校准): R3 段与 §04-S4 真机判据改三项形态 —— ①dry-run 冒烟(web 命令全链回执管线正常且无 probing 桶, notes 含「dry-run: 跳过强探测」)②受理段 warn 验证挂非 dry-run 真实探测窗(可与③同轮)③FS 不可达时主循环 tick 停摆&lt;单步预算; 原判据「dry-run 冒烟受理段」按代码现实不可达(dry-run 短路在闸决策表第 2 位, 先于缓存命中与未命中分支, --dry-run 下「探测中」受理段结构性不出现); §04-S6 的 issue 置 Done 判据顺延注记并入 R3 末; 同步面=2340 R5/§03.6/§04-S6 + issue 0638 + 档案 R3</li>
 </ul>
 
 </div>

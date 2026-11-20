@@ -65,7 +65,8 @@
   缺位/无 probe_receipts_take 时零动作
 - test_web_relocate_probe_split_group_terminal_maps_ok: 拆组形态(R5 评审修复) —— passed
   verdict 但重放按新 save_path 拆组出混合 items(本组 started + 拆出组 probing gate):
-  终态照常投 items 非 error(判别真值来源 = verdict 本体), drain 映射 ok(started+probing)
+  终态照常投 items 非 error(判别真值来源 = verdict 本体), drain 映射 ok(started+probing);
+  重放透传条目 receipt_ids 首个(评审终审接缝修复, 指纹漂移重入队时绑定延续)
 - test_web_relocate_probe_terminal_last_write_wins: 同一 cmd_id 绑多条 pending 条目(批量
   双组受理)-> 逐条各投终态 -> 一次 drain 二次写同 id 收敛 last-write-wins(后投条目明细),
   cmd 事件计数 = 受理 1 + 终态 2
@@ -1338,7 +1339,9 @@ def test_web_relocate_probe_split_group_terminal_maps_ok(tmp_path, monkeypatch):
     passed verdict 会被折成「同机探测失败」。混合 items 交宿主 _relocate_receipt 重计:
     started+probing 出 ok; 拆出条目无 receipt_ids 后续不再补发(该 probing 组的进展由
     job 视图承载)。防自环语义不变: env=True 失败时重放必回 probing 回执(test_consume_
-    env_failure_publishes_error_terminal 钉住)。
+    env_failure_publishes_error_terminal 钉住)。重放透传条目 receipt_ids 首个(评审终审
+    接缝修复: 指纹漂移重入队时绑定延续; 本用例重放未重入队, 透传对拆组映射无副作用,
+    test_consume_fingerprint_drift_reenq_binds_receipt_cmd_id 钉住重入队形态)。
     """
     pin_disk_usage(monkeypatch)
     mgr, _client, src, dst, _content, _files = relocate_env(tmp_path, file_count=2)
@@ -1363,7 +1366,8 @@ def test_web_relocate_probe_split_group_terminal_maps_ok(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod, "relocate_execute", _split_replay)
     mod.on_task_line()  # 消费: probe_put(passed) + 重放(拆组桩) + 出站面投递
-    assert replay_calls == [{"hashes": ["HA", "HB"], "receipt_cmd_id": ""}], "重放不携带 cmd_id(D6 意图重放)"
+    assert replay_calls == [{"hashes": ["HA", "HB"], "receipt_cmd_id": "c-split"}], \
+        "重放透传条目 receipt_ids 首个(评审终审接缝修复: 指纹漂移重入队时绑定延续)"
     out = list(mod._probe_receipt_outbox)  # 非排空窥视(排空归 webui 命令线)
     assert len(out) == 1 and out[0]["cmd_id"] == "c-split", "拆组形态照常投终态(不折成 error)"
     assert out[0]["error"] == "" and [it["cls"] for it in out[0]["items"]] == ["started", "blocked"], \

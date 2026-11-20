@@ -65,10 +65,16 @@ test_relocate_probe_gate_async 的注入形态(独立 runner: 独立结果队列
   重武装形态(re_armed)不投, 终态待新 verdict 正常消费
 - test_consume_rearm_does_not_publish_terminal: 重武装不投终态 —— crash verdict 重放重起探测
   时条目保留(receipt_ids 保留), 出站面空; 新 verdict 正常消费后才投
+- test_consume_fingerprint_drift_reenq_binds_receipt_cmd_id: 指纹漂移重入队(评审终审接缝修复)
+  —— 换盐后重放闸未命中, 意图按新指纹重新入队且新条目 receipt_ids 绑定延续(receipt_cmd_id
+  透传队首条目首个); 旧条目出站面先投「探测中」受理段兜底(纯 probing -> 宿主 warn), 新
+  verdict 消费的终态补发仍到达原 cmd_id 并跨漂移续跑建账
 - test_apply_hot_enable_recovers_pending: 热启用(假->真)同款恢复(与 start 分支口径对称):
   disabled 启动不 kick, apply 热启用后队首重 kick + verdict 到达消费链续跑
 - test_recover_strips_receipt_ids_from_survivors: 启动恢复清存活条目的 receipt_ids(T4 重启
   语义: 上一世 web 回执关联不跨进程补发), 出站面零动作; 超龄清扫条目连带 receipt_ids 消失
+- test_recover_dry_run_noop: dry-run 恢复零动手 —— 超龄条目不清、receipt_ids 不剥、零 kick
+  零出站(清扫是 state 写、kick 是真起线程), 条目整批原样
 """
 
 import queue
@@ -366,6 +372,40 @@ def test_consume_rearm_does_not_publish_terminal(monkeypatch):
     assert len(mod.active_jobs()) == 1, "续跑建账照常"
 
 
+def test_consume_fingerprint_drift_reenq_binds_receipt_cmd_id(monkeypatch):
+    """指纹漂移重入队(评审终审接缝修复): 重放重过闸未命中(盐被换 -> 重算指纹变)时新条目
+    receipt_ids 绑定随意图延续 —— 新 verdict 消费的终态补发仍到达原 cmd_id; 旧条目出站面
+    先投一拍「探测中」受理段兜底(items 带 probing 键, 宿主出 warn 受理段)"""
+    mod, _locs = _gate_env(monkeypatch)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    fp1 = _fp_of(mod)
+    mod.probe_pending_append(fp1, ["HA", "HB"], "R:/src", "R:/dst", "web", receipt_id="cmd-drift")
+    slot.try_acquire(fp1)  # 自然路径: 槽被本指纹在飞探测占着, verdict 是它的结论
+    q.put((fp1, _passed()))
+    mod._ctx.state.data["relocate"]["probe_salt"] = "salt-drifted"  # apply 热改 qB 配置/换盐形态: 重放重算指纹必漂移
+    fp2 = _fp_of(mod)
+    assert fp2 != fp1, "前提: 换盐后重算指纹已漂移(闸未命中, 重新入队)"
+    mod._consume_probe_verdict()
+    entries = mod.probe_pending_list()
+    assert [e["fingerprint"] for e in entries] == [fp2], "重放闸未命中: 意图按新指纹重新入队"
+    assert entries[0].get("receipt_ids") == ["cmd-drift"], "新条目 receipt_ids 绑定延续(receipt_cmd_id 透传队首条目首个)"
+    out1 = mod.probe_receipts_take()
+    assert len(out1) == 1 and out1[0]["cmd_id"] == "cmd-drift", "旧条目出站面一拍受理段兜底(同 cmd_id)"
+    assert out1[0]["error"] == "" and out1[0]["items"][0].get(ru.PROBE_GATE_PROBING_KEY) is True, \
+        "兜底形态 = 「探测中」明细(纯 probing -> 宿主出 warn 受理段)"
+    assert (mod.probe_get(fp1) or {}).get("status") == "passed", "缓存按 verdict 指纹写(D7 真值面不变)"
+    assert wait_until(lambda: q.qsize() == 1 and len(calls) == 1), "kick 下一条 = 新指纹探测(单飞接续)"
+    assert calls == [{"src": "R:/src", "dst": "R:/dst"}], calls
+    assert slot.in_flight() == fp2, "新探测占槽"
+    mod._consume_probe_verdict()  # 第二拍: 新 verdict 正常消费
+    out2 = mod.probe_receipts_take()
+    assert len(out2) == 1 and out2[0]["cmd_id"] == "cmd-drift", "新条目 verdict 消费: 终态补发到达原 cmd_id"
+    assert out2[0]["error"] == "" and out2[0]["items"][0].get("cls") == "started", "终态 = 重放续跑明细(已发起)"
+    assert len(mod.active_jobs()) == 1, "自动链跨指纹漂移续跑建账"
+    assert mod.probe_pending_list() == () and slot.in_flight() is None, "条目清 + 槽释放"
+
+
 def test_on_task_line_consumes_verdict_before_stepping(monkeypatch):
     """D9 挂点: on_task_line 先消费(条目清/缓存写/建账)后步进; 空队列二拍相位推进照常"""
     mod, locs = _gate_env(monkeypatch)
@@ -476,6 +516,23 @@ def test_recover_strips_receipt_ids_from_survivors(fake_clock):
     assert wait_until(lambda: q.qsize() == 1), "kick 起的探测 verdict 到达"
     mod._consume_probe_verdict()
     assert mod.probe_receipts_take() == [], "续跑完成: 清绑后的条目消费零出站动作"
+
+
+def test_recover_dry_run_noop(fake_clock):
+    """dry-run 恢复零动手(docstring 明示: 清扫是 state 写、kick 是真起线程) —— 超龄条目不清、
+    receipt_ids 不剥、零 kick 零出站, 条目整批原样(真机轨先 --dry-run 冒烟的前提)"""
+    mod = RelocateModule(clock=fake_clock)
+    mod._ctx = types.SimpleNamespace(state=types.SimpleNamespace(data={}), dry_run=True)
+    calls = []
+    q, slot = _wire_async(mod, _recording_probe(calls))
+    mod.probe_pending_append("fpDry", ["HA"], "R:/s1", "R:/d1", "web", receipt_id="cmd-dry")
+    fake_clock.advance(PROBE_PENDING_MAX_AGE_S + 60.0)  # 条目已超龄: 非 dry-run 形态必清必 kick
+    mod._probe_pending_recover()
+    entries = mod.probe_pending_list()
+    assert [e["fingerprint"] for e in entries] == ["fpDry"], "dry-run: 超龄条目原样(清扫 0)"
+    assert entries[0].get("receipt_ids") == ["cmd-dry"], "receipt_ids 不剥(恢复面零 state 写)"
+    assert calls == [] and slot.in_flight() is None, "零 kick(dry-run 不起探测线程)"
+    assert mod.probe_receipts_take() == [] and q.qsize() == 0, "零出站动作, 队列零变化"
 
 
 def test_consume_replay_exception_keeps_rearm_slot(monkeypatch):

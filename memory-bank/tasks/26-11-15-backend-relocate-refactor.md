@@ -2,8 +2,8 @@
 
 **Status:** In Progress
 **Added:** 2026-11-15
-**Updated:** 2026-11-20
-**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机复验轮(26-11-17~19, 计划 0636 七片执行完毕: 21 条回归适配 + 13 条新增耐久用例全 PASS, 产品回归 0)+ issue 七条翻 Done; S5 跨模块接口显式化两笔提交落地(a652290f 登记集退役改 RelocateModule 派生查询 / 80d8ea09 常量收口+接口 AST 守卫, 全仓 src 侧 relocate 家族私有名跨界 import 清零, test.quick 6499P/2S/0F); 第二批 S6 待开工
+**Updated:** 2026-11-21
+**Summary:** relocate 结构重构: 第一批 S1-S4(单活任务模型/撤销不搬回/生命周期账统一/路径判定单点)六笔提交落地 + 真机复验轮(26-11-17~19, 计划 0636 七片执行完毕: 21 条回归适配 + 13 条新增耐久用例全 PASS, 产品回归 0)+ issue 七条翻 Done; S5 跨模块接口显式化两笔提交落地(a652290f 登记集退役改 RelocateModule 派生查询 / 80d8ea09 常量收口+接口 AST 守卫, 全仓 src 侧 relocate 家族私有名跨界 import 清零, test.quick 6499P/2S/0F); S6 探测异步化五笔提交落地(d899e91a→824f6b94, 并轨 2350 D1-D10, 单测/仿真面全绿, 真机复验两项拍板延期)
 **Topics:** backend-relocate-refactor
 **Refs:** memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/issues/26-11-17-0214-question-qbmanager-startup-reload-state-discard.html, memory-bank/pitfalls/backend/startup-state-write-reload-discard.md, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html, memory-bank/pitfalls/testing/state-file-lag-and-journal-absence.md, memory-bank/pitfalls/testing/restart-transient-and-offline-cmd-window.md
 
@@ -36,7 +36,7 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 | S3 | 生命周期账统一: phase 派生+终态分级保留+双真相收敛 | Done(第一批) |
 | S4 | 路径判定单点: 归一/到位/根内合一+删链门修复 | Done(第一批) |
 | S5 | 跨模块接口显式化: 登记集→查询协议+私有引用清除 | Done(第二批; 守卫 test_relocate_interface_guard.py 承考, 见计划 R4) |
-| S6 | 探测异步化(并轨 2350) | Open |
+| S6 | 探测异步化(并轨 2350) | Done(第二批; 单测面达成, 真机复验两项延期, issue 0638 待复验后关) |
 
 ## 进度日志
 
@@ -78,3 +78,13 @@ relocate 结构重构这条线推进到哪、拍板了什么、下一步从哪�
 - 2026-11-19 06:20 真机复验轮收口: 计划 0636 七片执行完毕(21 回归适配 19P/1F/1S + 13 新增耐久用例全 PASS, 产品回归 0), issue 七条翻 Done(0528/0326/0535/0711/0553/0420/0401), 两计划回写(0636 R3+勘误 / 2340 状态列+R3), 坑档新立 2 + 复发+1 + 孤儿证伪, 基线切片落位, 档案 R2 段; 第二批 S5/S6 待开工
 
 - 2026-11-20 02:45 S5 跨模块接口显式化两笔提交落地: a652290f(登记集退役+RelocateModule 派生查询三方法, fuse/grouping/ops_skip/qbapi 消费点迁 ctx.relocate 句柄)+80d8ea09(常量收口+接口 AST 守卫, 全仓 src 侧 relocate 家族私有名跨界 import 清零, units 增显式 __all__); 评审两批各 2 轮(10 修/3 修, 引文校验 10/10 与 3/3, 复评零新增); 验收达成: 消费面测试全绿(test.quick 6499P/2S/0F; test.full 6495P/6S/0F, 覆盖率闸门 99.73% 达标), grep 无跨层私有引用由 tests/test_relocate_interface_guard.py 机械承考(真仓 198 文件); 开工拍板三条记计划 §06 D11-D13(全按推荐); 基线切片 26-11-20-0244-relocate-refactor-s5 落位; 第二批 S6 待开工
+
+### R3 · 第二批 S6 探测异步化落地 (2026-11-20)
+
+- **五笔提交链**(T1-T5, 并轨 26-11-10-2350 D1-D10, 设计钉死点单点在该计划 R3): d899e91a T1 探测 runner 基建(单飞槽+结果队列+probe_pending 容器+线程侧独立 qB 连接) → 9caf2675 T2 _ensure_probe 异步化(意图入队+单飞 kick+探测中回执; 合并键=意图三元组, 并轨适配点: probe_fingerprint 实为 qB 连接身份不编码 src/dst) → 8f129b47 T3 verdict 消费接线(消费四步+probing 键防自环+队首重 kick 恢复+超龄清扫挂 start+apply) → 7d99ce32 T4 web 两段回执(受理段 warn+cmd_id 绑 receipt_ids 出站面+webui drain 补发) → 824f6b94 T5 sweep 四断点残留核验+两洞补扫(H1 目录残留根集扫描+H3 _map_local 映射; 目录认领收紧自产 token)。
+- **分批评审**(派发/发现/修/轮): T1 2/8/8/3 · T2 2/3/3/3 · T3 2/4/4/2 · T4 2/7/6+忽1/2 · T5 1/1/1/2; 引文校验全过、复评均零 actionable(口径单点=各笔提交 Review trailer); T5 major = 裸前缀认领的用户目录误删面(全修: 认领收紧自产 token+lookalike 对照用例)。
+- **测试与基线**: 新增 59 条(test_relocate_probe_async 20 / probe_gate_async 8 / probe_consume 19 / test_web_relocate 6 / test_relocate_probe 36→42); test.full 全绿(数字见 kb.baseline), 覆盖率闸门达标, 基线切片 26-11-20-2348-relocate-refactor-s6 落位; T3 实施中 test_ascii_symbol_guard 批内拦截计划圈号进 .py 注释(坑档 testing/ascii-circled-digits-py-comments.md 复发+1: 实施子代理扫了 pitfalls/_index 但没打开该条目再动笔, 批内拦截未产生复评成本)。
+- **真机延期与边界**: 真机复验三项拍板延期待真机复验轮 —— dry-run 冒烟(web 命令全链回执管线正常且无 probing 桶, notes 含「dry-run: 跳过强探测」)/受理段 warn 验证挂非 dry-run 真实探测窗/FS 不可达时主循环 tick 停摆<单步预算(评审终审校准: dry-run 短路在闸决策表第 2 位(先于缓存与未命中), --dry-run 下「探测中」受理段结构性不出现, 原判据「dry-run 冒烟受理段」按代码现实不可达); issue 26-11-10-0638 保持 Open(正文补落地注记), 复验 PASS 后关(2350 §04-S6 的 issue 置 Done 判据随之顺延); 本收口轮零代码改动, 提交统一走主会话 ship.commit。
+- **S5 hash rebase 注记**: S5 两笔经 rebase 改写 a652290f→bde75be0 / 80d8ea09→28e3b4dd(树差=远端推进面 27 文件, tests 仅 +3 用例: a14e1e20 ALT 解锁 +2 / e0411a38 行高恒等 +1), R1-A 同型; 上文 S5 行与计划 R4 的旧 hash 为当时实测原值不回改, 追溯按本映射换算, 计划 R5 与基线切片差值口径均按新 hash 记。
+
+- 2026-11-20 23:54 S6 探测异步化收口: T1-T5 五笔提交落地(评审五批全闭环, 见 R3 段), test.full 6557P/6S/0F 覆盖率闸门 99.70% 达标, 基线切片 26-11-20-2348-relocate-refactor-s6 落位, 两计划回写(2350 R3 并轨执行完成 / 2340 R5+§04-S6+§03.6), issue 0638 补落地注记保持 Open, 坑档圈号复发+1; 真机复验三项(dry-run 冒烟/受理段 warn 挂非 dry-run 真实探测窗/FS 不可达 tick 停摆断言)拍板延期待复验轮(评审终审校准, 判据详见 R3 段)

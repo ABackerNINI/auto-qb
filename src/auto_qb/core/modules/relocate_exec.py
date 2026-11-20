@@ -129,6 +129,11 @@ class ExecMixin:
         (2) 重放队首条目 —— re-invoke relocate_execute 幂等面全新鲜(D6 只存意图不存快照;
            confirm 面按 relocate_execute 缺省 False: 意图入队本就以「确认已过/不需要」为前提,
            重放重新过全闸链, 探测窗口内新出现的需确认态停在 confirm 回执, 绝不代用户点头);
+           receipt_cmd_id 透传队首条目 receipt_ids 首个(T4 接缝, 评审终审修复): 重放重过探测闸
+           若因指纹漂移(apply 热改 qB 配置/换盐)未命中重新入队, 新条目 receipt_ids 绑定随
+           意图延续 —— 新 verdict 消费时终态补发仍到达原 cmd_id; 多 cmd_id 条目退化面: 只有
+           首个 cmd_id 精确延续, 其余由旧条目出站面兜底(防自环 error / probing 桶 warn
+           受理段, 见下 T4 终态补发段), 不再随新条目补终态;
         (3) 清条目 —— probe_pending_pop 队首(= 被 kick 的意图, FIFO kick 序保证); 防自环时
            即「丢弃条目终止自动链」;
         (4) 单飞槽释放 -> kick 下一条(主循环只启动线程不等待; pending 空则无事)。
@@ -175,11 +180,19 @@ class ExecMixin:
             # (2) 重放队首条目(意图重放, relocate_execute 全闸链幂等面全新鲜; 风险表第 5 行:
             # 探测窗口内组状态已变的过期意图由既有幂等 skip/闸门自然短路, 零新增幂等风险)。
             # 重放异常不得拖垮任务线也不得让 verdict 已耗而槽永久占用: 照常清条目 + 释放。
+            # receipt_cmd_id 透传(评审终审修复): 条目 receipt_ids 首个随重放传入 —— 重放重过
+            # 探测闸未命中时(指纹漂移: apply 热改 qB 配置/换盐, 或 env=True 失败后的防自环
+            # 重试形态), 新入队条目的 receipt_ids 绑定随意图延续, 新 verdict 消费的终态补发
+            # 仍到达原 cmd_id; merge_intent 对 receipt_id 去重, 防自环重放(命中自己条目)
+            # 幂等不叠加。多 cmd_id 退化面(docstring (2) 段): 只首个精确延续, 其余由旧条目
+            # 出站面兜底。
+            head_rids = [str(r) for r in (head.get("receipt_ids") or []) if str(r or "").strip()]
             try:
                 items = self.relocate_execute(
                     list(head.get("hashes") or ()),
                     location=str(head.get("dst") or ""),
                     origin=str(head.get("origin") or "") or "unknown",
+                    receipt_cmd_id=head_rids[0] if head_rids else "",
                 )
                 replay_items = items if isinstance(items, list) else []
                 probing = any(isinstance(it, dict) and it.get(PROBE_GATE_PROBING_KEY) is True for it in replay_items)
