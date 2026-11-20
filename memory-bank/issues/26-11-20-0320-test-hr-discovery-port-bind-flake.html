@@ -155,7 +155,7 @@
     <li>2026-11-20 03:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-20 08:31 <strong>未复现（本次窗口）</strong>——隔离跑锚点+兄弟用例 2 passed；<code>test.quick -n 8</code> 连跑两轮（6556P / 6555P+1F，1F 为 <code>test_traffic_qb_bucket_cache_perf.py::test_a4_bench_group_m30_warm</code> 另条环境敏感 flake，隔离复跑绿，与本件无关）锚点均绿。注意环境窗口：本机本次开机 TCP 排除段为空（<code>netsh interface ipv4 show excludedportrange protocol=tcp</code> 仅表头），与事发时可能不同，「已消失」不成立为「已修复」。另一线索：事发记录错误码为 WinError 10048（占用）而非 10013（排除段拒绝），§05 倾向假设里的「动态排除段」与留痕证据不符，占用竞争更贴合。</p>
   <h3>修复后补充</h3>
   <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
 </section>
