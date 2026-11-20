@@ -120,7 +120,8 @@ def _scan_mixin_wiring(problems):
     # 静态引用同样算"已接线"
     for ui in _UI_ALL:
         shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
-        refs |= {m.lstrip("/") for m in re.findall(r'<script src="(/shared/[^"]+\.js)"></script>', shell)}
+        # P2-1(D4): head 静态 script 带 ?v=__AQB_V__, 取路径时剥掉 query
+        refs |= {m.lstrip("/") for m in re.findall(r'<script src="(/shared/[^"?]+\.js)(?:\?[^"]*)?"></script>', shell)}
     for dirpath, _dirs, files in os.walk(os.path.join(STATIC_ROOT, "shared")):
         if os.path.basename(dirpath) == "vendor":  # 第三方压缩产物, 不参与本仓库的片段约定
             continue
@@ -861,7 +862,9 @@ def _scan_frontend_assets():
                 elif name.endswith(".html"):
                     _scan_template_transitions(path, rel, problems)
             for ref in re.findall(r'(?:src|href)="(/[^"]+)"', "\n".join(lines)):
-                if not os.path.exists(os.path.join(STATIC_ROOT, ref.lstrip("/"))):
+                # P2-1(D4): head 资源 URL 的 ?v=__AQB_V__ 是版本 query, 不是路径的一部分
+                ref_path = ref.split("?", 1)[0].lstrip("/")
+                if not os.path.exists(os.path.join(STATIC_ROOT, ref_path)):
                     problems.append(f"{rel} 引用不存在的静态资源 {ref}")
     _scan_js_syntax_with_node(js_files, problems)
     # app.js 已按域拆分(2026-09-20): 跨文件不变量按**整包**(HTML 加载顺序拼接)扫描 ——

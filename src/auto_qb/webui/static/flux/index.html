@@ -5,33 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>auto-qb · 辅种管理 · flux</title>
-  <link rel="icon" type="image/png" href="/shared/icon.png">
-  <!-- 主表行语言引擎(shared/rowlang.js): head 同步执行(首帧前定 data-rowlang, 无 FOUC) --><script src="/shared/rowlang.js"></script>
+  <link rel="icon" type="image/png" href="/shared/icon.png?v=__AQB_V__">
+  <!-- 主表行语言引擎(shared/rowlang.js): head 同步执行(首帧前定 data-rowlang, 无 FOUC) --><script src="/shared/rowlang.js?v=__AQB_V__"></script><script>window.AQB_V = "__AQB_V__";</script>
   <!-- flux(第四套皮肤, glass 层叠玻璃语言, fork 自 console): 令牌+基线留根 style.css, 链接顺序即级联序
        (components → views → dialogs); 设置页继续吃 shared/console_hub.css(与另三套同源)。
        主题: V1 固定玻璃层叠单主题(令牌名集与三皮肤相等, 取值走 glass 气质 dark), 五主题切换仍属棱镜 ui-diff 口。 -->
-  <link rel="stylesheet" href="/flux/style.css">
-  <link rel="stylesheet" href="/flux/css/components.css">
-  <link rel="stylesheet" href="/flux/css/views.css">
+  <link rel="stylesheet" href="/flux/style.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/flux/css/components.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/flux/css/views.css?v=__AQB_V__">
   <!-- 主表行语言结构规则单点(计划 26-10-30-0217): 必须在本皮肤 views.css 之后(级联序), 三皮肤共用 -->
-  <link rel="stylesheet" href="/shared/row_lang.css">
+  <link rel="stylesheet" href="/shared/row_lang.css?v=__AQB_V__">
   <!-- 主表横条隐藏 + 底部指示条样式单点(计划 26-11-01-0553): 三皮肤共用, 排在本皮肤 views.css 之后 -->
-  <link rel="stylesheet" href="/shared/hscroll.css">
-  <link rel="stylesheet" href="/flux/css/dialogs.css">
-  <link rel="stylesheet" href="/shared/console_hub.css">
-  <link rel="stylesheet" href="/shared/console_hub_layout.css">
-  <link rel="stylesheet" href="/shared/console_hub_controls.css">
-  <link rel="stylesheet" href="/shared/console_hub_panels.css">
+  <link rel="stylesheet" href="/shared/hscroll.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/flux/css/dialogs.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/shared/console_hub.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/shared/console_hub_layout.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/shared/console_hub_controls.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/shared/console_hub_panels.css?v=__AQB_V__">
   <!-- W6 表格面背景/密度族单点: 变体只声明令牌值(说明见该文件头) -->
-  <link rel="stylesheet" href="/shared/dt_table.css">
+  <link rel="stylesheet" href="/shared/dt_table.css?v=__AQB_V__">
   <!-- fx 动效库(计划 26-10-31-2316 S6): shared/fx 三件只挂 flux(S4 主 preset glass,
        见 <html data-fx-preset>; 级联序照 shared 层惯例排本皮肤全部 CSS 之后, 守阵
        test_frontend_fx_wiring 钉序; 三旧皮肤零引用 = D14 隔离拍板) -->
-  <link rel="stylesheet" href="/shared/fx/fx.css">
-  <link rel="stylesheet" href="/shared/fx/fx-presets.css">
+  <link rel="stylesheet" href="/shared/fx/fx.css?v=__AQB_V__">
+  <link rel="stylesheet" href="/shared/fx/fx-presets.css?v=__AQB_V__">
   <!-- fx 挂载面(S6 后半): flux 专属作用域 CSS 挂载层(共享模板公共类上的效果一律
        html[data-fx-preset] 前缀挂载, 级联序排 fx 三件之后, 守阵 test_frontend_fx_wiring 钉) -->
-  <link rel="stylesheet" href="/flux/css/fx-mount.css">
+  <link rel="stylesheet" href="/flux/css/fx-mount.css?v=__AQB_V__">
 </head>
 <body>
   <!-- 图标 sprite: 与 atlas/prism/console 同一份清单(brand 仍用 i-orbit 轨道符号, 皮肤差异只在 CSS 层) -->

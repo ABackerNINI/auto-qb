@@ -526,10 +526,11 @@ def test_frontend_fx_wiring():
     flux_shell = open(os.path.join(STATIC_ROOT, "flux", "index.html"), encoding="utf-8").read()
     # 1. flux 恰挂一次
     for needle, why in (
-        ('href="/shared/fx/fx.css"', "fx 库基线(fx.css)漏挂/重复挂"),
-        ('href="/shared/fx/fx-presets.css"', "fx 风格配方(fx-presets.css)漏挂/重复挂"),
+        # P2-1(D4): head 的 CSS link 带 ?v=__AQB_V__, 这里按路径前缀匹配(js 挂载器在 body 无 query)
+        ('href="/shared/fx/fx.css', "fx 库基线(fx.css)漏挂/重复挂"),
+        ('href="/shared/fx/fx-presets.css', "fx 风格配方(fx-presets.css)漏挂/重复挂"),
         ('src="/shared/fx/fx.js"', "fx 挂载器(fx.js)漏挂/重复挂"),
-        ('href="/flux/css/fx-mount.css"', "fx 作用域挂载层(fx-mount.css, S6 后半)漏挂/重复挂"),
+        ('href="/flux/css/fx-mount.css', "fx 作用域挂载层(fx-mount.css, S6 后半)漏挂/重复挂"),
         ('src="/flux/fx-mount.js"', "fx 状态驱动挂载器(fx-mount.js, S6 后半)漏挂/重复挂"),
     ):
         assert flux_shell.count(needle
@@ -537,11 +538,12 @@ def test_frontend_fx_wiring():
     # 2. 级联序: fx.css 在本皮肤 views.css 与 shared 收尾件(dt_table.css)之后;
     #    fx-presets.css 在 fx.css 之后(showcase 同序: 基线在前, 配方覆盖在后);
     #    fx-mount.css 排 fx 三件之后(S6 后半挂载面 = 最后一级联, 覆盖 flux 既有同选择器规则)
-    pos_views = flux_shell.find('href="/flux/css/views.css"')
-    pos_dt = flux_shell.find('href="/shared/dt_table.css"')
-    pos_fx = flux_shell.find('href="/shared/fx/fx.css"')
-    pos_pre = flux_shell.find('href="/shared/fx/fx-presets.css"')
-    pos_mount = flux_shell.find('href="/flux/css/fx-mount.css"')
+    # P2-1(D4): head CSS link 带 ?v=__AQB_V__, 级联序判据按路径前缀定位(不锚闭合引号)
+    pos_views = flux_shell.find('href="/flux/css/views.css')
+    pos_dt = flux_shell.find('href="/shared/dt_table.css')
+    pos_fx = flux_shell.find('href="/shared/fx/fx.css')
+    pos_pre = flux_shell.find('href="/shared/fx/fx-presets.css')
+    pos_mount = flux_shell.find('href="/flux/css/fx-mount.css')
     assert pos_views > 0 and pos_dt > 0, "flux shell 缺 views.css/dt_table.css link(fx 级联序判据失去锚点)"
     assert pos_fx > pos_views and pos_fx > pos_dt, (
         "flux shell 里 /shared/fx/fx.css 排在本皮肤 views.css / shared 收尾件之前 —— "

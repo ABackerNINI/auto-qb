@@ -1300,8 +1300,9 @@ def test_frontend_hscroll_indicator_wiring():
             "—— 漏挂 = 该皮肤横条重现且胶囊无外观; 挂两次 = 规则重复进级联"
         )
         # 判据 4: 级联序 —— 必须在本皮肤 views.css 之后
-        pos_views = shell.find(f'href="/{ui}/css/views.css"')
-        pos_shared = shell.find('href="/shared/hscroll.css"')
+        # P2-1(D4): head CSS link 带 ?v=__AQB_V__, 级联序判据按路径前缀定位(不锚闭合引号)
+        pos_views = shell.find(f'href="/{ui}/css/views.css')
+        pos_shared = shell.find('href="/shared/hscroll.css')
         assert pos_views > 0, f"{ui} index.html 找不到 /{ui}/css/views.css 的 link(级联序判据失去锚点)"
         assert pos_shared > pos_views, (
             f"{ui} index.html 里 /shared/hscroll.css 排在 /{ui}/css/views.css 之前 —— "
@@ -1326,7 +1327,8 @@ def test_frontend_hscroll_indicator_wiring():
         # flux(计划 26-10-31-2316 S6, D14 存量隔离拍板), 不参与四皮肤一致口径;
         # 其挂载与级联序由 test_frontend_fx_wiring 单独钉
         shared_sets[ui] = [
-            h for h in re.findall(r'href="(/shared/[^"]+\.css)"', shell) if not h.startswith("/shared/fx/")
+            h
+            for h in re.findall(r'href="(/shared/[^"?]+\.css)(?:\?[^"]*)?"', shell) if not h.startswith("/shared/fx/")
         ]
     base_shared = shared_sets[_UI_ALL[0]]
     assert "/shared/hscroll.css" in base_shared, ("共享层链接集里没有 /shared/hscroll.css(有序清单抽取口径坏了? 同步本守阵)")

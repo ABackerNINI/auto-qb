@@ -9,12 +9,17 @@
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 上次使用的 UI(autoqb_ui 皮肤 cookie, 未记录/失效回落星图); 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_ui_skin_cookie_persisted: boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(307 在服务端裁决, cookie 是唯一读得到的载体)
+- test_static_version_hash_stability: 静态树内容哈希 V(D5) —— 同内容恒等 / 改或增任一纳入文件即变 / 白名单外 .pyc/.log 不参与(抖动的 V 永远缓存未命中, 恒定的 V 升级后继续吃旧资源)
+- test_static_version_token_head_shape: 四套 index.html head 令牌形态(D4 静态守阵读盘) —— 所有 head script/link 都带 ?v=__AQB_V__ 且注入 window.AQB_V, 令牌数与资源数相等(漏一个 = 那份 JS/CSS 仍吃旧缓存且无报错)
+- test_static_version_token_response_replacement: HTML 版本令牌响应时替换(D4/D6) —— 四套皮肤目录/直取两种 URL 形态都无残留、替换为真实 V、仍 no-cache; 无令牌的 CSS/模板分片逐字节零副作用
 """
 import os
+import re
 
 from auto_qb import __version__
+from auto_qb.webui.server.static_version import compute_static_version
 
-from webui_helpers import STATIC_ROOT, _enable_qb_traffic
+from webui_helpers import STATIC_ROOT, _UI_ALL, _enable_qb_traffic
 
 
 def test_api_webui_flags_endpoint(web_env):
@@ -149,6 +154,13 @@ def test_static_assets_disable_heuristic_cache(web_env):
         assert resp.headers.get("cache-control") == "no-cache", f"{path} 应带 no-cache"
     api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
     assert api.headers.get("cache-control") != "no-cache", "/api 响应不应被静态策略影响"
+    # HEAD 只发头不发体: 中间件若把空 body_iterator 收齐后重建响应, 会把 Content-Length 清零,
+    # 破坏 HEAD 应回显与 GET 等效的长度语义 —— 必须保留原响应头(只带 no-cache)。
+    head = client.head("/atlas/")
+    assert head.status_code == 200, "HEAD /atlas/ 应可访问"
+    assert head.content == b"", "HEAD 不应带 body"
+    assert int(head.headers["content-length"]) > 0, "HEAD 的 Content-Length 不得被收空 body 的重建响应清零"
+    assert head.headers.get("cache-control") == "no-cache", "HEAD 响应仍须 no-cache"
 
 
 def test_ui_root_and_legacy_newui_redirect(web_env):
@@ -249,3 +261,104 @@ def test_lifecycle_wait_until_started_and_stop_timeout(monkeypatch):
     # 正常停止: wait 返回 True -> True
     handle_ok = SimpleNamespace(stop=lambda: None, wait=lambda timeout=None: True)
     assert lifecycle.stop_web_server(handle_ok, 0.05) is True
+
+
+def test_static_version_hash_stability(tmp_path, monkeypatch):
+    """静态树内容哈希 V(D5): 同内容恒等 / 改或增任一纳入文件即变 / 白名单外扩展名不进哈希
+
+    V 是 head 资源 ?v= 的取值来源: 抖动的 V 让浏览器永远缓存未命中, 恒定的 V 让升级后
+    继续吃旧 JS/CSS —— 两头都是故障, 故两头都钉。用临时树算, 不碰真实 static/。
+    """
+    root = tmp_path / "static"
+    (root / "atlas").mkdir(parents=True)
+    (root / "shared").mkdir()
+    (root / "atlas" / "index.html").write_text("<html>?v=__AQB_V__</html>", encoding="utf-8")
+    (root / "atlas" / "style.css").write_text("body{color:red}", encoding="utf-8")
+    (root / "shared" / "app.js").write_text("window.AQB_V=1;", encoding="utf-8")
+    (root / "shared" / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    # 真钉排序(而非靠同进程 os.walk 天然稳定): patch 计算所用 os.walk, 让两次调用的
+    # dirs/files 与目录顺序都翻转 —— static_version.py 的 dirs.sort()/entries.sort()
+    # 一旦被去掉, 收集顺序即变, 断言随之变红。context 限定作用域, 后续内容用例用真 walk。
+    real_walk = os.walk
+    snapshots = [(r, list(dirs), list(files)) for r, dirs, files in real_walk(str(root))]
+    state = {"call": 0}
+
+    def _shuffled_walk(top, *args, **kwargs):
+        state["call"] += 1
+        reverse = state["call"] % 2 == 0
+        seq = list(reversed(snapshots)) if reverse else snapshots
+        for r, dirs, files in seq:
+            out_dirs = list(reversed(dirs)) if reverse else list(dirs)
+            out_files = list(reversed(files)) if reverse else list(files)
+            yield r, out_dirs, out_files
+
+    with monkeypatch.context() as m:
+        m.setattr(os, "walk", _shuffled_walk)
+        v_shuffled = compute_static_version(str(root))
+        assert re.fullmatch(r"[0-9a-f]{16}", v_shuffled), f"V 应是 16 位十六进制, 实得 {v_shuffled}"
+        v_again = compute_static_version(str(root))
+        assert v_again == v_shuffled, ("同内容两次计算必须相等(遍历顺序不得影响 V —— dirs.sort()/entries.sort() 必须保留)")
+
+    v1 = compute_static_version(str(root))
+    assert v1 == v_shuffled, "dirs/files 遍历顺序被打乱时 V 仍须相等"
+
+    # 白名单外扩展名: 运行期噪声文件进出不得改变 V
+    (root / "shared" / "junk.pyc").write_bytes(b"\x00\x01noise")
+    (root / "shared" / "run.log").write_text("noise", encoding="utf-8")
+    assert compute_static_version(str(root)) == v1, ".pyc/.log 不得进入哈希"
+
+    # 改任一纳入文件: V 必须变
+    (root / "atlas" / "style.css").write_text("body{color:blue}", encoding="utf-8")
+    v2 = compute_static_version(str(root))
+    assert v2 != v1, "纳入文件变化后 V 必须变"
+    # 新增纳入文件: 同样必须变
+    (root / "shared" / "extra.js").write_text("x", encoding="utf-8")
+    assert compute_static_version(str(root)) != v2, "新增纳入文件后 V 必须变"
+
+
+def test_static_version_token_head_shape():
+    """四套 index.html head 令牌形态(D4 静态守阵读盘): script/link 全挂 ?v=__AQB_V__ 且注入 window.AQB_V
+
+    服务端替换只发生在响应层, 磁盘文件必须保留令牌本身(写回真实 V 会自毁哈希稳定性)。
+    漏一个资源 = 升级后那份 JS/CSS 仍吃旧缓存且无任何报错; 四套同口径.
+    """
+    for ui in _UI_ALL:
+        shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        head = shell.split("</head>", 1)[0]
+        srcs = re.findall(r'<script[^>]*\ssrc="([^"]+)"', head)
+        links = re.findall(r'<link[^>]*\shref="([^"]+)"', head)
+        assert srcs and links, f"{ui} head 没解析到 script/link(守阵口径坏了)"
+        for url in srcs + links:
+            assert "?v=__AQB_V__" in url, f"{ui} head 资源 {url} 缺版本令牌"
+        assert 'window.AQB_V = "__AQB_V__";' in head, f"{ui} head 缺 window.AQB_V 注入"
+        assert head.count("?v=__AQB_V__") == len(srcs) + len(links), (f"{ui} head 版本令牌数与资源数不等 —— 有资源漏挂或重复挂")
+
+
+def test_static_version_token_response_replacement(web_env):
+    """HTML 版本令牌响应时替换(D4/D6): 四皮肤无残留、形状正确、仍 no-cache; 无令牌响应零副作用
+
+    走 TestClient 真请求, 覆盖 /atlas/ 等目录形态与 /atlas/index.html 直取形态 ——
+    StaticFiles(html=True) 两条路径都吐同一份 index.html, 替换必须都生效。
+    """
+    _, client = web_env
+    v = compute_static_version(STATIC_ROOT)
+    assert re.fullmatch(r"[0-9a-f]{16}", v)
+    for ui in _UI_ALL:
+        for path in (f"/{ui}/", f"/{ui}/index.html"):
+            resp = client.get(path)
+            assert resp.status_code == 200, f"{path} 应可访问"
+            assert resp.headers.get("cache-control") == "no-cache", f"{path} 仍须 no-cache"
+            assert int(resp.headers["content-length"]) == len(resp.content), (f"{path} Content-Length 必须按替换后字节数回填")
+            assert "__AQB_V__" not in resp.text, f"{path} 有令牌残留"
+            assert f'window.AQB_V = "{v}";' in resp.text, f"{path} window.AQB_V 未被赋真实 V"
+            assert f"?v={v}" in resp.text, f"{path} head 资源未带真实 V"
+    # 无 token 的响应零副作用: CSS 与模板分片逐字节等于磁盘文件
+    css = client.get("/atlas/style.css")
+    assert css.status_code == 200 and css.headers.get("cache-control") == "no-cache"
+    with open(os.path.join(STATIC_ROOT, "atlas", "style.css"), "rb") as f:
+        assert css.content == f.read(), "CSS 二进制不得被令牌替换逻辑改动"
+    tpl = client.get("/shared/tpl/topbar.html")
+    assert tpl.status_code == 200 and "__AQB_V__" not in tpl.text
+    with open(os.path.join(STATIC_ROOT, "shared", "tpl", "topbar.html"), "rb") as f:
+        assert tpl.content == f.read(), "无令牌的 HTML 分片应原样返回"

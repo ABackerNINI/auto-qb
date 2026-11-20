@@ -238,9 +238,9 @@ def test_aq_kbd_css_four_skin_isomorphic() -> None:
     # 四皮肤同构: 键帽类是共享单文件单点, 四份 shell 全 link 同一文件 => 同一规则四皮肤生效
     for ui in _UI_ALL:
         shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
-        assert 'href="/shared/console_hub_panels.css"' in shell, (
-            f"{ui} shell 未 link console_hub_panels.css(键帽类四皮肤同构破口)"
-        )
+        # P2-1(D4): head CSS link 带 ?v=__AQB_V__, 锚闭合引号以挡 .css.map/.cssx 等畸形拼接
+        assert re.search(r'href="/shared/console_hub_panels\.css(?:\?[^"]*)?"',
+                         shell), (f"{ui} shell 未 link console_hub_panels.css(键帽类四皮肤同构破口)")
     # 置灰行键帽随行: dyn gate 置灰(.is-gated, 各皮肤 components.css 置灰链 label -> var(--fg-dim))
     # 行内键帽须锁死弱化色 --fg-dim, 防止任何皮肤专属 hover / 高对比覆盖把它抬回 --fg(Q5 否 b)
     assert ".ctx-menu .ctx-item.is-gated .aq-kbd { color: var(--fg-dim); }" in css, (

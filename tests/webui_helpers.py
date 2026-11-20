@@ -244,7 +244,8 @@ def _ui_aggregate(ui):
 def _ui_css_files(ui):
     """ui shell <head> 里声明的本 UI CSS 链接顺序(link 顺序即级联序) —— CSS 拆分后的加载序单一来源"""
     shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
-    hrefs = re.findall(r'<link rel="stylesheet" href="(/%s/[^"]+\.css)"' % ui, shell)
+    # P2-1(D4): head 资源 URL 带 ?v=__AQB_V__(响应时替换), 解析只取真实文件路径、剥掉 query
+    hrefs = re.findall(r'<link rel="stylesheet" href="(/%s/[^"?]+\.css)(?:\?[^"]*)?"' % ui, shell)
     assert hrefs, f"{ui} shell head 缺本 UI 的 CSS 链接"
     return [os.path.join(STATIC_ROOT, *h.lstrip("/").split("/")) for h in hrefs]
 
@@ -275,7 +276,7 @@ def _ui_css_effective(ui):
     shared = [
         os.path.join(STATIC_ROOT,
                      *h.lstrip("/").split("/"))
-        for h in re.findall(r'<link rel="stylesheet" href="(/shared/[^"]+\.css)"', shell)
+        for h in re.findall(r'<link rel="stylesheet" href="(/shared/[^"?]+\.css)(?:\?[^"]*)?"', shell)
     ]
     return "\n".join(open(p, encoding="utf-8").read() for p in _ui_css_files(ui) + shared)
 
