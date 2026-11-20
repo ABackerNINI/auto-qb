@@ -1,7 +1,7 @@
 # relocate-refactor
 
 > 摘要: 立项: 双子代理分析(结构7418行/45issue归类) + grilling D1-D10 全拍板 + 计划 26-11-15-2340 入库认领 8 Open issue; 并轨处置 2350 计划翻 Superseded + issue 0638 认领链改挂 + 活动切片注记
-> 最后活动: 2026-11-20 23:54
+> 最后活动: 2026-11-21 07:48
 
 **R0(2026-11-15 23:44):** 立项: 双子代理分析(结构7418行/45issue归类) + grilling D1-D10 全拍板 + 计划 26-11-15-2340 入库认领 8 Open issue; 并轨处置 2350 计划翻 Superseded + issue 0638 认领链改挂 + 活动切片注记
 
@@ -16,3 +16,5 @@
 **R5(2026-11-20 02:45):** S5 跨模块接口显式化两笔提交落地: a652290f(登记集退役+RelocateModule 派生查询三方法, fuse/grouping/ops_skip/qbapi 消费点迁 ctx.relocate 句柄)+80d8ea09(常量收口+接口 AST 守卫, 全仓 src 侧 relocate 家族私有名跨界 import 清零, units 增显式 __all__); 评审两批各 2 轮(10 修/3 修, 引文校验 10/10 与 3/3, 复评零新增); 验收达成: 消费面测试全绿(test.quick 6499P/2S/0F; test.full 6495P/6S/0F, 覆盖率闸门 99.73% 达标), grep 无跨层私有引用由 tests/test_relocate_interface_guard.py 机械承考(真仓 198 文件); 开工拍板三条记计划 §06 D11-D13(全按推荐); 基线切片 26-11-20-0244-relocate-refactor-s5 落位; 第二批 S6 待开工
 
 **R6(2026-11-20 23:53):** relocate 第二批 S6 探测异步化收尾: T1-T5 五笔提交落地(评审五批全闭环), test.full 全绿基线切片落位, 两计划/档案/issue 0638/坑档复发回写, 真机两项(dry-run 冒烟受理段+FS 不可达 tick 停摆断言)拍板延期待复验轮
+
+**R7(2026-11-21 07:48):** RM11 真机复验轮: RM04-35/36/37 三用例 3P/0F/0B 产品回归 0; issue 26-11-10-0638 关闭; 主计划 26-11-15-2340 与 RM11 执行计划翻 Done; 坑 seed-clean-vs-evidence 复发+1; 计划外四项入池; 基线切片 test.full 6656P/6S/0F
