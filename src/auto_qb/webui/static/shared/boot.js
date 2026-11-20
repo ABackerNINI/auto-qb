@@ -1,11 +1,14 @@
-/* boot.js — 模板分片注入胶水(两套 UI 共用, 见 plans/26-09-26-2233 §5)
+/* boot.js — 模板分片注入胶水(四套 UI 共用, 见 plans/26-09-26-2233 §5 / 26-11-20-0727 §03)
  *
  * shell(index.html)只保留 sprite + #app 内联段(登录遮罩) + 分片清单(tpl-manifest) + 本脚本;
- * 页面区模板拆在 tpl/*.html, 由这里按清单顺序 fetch 后注入, 全部成功才按序放行逻辑脚本
+ * 页面区模板拆在 tpl/*.html, 由这里并发 fetch 后按清单序注入, 全部成功才按序放行逻辑脚本
  * (app.js 末尾 createApp().mount("#app") 执行时模板已完整)。任何一步失败(含请求悬挂被请求级
  * 超时兜住, issue 26-10-16-1303): 显式错误占位 + 停止, 不放行任何逻辑脚本 —— 与「配置加载失败
  * + 重试」同风格, 不留半挂状态。
- * 时序纪律: 动态插入的 <script> 默认 async=true, 必须 async=false + onload 链保序。
+ * 时序纪律(plan 26-11-20-0727 P1): 分片 Promise.all 并发 fetch, 结果按清单 index 归位后拼接;
+ * 脚本用 link rel=preload as=script 并发预取(不 fetch —— P1 中间件仍全量 no-cache, fetch 预取
+ * 后再插 script src 会二次 ETag 重验, 破坏「每脚本只 1 次网络请求」), 全部成功后按清单序批量
+ * 插入 async=false 脚本, 执行序 = 清单序。fail-fast 不变: 任一失败即 fail(), 不注入半成品。
  */
 (function () {
   "use strict";
@@ -16,7 +19,9 @@
    * 给可读占位 + 重新加载按钮(与分片 404 同一路径)。
    * !值比低层单点 aqbFetch(shared/fetch_low.js, 15s)短: 本链阻塞整个首屏, 早失败更重要。
    * !本文件在清单脚本之前执行(装载链本身是放行它们的前提), 用不了那个单点(定义还没跑到),
-   *   故内联一份等价逻辑; 两处文案同款, 值各自守阵钉住。 */
+   *   故内联一份等价逻辑; 两处文案同款, 值各自守阵钉住。
+   * 并发化后(P1-1)每片仍各带一个 AbortController + 10s 定时器, 悬挂只拖垮该片 -> Promise.all
+   * 整体 reject -> fail(), 不会留下半挂等待。 */
   var BOOT_PART_TIMEOUT_MS = 10000;
 
   /* AbortError 的原始文案("The operation was aborted")对用户没有信息量 —— 与低层单点同款翻译 */
@@ -67,30 +72,22 @@
 
   var buckets = { app: "", body: "" };
   var slots = [];  /* 自定义选择器落点(方案A 停靠面板): { sel, text } —— app 桶插入后按选择器定位注入 */
-  var partIdx = 0;
+  var parts = mf.parts;
 
-  function nextPart() {
-    if (partIdx >= mf.parts.length) {
-      injectParts();
-      return;
-    }
-    var part = mf.parts[partIdx++];
-    var into = part.into === "body" || part.into === "app" ? part.into : "";  // 其余值 = 自定义选择器
+  /* P1-1(plan 26-11-20-0727): 并发 fetch 全部分片。每片独立 AbortController + 10s 定时器,
+   * 各片 finally 清自己的定时器。Promise.all 的结果按入参 index 排列(与完成先后无关), 全部
+   * 成功才在下面按清单序拼接注入 —— 顺序、全有或全无、10s 超时三条不变量都不变(D8);
+   * 任一片 reject(404 / 网络错误 / 悬挂 abort) -> Promise.all reject -> fail(), 一片都不注入。 */
+  var jobs = parts.map(function (part) {
     var ctl = new AbortController();
     var timer = setTimeout(function () { ctl.abort(); }, BOOT_PART_TIMEOUT_MS);
-    fetch(part.src, { credentials: "same-origin", signal: ctl.signal }).then(function (res) {
+    return fetch(part.src, { credentials: "same-origin", signal: ctl.signal }).then(function (res) {
       if (!res.ok) throw new Error(part.src + " HTTP " + res.status);
       return res.text();
-    }).then(function (text) {
-      if (into) buckets[into] += text;
-      else slots.push({ sel: part.into, text: text });
-      nextPart();
-    }).catch(function (err) {
-      fail("分片加载失败: " + partErrText(err));
     }).finally(function () {
       clearTimeout(timer);  // 成功/失败/悬挂都清掉(不留悬挂定时器)
     });
-  }
+  });
 
   function findSlot(sel, root) {
     /* 递归下钻 template.content 找落点容器(见 injectParts 内注释) */
@@ -116,18 +113,66 @@
       if (!target) { fail("分片落点不存在: " + slots[si].sel); return; }
       target.insertAdjacentHTML("beforeend", slots[si].text);
     }
-    var scriptIdx = 0;
-    (function nextScript() {
-      if (scriptIdx >= mf.scripts.length) return;
-      var src = mf.scripts[scriptIdx++];
-      var el = document.createElement("script");
-      el.src = src;
-      el.async = false; /* onload 链已串行, 此处再钉死插入序 -> 执行序 */
-      el.onload = nextScript;
-      el.onerror = function () { fail("脚本加载失败: " + src); };
-      document.head.appendChild(el);
-    })();
+    injectScripts();
   }
 
-  nextPart();
+  /* P1-2(plan 26-11-20-0727): 脚本从「逐个插入 + onload 递归」改为「并发预取 + 批量插入」。
+   * 预取只用 link rel=preload as=script, 不 fetch —— P1 阶段中间件仍全量 no-cache, fetch 预取
+   * 后再插 script src 会二次 ETag 重验, 破坏「每脚本只 1 次网络请求」; preload 结果可被后续
+   * script 复用缓存。全部预取成功(onload 计数到齐)才按清单序批量插入 async=false 脚本 ——
+   * 执行序 = 清单序(顶层 const 与依赖顺序依赖它, 不用 type=module 改作用域); 任一预取 onerror
+   * -> fail(), 且发生在插入**任何**脚本之前(D8 fail-fast, 404 专门注入验证的点)。P1 阶段 URL
+   * 用清单字面量, 不追加 ?v=(那是 P2-b 的事)。 */
+  function injectScripts() {
+    var scripts = mf.scripts;
+    var remaining = scripts.length;
+    var failed = false;
+
+    function preloadFail(src) {
+      if (failed) return;  /* 多个预取同时失败只报一次 */
+      failed = true;
+      fail("脚本加载失败: " + src);
+    }
+
+    function insertAll() {
+      for (var j = 0; j < scripts.length; j++) {
+        var s = document.createElement("script");
+        s.src = scripts[j];
+        s.async = false; /* 批量按清单序插入 + async=false -> 执行序 = 清单序 0..N-1 */
+        s.onerror = (function (src) {
+          return function () { fail("脚本加载失败: " + src); };
+        })(scripts[j]);
+        document.head.appendChild(s);
+      }
+    }
+
+    for (var i = 0; i < scripts.length; i++) {
+      /* 用 IIFE 锁住每轮的 src(ES5 var 无块级作用域), 否则 onload/onerror 全指向最后一轮 */
+      (function (src) {
+        var link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "script";
+        link.href = src;
+        link.onload = function () {
+          remaining -= 1;
+          if (remaining === 0 && !failed) insertAll();
+        };
+        link.onerror = function () { preloadFail(src); };
+        document.head.appendChild(link);
+      })(scripts[i]);
+    }
+  }
+
+  Promise.all(jobs).then(function (texts) {
+    /* texts[i] 对应 parts[i] —— Promise.all 保序, 与并发完成先后无关 */
+    for (var i = 0; i < texts.length; i++) {
+      var part = parts[i];
+      var into = part.into === "body" || part.into === "app" ? part.into : "";  // 其余值 = 自定义选择器
+      if (into) buckets[into] += texts[i];
+      else slots.push({ sel: part.into, text: texts[i] });
+    }
+    injectParts();
+  }).catch(function (err) {
+    fail("分片加载失败: " + partErrText(err));
+  });
 })();

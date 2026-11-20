@@ -5,6 +5,7 @@
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 次级入口由注册表声明、渲染层计数(「更多操作」+「转移到」, 模板骨架单份; 原 CTX-06 单入口断言随「转移到」入口过期, R5#30)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)入口接线守阵(2026-10-10; 2026-10-17 扩段删除链, issue 26-10-17-1703) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): 1. 判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles/**moving** 且**读 qB 原始 state**(kind 现 7 档, 排队仍被归进 downloading/seeding ⇒ 单看 kind 判不出排队; moving 虽自成第 7 档, 后端却不在任何 state_enum 谓词集合里 ⇒ 后端同须判 state 串); 2. 右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); 3. 行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); 4. 详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; 5. 投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表; 6. 删除链(唯一漏接入口的修复) —— _deleteFlow 按 reannouncePlan 收敛 + 全非活跃时闸门禁用复选框(popovers.html is-gated 类/标题/点击短路三件 + .opt-pill.is-gated 三套 CSS 成套压过 :hover)+ _reannounceAll 的 skip 桶(非活跃 warn 降级为跳过不挡删除, 推迟中/error 维持不放行)+ 后端 REANNOUNCE_INACTIVE_SKIP 文案含「非活跃」(前端文本判据锚点)。行为语义由同批 node 电池真跑(判定表 + 投递计划 + 删除闸门 + skip 桶分型)。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: 1. 常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); 2. fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); 3. AbortError 必须翻译(超时/取消分型 + timeout 标记); 4. `finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: 1. 单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); 2. **裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); 3. boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); 4. 四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
+- test_frontend_boot_concurrent_load: boot.js 静态资源并发装载守阵(plan 26-11-20-0727 P1-1/P1-2) —— 分片 Promise.all 并发 fetch + 按清单 index 归位拼接, 脚本 link rel=preload as=script 并发预取 + 全部成功后按清单序批量插入 async=false; 静态锚(Promise.all / preload / insertAll / async=false) + node 电池三型(乱序兑现仍按清单归位且 4 片各独立 10s 定时器; 分片 404 零注入零预取; 预取 404 在插入任何脚本前 fail), 无 fetch 预取、脚本 URL 无 ?v=
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: 1. 骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); 2. 抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; 3. document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; S1 起放行 qb_traffic_chart.js 的**节拍暂停**恰一处(plan 26-11-12-1139 §09: 页面隐藏暂停 rAF、可见后从当前显示值接续, 是"冻结拍内时钟"不是"跳拍"), 且必须在 _qbBeatFrame 内; 4. 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
 
 ## 皮肤档位口径
@@ -711,6 +712,132 @@ checks.push(["排出 10s 分片装载超时定时器", !!t]);
 })();
 """
 
+# node 电池(plan 26-11-20-0727 P1-1/P1-2): 加载真实 shared/boot.js(最小 DOM 桩)+ 可控 fetch。
+# 真跑并发语义 —— 分片全部并发发出 / 按清单 index 归位 / 任一失败零注入; 脚本 link preload
+# 并发预取 / 全部成功后按序批量插入 async=false / 预取失败在插入任何脚本前 fail()。
+# 无 node 静默跳过(与 _NODE_BOOT_HANG_PROBE 同口径)。
+_NODE_BOOT_CONCURRENT_PROBE = r"""
+const fs = require("fs");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const bootSrc = fs.readFileSync(process.argv[1], "utf8");
+const flush = async () => { for (let i = 0; i < 30; i++) await null; };
+const resp = (text) => ({ ok: true, status: 200, text: async () => text });
+const notFound = (src) => ({ ok: false, status: 404, text: async () => "" });
+
+function makeEnv(manifest, fetchImpl) {
+  const timers = [];
+  let cleared = 0;
+  global.setTimeout = (fn, ms) => { timers.push({ fn: fn, ms: ms }); return timers.length; };
+  global.clearTimeout = () => { cleared += 1; };
+  const appHtml = [];
+  const bodyHtml = [];
+  const dockHtml = [];
+  const dockTarget = { insertAdjacentHTML: (where, text) => dockHtml.push(text) };
+  const appEl = {
+    innerHTML: "",
+    querySelector: (sel) => (sel === ".dock" ? dockTarget : null),
+    querySelectorAll: () => [],
+    insertAdjacentHTML: (where, text) => appHtml.push(text),
+  };
+  const mfEl = { textContent: JSON.stringify(manifest) };
+  const links = [];
+  const scripts = [];
+  global.document = {
+    get cookie() { return ""; },
+    set cookie(v) {},
+    getElementById: (id) => (id === "app" ? appEl : mfEl),
+    body: { textContent: "", insertAdjacentHTML: (where, text) => bodyHtml.push(text) },
+    createElement: (tag) => (tag === "link"
+      ? { tag: tag, rel: "", as: "", href: "", onload: null, onerror: null }
+      : { tag: tag, src: "", async: true, onerror: null }),
+    head: { appendChild: (el) => { (el.tag === "link" ? links : scripts).push(el); } },
+  };
+  global.location = { pathname: "/atlas/" };
+  global.fetch = fetchImpl;
+  return {
+    timers: timers, appHtml: appHtml, bodyHtml: bodyHtml, dockHtml: dockHtml,
+    links: links, scripts: scripts, appEl: appEl,
+    get cleared() { return cleared; },
+  };
+}
+
+(async () => {
+  // 1 分片并发 + 按清单 index 归位 + 脚本 preload 并发 + 按序批量插入
+  const mf = {
+    parts: [
+      { src: "/tpl/p0.html", into: "app" },
+      { src: "/tpl/p1.html", into: "body" },
+      { src: "/tpl/p2.html", into: ".dock" },
+      { src: "/tpl/p3.html", into: "app" },
+    ],
+    scripts: ["/s0.js", "/s1.js", "/s2.js"],
+  };
+  const calls = [];
+  const pending = [];
+  const env = makeEnv(mf, (src, opts) => {
+    calls.push({ src: src, signal: !!(opts && opts.signal) });
+    return new Promise((res, rej) => pending.push({ src: src, res: res }));
+  });
+  eval(bootSrc);
+  ok("分片全部并发发出(eval 返回时 fetch 已发 4 次)", calls.length === 4);
+  ok("每片带独立 AbortSignal", calls.every((c) => c.signal));
+  ok("每片排出独立 10s 定时器", env.timers.length === 4 && env.timers.every((t) => t.ms === 10000));
+  // 乱序兑现 p2 -> p0 -> p3 -> p1
+  pending[2].res(resp("P2"));
+  pending[0].res(resp("P0"));
+  pending[3].res(resp("P3"));
+  pending[1].res(resp("P1"));
+  await flush();
+  ok("按清单 index 归位: app 桶 P0+P3(非完成序)", env.appHtml.join("") === "P0P3");
+  ok("按清单 index 归位: body 桶 P1", env.bodyHtml.join("") === "P1");
+  ok("按清单 index 归位: 自定义落点 P2", env.dockHtml.join("") === "P2");
+  ok("分片成功定时器全清", env.cleared === 4);
+  ok("脚本预取只用 link preload(无 fetch 预取, 每脚本仅 1 次请求)",
+     env.links.length === 3 && calls.length === 4);
+  ok("preload 属性 rel=preload / as=script / href=清单字面量",
+     env.links.every((l, i) => l.rel === "preload" && l.as === "script" && l.href === mf.scripts[i]));
+  ok("全部预取成功前不插入任何脚本", env.scripts.length === 0);
+  env.links[1].onload(); env.links[0].onload(); env.links[2].onload();  // 乱序 onload
+  await flush();
+  ok("脚本按清单序批量插入(执行序 0..2)", env.scripts.map((s) => s.src).join(",") === "/s0.js,/s1.js,/s2.js");
+  ok("脚本 async=false", env.scripts.every((s) => s.async === false));
+  ok("脚本 URL 用清单字面量(无 ?v=)", env.scripts.every((s) => s.src.indexOf("?v=") < 0));
+
+  // 2 多分片中任一失败 -> fail-fast, 成功分片也一片都不注入, 不预取脚本
+  const env2 = makeEnv({ parts: [
+    { src: "/tpl/a.html", into: "app" },
+    { src: "/tpl/b.html", into: "body" },
+    { src: "/tpl/c.html", into: ".dock" },
+  ], scripts: ["/x.js"] },
+                       (src) => Promise.resolve(src === "/tpl/b.html" ? notFound(src) : resp("OK")));
+  eval(bootSrc);
+  await flush();
+  ok("多分片中一片 404 -> fail()", /分片加载失败/.test(env2.appEl.innerHTML));
+  ok("分片失败成功片也不注入(app/body/自定义落点全零)",
+     env2.appHtml.length === 0 && env2.bodyHtml.length === 0 && env2.dockHtml.length === 0);
+  ok("分片失败不预取/插入脚本", env2.links.length === 0 && env2.scripts.length === 0);
+  ok("分片失败仍清定时器(每片各清一个)", env2.cleared === 3);
+
+  // 3 预取失败 -> 在插入任何脚本前 fail()
+  const env3 = makeEnv({ parts: [{ src: "/tpl/a.html", into: "app" }], scripts: ["/x.js", "/y.js"] },
+                       () => Promise.resolve(resp("OK")));
+  eval(bootSrc);
+  await flush();
+  ok("预取阶段全部 link 已建", env3.links.length === 2);
+  env3.links[0].onerror();
+  await flush();
+  ok("预取 404 -> fail()", /脚本加载失败/.test(env3.appEl.innerHTML));
+  ok("预取失败在插入任何脚本前 fail()", env3.scripts.length === 0);
+  env3.links[1].onload();
+  await flush();
+  ok("已 fail 后即便其余预取成功也不插脚本", env3.scripts.length === 0);
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})();
+"""
+
 
 def _js_fetch_call_lines(text):
     """JS 源码里真调用点 `fetch(` 的行号 —— 先抹掉注释与字符串内容, 再找未被 `.`/标识符前缀接住的
@@ -871,6 +998,45 @@ def test_frontend_raw_fetch_timeout_single_point():
             report = json.loads(lines[-1])
             assert report["failed"] == [], \
                 f"{label}电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_frontend_boot_concurrent_load():
+    """boot.js 静态资源并发装载守阵(plan 26-11-20-0727 P1-1/P1-2): 分片 Promise.all 并发 fetch +
+    按清单 index 归位拼接, 脚本 link rel=preload as=script 并发预取 + 按序批量插入 async=false。
+
+    只并发 fetch, 三条不变量不变(D8): 模板按清单序注入且全有或全无; 脚本执行序 = 清单序;
+    任一失败走 fail()(可读占位 + 重新加载按钮), 且不注入半成品 / 不放行脚本。P1 阶段脚本 URL
+    用清单字面量, 不追加 ?v=(那是 P2-b 的事); 预取只用 preload 不用 fetch —— 后者会在 P1 全量
+    no-cache 中间件下二次 ETag 重验, 破坏「每脚本只 1 次网络请求」判据。
+    静态锚钉住并发形态(Promise.all / link preload / 批量插入 async=false), 行为面 node 电池真跑
+    三型: 分片并发且乱序兑现仍按清单归位 + 脚本乱序 onload 仍按清单序插入; 分片 404 -> 零注入
+    零预取; 预取 404 -> 插入任何脚本前 fail()。无 node 静默跳过(与 _NODE_BOOT_HANG_PROBE 同口径)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    boot_js = open(os.path.join(shared, "boot.js"), encoding="utf-8").read()
+
+    assert "Promise.all(" in boot_js, "boot.js 分片未并发(Promise.all 缺失, 退回串行 then 链)"
+    assert 'link.rel = "preload"' in boot_js and 'link.as = "script"' in boot_js, \
+        "boot.js 脚本预取不是 link rel=preload as=script(fetch 预取会二次 ETag 重验)"
+    assert "insertAll()" in boot_js, "boot.js 缺「全部预取成功后批量插入」收口(仍按 onload 递归串行?)"
+    assert "s.async = false" in boot_js, "boot.js 批量插入的脚本未钉 async=false(执行序会漂)"
+
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_BOOT_CONCURRENT_PROBE,
+             os.path.join(shared, "boot.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"boot 并发装载 node 电池跑挂: {proc.stderr.strip()}"
+        lines = proc.stdout.strip().splitlines()
+        assert lines, "boot 并发装载 node 电池无输出(被悬挂挂住了? 见探针注释)"
+        report = json.loads(lines[-1])
+        assert report["failed"] == [], \
+            f"boot 并发装载电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 # node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— 1. chain 在途不排下一拍
