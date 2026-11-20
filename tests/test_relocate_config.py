@@ -17,6 +17,8 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_low_space_warn_units: low_space_warn 走 parse_fsize(二进制单位; 10G 这种写法拒收)
 - test_relocate_assume_shared_bool: assume_shared(计划 26-11-04-0055 §03.2)缺省 False(保守默认)/
   显式 true 经 loader 进 Config / 非法类型走 parse_bool 聚合报错(不打断其它键)
+- test_relocate_foreign_torrent_bool: foreign_torrent(计划 26-11-20-0434 S1)缺省 True(用户拍板 D5
+  默认开启)/ 显式 false 经 loader 进 Config / 非法类型走 parse_bool 聚合报错(不打断其它键)
 - test_relocate_pending_tag_namespace: pending_tag(计划 26-11-04-1042 P3)缺省空(关闭);
   非空必须落在保留命名空间(zRelocate 前缀)、不含逗号、类型为字符串; loader 透传
 - test_relocate_load_config_explicit_values: 显式 YAML 值按 parse_* 语义进入 Config(含时间/大小)
@@ -157,6 +159,27 @@ def test_relocate_assume_shared_bool():
             yaml.safe_dump(cfg_dict, f, allow_unicode=True)
         cfg = load_config(path)
     assert cfg.relocate.assume_shared is True
+
+
+def test_relocate_foreign_torrent_bool():
+    """foreign_torrent(计划 26-11-20-0434 S1): 缺省 True(外部旧路径种子处置默认开启, 用户拍板 D5
+    改判); 显式 false = 不侦测不处置; 非法类型走 parse_bool 聚合报错且不打断其它键"""
+    assert RelocateConfig().foreign_torrent is True  # 缺省开启(D5 改判, 原推荐默认关)
+    assert _validate({"foreign_torrent": "true"}) == []
+    assert _validate({"foreign_torrent": "false", "enabled": "true"}) == []
+
+    errors = _validate({"foreign_torrent": "maybe", "enabled": "maybe"})
+    assert any("config.relocate.foreign_torrent" in e for e in errors), errors
+    assert any("config.relocate.enabled" in e for e in errors), errors  # 聚合: 其它键报错不被打断
+
+    # loader 面: 显式 YAML 值按 parse_bool 语义进入 Config; 段缺省 = 字段默认 True
+    cfg_dict = {"config": {"relocate": {"foreign_torrent": "false"}}}
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "c.yml")
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg_dict, f, allow_unicode=True)
+        cfg = load_config(path)
+    assert cfg.relocate.foreign_torrent is False
 
 
 def test_relocate_pending_tag_namespace():

@@ -545,6 +545,9 @@ class RelocateConfig:
     assume_shared: 显式声明 qB 与 auto-qb 已共享文件系统(计划 26-11-04-0055 §03.2):
         true = 跳过一次性同机强探测(E1), 回执显著标注「未经 auto-qb 验证, 由用户承担」;
         false(默认, 保守默认)= 不跳过, 多成员组首次迁移前照常强探测。唯一越权逃生口
+    foreign_torrent: 外部旧路径种子处置(计划 26-11-20-0434 S1): IYUU 等外部工具经 qB 按
+        旧路径加进来的辅种种子 —— 收尾窗内到达的零破坏纳入在途收尾, 收尾后到达的只通知;
+        默认 true(用户拍板 D5 改判, 原推荐默认关); false = 不侦测不处置(行为与无此功能一致)
     """
 
     enabled: bool = False
@@ -560,6 +563,9 @@ class RelocateConfig:
     # qB 的 BT_backup 目录(计划 26-11-11-0259 S1, 单实例标量化): 空(默认)= fastresume 收尾
     # 功能未启用(预检给结构化拒绝, 不影响启动); qB 与本程序不同文件系统时须手写
     bt_backup: str = ""
+    # 外部旧路径种子处置总开关(计划 26-11-20-0434 S1/D5): 默认开启(零破坏动作面 ——
+    # 不删种/不重加/不跳检/不自动校验, 全程只纳入或通知); 消费面在 relocate_foreign(T2 批)
+    foreign_torrent: bool = True
 
 
 @dataclass

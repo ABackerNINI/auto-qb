@@ -414,6 +414,9 @@ _LOADER_PROBES = {
     # bt_backup(计划 26-11-11-0259 S1 收编为 relocate.bt_backup 标量, 原顶层表退役):
     # 剥空白单标量路径, 空 = fastresume 收尾未启用 —— 探针用非空路径覆盖往返
     "relocate.bt_backup": ("/probe/bt_backup", "/probe/bt_backup"),
+    # foreign_torrent(计划 26-11-20-0434 S1): 默认 true(外部旧路径种子处置默认开启),
+    # 探针用 false(防与默认同值空转)
+    "relocate.foreign_torrent": ("false", False),
 }
 
 

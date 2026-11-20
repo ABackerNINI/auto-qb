@@ -153,6 +153,7 @@ relocate.allow_uac
 relocate.assume_shared
 relocate.bt_backup
 relocate.enabled
+relocate.foreign_torrent
 relocate.hard_max_links
 relocate.low_space_warn
 relocate.move_stall_timeout

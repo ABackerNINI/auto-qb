@@ -530,6 +530,7 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
     verify/allow_uac 等布尔与枚举直接按 models 默认取 _get 回退; 时间键走 parse_time
     ("10m"/"2h"), 空间键走 parse_fsize("10GiB" —— 本仓 parse_fsize 只认二进制单位)。
     bt_backup(计划 26-11-11-0259 S1 收编, 原顶层 bt_backup 表退役)为标量路径, 剥首尾空白。
+    foreign_torrent(计划 26-11-20-0434 S1)布尔键, 缺省 true(外部旧路径种子处置默认开启)。
     """
     d = RelocateConfig()
     if not isinstance(spec, dict):
@@ -546,6 +547,7 @@ def load_relocate_config(spec: Any) -> RelocateConfig:
         assume_shared=_get(spec, "assume_shared", d.assume_shared, parse_bool),
         pending_tag=_get(spec, "pending_tag", d.pending_tag, lambda v: str(v or "").strip()),
         bt_backup=_get(spec, "bt_backup", d.bt_backup, lambda v: str(v or "").strip()),
+        foreign_torrent=_get(spec, "foreign_torrent", d.foreign_torrent, parse_bool),
     )
 
 

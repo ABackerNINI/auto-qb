@@ -66,6 +66,8 @@ KNOWN_RELOCATE_KEYS = {
     "pending_tag",
     # BT_backup 目录标量(计划 26-11-11-0259 S1 收编; 原顶层 bt_backup 表退役)
     "bt_backup",
+    # 外部旧路径种子处置总开关(计划 26-11-20-0434 S1; 默认开启, 消费面 relocate_foreign)
+    "foreign_torrent",
 }
 
 KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu", "transfer"}
@@ -705,7 +707,7 @@ def _validate_fs(spec: dict | None, errors: List[str]) -> None:
 
 
 def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
-    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 11 键逐一键级校验
+    """relocate 段(整组迁移, 计划 26-10-18-1604 §3.7): 12 键逐一键级校验
 
     阈值分流细节(alias_file_threshold 的 7/8/9 边界、hard_max_links 与目录别名的取舍)
     由 P2 引擎纯函数表驱动测试覆盖, 本处只做形状与粗范围: 两个 int >= 1 且
@@ -714,7 +716,8 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
     组绕过逐文件链接硬上限, 「链接爆炸防护」静默失效); verify 取值域
     单点(RELOCATE_VERIFY_MODES, schema.fields 同源); 两个时间键 > 0; low_space_warn 走
     parse_fsize(二进制单位, YAML 写 10GiB; 0 = 不告警); bt_backup 标量(计划
-    26-11-11-0259 S1 收编)只验形状, 见 _validate_relocate_bt_backup。
+    26-11-11-0259 S1 收编)只验形状, 见 _validate_relocate_bt_backup;
+    foreign_torrent(计划 26-11-20-0434 S1)走 parse_bool 同款(缺省 true 不在此拦)。
     """
     if spec is None:
         return
@@ -722,7 +725,7 @@ def _validate_relocate(spec: dict | None, errors: List[str]) -> None:
         errors.append("config.relocate: 必须是字典")
         return
     _check_unknown_keys(spec, KNOWN_RELOCATE_KEYS, "config.relocate", errors)
-    for key in ("enabled", "allow_uac", "assume_shared"):
+    for key in ("enabled", "allow_uac", "assume_shared", "foreign_torrent"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.relocate.{key}", errors)
     parsed_ints: dict = {}

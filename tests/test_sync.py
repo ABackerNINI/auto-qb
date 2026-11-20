@@ -39,6 +39,15 @@
 - test_store_last_added_removed_match_return_on_delta: S1 增量轮属性与返回值一致
 - test_store_last_added_removed_empty_on_zero_change: S1 零变化轮属性为空(不留上一轮残值)
 - test_store_last_added_removed_cleared_by_reset_sync: S1 reset_sync 后属性为空
+- test_store_last_added_diff_startup_baseline_round: S2a(计划 26-11-20-0434)启动基线轮
+  last_added=全体但差集为空(存量不算新增, 与 last_added 的唯一差异点)
+- test_store_last_added_diff_first_seen_after_baseline: S2a 基线后各拍差集 = 本拍 first-seen
+  原始集(增量/全量轮同口径; 未过 tracker 匹配门, 侦测地基语义)
+- test_store_last_added_diff_empty_on_zero_change: S2a 零变化轮差集为空(不留上一拍残值)
+- test_store_last_added_diff_vanish_reappear_counts: S2a 种子消失后重新出现 = 重新
+  first-seen, 计入差集
+- test_store_last_added_diff_reset_sync_and_reconnect_full: S2a reset_sync 清空差集;
+  重连后全量轮存量种子不重报、断连期间新到的种子计入(记录跨断连存活)
 - test_store_apply_sync_full_prunes_context_missing: rid 失效全量 -> 未出现者视为删除
 - test_store_remove_then_restore_pending: remove_torrent 登记待报删除 / restore_torrent 撤销
 - test_store_apply_sync_fallback_when_endpoint_unavailable: 无 sync 端点 -> 降级 + 告警一次
@@ -424,6 +433,113 @@ def test_store_last_added_removed_cleared_by_reset_sync():
 
     store.reset_sync()
     assert store.last_added == [] and store.last_removed == []
+
+
+def test_store_last_added_diff_startup_baseline_round():
+    """S2a(计划 26-11-20-0434): 启动基线轮 —— 首个成功应用轮建立的初始快照整体不进差集
+
+    last_added 保持既有契约(首轮=全体, WebUI 脏行推导依赖); last_added_diff 为空
+    (存量是基线不是"新到", 启动首轮全量兜底由时机触发方负责)。这是两者唯一的语义分叉点。
+    """
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    store = TorrentStore(client)
+
+    added, _removed = store.apply_sync(_api(client, store))
+
+    assert set(added) == {"H1", "H2"} and set(store.last_added) == {"H1", "H2"}
+    assert store.last_added_diff == frozenset()
+
+
+def test_store_last_added_diff_first_seen_after_baseline():
+    """S2a(计划 26-11-20-0434): 基线后各拍差集 = 本拍 first-seen 的原始 hash 集
+
+    增量轮与全量轮(rid 失效)同口径; 这是同步层原始差集 —— 在 qbmanager 的 tracker 匹配门
+    之前现算, 未匹配 tracker 配置的种子同样进入(侦测地基, 消费方 relocate_foreign 每拍读)。
+    """
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)  # 基线轮
+
+    # 增量轮: 新到 H2/H3 -> 差集 = 两者的 first-seen 集
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    client.torrents["H3"] = FakeTorrent(hash="H3", name="T3")
+    added, _removed = store.apply_sync(api)
+    assert added == ["H2", "H3"]
+    assert store.last_added_diff == frozenset({"H2", "H3"})
+
+    # 全量轮(rid 失效): 存量不重报, 新到的 H4 计入 —— 全量兜底与逐拍差集互补不重叠
+    store.rid = 999
+    client.torrents["H4"] = FakeTorrent(hash="H4", name="T4")
+    added, _removed = store.apply_sync(api)
+    assert added == ["H4"]
+    assert store.last_added_diff == frozenset({"H4"})
+
+
+def test_store_last_added_diff_empty_on_zero_change():
+    """S2a(计划 26-11-20-0434): 零变化轮(零成本早退)差集为空, 不留上一拍残值"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)
+
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    store.apply_sync(api)
+    assert store.last_added_diff == frozenset({"H2"})  # 前置: 上一拍确有残值
+    store.apply_sync(api)  # 零变化轮
+
+    assert store.last_added_diff == frozenset()
+
+
+def test_store_last_added_diff_vanish_reappear_counts():
+    """S2a(计划 26-11-20-0434): 种子消失后重新出现 = 重新 first-seen, 计入差集
+
+    (IYUU 侧删了重加、或用户删后重加的形态: 对侦测方都是"这一拍新到的种子"。)
+    """
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)  # 基线轮(H1 入基线)
+
+    del client.torrents["H1"]
+    added, _removed = store.apply_sync(api)
+    assert added == [] and store.last_added_diff == frozenset()  # 消失不进 added 差集
+
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    added, _removed = store.apply_sync(api)
+    assert added == ["H1"] and store.last_added_diff == frozenset({"H1"})  # 重现 = 新到
+
+
+def test_store_last_added_diff_reset_sync_and_reconnect_full():
+    """S2a(计划 26-11-20-0434): reset_sync 清空差集; 重连后全量轮存量不重报、断连期新到计入
+
+    重连(client.setter -> reset_sync)只失效 rid, by_hash 记录跨断连存活 —— 重连全量轮
+    只有断连期间真新到的 hash 进差集, 存量种子不重报(否则重连即全库误报"新到")。
+    """
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    store = TorrentStore(client)
+    api = _api(client, store)
+    store.apply_sync(api)  # 基线轮
+
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    store.apply_sync(api)
+    assert store.last_added_diff == frozenset({"H2"})  # 前置: 上一拍残值
+
+    # 模拟断连重连: 换客户端 -> reset_sync; 断连期间 qB 侧新到 H3
+    store.reset_sync()
+    assert store.last_added_diff == frozenset() and store.last_added == []
+    client.torrents["H3"] = FakeTorrent(hash="H3", name="T3")
+
+    added, _removed = store.apply_sync(api)  # rid=0 -> 全量轮
+    assert store.need_validate is True
+    assert added == ["H3"]
+    assert store.last_added_diff == frozenset({"H3"})  # H1 存量不重报, 只有 H3 计入
 
 
 def test_store_apply_sync_full_prunes_context_missing():

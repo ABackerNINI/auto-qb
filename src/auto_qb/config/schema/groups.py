@@ -529,6 +529,17 @@ GROUPS: Tuple[Group, ...] = (
                         help="qB 的 BT_backup 目录(fastresume 收尾改写用): 留空 = fastresume 收尾未启用; "
                         "可在设置页自动探测; qB 与本程序不同文件系统时须手写",
                     ),
+                    Field(
+                        "foreign_torrent",
+                        "外部旧路径种子处置",
+                        "bool",
+                        default="true",
+                        grey_if=("enabled", "true"),
+                        help="IYUU 等外部工具经 qB 按旧路径加进来的辅种种子(relocate 整组迁移改过路径后): "
+                        "收尾窗内到达的自动零破坏纳入在途收尾, 收尾后到达的只通知不动(含数据现位置提示); "
+                        "全程不删种/不重加/不跳检/不自动校验。关闭 = 不侦测不处置(行为与无此功能一致); "
+                        "处置以「旧路径命中 + 文件清单一致」为前提, 清单不一致只告警",
+                    ),
                 ),
             ),
             Field(
