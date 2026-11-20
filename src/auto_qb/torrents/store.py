@@ -154,6 +154,13 @@ class TorrentStore:
         self.need_validate: bool = True
         self.using_fallback: bool = False
         self.validate_sample: Optional[Any] = None
+        # 同步纪元计数(计划 26-11-20-0434 T2/S2): 每次 reset_sync +1 的单调计数器, 消费方
+        # (relocate_foreign 侦测面)跨拍比对即得「qB 重连/热重载换客户端发生过」信号 ——
+        # 重连首轮全量兜底扫描的触发源。rid 不堪此任: apply_sync 的同步异常路径也把 rid
+        # 归零(「下轮强制全量」语义), 非「重连」专属; 本计数器单点在 reset_sync(生产唯一
+        # 调用方 = client setter, 即重连/换客户端), __init__ 不计(启动基线由「闸门激活
+        # 首轮」时机负责)。
+        self.sync_epoch: int = 0
         # 速率键新鲜度追踪(P3, 纯内存): 连续未上报轮数 + 本段缺席期是否已告警(节流);
         # 见 _track_rate_key_freshness, reset_sync 随同步态一并复位
         self._rate_absent_streak: int = 0
@@ -449,6 +456,7 @@ class TorrentStore:
         self.need_validate = True
         self.using_fallback = False
         self.validate_sample = None
+        self.sync_epoch += 1  # 同步纪元(计划 26-11-20-0434 T2/S2): 重连/换客户端信号, 消费方跨拍比对
         self._rate_absent_streak = 0
         self._rate_stale_warned = False
         self.delta_fields = {}

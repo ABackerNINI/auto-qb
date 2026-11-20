@@ -543,8 +543,14 @@ class LifecycleMixin:
         state 恢复的非终态 job 不经任何入口闸(崩溃/重启窗口即常态), 闸门必须落在这里,
         否则 --dry-run 启动会照着昨天的账真写。启动对账(_startup_reconcile_tick, 消费点
         在本函数体内)同受此闸: 重入是真写相位, 干跑 flag 在手也不判。与 ops_mod.on_micro_line 同款。
+
+        外部旧路径种子侦测面(ForeignMixin._foreign_on_task_line, 计划 26-11-20-0434 T2)
+        在本 hook 首位调用、在 enabled 早退**之前** —— 门激活观测(启动首轮/foreign_torrent
+        翻转的信号面)必须覆盖 enabled=false 拍, 否则「关->开」翻转漏观测; 闸门/dry-run/
+        ctx 自查在侦测面入口内完成(见其 docstring)。
         """
         conf = self._live_conf()
+        self._foreign_on_task_line(conf)
         if conf is None or not getattr(conf, "enabled", False):
             return
         if self._dry_run():

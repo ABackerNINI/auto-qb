@@ -38,6 +38,7 @@ from ..module import AppContext, BaseModule
 from . import relocate_units as ru
 from .relocate_units import RelocateJob
 from .relocate_common import logger
+from .relocate_foreign import ForeignMixin
 from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
 from .relocate_exec import ExecMixin, arm_members_of
@@ -47,7 +48,7 @@ from .relocate_probe import PROBE_RECEIPT_OUTBOX_MAX, new_probe_salt
 _PROBE_STATUSES = ("passed", "failed")
 
 
-class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
+class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, ForeignMixin, BaseModule):
     """整组迁移模块: relocate 段认领 + P2 只读预检引擎(执行体随 P3)
 
     三入口(均只读, 经 WEB 命令队列在主循环线程执行, 与写命令串行化):
@@ -106,6 +107,19 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         # drop-oldest 封顶 PROBE_RECEIPT_OUTBOX_MAX(64); 重启即空 = 已投未取的终态随
         # 进程消亡不补发(与 webui results 同生灭, 前端重启自愈清在途命令)。
         self._probe_receipt_outbox: deque = deque(maxlen=PROBE_RECEIPT_OUTBOX_MAX)
+        # 外部旧路径种子侦测面(T2, 计划 26-11-20-0434; 机制与口径单点见 relocate_foreign.py):
+        # _foreign_pending = 候选池(R4 有界 FIFO, dict 当插入序集合用 —— O(1) 去重 + FIFO
+        # 出队序一体; 只存内存, 重启丢失 = D13 接受边界, 时机兜底自愈); _foreign_failed_warned
+        # = 单候选处理异常已告警位(T2 评审护栏: WARNING 一次后转 DEBUG 静默重试, 出队即清);
+        # 其余四个是时机观测的跨拍游标: 门激活观测(None = 从未观测) / 待扫位 / 重连锚 /
+        # 收尾窗集合(None = 首拍只记不比对, 防「启动恢复即 armed」误触发)。
+        self._foreign_pending: dict = {}
+        self._foreign_failed_warned: set = set()
+        self._foreign_seen_active: Optional[bool] = None
+        self._foreign_need_first_scan: bool = False
+        self._foreign_sync_epoch: Optional[int] = None
+        self._foreign_reconnect_round: Optional[int] = None
+        self._foreign_window: Optional[frozenset] = None
 
     def sections(self) -> tuple:
         # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块

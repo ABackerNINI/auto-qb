@@ -4,9 +4,9 @@ S5 验收里「grep 无跨层私有引用」此前只靠 grep 人肉, 本守阵�
 四条判据(全部按解析后的**全限定名**判, 不按文本命中; 相对导入解析成全限定名后与绝对
 导入同族, webui 深层相对路径 `from ....core.modules...` 天然覆盖):
 
-- P1 禁入面 import: 非 relocate 家族文件(家族 = core/modules/relocate_{mod,exec,lifecycle,
-  plan,probe,proof,common,units}.py)import 解析到 `auto_qb.core.modules.relocate_{probe,
-  lifecycle,exec,plan,mod,proof,common}` -> 红; relocate_units 是公开判定层, 族外一律可依。
+- P1 禁入面 import: 非 relocate 家族文件(家族 = FAMILY_FILES 单点, 现含 mod/exec/lifecycle/
+  plan/probe/proof/common/units/foreign)import 解析到 FORBIDDEN_FAMILY_MODULES(即
+  FAMILY_MODULES 除 relocate_units 外全部 —— units 是公开判定层, 族外一律可依) -> 红。
   TYPE_CHECKING 块运行期不执行(R4#18 既有口径), 但豁免钉死为 core/module.py 一处; 运行期
   豁免钉死为 core/modules/__init__.py 一处(RelocateModule 再导出装配面)。qbmanager 的
   `from .modules import RelocateModule` 是包级 import, 解析目标不是 relocate_* 子模块,
@@ -51,13 +51,15 @@ PACKAGE_PARTS = ("auto_qb", )
 OUTSIDE = "<outside-auto_qb>"
 
 UNITS_MODULE = "auto_qb.core.modules.relocate_units"
+# family 成员清单(T2 追加 "foreign": 外部旧路径种子侦测面, 计划 26-11-20-0434 D7 落点
+# relocate 模块内新面 —— 家族纪律与既有成员同口径: 族外不得 import, 判定纯函数归 units)
 FAMILY_FILES = frozenset(
     f"core/modules/relocate_{name}.py"
-    for name in ("mod", "exec", "lifecycle", "plan", "probe", "proof", "common", "units")
+    for name in ("mod", "exec", "lifecycle", "plan", "probe", "proof", "common", "units", "foreign")
 )
 FAMILY_MODULES = frozenset(
     f"auto_qb.core.modules.relocate_{name}"
-    for name in ("mod", "exec", "lifecycle", "plan", "probe", "proof", "common", "units")
+    for name in ("mod", "exec", "lifecycle", "plan", "probe", "proof", "common", "units", "foreign")
 )
 FORBIDDEN_FAMILY_MODULES = FAMILY_MODULES - {UNITS_MODULE}
 REGISTRY_NAMES = frozenset({"relocating_hashes", "resuming_hashes", "relocating_alias_roots"})
