@@ -1,13 +1,15 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 6/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `kbd-row-kind-dispatch.md` … `poll-reseed-filter.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `kbd-cursor-first-row-gap.md` … `password-autofill-dirty.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [kbd-cursor-first-row-gap.md](kbd-cursor-first-row-gap.md) | 键盘光标首行虚线贴住吸顶列头: 行间有 gap 但首行与列头 0 间隙 | 光标虚线上边缘被遮挡, 第一个种子虚线, kb-cursor 上边被压, 首行贴着列头, 虚线缺一半, 键盘光标上边看不见, 三主表首行, torrents-dock group-table, padding-top |
+| [kbd-range-view-scope.md](kbd-range-view-scope.md) | 成员行的 Shift+↑↓ 范围选择, `_kbExtend` 曾**一律**调 `shiftTorrentSel` —— 它的候选是**种子页平铺列表** `filteredTorrents`。在辅种页/追剧页该列表要么为空(懒加载, 未进过种子页)、要么与屏幕上的行无关, 于是范围选择**静默落空**(不报错、不提示, 只是"选不中"), 而同一功能在种子页完全正常 —— 只在跨视图时露头。鼠标路径同族: `shiftMemberSel` 硬编码查 `expandedKey`(辅种页字段), 追剧页 `expandedKey` 恒空 ⇒ 集明细行 Shift+点击也选不中。 | 键盘 Shift+↑↓ 选不中, 范围选中没反应, 辅种页/追剧页范围选择失效, shiftMemberSel, shiftTorrentSel, _kbExtend, filteredTorrents, 成员行范围, 选中集合不增长, 选中数不涨 |
 | [kbd-row-kind-dispatch.md](kbd-row-kind-dispatch.md) | `shortcuts.js` 的键盘动作大量按 `c.kind` 分派(group / show / ep / torrent)。把一种新行种纳入 `_kbRows()` 光标链时, 只在**新增那一条链**上接线(如"成员行能 ↓ 走到""成员行能 Shift 扩选"), 而同族的**其它分派**若没同步, 症状全是**静默无反应**(不报错、无 toast, 只是"按了没动静")。2026-10-09 实证: 成员行(展开组/展开集的成员, kind=torrent)入链后, ← 收起当前行(`_kbCollapseRow`)只认 group/show/ep, 光标按 ↓ 进组后 ← 收不起任何东西 —— 用户报「收起当前行快捷键无法在键盘光标进入分组后收起分组」。 | 新增行种/成员行入光标链, 改 `_kbRows` 或任一 `_kb*` 动作, 快捷键按了没反应, 收起当前行不生效, 光标进组后 ← 无效, kind 分派漏分支 |
 | [kbd-tab-set-sync.md](kbd-tab-set-sync.md) | 详情面板的页签快捷键(Alt+1~5)与**可见页签集合**是两套独立事实源 —— 页签栏收敛为合并页签后, 注册表五档仍按旧的四页签映射(`Alt+3` 名义「用户页」实际落到收起页签), 症状是**按了键切到别的页签**(不报错、不白屏, 只是"怎么跳到这页去了")。修法 = 键盘入口按 `dtMergeTabsOn`(与页签栏 `v-if` 同一判据)**按位次重排**到可见页签, 且重排必须**先于**功能门控; 帮助/设置面板文案同源改写。2026-10-10 用户报「标签合并后没有同步修改快捷键」。 | 改页签/子视图集合, 页签栏收敛或增删页签, 快捷键切错页签, Alt+数字不对, 合并页签, 快捷键没同步, 按了跳到别的页 |
 | [layout-css.md](layout-css.md) | 行宽口径、表头吸顶、两表逐栏对齐、sticky 层叠、flex 挤压、flex 子项错行、特异性之争、状态色分不出 —— 前端版式类的固定判据。 | 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 对齐, 未对齐, 没对齐, 错行, 文字高低不一, 后者更高, 统计栏, 工具条, 图例, align-items, stretch, 垂直居中, 基线, align-items baseline, 省略号, 媒体查询, 颜色不对, 按钮, 控件变形过高, 控件尺寸, 两态分不出, 状态色, 徽章底色, 底色相近, 同亮度, 顶栏, 标题栏, 状态栏, 表头, 列标题行, thead, 底色与其余部分难区分, 同色, 明度差不足, chrome 底色, UA 默认色, 两表对齐, 逐栏对齐, 列宽不一致, table-layout, scrollbar-gutter, 置顶专区 |
@@ -19,5 +21,3 @@
 | [opacity-tier-ghosting.md](opacity-tier-ghosting.md) | 深色底 + 两排高度相似的路径文本(当前位置/目标位置只差一两级目录)时, 给上排 `opacity:.55` 做「暗/亮」分层, 远看不会被读成层级, 而是被读成下排文字的半透明残影(近视错觉)。层级要靠**形状差异**(删除线/标签), 不能靠亮度差; 尤其别在等宽 11px 路径上用合成斜体(oblique 发虚, 骨架不变, 仍像歪掉的影子)。 | 双排显示, 保存路径, 整组迁移, relocate, rel-pair, rel-pa, opacity, 颜色浅, 伪影, 重影, 近视错觉, 淡影, 深色底, 层级, 删除线, 斜体, row_lang.css, D6 |
 | [overlays.md](overlays.md) | 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序; 含浮层几何(视口钳位 / 尺寸估算)与 Esc 退栈顺序。 | 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor, 视口钳位, 菜单高度, 溢出视口, 菜单项点不到, outside of the viewport, ESC 退栈, 退栈顺序, Esc 关错层, 两图同开, 层叠顺序, 透出正文, 背景透明, 毛玻璃, 半透明底, 浮层底, --bg-pop |
 | [password-autofill-dirty.md](password-autofill-dirty.md) | 密码框的浏览器自动填充会凭空写脏配置树 | 有改动还没保存, 一进设置就脏, 自动填充, autofill, 密码框, 密码管理器, autocomplete, new-password, 脏标记凭空变真, 配置树被写 |
-| [perf-cadence.md](perf-cadence.md) | 主循环节拍、缓存边界、埋点与相对时间 —— 改热路径 / 改节拍 / 加埋点前必读。 | 性能, 热路径, jsonable_encoder, 节拍, 刷新, 轮询, 缓存, 埋点, 相对时间, 时间列, yapf |
-| [poll-reseed-filter.md](poll-reseed-filter.md) | 数据是轮询/增量刷新、某一组筛选的**候选值从数据派生**(不是定长常量数组)时, 若在每次数据到达的派生函数里直接 `选中集.add(候选)`, 每轮刷新都会把用户刚取消的勾选加回来 —— 表现是「这一组筛选器每隔 N 秒自动重置」; 而候选是定长常量的那几组(形态 / issue 类型)完全正常, 因为它们的候选压根不进派生。**只中一组、且按刷新节奏复发**就是本坑的指纹。修复 = 给自动入选加「只补一次」的记账(statusSeeded): 派生仍补数据里新冒出来的候选(否则带新值的条目会静默消失), 但已入选过的值不再碰。**同族坑 (本文末节)**: 给筛选器加 localStorage 持久化后, 还原时若不同时把已知候选计入该台账, 刷新后首轮派生又把用户取舍盖回 —— 症状与不落盘时一样, 看着像"持久化没生效"。 | 筛选器自动重置, 过滤器自己复位, 每隔一会儿又全选, 勾选取消了又回来, 轮询后筛选失效, 派生候选 vs 常量候选, 只有某一组筛选出问题, 状态筛选器重置, poll reseed, auto-reselect, 筛选器刷新重置, 筛选器不保存, 刷新后筛选丢失, 筛选持久化, localStorage 筛选, 持久化后又被重播种, 还原后筛选失效, 取消的筛选刷新又回来 |

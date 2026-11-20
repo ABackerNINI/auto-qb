@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-11-18
-**Updated:** 2026-11-18
+**Updated:** 2026-11-20
 **Summary:** 重启后 WebUI 首份数据 5-15s 已修: S1 启动首轮提前发布(apply_sync 落库后即发基础视图), S3 真机验收探测轮空窗 1.49s→0.050s 收缩为一拍, 硬判据 flat/singles/shows ≤2s 三轮全 PASS; groups 第二跳残差承接 issue 26-11-18-0259-perf-first-round-grouping-files-serial(Open 待排期)
 **Topics:** webui-boot-first-data
 **Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/pitfalls/testing/playwright-testignore-negation.md
@@ -80,3 +80,5 @@
 - 2026-11-18 23:10 收口终态: 计划 26-11-18-0259 与档案翻转 Done(S0-S3 四步全落地, 四笔提交 601b9494/e073e718/e16527ab/6ddfafc4, S3 验收硬判据全 PASS, 探测轮空窗 1.49s->0.050s), 计划 doc-refs 补 S3 证据档双向声明, 新坑 pitfalls/testing/playwright-testignore-negation.md 入档(testIgnore 负模式非白名单, 隔离走 testMatch)
 
 - 2026-11-18 接缝终审处置: S0 提交消息 groups 上界 2.47 系 2.421 转抄误(提交固化不改写), 该数字权威 = S0 证据档 §03 表格, 后续引用一律从证据档誊写
+
+- 2026-11-20 09:36 P1 并发化 + P2 指纹长缓存两期落地（四套皮肤共用 boot.js + 静态树哈希 + immutable 分流），评审每批 2 轮零 actionable，真机验收按拍板剥离待用户做。

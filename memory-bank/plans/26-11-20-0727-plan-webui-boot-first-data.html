@@ -7,10 +7,10 @@
 <title>WEBUI 重启后首屏白屏根治：静态资源并发化 + 查询参数指纹长缓存</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-boot-first-data">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-20-0727">
-<meta name="doc-updated" content="26-11-20-0727">
-<meta name="doc-refs" content="memory-bank/issues/26-11-20-0553-perf-webui-boot-serial-asset-chain.html,memory-bank/issues/26-11-20-0726-question-webui-build-toolchain.html">
+<meta name="doc-updated" content="26-11-20-0954">
+<meta name="doc-refs" content="memory-bank/issues/26-11-20-0553-perf-webui-boot-serial-asset-chain.html, memory-bank/issues/26-11-20-0726-question-webui-build-toolchain.html, memory-bank/tasks/26-11-20-webui-boot-static-fingerprint.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WEBUI 重启后首屏白屏根治：静态资源并发化 + 查询参数指纹长缓存</h1>
 <p class="lede">本篇只回答：怎么把「重启后 109 个静态请求串行 + 每次 ETag 重验」造成的 10.5s 首屏空白，分两期根治到框架可见 ≤1.5s；为什么不直接上构建工具链，见 issue 26-11-20-0726。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-20-0727 · <b>doc-updated</b> 26-11-20-0727 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-20-0727 · <b>doc-updated</b> 26-11-20-0954 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-18 首轮修复未果 → 2026-11-20 真机逐阶段桩坐实根因（issue 26-11-20-0553 §08）→ 成熟方案调研 + 批量插入保序实验 + grilling 三轮 8 问拍板（D1-D8）
 </div>
 
@@ -162,6 +162,7 @@ config_public_req 出现在 12,036ms（框架可见那一刻）-> 后端 API 不
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-20-0727</span> 初版：来源为 grilling 三轮 8 问拍板 + issue 26-11-20-0553 §08 真机证据 + issue 26-11-20-0726 构建工具链对比；要点为两期方案、D1-D8、≤1.5s 验收与分期门槛。</li>
+  <li><span class="tag">R1 · 26-11-20-0954</span> 收尾：P1/P2-a/P2-b 三笔本地提交落地（<code>204f69df</code> 分片 Promise.all 并发 + 脚本 preload 批量插入 / <code>072f2734</code> 静态树哈希 + HTML 令牌替换 / <code>c5cee5f0</code> withV + immutable 四态分流）；守阵 <code>test.quick</code> 全绿（验收数字只进基线切片，本条不写裸数字）。P1-3 真机复测（≤3s）与 P2-4 真机验收（≤1.5s）按用户拍板剥离、未做——子代理只承担代码 + 自动化测试，框架可见 ≤1.5s 待用户在有 qB/浏览器环境验收，不得当作已达成；收尾回写两条新坑档、task 档案 26-11-20-webui-boot-static-fingerprint、架构/坑档事实回写、计划与两 issue 双向补链、基线切片。</li>
 </ul>
 
 </div>

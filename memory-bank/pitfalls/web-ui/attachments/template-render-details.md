@@ -47,7 +47,7 @@
 
 ## 静态资源不加 `Cache-Control` 会被浏览器启发式缓存
 
-- **处置**: 现由 `webui/server/static_ui.py` 的 `_static_no_cache` middleware 给所有非 `/api` 响应加 `no-cache`。
+- **处置**: 现由 `webui/server/static_ui.py` 的 `_static_no_cache` middleware 给所有非 `/api` 响应加 `no-cache`; **(P2-b 补充, plans/26-11-20-0727)** 分流例外: 带当前静态树哈希 v 的非 HTML 静态 2xx 响应改发 `public, max-age=31536000, immutable`, 其余(裸/无 v/过期 v/3xx/4xx/5xx/HTML)仍 no-cache；/api 响应不受本中间件影响（保持原样，非 no-cache）—— 核心教训不变: 自建桩仍须带正确缓存契约(带 v 的 immutable + 其余 no-cache), 别只抄「全量 no-cache」或反过来给裸路径长缓存。
 - **复发: 1** —— 2026-09-27(界面切换下拉冒烟): 自建桩服务(FastAPI + StaticFiles)挂静态 UI 没抄这条,
   改完 topbar.html 后浏览器仍吐旧分片, 症状与"改了没生效"一模一样, 白查一轮。**为什么没命中**:
   注意力全在改动本身, 没意识到**自建静态服务也必须带 no-cache**(真机的 middleware 不是天然存在的)。

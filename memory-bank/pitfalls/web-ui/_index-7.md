@@ -1,13 +1,15 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 7/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `progress-bar.md` … `stale-predicate-inverted.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `perf-cadence.md` … `sort-default-asc-tristate-noop.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [perf-cadence.md](perf-cadence.md) | 主循环节拍、缓存边界、埋点与相对时间 —— 改热路径 / 改节拍 / 加埋点前必读。 | 性能, 热路径, jsonable_encoder, 节拍, 刷新, 轮询, 缓存, 埋点, 相对时间, 时间列, yapf |
+| [poll-reseed-filter.md](poll-reseed-filter.md) | 数据是轮询/增量刷新、某一组筛选的**候选值从数据派生**(不是定长常量数组)时, 若在每次数据到达的派生函数里直接 `选中集.add(候选)`, 每轮刷新都会把用户刚取消的勾选加回来 —— 表现是「这一组筛选器每隔 N 秒自动重置」; 而候选是定长常量的那几组(形态 / issue 类型)完全正常, 因为它们的候选压根不进派生。**只中一组、且按刷新节奏复发**就是本坑的指纹。修复 = 给自动入选加「只补一次」的记账(statusSeeded): 派生仍补数据里新冒出来的候选(否则带新值的条目会静默消失), 但已入选过的值不再碰。**同族坑 (本文末节)**: 给筛选器加 localStorage 持久化后, 还原时若不同时把已知候选计入该台账, 刷新后首轮派生又把用户取舍盖回 —— 症状与不落盘时一样, 看着像"持久化没生效"。 | 筛选器自动重置, 过滤器自己复位, 每隔一会儿又全选, 勾选取消了又回来, 轮询后筛选失效, 派生候选 vs 常量候选, 只有某一组筛选出问题, 状态筛选器重置, poll reseed, auto-reselect, 筛选器刷新重置, 筛选器不保存, 刷新后筛选丢失, 筛选持久化, localStorage 筛选, 持久化后又被重播种, 还原后筛选失效, 取消的筛选刷新又回来 |
 | [progress-bar.md](progress-bar.md) | `.m-progress` 是 flex 行 —— 条 `flex: 1 1 auto` 吃剩余空间, 右侧百分比 `.val` 只占自身文本宽, 「100.0%」比「5.2%」宽 ⇒ 同列各行条的长度/起点随文本宽逐行漂移。处置 = **数值盒** `min-width: 4em` + `text-align: right`(不是把条定宽), 条长即与文本解耦。 | 改进度条, 进度条长度不一致, 条宽漂移, 条长不一致, m-progress, 进度列, 数值盒, flex 条宽, 百分比文本 |
 | [reannounce-inactive-gate.md](reannounce-inactive-gate.md) | 「非活跃种子不允许强制汇报」这条 qB 对齐规则, 三处最容易做错 —— ①**判定读 `kind` 而不读 qB 原始 `state`**: `kind` 现 7 档(error/checking/paused/downloading/seeding/**moving**/other; moving 于 2026-10-29 补), 而 qbittorrent-api 把 `queuedDL`/`queuedUP` 归进 is_downloading/is_uploading ⇒ 其 kind 落成 downloading/seeding, 单看 kind 会把**排队**种子当活跃放行(而 qB 自己正是拿 `isQueued` 置灰的); **同一个坑的反向版本**: 补了 moving 档之后它虽然"看 kind 判得出来", 但后端 `state_enum` 的谓词**依然不包含它**, 所以后端那张表照样得按 `state` 串写 —— 前后端判据必须同表, 只改一边必立刻报红; ②**只接一个入口**: 强制汇报有四条入口(右键菜单四支 / 键盘 Shift+A / 详情面板 tracker 重报钮 / 程序化 `torrentCmd`), 只改右键 = 键盘与详情面板绕得过去, "不允许"就不成立; ③**置灰样式压不住 base**: 菜单项图标另有 `.ico-sync`(0,2,0), 变体动作钮 hover 是 (0,3,0), 05 失败区更有 (0,4,0) —— 不显式抬特异性就会出现"文字灰、图标仍蓝"或"置灰了还能 hover 亮起"的半灰态。 | 强制汇报, reannounce, 非活跃, 暂停种子, 排队种子, 搬迁中, moving, queuedDL, stoppedUP, checkingResumeData, is-gated, 置灰, 按钮变灰, 右键置灰, qB 口径, aa189a7, issue 12080, kind 判不出排队, state 原文, isPaused isChecking isQueued |
 | [row-shadow-zeroed-by-rowlang.md](row-shadow-zeroed-by-rowlang.md) | 皮肤 CSS 给行加 box-shadow 会被 row_lang flat 归零 | 行高亮不生效, box-shadow 无效, 右键目标不可见, row_lang, ctx-src |
@@ -19,5 +21,3 @@
 | [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
 | [show-if-residual-key.md](show-if-residual-key.md) | schema 字段的 show_if 只控制「这一行渲染不渲染」; 用户把触发键从命中值切走后, 该字段先前写进树的值**仍留在配置树里**(show_if 不删键), 行又已隐藏 ⇒ 用户看不见也改不了, 保存时后端校验对残留键报错(如 watch_fields 仅在 trigger: on_torrent_field_changed 下允许) ⇒ **保存必败且无法从 UI 自救**。处置 = 键残留会非法的条件下显隐一律改用 grey_if(灰显仍可见可编辑, 清得掉)。 | 给规则/段字段配 show_if; 切走关联键后保存报"该键非法"; 字段在某取值下才合法 |
 | [sort-default-asc-tristate-noop.md](sort-default-asc-tristate-noop.md) | `setSort` 三态循环(首击降序/再击升序/第三击复位默认)用 `(key, dir)` 二元组表示状态, 隐含前提「初始态不等于某一中间态」。当表描述符 `sort.defKey` 非空且 `sort.defDir === 1`(默认就按某列**升序**)时, `dtSortCell` 懒建的初始 cell 恰为 `{key: defKey, dir: 1}` —— 点击该默认列时, `cell.key !== key` 为假、`cell.dir === -1` 为假, 直接落第三击复位分支, 而复位目标正是 `(defKey, 1)`, 等于没点。用户症状「IP 列/默认列点了没反应」, 无任何报错、箭头恒指默认列, 静态守阵(可排性判据/几何)全绿, 只有真跑 setSort 三态或真浏览器点击现形。defDir=-1 或空 defKey 的表无此问题(初始 dir=-1 命中第二分支翻升序; 空键表首击任意列都走换列降序)。 | 表头排序, 三态排序, 点了没反应, 排序不生效, 默认列排序失效, IP 列点不动, setSort, defKey, defDir, defDir 1, 默认升序, dtSortCell, 排序箭头, dyn 排序, 三态 no-op |
-| [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
-| [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」时判「已过期」。静态字符串守阵对此天然失明(`!` 与 `!!` 的差别只在运行时语义), 症状是**卡在加载态**: 无报错、无红、控制台干净, 只有用户看得见。 | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |

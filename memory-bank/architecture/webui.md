@@ -9,7 +9,9 @@
 
 ## 皮肤目录即 URL 与静态契约 (webui/server/static_ui.py)
 
-`webui/static/<名>/` 一个目录 = 一套皮肤(atlas 星图 / prism 棱镜 / console 控制台 / flux), `shared/` 是公共逻辑层、`fx/` 是动效库 —— **新增 UI = 新增目录, 零后端改动**。根路径按 cookie(`shared/boot.js` 写入)307 直达「上次使用的 UI」(服务端只认形状合法且 index.html 真实存在的值, 挡路径逃逸), 失效回落默认; 旧 `/newui` 书签 307 到 prism。**静态契约**: 非 /api 响应一律 `Cache-Control: no-cache` —— 浏览器仍缓存但每次带 ETag 协商(未变更 304), 否则升级后浏览器自缓存数小时, 界面「改了没变」。
+`webui/static/<名>/` 一个目录 = 一套皮肤(atlas 星图 / prism 棱镜 / console 控制台 / flux), `shared/` 是公共逻辑层、`fx/` 是动效库 —— **新增 UI = 新增目录, 零后端改动**。根路径按 cookie(`shared/boot.js` 写入)307 直达「上次使用的 UI」(服务端只认形状合法且 index.html 真实存在的值, 挡路径逃逸), 失效回落默认; 旧 `/newui` 书签 307 到 prism。**静态契约**: 默认非 /api 响应 `Cache-Control: no-cache` —— 浏览器仍缓存但每次带 ETag 协商(未变更 304), 否则升级后浏览器自缓存数小时, 界面「改了没变」; P2-b 起(plans/26-11-20-0727) 分流例外: 仅「v == 当前静态树哈希 V + 非 HTML + 2xx」的静态响应发 `public, max-age=31536000, immutable`, 裸路径/无 v/过期 v/3xx/4xx/5xx/HTML 仍 no-cache(升级后旧 v 落 no-cache + HTML 永 no-cache 保新 V 下发)。/api 响应不受本中间件影响（保持原样，非 no-cache）。
+
+- **boot.js 装载已并发化 + `?v=` 版本化**(plans/26-11-20-0727): 分片 `Promise.all` 并发 fetch + index 归位拼接, 脚本 `link rel=preload as=script` 并发预取 + 全部成功后按清单序批量插入 `async=false`(四皮肤共用 boot.js, 一处改动四套受益); `withV()` 单点给分片 fetch / preload href / script src 三处统一追加 `?v=V`(已有 query 用 `&v=`, window.AQB_V 缺失优雅退化), fail-fast/保序/10s 超时不变量不变。
 
 - **version-reload 自愈**(plans/26-11-11-0630 §04 S3, 2026-11-12 接线): no-cache+ETag 只保证**新开页面**拿到新 JS —— 同仓同进程发布下**已开的旧标签页**仍跑旧 JS, 每轮轮询把新形状载荷喂给旧消费位(静默渲染破损, 用户无感)。机制: 后端 status 载荷恒带 `version`(app_version), 前端 `_versionSelfHeal`(polling.js, 轮询数据入口)每轮比对: 变更沿 → `location.reload()` 自愈一跳(**中止本轮载荷应用**, 不把跨版本载荷喂进旧 JS)且照常续排下一拍; **30s 防抖**(sessionStorage per-tab, 不可用退内存层)把 reload 速率封顶 1 次/30s, 部署稳定后归零; 配置编辑器脏态守卫(cfgGuardActive)活跃 = 让拍不让位(不 reload、基线不动, 守卫释放后下一轮变更沿自然再触发); version 缺失/非字符串**保守不动基线**(无从判定变更方向, 宁可不自愈)。
 

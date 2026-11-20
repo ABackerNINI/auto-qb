@@ -1,13 +1,15 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 8/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `sticky-scrollpad-inset.md` … `ui-location-persist.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `sortable-gate-source-split.md` … `tpl-comment-split-orphan.md`(共 13 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [sortable-gate-source-split.md](sortable-gate-source-split.md) | 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭 | 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方 |
+| [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」时判「已过期」。静态字符串守阵对此天然失明(`!` 与 `!!` 的差别只在运行时语义), 症状是**卡在加载态**: 无报错、无红、控制台干净, 只有用户看得见。 | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |
 | [sticky-scrollpad-inset.md](sticky-scrollpad-inset.md) | sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会同时中招(两档极端不露缝, 只有中途露)。修法 = 负 inset 抵消 padding(top:-14px / bottom:-20px), 或把 padding 移出滚动容器(结构性大改, 一般不值)。守阵量「吸顶条顶缘 == 滚动容器可视顶缘」的几何齐平。 | 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl, 负 inset, sticky 缝隙 |
 | [surface-color-family-single-point.md](surface-color-family-single-point.md) | 同一个视觉区域(面板 / 表区)的各层表面(列头底、行板底、悬停、落影)若被多处各写一遍——表头 `--bg-card`、行板 skin 卡底 `--bg-row`、行板透明露面板、页面级吸顶列头的 `--shadow-1` 落影——就会在主题切换时露出肉眼可见的色带 / 横条, 工具与截图都不易定位, 只有像素采样能实锤。修法是把该区域的表面色收口成**一个令牌族单点**(shared/dt_table.css: 表头 `--tbl-head-bg`、行板 `--tbl-face-bg` 默认 `var(--bg)`, 落影 `box-shadow:none`), 变体只声明密度/几何令牌; 页面级组件的观感语义(吸顶列头=「第二根导航」)被嵌入面复用时, 页面观感(box-shadow/sticky top)必须显式剥离。 | 表头异色, 异色背景, 色带, 横条, 表头下方颜色不一样, 背景不一致, 主题下表头发白, 抽屉表格底色, --bg-card, --bg-row, box-shadow 落影, 吸顶列头阴影, 三皮肤观感分叉 |
 | [svg-chart-mapping.md](svg-chart-mapping.md) | 内联 SVG 图表(viewBox + aspect-ratio)的鼠标坐标换算若假设"SVG 铺满容器", 一旦 CSS 把高度压扁(preserveAspectRatio 居中 letterbox)映射整体错位; 共享 CSS 里残留的固定 height 会以特异性压过主题的 aspect-ratio 静默复现此症。 | 改图表悬停, 改 SVG 尺寸, 改图表 CSS, 图表 tooltip 不跟手, 十字线偏移, 图看起来偏窄, letterbox |
@@ -19,5 +21,3 @@
 | [toast-kind-unstyled.md](toast-kind-unstyled.md) | toast 新 kind 不登记样式 = 与 info 同貌 | toast, kind, 提示条, warn 档, 消息弹窗, 样式没生效, 与 info 一样, toast 颜色, 语义档, msg-tone, msg-line |
 | [toast-queue-pushin-overlap.md](toast-queue-pushin-overlap.md) | 给底部锚定的提示条栈补了 FLIP 之后, 新条仍走「原地淡入」, 于是旧条还没让开、新条已经落在同一块地方 —— 重叠是入场形态的锅, 不是 FLIP 的锅 | toast 重叠, 队列重排, FLIP, 叠画, 新条入场, 顶掉, 提示条重叠, 强制汇报两个窗口, 队列推入, data-fx-queue |
 | [tpl-comment-split-orphan.md](tpl-comment-split-orphan.md) | 把单文件模板切成 `shared/tpl/*.html` 时, 若一条 `<!-- ... -->` 的开头半被切走/丢弃, 分片里只剩 结尾的 `-->`, 聚合(boot.js 把清单里同目标分片拼成一条 HTML 串再注入)里就成了**孤儿 `-->`** —— 被当**文字节点渲染出来**。标签配平 / CSS 注释扫描等既有守阵全查不出。 | 页面出现不该有的中文注释文字, 页面上出现 `-->`, 模板分片, tpl-manifest, 聚合, 注释没闭合 |
-| [ui-entry-tradeoff-unreported.md](ui-entry-tradeoff-unreported.md) | 配置键/功能在设置页的**入口取舍**(图形化与否、hidden 后用户在哪编辑、接线位置)是用户可感知的交互面决策, 不是实现细节 —— 实现者把「通用编辑树表达不了 → hidden + YAML 手编」当可自行拍板的实现细节定下, 代码全绿、评审通过, 入口却没上设置页; 副因: 收口验收只有代码断言与评审, 无「设置页过一遍」动作, e2e 对设置页零断言, 全绿掩盖入口缺失。动作两条: ①影响用户入口/交互面的取舍必须上报拍板, 不得以实现细节名义自行决定; ②涉设置页/入口面的计划, 收口验收必须含浏览器级断言或显式目检项。 | 设置页, 接线, hidden, 入口, 验收遗漏, UI 未接线, 图形化 |
-| [ui-location-persist.md](ui-location-persist.md) | "刷新后回到别的页"这类报障的固定判据 —— 位置属于**用户意图**该落盘, 但只改初值不够(按需加载的页面必须在启动路径补一次加载), 且恢复的值必须对 schema 校验, 采用时要复用既有跳转方法。 | 刷新回种子页, 设置页刷新, 刷新掉回首页, 页面位置, 停在哪一页, page 持久化, hub.view, F5 丢位置, 记住上次在哪, 展开态被收起, 切视图, expandedKey, 分组展开, 追剧展开 |
