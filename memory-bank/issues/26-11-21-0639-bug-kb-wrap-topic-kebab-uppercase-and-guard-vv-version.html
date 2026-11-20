@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>kb.wrap --topic kebab 校验拒绝 sliceA 式大写切片命名 + real.guard 输出「vv5.2.3」双 v 拼印(两条 cosmetic 合并) · bug · 计划外问题（便签）</title>
+<meta name="issue-slug" content="kb-wrap-topic-kebab-uppercase-and-guard-vv-version">
+<meta name="issue-stamp" content="26-11-21-0639">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="kb-wrap-topic-kebab-uppercase-and-guard-vv-version">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="kb.wrap --topic kebab 校验拒绝 sliceA 式大写切片命名 + real.guard 输出「vv5.2.3」双 v 拼印(两条 cosmetic 合并)">
+<meta name="issue-summary" content="kb.wrap --topic 校验只收小写 kebab, 与 real-baselines 切片命名惯例(sliceA 大写段)冲突; runner.py cmd_guard f-string 写死 v 前缀与 qb.version() 自带的 v 拼成 vv5.2.3 —— 两条工具面 cosmetic 合并一条记录">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· bug</div>
+<h1>kb.wrap --topic kebab 校验拒绝 sliceA 式大写切片命名 + real.guard 输出「vv5.2.3」双 v 拼印(两条 cosmetic 合并)</h1>
+<p class="lede">kb.wrap --topic 校验只收小写 kebab, 与 real-baselines 切片命名惯例(sliceA 大写段)冲突; runner.py cmd_guard f-string 写死 v 前缀与 qb.version() 自带的 v 拼成 vv5.2.3 —— 两条工具面 cosmetic 合并一条记录</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-21-0639-bug-kb-wrap-topic-kebab-uppercase-and-guard-vv-version</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:39</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>两条 cosmetic，合并记录（RM11 轮 2026-11-21 撞见）：</p>
+  <ul>
+    <li><b>kb.wrap --topic 校验拒绝大写</b>：按切片命名惯例传 <code>--topic real-rm11-sliceA</code>（real-baselines 现行切片名 <code>26-11-21-0446-real-rm11-sliceA.md</code> 等都带大写段 sliceA/sliceB）被 kebab 校验拒绝（只收小写），命名惯例与校验规则互相矛盾，收尾只能降格改名绕过；</li>
+    <li><b>real.guard 版本双 v 拼印</b>：guard 输出「vv5.2.3」——f-string 写死 <code>v{version}</code> 前缀，而 <code>qb.version()</code> 原样返回 qB API 的版本串（自带 v 前缀），两个 v 拼在一起。</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <ul>
+    <li>kb.wrap topic 校验面：<code>.agents/skills/memory-bank/scripts/wrap_session.py</code>（取证 2026-11-21 06:39 · grep <code>kebab</code> / <code>--topic</code> 校验段；行号已由 2026-11-21 批D2 评审核实：:108 --topic 定义 / :115-116 kebab 校验）</li>
+    <li>双 v 拼印：<code>tests-real/runner.py:75</code>（取证 2026-11-21 06:39）· grep <code>v{version}</code>（cmd_guard 输出行；版本串来源 <code>tests-real/lib/qb.py:77</code> version() 原样返回 <code>/app/version</code>）</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>kb.wrap：--topic 是双重角色（wrap_session.py:108 取证：切片文件名后缀 / 档案 <code>**Topics:**</code> 主键），kebab 小写主键是 2026-10-18 拍板口径（doc-forms.md:52「主键形态」；<code>gen_doc_map --check</code> 对非 kebab 判红，机检单点，issue <a href="26-10-18-0858-question-doc-topics-composite-split.html">26-10-18-0858</a>）——放行大写段会撞机检闸，两处规矩并不对等；与既有拍板对齐的一侧是<b>「切片命名惯例统一改小写」</b>（sliceA→slice-a 式），wrap 校验不动，此为定案单点。runner.py：:75 改裸 <code>{version}</code> 或对返回串 <code>lstrip("v")</code> 后再加前缀，二选一；修 :75 时与 <a href="26-11-21-0639-bug-real-guard-seed-count-real-fake-mislabeled.html">26-11-21-0639</a>（guard 计数误标）的文案改法一并落——两者落在同一 f-string 输出行，一次改齐免二次评审同一行。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-21 06:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-21 — 档位显式覆盖留痕：light 非类型默认推导（bug 默认 standard），系主会话派单时拍板「两条 cosmetic 合并记便签档」，不复档。</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-21-0639-bug-kb-wrap-topic-kebab-uppercase-and-guard-vv-version.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

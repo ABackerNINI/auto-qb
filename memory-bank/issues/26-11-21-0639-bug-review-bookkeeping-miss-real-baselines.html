@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>review 记账排除面缺 memory-bank/testing/real-baselines/(真机切片被计评审行, 含未跟踪新切片) · bug · 计划外问题</title>
+<meta name="issue-slug" content="review-bookkeeping-miss-real-baselines">
+<meta name="issue-stamp" content="26-11-21-0639">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="review-bookkeeping-miss-real-baselines">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="review 记账排除面缺 memory-bank/testing/real-baselines/(真机切片被计评审行, 含未跟踪新切片)">
+<meta name="issue-summary" content="review_content.py BOOKKEEPING_PREFIXES 只排除 tasks/active-context/baselines/legacy-review4 四前缀, 真机切片 real-baselines/*.md 照旧计行进评审面 —— 按 code-review skill 口径记账类应机械排除, 每轮真机收尾派评徒增噪声">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>review 记账排除面缺 memory-bank/testing/real-baselines/(真机切片被计评审行, 含未跟踪新切片)</h1>
+<p class="lede">review_content.py BOOKKEEPING_PREFIXES 只排除 tasks/active-context/baselines/legacy-review4 四前缀, 真机切片 real-baselines/*.md 照旧计行进评审面 —— 按 code-review skill 口径记账类应机械排除, 每轮真机收尾派评徒增噪声</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-21-0639-bug-review-bookkeeping-miss-real-baselines</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:39</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">review</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>RM11 真机复验轮（2026-11-21）批次评审 pack 时发现：真机切片 <code>memory-bank/testing/real-baselines/*.md</code>（含本轮新建、尚未跟踪的 <code>26-11-21-0446-real-rm11-sliceA.md</code>）被计入评审行数、进了评审面。按 code-review skill 口径（DO NOT USE FOR「仅生成物/记账类改动(机械排除, 不计行)」），切片属记账类（数字誊写 + 三态记账，内容由守卫与生成器管），应与 <code>testing/baselines/</code> 同款机械排除——排除面漏了这一族。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">review_content.py 原文（取证 2026-11-21 06:39）——四前缀里只有 <code>baselines/</code>（全量测试基线），没有 <code>real-baselines/</code>（真机切片）：</p>
+<pre><code># .commands/review/scripts/review_content.py:59-64
+BOOKKEEPING_PREFIXES = (
+    "memory-bank/tasks/",
+    "memory-bank/active-context/",
+    "memory-bank/testing/baselines/",
+    "memory-bank/reports/attachments/legacy-review4/",
+)
+
+# :165 (消费点)
+    return not any(path.startswith(p) for p in BOOKKEEPING_PREFIXES)</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>收尾回写包含真机切片的提交走分批评审 pack（每轮真机复验收尾必含）</td></tr>
+    <tr><td>影响范围</td><td>切片 md 被计行进评审面：评审子代理收到记账类 diff 徒增噪声与评审成本；未跟踪新切片同样被圈入（<code>review.pack</code> 的未跟踪文件计行形态）</td></tr>
+    <tr><td>严重度</td><td class="wr">低</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>.commands/review/scripts/review_content.py:59-64</code>（取证 2026-11-21 06:39）· <code>BOOKKEEPING_PREFIXES</code> · grep <code>BOOKKEEPING_PREFIXES</code>（消费点 :165）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+  <div class="callout">git 史核（批D2 评审 2026-11-21 复核）：真机切片族自 <b>10-31 建轨起持续产出</b>——d7df704a（10-31 06:52）立 <code>real-baselines</code> 轨（规程+常驻排期锚），当日 RM00-RM10 十一片即入库（81439531 07:45 → 87b3836b 20:14），11-01 起逐轮追加（2580940a/b172f416/5ff09d06 等）；而排除面清单<b>首次落码 0967985a（11-06 09:35）</b>（<code>BOOKKEEPING_PREFIXES</code> 三前缀：tasks/activeContext/baselines），11-08 b8895a77 才抽共享模块——清单定稿时族内已实存 26 份切片（<code>git ls-tree 0967985a</code> 顶层实测；递归全量 31 含 <code>attachments/</code> 附件 5 份，附件不是切片），却漏枚举这一既有目录，<b>属定稿时的枚举疏漏而非「族晚于清单出现的演化缺位」</b>。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p><code>BOOKKEEPING_PREFIXES</code> 增补一行 <code>"memory-bank/testing/real-baselines/"</code>（与 <code>testing/baselines/</code> 同款记账定位）。其余机械排除面无需另补：<code>issues/</code> 记录件是可评事实性文档、照旧计行；生成件清单（<code>gen_all.py --list</code>）与 <code>_index</code> 类文件已被生成件过滤覆盖，本条不涉及其它族。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-21 06:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-21-0639-bug-review-bookkeeping-miss-real-baselines.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
