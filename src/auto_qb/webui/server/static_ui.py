@@ -62,16 +62,27 @@ def mount_static_ui(app: FastAPI) -> None:
             D4: HTML 经 StaticFiles(html=True) 直吐磁盘文件, 令牌不能写回盘, 故在响应层把
             __AQB_V__ 换成挂载时算好的 V: 只碰 text/html(不动 JS/CSS/PNG 二进制), body_iterator
             可能分块故先收齐再替换, 重建 Response 让 Starlette 按新字节回填 Content-Length。
+
+            D6(P2-2): 缓存分流 —— 带**当前 V** 的非 HTML 静态响应发 immutable 长缓存;
+            裸路径 / 无 v / 过期 v / HTML / 非 2xx(含 3xx/4xx/5xx)仍 no-cache。过期 v 必须回
+            no-cache(不变量 3: 升级后绝不让用户拿到旧 app.js)。
             """
             response = await call_next(request)
             if request.url.path.startswith("/api"):
                 return response
-            response.headers["Cache-Control"] = "no-cache"
+            # 只有 v 与挂载时算好的 version 逐字相等、且非 HTML、且是 2xx 成功响应才 immutable。
+            # 非 2xx(3xx 重定向 / 4xx / 5xx, 还有 304)一律 no-cache —— 带当前 v 的 307 若被
+            # immutable, 换皮肤后书签会永久跳旧 UI; 404 同理会被永久缓存。
+            # 比较的是 request query 的 v 与内存版本 —— 旧版本 URL 的 v 必然不等 => no-cache,
+            # 浏览器拿到 ETag 重验就能刷成新内容, 不会永久吃旧缓存。
+            is_html = "text/html" in response.headers.get("content-type", "")
+            immutable = (request.query_params.get("v") == version and not is_html and 200 <= response.status_code < 300)
+            response.headers["Cache-Control"] = ("public, max-age=31536000, immutable" if immutable else "no-cache")
             # HEAD 只发头不发体: body_iterator 为空, 收齐重建会把 Content-Length 误置 0,
-            # 破坏 HEAD 应回显与 GET 等效的长度语义 —— 原样返回, 仅保留 no-cache 头。
+            # 破坏 HEAD 应回显与 GET 等效的长度语义 —— 原样返回, 仅保留上面算好的缓存头。
             if request.method == "HEAD":
                 return response
-            if "text/html" not in response.headers.get("content-type", ""):
+            if not is_html:
                 return response
             if response.status_code in (204, 304):
                 return response

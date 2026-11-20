@@ -70,6 +70,17 @@
     return;
   }
 
+  /* P2-2(plan 26-11-20-0727 D4/D6): 版本查询参数单点 —— 分片 fetch URL / 脚本 preload href /
+   * 最终 script src 三处都经它追加同一个 V。preload href 与 script src 必须逐字同形, 否则
+   * preload 的缓存复用失效、脚本二次请求(D4)。V 来自 index.html head 注入的 window.AQB_V
+   * (P2-a 已注入令牌, 服务端响应时替换为真实 V); 缺失(异常/直接开文件/诊断桩/node 探针)时
+   * 优雅退化: 不加 v、不崩 —— 退化后 URL 仍是清单字面量。 */
+  function withV(url) {
+    var v = (typeof window !== "undefined" && window.AQB_V) ? String(window.AQB_V) : "";
+    if (!v || !url) return url;
+    return url + (url.indexOf("?") >= 0 ? "&v=" : "?v=") + v;
+  }
+
   var buckets = { app: "", body: "" };
   var slots = [];  /* 自定义选择器落点(方案A 停靠面板): { sel, text } —— app 桶插入后按选择器定位注入 */
   var parts = mf.parts;
@@ -81,7 +92,7 @@
   var jobs = parts.map(function (part) {
     var ctl = new AbortController();
     var timer = setTimeout(function () { ctl.abort(); }, BOOT_PART_TIMEOUT_MS);
-    return fetch(part.src, { credentials: "same-origin", signal: ctl.signal }).then(function (res) {
+    return fetch(withV(part.src), { credentials: "same-origin", signal: ctl.signal }).then(function (res) {
       if (!res.ok) throw new Error(part.src + " HTTP " + res.status);
       return res.text();
     }).finally(function () {
@@ -121,8 +132,9 @@
    * 后再插 script src 会二次 ETag 重验, 破坏「每脚本只 1 次网络请求」; preload 结果可被后续
    * script 复用缓存。全部预取成功(onload 计数到齐)才按清单序批量插入 async=false 脚本 ——
    * 执行序 = 清单序(顶层 const 与依赖顺序依赖它, 不用 type=module 改作用域); 任一预取 onerror
-   * -> fail(), 且发生在插入**任何**脚本之前(D8 fail-fast, 404 专门注入验证的点)。P1 阶段 URL
-   * 用清单字面量, 不追加 ?v=(那是 P2-b 的事)。 */
+   * -> fail(), 且发生在插入**任何**脚本之前(D8 fail-fast, 404 专门注入验证的点)。P2-b 起三处
+   * URL(分片 fetch / 本 preload href / 最终 script src)统一经 withV 追加同一个 V —— preload
+   * 与 script src 逐字同形才能复用预取缓存, 不给脚本制造二次请求。 */
   function injectScripts() {
     var scripts = mf.scripts;
     var remaining = scripts.length;
@@ -137,7 +149,7 @@
     function insertAll() {
       for (var j = 0; j < scripts.length; j++) {
         var s = document.createElement("script");
-        s.src = scripts[j];
+        s.src = withV(scripts[j]);
         s.async = false; /* 批量按清单序插入 + async=false -> 执行序 = 清单序 0..N-1 */
         s.onerror = (function (src) {
           return function () { fail("脚本加载失败: " + src); };
@@ -152,7 +164,7 @@
         var link = document.createElement("link");
         link.rel = "preload";
         link.as = "script";
-        link.href = src;
+        link.href = withV(src);
         link.onload = function () {
           remaining -= 1;
           if (remaining === 0 && !failed) insertAll();

@@ -6,7 +6,10 @@
 - test_api_t_skip_check_gated_by_config: R2 skip-check 端点 gate —— 配置关 403(detail 注明 web.skip_check_menu)/ 开 200 入队, 403 不投递命令
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
-- test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
+- test_static_assets_disable_heuristic_cache: 缓存分流(D6/P2-2) —— 裸路径 no-cache / 带当前 v immutable, /api 与 HTML 不受影响, HEAD 保留 Content-Length; 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared/console/flux)
+- test_static_cache_split_four_states: 缓存分流四态(D6) —— 当前 v immutable / 裸 no-cache / 过期 v no-cache / HTML 带 v 仍 no-cache(过期 v 必须可重验, 不变量 3)
+- test_bootjs_withv_url_append: boot.js withV URL 追加(D4/P2-2, node 行为电池) —— 无 query 加 ?v= / 已有 query 加 &v= / fetch·preload·script src 三处同形同 V / 缺 window.AQB_V 与无 window 优雅退化
+- test_static_cache_upgrade_invalidation: 升级演练(D6/不变量 3) —— 换 V 重建 app 后旧 URL 不再 immutable、新 URL immutable; 四套 HTML 与 boot.js 静态守阵无硬编码 V
 - test_ui_root_and_legacy_newui_redirect: / -> 307 上次使用的 UI(autoqb_ui 皮肤 cookie, 未记录/失效回落星图); 旧 /newui/* 书签 -> 307 /prism/*
 - test_frontend_ui_skin_cookie_persisted: boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(307 在服务端裁决, cookie 是唯一读得到的载体)
 - test_static_version_hash_stability: 静态树内容哈希 V(D5) —— 同内容恒等 / 改或增任一纳入文件即变 / 白名单外 .pyc/.log 不参与(抖动的 V 永远缓存未命中, 恒定的 V 升级后继续吃旧资源)
@@ -20,6 +23,101 @@ from auto_qb import __version__
 from auto_qb.webui.server.static_version import compute_static_version
 
 from webui_helpers import STATIC_ROOT, _UI_ALL, _enable_qb_traffic
+
+IMMUTABLE = "public, max-age=31536000, immutable"
+
+# node 行为电池(P2-2/D4): 真加载 boot.js, 钉 withV 三处 URL 同形 + query 形态 + 缺失退化。
+# 与 P1 并发电池同款桩法(window/document/fetch/setTimeout 全桩, 不碰真实网络); 本探针自己
+# 提供 window.AQB_V —— P1 并发电池不提供, 故那边仍走「字面量」退化分支, 两电池互不干扰。
+_NODE_BOOT_WITHV_PROBE = r"""
+const fs = require("fs");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const bootSrc = fs.readFileSync(process.argv[1], "utf8");
+const V = "abc123def4567890";
+const flush = async () => { for (let i = 0; i < 30; i++) await null; };
+const resp = () => ({ ok: true, status: 200, text: async () => "X" });
+const mf = {
+  parts: [
+    { src: "/shared/tpl/a.html", into: "app" },
+    { src: "/shared/tpl/b.html?x=1", into: "body" },
+  ],
+  scripts: ["/shared/s0.js", "/shared/s1.js?mode=2"],
+};
+
+function makeEnv(win) {
+  const calls = [];
+  const pending = [];
+  if (win === null) delete global.window; else global.window = win;
+  global.setTimeout = () => 1;
+  global.clearTimeout = () => {};
+  const appEl = {
+    innerHTML: "",
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    insertAdjacentHTML: () => {},
+  };
+  const mfEl = { textContent: JSON.stringify(mf) };
+  const links = [];
+  const scripts = [];
+  global.document = {
+    get cookie() { return ""; },
+    set cookie(v) {},
+    getElementById: (id) => (id === "app" ? appEl : mfEl),
+    body: { textContent: "", insertAdjacentHTML: () => {} },
+    createElement: (tag) => (tag === "link"
+      ? { tag: tag, rel: "", as: "", href: "", onload: null, onerror: null }
+      : { tag: tag, src: "", async: true, onerror: null }),
+    head: { appendChild: (el) => { (el.tag === "link" ? links : scripts).push(el); } },
+  };
+  global.location = { pathname: "/atlas/" };
+  global.fetch = (src) => { calls.push(src); return new Promise((res) => pending.push({ src: src, res: res })); };
+  return { calls: calls, pending: pending, links: links, scripts: scripts };
+}
+
+(async () => {
+  // 1 有 V: 三处都追加同一个 V, 已有 query 用 &v=
+  const env = makeEnv({ AQB_V: V });
+  eval(bootSrc);
+  ok("分片 fetch 无 query -> ?v=V", env.calls[0] === "/shared/tpl/a.html?v=" + V);
+  ok("分片 fetch 已有 query -> &v=V", env.calls[1] === "/shared/tpl/b.html?x=1&v=" + V);
+  env.pending.forEach((p) => p.res(resp()));
+  await flush();
+  ok("preload href 无 query -> ?v=V", env.links[0].href === "/shared/s0.js?v=" + V);
+  ok("preload href 已有 query -> &v=V", env.links[1].href === "/shared/s1.js?mode=2&v=" + V);
+  env.links.forEach((l) => l.onload());
+  await flush();
+  ok("script src 与 preload href 逐字同形(预取可复用)",
+     env.scripts.length === 2 && env.scripts.every((s, i) => s.src === env.links[i].href));
+  ok("fetch / preload / script 三处同一个 V",
+     env.calls.every((u) => u.indexOf("v=" + V) >= 0)
+     && env.scripts.every((s) => s.src.indexOf("v=" + V) >= 0));
+
+  // 2 window 存在但无 AQB_V: 优雅退化为清单字面量, 不崩
+  const env2 = makeEnv({});
+  eval(bootSrc);
+  ok("缺 AQB_V 时 fetch 退化为字面量",
+     env2.calls[0] === "/shared/tpl/a.html" && env2.calls[1] === "/shared/tpl/b.html?x=1");
+  env2.pending.forEach((p) => p.res(resp()));
+  await flush();
+  env2.links.forEach((l) => l.onload());
+  await flush();
+  ok("缺 AQB_V 时 preload/script 仍用字面量",
+     env2.scripts.every((s, i) => s.src === mf.scripts[i] && s.src.indexOf("?v=") < 0));
+
+  // 3 完全无 window(直接开文件/诊断桩/node): typeof 守卫不抛, 仍退化
+  const env3 = makeEnv(null);
+  eval(bootSrc);
+  ok("无 window 时不抛且退化为字面量",
+     typeof window === "undefined"
+     && env3.calls[0] === "/shared/tpl/a.html" && env3.calls[1] === "/shared/tpl/b.html?x=1");
+  env3.pending.forEach((p) => p.res(resp()));
+  await flush();
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})();
+"""
 
 
 def test_api_webui_flags_endpoint(web_env):
@@ -138,20 +236,32 @@ def test_api_expr_eval_endpoint(web_env):
 
 
 def test_static_assets_disable_heuristic_cache(web_env):
-    """静态资源带 no-cache: 不加 Cache-Control 时浏览器会启发式缓存数小时
+    """静态资源缓存分流(D6/P2-2): 裸路径 no-cache, 带当前 v immutable; /api 与 HTML 不受影响
 
-    症状: 升级程序后仍加载旧前端("改了但没变"), 开发中实际撞到。
-    no-cache 仍允许存储, 但每次必须带 ETag 重新校验(未变走 304); /api 响应不受影响。
-    路径随 UI 目录化更新: atlas=星图(旧) / prism=棱镜(新) / shared=公共逻辑层。
+    症状: 升级程序后仍加载旧前端("改了但没变")。裸路径仍 no-cache(每次 ETag 重验); 装配端点
+    (head/boot.js)带上的当前 v 资源走 immutable 长缓存, 不再逐请求重验。HTML 自身永远 no-cache
+    (D6 —— 它是版本清单的载体, 长缓存会让新 V 永远下不到浏览器)。UI 目录化路径:
+    atlas=星图(旧) / prism=棱镜(新) / console / flux / shared=公共逻辑层。
     """
     mgr, client = web_env
-    for path in (
+    v = compute_static_version(STATIC_ROOT)
+    html_paths = {"/atlas/", "/prism/", "/console/", "/shared/tpl/topbar.html"}
+    paths = (
         "/atlas/", "/atlas/style.css", "/shared/tpl/topbar.html", "/prism/", "/shared/app.js", "/shared/boot.js",
         "/shared/vendor/vue.global.prod.js", "/console/", "/console/css/components.css"
-    ):
+    )
+    # 1 裸路径: 无 v 可比对 -> 一律保守 no-cache
+    for path in paths:
         resp = client.get(path)
         assert resp.status_code == 200, f"{path} 应可访问"
-        assert resp.headers.get("cache-control") == "no-cache", f"{path} 应带 no-cache"
+        assert resp.headers.get("cache-control") == "no-cache", f"{path} 裸路径应带 no-cache"
+    # 2 带当前 v: 非 HTML 走 immutable, HTML 仍 no-cache
+    for path in paths:
+        url = path + ("&" if "?" in path else "?") + "v=" + v
+        resp = client.get(url)
+        assert resp.status_code == 200, f"{url} 应可访问"
+        expect = "no-cache" if path in html_paths else IMMUTABLE
+        assert resp.headers.get("cache-control") == expect, f"{url} 缓存头应为 {expect}"
     api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
     assert api.headers.get("cache-control") != "no-cache", "/api 响应不应被静态策略影响"
     # HEAD 只发头不发体: 中间件若把空 body_iterator 收齐后重建响应, 会把 Content-Length 清零,
@@ -161,6 +271,114 @@ def test_static_assets_disable_heuristic_cache(web_env):
     assert head.content == b"", "HEAD 不应带 body"
     assert int(head.headers["content-length"]) > 0, "HEAD 的 Content-Length 不得被收空 body 的重建响应清零"
     assert head.headers.get("cache-control") == "no-cache", "HEAD 响应仍须 no-cache"
+
+
+def test_static_cache_split_four_states(web_env):
+    """缓存分流四态(D6): 当前 v immutable / 裸 no-cache / 过期 v no-cache / HTML 带 v 仍 no-cache
+
+    升级安全的判据落在「v 与当前版本逐字相等」: 任何不等的 v(含旧版本)都不得 immutable,
+    否则升级后旧 app.js 会被浏览器永久缓存(不变量 3)。HTML 即便带当前 v 也只发 no-cache ——
+    HTML 是版本清单的载体, 一旦长缓存, 新 V 永远下发不到浏览器。
+    另钉两条边界: 非 2xx(307 重定向/404 缺失资源)带当前 v 也不得 immutable; HEAD 带当前 v
+    的静态资源仍 immutable 且保留 Content-Length。
+    """
+    _, client = web_env
+    v = compute_static_version(STATIC_ROOT)
+    stale = "0" * 16 if v != "0" * 16 else "f" * 16
+    assert client.get(f"/shared/app.js?v={v}").headers["cache-control"] == IMMUTABLE
+    assert client.get("/shared/app.js").headers["cache-control"] == "no-cache"
+    assert client.get(f"/shared/app.js?v={stale}").headers["cache-control"] == "no-cache"
+    html = client.get(f"/atlas/?v={v}")
+    assert html.status_code == 200
+    assert html.headers["cache-control"] == "no-cache", "HTML 带当前 v 也不得 immutable"
+    # 非 2xx 带当前 v 也必须 no-cache: 带 v 的 307 若被 immutable, 换皮肤后书签会永久跳旧 UI;
+    # 404 若被 immutable 则缺失资源永久占位。TestClient 默认 follow_redirects=True, 须关掉才看得到 307。
+    root = client.get("/?v=" + v, follow_redirects=False)
+    assert root.status_code == 307, "带当前 v 的根路径仍须 307 到上次 UI 的裁决目标"
+    assert root.headers["cache-control"] == "no-cache", "307 带当前 v 不得 immutable"
+    assert root.headers["location"].endswith("/"), "307 的 Location 不得被缓存分流破坏"
+    legacy = client.get("/newui?v=" + v, follow_redirects=False)
+    assert legacy.status_code == 307, "带当前 v 的旧书签仍须 307"
+    assert legacy.headers["cache-control"] == "no-cache", "307 带当前 v 不得 immutable"
+    missing = client.get("/shared/__no_such_asset__.js?v=" + v, follow_redirects=False)
+    assert missing.status_code == 404, "不存在的静态路径应 404"
+    assert missing.headers["cache-control"] == "no-cache", "404 带当前 v 不得 immutable"
+    # HEAD 带当前 v: 缓存头在中间件 HEAD 提前 return 之前已算好, immutable 与 GET 同口径;
+    # 提前 return 不做 body 重建, Content-Length 保持与 GET 等效(与 P2-a 的 HEAD 修复一致)。
+    head = client.head("/shared/app.js?v=" + v)
+    assert head.headers["cache-control"] == IMMUTABLE, "HEAD 带当前 v 的静态资源应 immutable"
+    assert int(head.headers["content-length"]) > 0, "HEAD 的 Content-Length 不得被清空"
+
+
+def test_bootjs_withv_url_append():
+    """boot.js withV URL 追加(D4/P2-2): 三处同形同 V + query 两形态 + 缺失优雅退化
+
+    withV 是分片 fetch / 脚本 preload href / 最终 script src 的公共出口 —— preload 与 script
+    src 必须逐字同形, 否则预取缓存复用失效, 脚本二次请求。已有 query 用 &v=、无则 ?v=;
+    window.AQB_V 缺失(或不存在的 window)时退化为清单字面量, 不崩。静态锚先钉三处都过单点,
+    行为面 node 电池真跑(无 node 静默跳过, 与 P1 并发电池同口径)。
+    """
+    boot = os.path.join(STATIC_ROOT, "shared", "boot.js")
+    src = open(boot, encoding="utf-8").read()
+    # 静态锚: 定义 + 三处调用共 4 个 withV(, 两种 query 形态的字面量都在
+    assert "function withV(" in src and "window.AQB_V" in src, "boot.js 缺 withV 版本单点"
+    assert src.count("withV(") >= 4, "分片 fetch / preload href / script src 未全走 withV"
+    assert '"&v="' in src and '"?v="' in src, "withV 未同时覆盖已有 query 与无 query 两种形态"
+
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_BOOT_WITHV_PROBE, boot],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"boot.js withV node 电池跑挂: {proc.stderr.strip()}"
+    lines = proc.stdout.strip().splitlines()
+    assert lines, "boot.js withV node 电池无输出(被悬挂挂住了?)"
+    report = json.loads(lines[-1])
+    assert report["failed"] == [], \
+        f"withV 电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_static_cache_upgrade_invalidation(web_env, monkeypatch):
+    """升级演练(D6/不变量 3): V 变化后旧 URL 不再 immutable, 新 URL 才 immutable
+
+    版本源在挂载时算一次, 由中间件闭包持有。模拟升级 = 换掉版本源再建一个 app: 旧 V 的 URL
+    必须落回 no-cache(浏览器拿 ETag 重验刷成新内容), 新 V 的 URL 才 immutable。同时静态守阵:
+    四套 index.html 与 boot.js 不得出现硬编码 16 位 V —— 版本只能来自令牌 / window.AQB_V,
+    否则换版本的升级演练形同虚设。
+    """
+    mgr, client = web_env
+    v1 = compute_static_version(STATIC_ROOT)
+    assert client.get(f"/shared/app.js?v={v1}").headers["cache-control"] == IMMUTABLE
+    assert client.get("/shared/app.js?v=aaaaaaaaaaaaaaaa").headers["cache-control"] == "no-cache"
+
+    from fastapi.testclient import TestClient
+
+    from auto_qb.webui import create_app
+    from auto_qb.webui.server import static_ui
+
+    v2 = "b" * 16 if v1 != "b" * 16 else "c" * 16
+    monkeypatch.setattr(static_ui, "compute_static_version", lambda _d: v2)
+    upgraded = TestClient(create_app(mgr))
+    assert upgraded.get(f"/shared/app.js?v={v2}").headers["cache-control"] == IMMUTABLE
+    old = upgraded.get(f"/shared/app.js?v={v1}")
+    assert old.status_code == 200, "旧 URL 仍须取到内容(只是不许 immutable)"
+    assert old.headers["cache-control"] == "no-cache", \
+        "升级后旧 V 不得 immutable —— 否则用户永久吃旧 app.js"
+
+    for ui in _UI_ALL:
+        shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        assert not re.search(r"\?v=[0-9a-f]{16}\b", shell), f"{ui} 硬编码了 16 位 V —— 升级后不会更新"
+    boot = open(os.path.join(STATIC_ROOT, "shared", "boot.js"), encoding="utf-8").read()
+    assert not re.search(r"\b[0-9a-f]{16}\b", boot), "boot.js 硬编码了 16 位 V —— 版本必须来自 window.AQB_V"
 
 
 def test_ui_root_and_legacy_newui_redirect(web_env):
