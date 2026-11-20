@@ -25,6 +25,10 @@
   各有提取存活下限(头部家族类/枚举面清单点名)防空转恒绿。判据是类名级 used ⊆ defined,
   删某类名的**全部**规则(或缺最后一条)即红, 只删多定义类的一条不红(谱×档矩阵完整性归
   S6 e2e); 范围克制只扫列风格 cs- 前缀类, 不扩成全模板扫描(历史未配对类不掀)。
+  接缝终审 minor 2 起色样修饰类纳入: cs-unit 元素第二 token 的 7 个修饰(dim/accent/
+  invert/family/band-cool/band-heat/band-theme, 白名单 _CS_UNIT_MODIFIERS)以复合键
+  cs-unit.<修饰> 进 used/defined 两侧 —— defined 从 .cs-unit.<修饰> 复合选择器提取
+  (命名空间提取吃不到修饰 token 已实测), 白名单修饰从 defined 消失即红。
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -945,6 +949,13 @@ def test_frontend_console_square_radius():
             )
 
 
+# S2 单位色组色样修饰 token 白名单(接缝终审 minor 2, 计划 26-11-20-0009): ctx-menus.html
+# 里 <span class="cs-unit <修饰>"> 的第二 token = COLSTYLE_ENUMS.units 的组值(uniform 为
+# 默认档无色样, 不在列); 模板/CSS 两手抄面都靠这份白名单进配对面, 加组/改组值必须显式同步。
+_CS_UNIT_MODIFIERS = ("dim", "accent", "invert", "family", "band-cool", "band-heat", "band-theme")
+_CS_UNIT_MOD_RE = re.compile(r"\.cs-unit\.(" + "|".join(_CS_UNIT_MODIFIERS) + r")\b")
+
+
 def test_frontend_colstyle_tpl_class_css_paired():
     """列风格「模板类→CSS 配对」守阵(计划 26-11-20-0009 S6): 片段模板 cs-* 类名在四皮肤有效级联面均有定义
 
@@ -957,6 +968,10 @@ def test_frontend_colstyle_tpl_class_css_paired():
       1. 静态 class="..." 属性: shared/tpl/ctx-menus.html(表头菜单五维色样)与
          xtpl-cells.html(行格 cs-v/cs-u 双 span); 剥 HTML 注释后逐属性提取 cs- 命名空间
          类名 —— :class 绑定里的 'cs-barstyle' 等是 subMenu 状态键不是类名, 只取静态属性。
+         S2 色样修饰类(接缝终审 minor 2): cs-unit 元素的第二 token(dim/accent/invert/
+         family/band-cool/band-heat/band-theme, 白名单 _CS_UNIT_MODIFIERS)是单位色组值,
+         不带 cs- 前缀, 命名空间提取吃不到 —— 以复合键 cs-unit.<修饰> 并入 used 面;
+         存活下限逐修饰钉(模板改修饰名/退役组 = 白名单空转, 显式红)。
       2. 动态四族 csb-*/csp-*/cst-*/csu-*: 模板只经 :class 绑定 format.js 判定单点
          (progBandClass/speedBandClass/numScale*/fmt*Parts), 类名静态提不出来 —— node
          真跑单点函数全值域枚举(r4 电池同口径; 无 node 静默跳过该族, 静态面照守)。
@@ -969,17 +984,38 @@ def test_frontend_colstyle_tpl_class_css_paired():
     扫描(历史未配对类不掀)。
     """
     used_static = set()
+    used_unit_mods = set()  # cs-unit 色样修饰复合键(cs-unit.<修饰>), 提取见循环内
     for name in ("ctx-menus.html", "xtpl-cells.html"):
         path = os.path.join(STATIC_ROOT, "shared", "tpl", name)
         assert os.path.isfile(path), f"缺 shared/tpl/{name}(列风格模板类 used 面的提取源)"
         stripped = re.sub(r"<!--.*?-->", "", open(path, encoding="utf-8").read(), flags=re.S)
         for m in re.finditer(r'(?<![:\w-])class="([^"]*)"', stripped):
-            for cls in m.group(1).split():
+            toks = m.group(1).split()
+            for cls in toks:
                 if re.match(r"^cs[a-z]*(?:-[A-Za-z0-9]+)+$", cls):
                     used_static.add(cls)
+            # S2 色样修饰类(接缝终审 minor 2): cs-unit 元素的第二 token 是单位色组值, 不带
+            # cs- 前缀, 上面按命名空间的提取吃不到 —— 白名单修饰 token 与 cs-unit 组成复合键
+            # 入 used 面(修饰类挂 DOM 而映射规则没了 = 样例字静默回落无色, 无报错)。
+            if "cs-unit" in toks:
+                # 白名单成员资格本身红性化(接缝终审复评 minor): 未来模板长出白名单外的新修饰
+                # token 时显式红, 强制同步 _CS_UNIT_MODIFIERS —— 否则该修饰静默逃出配对面恒绿。
+                unknown = [t for t in toks if t != "cs-unit" and t not in _CS_UNIT_MODIFIERS]
+                assert not unknown, (
+                    f"cs-unit 元素出现白名单外的修饰 token {unknown} —— 新增单位色组修饰须同步 "
+                    "_CS_UNIT_MODIFIERS(否则配对面漏收静默恒绿)"
+                )
+                used_unit_mods.update("cs-unit." + tok for tok in toks if tok in _CS_UNIT_MODIFIERS)
     # 提取口径存活下限: 头部家族类一个都提不出来 = 模板改版让本守阵空转恒绿, 显式红
     for floor in ("cs-bar", "cs-ramp", "cs-dots", "cs-unit", "cs-v", "cs-u"):
         assert floor in used_static, (f"片段模板静态类提取丢失 {floor}(实测 {sorted(used_static)}) —— 模板改版须同步本守阵 used 面")
+    # 修饰类存活下限: 白名单 7 个修饰 token 必须都能从模板 cs-unit 元素现提取到 —— 修饰
+    # 改名/退役(或模板改版)让白名单空转恒绿时显式红, 同步白名单是显式决策
+    for mod in _CS_UNIT_MODIFIERS:
+        assert "cs-unit." + mod in used_unit_mods, (
+            f"cs-unit 色样修饰类提取丢失 cs-unit.{mod}(实测 {sorted(used_unit_mods)}) —— "
+            "修饰 token 改名/退役须同步 _CS_UNIT_MODIFIERS 白名单"
+        )
 
     # 动态四族: format.js 判定单点真跑全值域枚举(类名单点在 format.js, 模板 :class 绑定)
     used_dynamic = set()
@@ -1014,18 +1050,22 @@ console.log(JSON.stringify([...names].sort()));
         ):
             assert floor in used_dynamic, (f"判定单点枚举丢失 {floor}(实测 {sorted(used_dynamic)}) —— format.js 改版须同步本守阵下限")
 
-    used = used_static | used_dynamic
+    used = used_static | used_dynamic | used_unit_mods
     missing = {}
     for ui in _UI_ALL:
         css = re.sub(r"/\*.*?\*/", "", _ui_css_effective(ui), flags=re.S)
         defined = set()
         for mo in re.finditer(r"([^{}@/][^{}]*)\{", css):
             defined.update(re.findall(r"\.((?:cs|csb|csp|cst|csu)-[A-Za-z0-9-]+)", mo.group(1)))
+            # 修饰复合键: .cs-unit.<修饰> 复合选择器里的修饰 token 不带 cs- 前缀, 上面的
+            # 命名空间提取吃不到(实测 '.cs-unit.dim .cs-uu' 只出 cs-unit/cs-uu) —— 白名单
+            # 修饰以复合键入 defined 面; 白名单修饰从 defined 消失即红。
+            defined.update("cs-unit." + t for t in _CS_UNIT_MOD_RE.findall(mo.group(1)))
         gap = sorted(used - defined)
         if gap:
             missing[ui] = gap
     assert not missing, (
-        f"列风格「模板类→CSS 配对」失守: 以下 cs-* 类名在该皮肤的有效级联面里没有任何选择器规则 "
+        f"列风格「模板类→CSS 配对」失守: 以下 cs-* 类名(含 cs-unit.<修饰> 色样修饰复合键)在该皮肤的有效级联面里没有任何选择器规则 "
         f"(类照挂 DOM 但选择器永不命中, 色样/着色/档位映射静默失效; 列风格映射规则族单点在 "
         f"shared/console_hub.css 尾段, 四皮肤逐一面都要有): {missing}"
     )

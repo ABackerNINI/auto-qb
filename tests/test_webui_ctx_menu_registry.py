@@ -16,6 +16,13 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); 3. 接线
   W2 期还另有一项「注册表 ↔ 静态模板计数对账」过渡锚
   (52 项 + 14 线逐支相等), W3 模板 v-for 化后如期退役 —— 渲染层零漂移由 e2e menus.spec 接棒,
   注册表层由本文件余两项与 W5 新守阵(注册表 id ↔ 默认布局 ↔ config 契约 ↔ flags 键)接棒
+- test_ctx_head_menu_style_literals_paired_colstyle_enums: 表头菜单五维写链字面量与引擎枚举
+  静态配对守阵(计划 26-11-20-0009 接缝终审 minor 1) —— ctx-menus.html 里逐项手写的
+  headMenuStyle<Dim>('<值>') 调用实参与 app.js COLSTYLE_ENUMS 五维值集互为手抄副本, 引擎
+  setColStyle(colstyle.js)对非法 dim/value 静默拒绝(return false, 该维点击死档无报错);
+  从两份静态文本各自提取(模板剥 HTML 注释后按文档序取实参 / 枚举块静态文本解析), 逐维钉
+  **有序相等**(实参序 = 菜单项序 = 枚举序, 第 0 项即默认档)+ 维度集合 == 五维白名单
+  _CS_MENU_STYLE_DIMS + 写链调用总数 == 24(3+5+6+2+8), 任一侧漂移/换序/加删项/新维即红
 - test_ctx_menu_registry_node_battery: node 真跑电池(无 node 静默跳过, 不引入 skip) —— 默认布局
   硬编码钉(四支 + 次级逐位) + 注册表完整性(id 唯一/形状齐/gate·dyn 合法/次级默认仅 member) +
   无 cfg 渲染 == 默认序 + 补尾 + 隐藏槽位保留与恢复归位 + 跨层双向 + sep 增删与 token 分配 +
@@ -574,6 +581,65 @@ def test_ctx_menu_template_consumes_registry():
     body = re.sub(r"<!--.*?-->", "", row, flags=re.S)
     for dead in ("Shift + ", "Ctrl + ", "Alt + "):
         assert dead not in body, (f"行菜单模板出现写死键位串「{dead}」—— 键位显示串一律经 kbShortcutDisplay 单点现算(I1)")
+
+
+# 表头菜单列风格五维白名单(计划 26-11-20-0009): 引擎 COLSTYLE_FIELDS(barstyle/barramp/
+# speedramp/numeric/units)的守阵侧副本 —— 新增第六维/退役某维必须显式改这里, 不许静默绕过。
+_CS_MENU_STYLE_DIMS = ("barstyle", "barramp", "speedramp", "numeric", "units")
+
+
+def test_ctx_head_menu_style_literals_paired_colstyle_enums():
+    """表头菜单五维写链字面量与引擎枚举静态配对守阵(计划 26-11-20-0009 接缝终审 minor 1)
+
+    五维"点击 -> 生效"链是一串手抄副本: ctx-menus.html 逐项手写的 headMenuStyle<Dim>('<值>')
+    调用实参(24 个)与 app.js COLSTYLE_ENUMS 五维值集互为手抄, 引擎入口 setColStyle(colstyle.js)
+    按枚举闸校验, 非法 dim/value **静默拒绝**(return false, menu.js _headMenuStyleSet 拿到
+    false 直接 return) —— 任一处漂移(手滑改名/加项只动一侧/换序)该维全部点击死档, 无报错
+    也无测试红。本守阵从两份静态文本各自提取并逐维钉**有序相等**:
+      实参序(=模板文档序=菜单项序)== 枚举序(=菜单循环序, 第 0 项即默认档)。
+    能红推演: 改掉任一侧同维任一值/换序/加删项即红; 新增维度(任一侧多出第六维)也红 ——
+    同步 _CS_MENU_STYLE_DIMS 白名单是显式决策。
+    """
+    # 模板侧: 剥 HTML 注释(头注的 headMenuStyle<Dim>(menu.js) 是文档不是调用)后按文档序
+    # 提取全部写链调用; 维度名取自函数后缀(headMenuStyleBarstyle -> barstyle)小写归一,
+    # 后缀白名单不预设 —— 新后缀天然落进维度集合断言的"多出维度"红。
+    with open(_CTX_MENUS_TPL, encoding="utf-8") as f:
+        tpl = re.sub(r"<!--.*?-->", "", f.read(), flags=re.S)
+    args_by_dim = {}
+    for m in re.finditer(r"headMenuStyle([A-Z][A-Za-z]*)\('([^'\n]+)'\)", tpl):
+        args_by_dim.setdefault(m.group(1).lower(), []).append(m.group(2))
+
+    # 引擎侧: app.js COLSTYLE_ENUMS 五维值集(静态文本解析; 值一律双引号串, 单引号写法
+    # 会让提取为空而红 —— 引擎文件改版须同步本守阵提取锚)
+    with open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8") as f:
+        app_js = f.read()
+    m_enum = re.search(r"const COLSTYLE_ENUMS = \{(.*?)\};", app_js, re.S)
+    assert m_enum, "app.js 缺 COLSTYLE_ENUMS 枚举单点(引擎值域被移走/改名? 同步本守阵提取锚)"
+    enums_by_dim = {}
+    for dim, vals in re.findall(r"(\w+): \[([^\]]*)\]", m_enum.group(1)):
+        enums_by_dim[dim] = re.findall(r'"([^"]+)"', vals)
+
+    # 维度集合两侧一致且 == 五维白名单(新维/删维/维改名必须显式过本守阵)
+    assert sorted(args_by_dim) == sorted(_CS_MENU_STYLE_DIMS), (
+        f"模板写链维度 {sorted(args_by_dim)} != 五维白名单 {sorted(_CS_MENU_STYLE_DIMS)} —— "
+        "模板侧多出/缺少维度(新维度须同步白名单; 提取为空多半是模板改版丢了调用形态)"
+    )
+    assert sorted(enums_by_dim) == sorted(_CS_MENU_STYLE_DIMS), (
+        f"COLSTYLE_ENUMS 维度 {sorted(enums_by_dim)} != 五维白名单 {sorted(_CS_MENU_STYLE_DIMS)} —— "
+        "引擎侧多出/缺少维度(须同步引擎与本守阵 _CS_MENU_STYLE_DIMS)"
+    )
+    # 逐维有序相等: 实参序 = 菜单项序 = 枚举序(循环序, 第 0 项即默认档)
+    for dim in _CS_MENU_STYLE_DIMS:
+        assert args_by_dim[dim] == enums_by_dim[dim], (
+            f"列风格 {dim} 维菜单实参 {args_by_dim[dim]} != 引擎枚举 {enums_by_dim[dim]} —— "
+            "两侧互为手抄副本, 任一侧漂移 = 引擎 setColStyle 静默拒绝该维全部点击(死档无报错); "
+            "顺序即菜单循环序(第 0 项默认档), 改序同样红"
+        )
+    # 总数钉(同文件 key 对账 44 钉先例): 24 = 3(barstyle) + 5(barramp) + 6(speedramp)
+    # + 2(numeric) + 8(units) —— 菜单项/枚举加删项两侧同步后必须显式更新本钉
+    n_calls = sum(len(v) for v in args_by_dim.values())
+    assert n_calls == 24, (f"表头菜单五维写链调用共 {n_calls} 个 != 24(3+5+6+2+8) —— 加删菜单项必须模板/枚举"
+                           "两侧同步并更新本钉")
 
 
 def test_ctx_menu_registry_node_battery():
