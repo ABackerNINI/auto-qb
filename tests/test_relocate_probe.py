@@ -41,6 +41,25 @@
 - test_start_hook_sweeps_residue: relocate 启动钩子: enabled 时清残留并在日志提及; disabled/dry_run 不动手
 - test_lifecycle_mixin_wires_sweep: LifecycleMixin.start 源码里确实调用 sweep_probe_residue(钩子挂接不回退)
 
+S5 探测中途断点残留态钉扎(计划 26-11-10-2350 §04-S5; 拍板 D4: 残留交 sweep 启动清扫,
+有洞在 sweep 补 —— 探测 daemon 线程随进程死, 残留形态与单线程时代同四断点):
+- test_sweep_residue_breakpoint_add_done: 断点1(add 完成后退出): 种子已在 qB + src 探针
+  目录已落盘 => sweep 种子+目录两半全清, dst 侧零误伤
+- test_sweep_residue_breakpoint_read_proof_exit: 断点2(证读中途退出): 证读轮询里挂掉,
+  形态与断点1同(recheck 已下发 progress 推进不改认领面) => 两半全清
+- test_sweep_residue_breakpoint_write_proof_exit: 断点3(证写中途退出): 整目录搬模型下
+  种子 save_path=dst 探针目录 + dst 目录含证写文件 => 两半全清; 对侧残留形态(qB 也没
+  搬完: 两侧探针目录都在)由 pending 根集目录扫描闭合
+- test_sweep_residue_breakpoint_cleanup_half_done: 断点4(清理中途退出, 最阴形态): 种子已
+  被 deleteFiles 删掉、目录半删 => 无种子可认领, 由 pending 根集目录扫描闭合(补洞用例);
+  非前缀目录/前缀同名文件/根集读不到都不碰不挡(保守认领边界)
+- test_sweep_residue_namespaced_maps_save_path: 容器部署(fs.path_map)下 sweep 目录半经
+  map_to_container 换算本机侧: save_path 派生目录与 pending 根集扫描两路都走映射
+- test_sweep_residue_prefix_lookalike_dir_untouched: 目录认领收紧(major 修): pending 根集
+  扫描只认自产名字形状(前缀 + 6~12 位小写十六进制) —— 前缀同名非 token 形状的用户目录
+  (aqb-probe-old)与大写 hex 形态不碰; 自产形状(8 位夹具形态/12 位 token_hex(6) 现产形态)
+  照常清, 返回值语义不变(仍是种子条数)
+
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
 - test_probe_bencode_type_gates: _bencode 类型闸(bool 拒 / list 编码 / float 拒)
 - test_probe_api_unavailable_env: ctx 无 api => 环境性失败 api_unavailable
@@ -56,7 +75,8 @@
 - test_cleanup_rmtree_failure_and_leftover: 目录清理失败 residue 留证
 - test_sweep_probe_residue_list_error_returns_zero: 扫描列种子炸返回 0 不挡启动
 - test_sweep_probe_residue_delete_failure_and_hashless: 残留删除失败继续/无 hash 条目不发删除
-- test_sweep_probe_residue_dir_cleanup_failure_warns: 残留目录清理失败只告警
+- test_sweep_probe_residue_dir_cleanup_failure_warns: 残留目录清理失败只告警(save_path 派生
+  与 S5 pending 根集扫描两路同判)
 """
 
 import hashlib
@@ -540,6 +560,217 @@ def test_sweep_residue_tag_only_zero_action(tmp_path):
     assert any("非探针" in r.getMessage() for r in rec.records)
 
 
+# ---------- S5 断点残留态钉扎(计划 26-11-10-2350 §04-S5; daemon 线程随进程死, 残留形态同单线程时代四断点) ----------
+
+
+def test_sweep_residue_breakpoint_add_done(tmp_path):
+    """断点1(add 完成后退出): 种子已在 qB + src 探针目录已落盘 => sweep 种子+目录两半全清
+
+    探测中途进程退出此刻的残留: 探针种子(stopped, tag=TAG_PROBE)已 add 进 qB、探针文件已
+    落 src 侧临时子目录, dst 侧未动(setLocation 尚未下发)。种子半走 tag+前缀认领 deleteFiles,
+    目录半走 save_path 前缀认领 rmtree —— 两半都该被清干净。
+    """
+    ctx, client, src, dst = _env(tmp_path)
+    save_path = _inject_residue(ctx, client, src)
+    assert os.path.isfile(os.path.join(save_path, "aqb-probe-deadbeef.bin"))
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == [] and not os.path.exists(save_path)
+    assert os.listdir(dst) == []  # dst 侧本就无残留, 也不得误伤
+
+
+def test_sweep_residue_breakpoint_read_proof_exit(tmp_path):
+    """断点2(证读中途退出): 证读轮询里挂掉 => 残留形态与断点1同, sweep 两半全清
+
+    证读阶段(recheck 下发 + progress 轮询)不改变种子位置与本机文件布局, 残留态与断点1
+    唯一差异是 progress 已推进 —— 认领面(tag+前缀 / save_path 前缀)不受影响, 照常全清。
+    """
+    ctx, client, src, dst = _env(tmp_path)
+    save_path = _inject_residue(ctx, client, src)
+    client.torrents["RES1"].progress = 0.5  # recheck 进行中挂掉
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == [] and not os.path.exists(save_path)
+    assert os.listdir(dst) == []
+
+
+def test_sweep_residue_breakpoint_write_proof_exit(tmp_path):
+    """断点3(证写中途退出): 种子 save_path=dst 探针目录 + dst 目录含证写文件 => 两半全清
+
+    主形态: 进程退出时 qB 还活着, 4KiB 探针的搬运在 qB 侧自会做完 —— 整目录搬模型下
+    src 侧已随搬走消失, 残留 = dst 侧种子+目录(save_path 已指向 dst 探针目录)。
+    对侧残留形态(qB 也没搬完, 两侧探针目录都在): save_path 只够认领一侧, 另一侧由
+    pending 根集目录扫描闭合(本用例后半段)。
+    """
+    ctx, client, src, dst = _env(tmp_path)
+    dst_probe = os.path.join(dst, rp.PROBE_DIR_PREFIX + "cafebabe")
+    os.makedirs(dst_probe)
+    with open(os.path.join(dst_probe, "aqb-probe-cafebabe.bin"), "wb") as f:
+        f.write(b"proof")
+    client.torrents["RES3"] = FakeTorrent(
+        hash="RES3", name="aqb-probe-cafebabe.bin", save_path=dst_probe, tags=rp.TAG_PROBE
+    )
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == [] and not os.path.exists(dst_probe)
+    assert os.listdir(src) == []
+    # 对侧残留形态: src/dst 两侧探针目录都在(搬运半途), pending 账上有这对根 => 两半全清
+    src_probe = os.path.join(src, rp.PROBE_DIR_PREFIX + "cafebabe")
+    os.makedirs(src_probe)
+    with open(os.path.join(src_probe, "aqb-probe-cafebabe.bin"), "wb") as f:
+        f.write(b"leftover")
+    os.makedirs(dst_probe)
+    with open(os.path.join(dst_probe, "aqb-probe-cafebabe.bin"), "wb") as f:
+        f.write(b"proof")
+    client.torrents["RES4"] = FakeTorrent(
+        hash="RES4", name="aqb-probe-cafebabe.bin", save_path=dst_probe, tags=rp.TAG_PROBE
+    )
+    ctx.relocate.probe_pending_append("fp1", ["H1"], src, dst, "rule")
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == []
+    assert not os.path.exists(src_probe) and not os.path.exists(dst_probe)
+    assert os.listdir(src) == [] and os.listdir(dst) == []
+
+
+def test_sweep_residue_breakpoint_cleanup_half_done(tmp_path):
+    """断点4(清理中途退出, 最阴形态): 种子已被 deleteFiles 删掉、目录半删 => 无种子可认领,
+    pending 根集目录扫描闭合(补洞用例)
+
+    _cleanup 的 delete 成功到 rmtree 之间被杀(消失轮询预算最长 5s + rmtree 窗口): qB 里已
+    无种子(tag 列表空, 返回值 0 —— 语义仍是种子条数), src/dst 探针目录残留半删态。补洞后
+    按 pending 意图的 src/dst 根集(D7 持久化, start/apply 挂点里 sweep 先于 recover 跑,
+    账面完整)在 FS 侧认领前缀目录删除。保守认领边界一并钉住: 非前缀目录不碰、前缀同名
+    文件不碰、根集读取失败不挡种子路径的正常清扫、二次扫描幂等。
+    """
+    ctx, client, src, dst = _env(tmp_path)
+    src_probe = os.path.join(src, rp.PROBE_DIR_PREFIX + "deadbeef")
+    os.makedirs(src_probe)
+    with open(os.path.join(src_probe, "aqb-probe-deadbeef.bin"), "wb") as f:
+        f.write(b"partial")  # rmtree 半途: 文件还在
+    dst_probe = os.path.join(dst, rp.PROBE_DIR_PREFIX + "cafebabe")
+    os.makedirs(dst_probe)  # deleteFiles 已删内容、rmtree 未跑: 空目录
+    user_dir = os.path.join(src, "user-keep")  # 同根下的用户目录: 保守认领边界, 不碰
+    os.makedirs(user_dir)
+    with open(os.path.join(user_dir, "e01.mkv"), "w") as f:
+        f.write("keep")
+    prefix_file = os.path.join(dst, rp.PROBE_DIR_PREFIX + "not-a-dir")  # 前缀同名文件: 不碰
+    with open(prefix_file, "w") as f:
+        f.write("file not dir")
+    ctx.relocate.probe_pending_append("fp1", ["H1"], src, dst, "rule")
+    with capture_logs("auto_qb.core.modules.relocate_mod", level=logging.WARNING) as rec:
+        assert rp.sweep_probe_residue(ctx) == 0  # 无种子可清: 返回值仍是种子条数
+    assert not os.path.exists(src_probe) and not os.path.exists(dst_probe)
+    assert os.path.exists(os.path.join(user_dir, "e01.mkv"))
+    assert os.path.isfile(prefix_file)
+    assert any("残留探测目录" in r.getMessage() for r in rec.records)
+    # 幂等: 二次扫描(目录已清, pending 账仍在)零动作不误伤
+    assert rp.sweep_probe_residue(ctx) == 0
+    assert os.listdir(src) == ["user-keep"] and os.listdir(dst) == [rp.PROBE_DIR_PREFIX + "not-a-dir"]
+
+    # 根集读不到(pending 账面炸)不挡扫描: 种子+目录两半的既有认领路径照常走
+    def _boom():
+        raise RuntimeError("pending broke")
+
+    ctx.relocate.probe_pending_list = _boom
+    save_path2 = _inject_residue(ctx, client, src)
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == [] and not os.path.exists(save_path2)
+    # 根集防御面: 坏条目跳过 / 同根去重 / 空根与缺失根零动作(扫描照常, 用户目录仍保留)
+    ctx.relocate.probe_pending_list = lambda: (
+        "junk",
+        {
+            "src": src,
+            "dst": src
+        },  # src == dst 同根: 去重只扫一次
+        {
+            "src": "",
+            "dst": dst
+        },  # 空根跳过
+        {
+            "src": os.path.join(str(tmp_path), "no-such-root"),
+            "dst": dst
+        },  # 缺失根: OSError 吞掉
+    )
+    assert rp.sweep_probe_residue(ctx) == 0
+    assert os.path.exists(os.path.join(user_dir, "e01.mkv"))
+    # 根集不可达(relocate 句柄缺失): 目录侧兜底静默空转, 种子路径认领照常
+    ctx.relocate = None
+    save_path3 = _inject_residue(ctx, client, src)
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert not os.path.exists(save_path3)
+
+
+def test_sweep_residue_prefix_lookalike_dir_untouched(tmp_path):
+    """前缀同名但非自产 token 形状的用户目录不碰(major 修: 目录认领收紧到自产名字形状)
+
+    用户目录恰好叫 aqb-probe-old 之类且恰逢崩溃后启动(pending 账上有意图): 裸前缀单条件
+    认领会把它静默 rmtree(不可恢复)。收紧后认领 = 前缀 + 6~12 位小写十六进制 token
+    (run_probe 的 token_hex(6) 自产形状): 非 hex 尾段(aqb-probe-old)与大写 hex 形态
+    (token_hex 只产小写)一律不碰; 真自产形状(8 位夹具/历史形态 cafebabe、12 位现产形态)
+    照常清。返回值语义不变: 无种子可清 => 0(种子条数)。
+    """
+    ctx, _client, src, dst = _env(tmp_path)
+    lookalike = os.path.join(src, rp.PROBE_DIR_PREFIX + "old")  # 前缀同名, 尾段非 hex: 用户目录
+    os.makedirs(lookalike)
+    with open(os.path.join(lookalike, "backup.dat"), "w") as f:
+        f.write("keep")
+    upper = os.path.join(src, rp.PROBE_DIR_PREFIX + "DEADBEEF")  # token_hex 只产小写: 大写形状不认领
+    os.makedirs(upper)
+    with open(os.path.join(upper, "x.bin"), "w") as f:
+        f.write("keep")
+    real8 = os.path.join(src, rp.PROBE_DIR_PREFIX + "cafebabe")  # 8 位小写 hex(夹具/历史形态): 仍认领
+    os.makedirs(real8)
+    with open(os.path.join(real8, "aqb-probe-cafebabe.bin"), "wb") as f:
+        f.write(b"leftover")
+    real12 = os.path.join(dst, rp.PROBE_DIR_PREFIX + "0f1e2d3c4b5a")  # 12 位小写 hex(现产 token_hex(6) 形态)
+    os.makedirs(real12)
+    with open(os.path.join(real12, "aqb-probe-0f1e2d3c4b5a.bin"), "wb") as f:
+        f.write(b"leftover")
+    ctx.relocate.probe_pending_append("fp1", ["H1"], src, dst, "rule")
+    assert rp.sweep_probe_residue(ctx) == 0  # 无种子可清: 返回值仍是种子条数
+    assert os.path.exists(os.path.join(lookalike, "backup.dat"))  # 用户目录整目录保留
+    assert os.path.exists(os.path.join(upper, "x.bin"))  # 大写形状同不碰
+    assert not os.path.exists(real8) and not os.path.exists(real12)  # 自产形状照常清
+    assert sorted(os.listdir(src)) == [rp.PROBE_DIR_PREFIX + "DEADBEEF", rp.PROBE_DIR_PREFIX + "old"]
+    assert os.listdir(dst) == []
+
+
+def test_sweep_residue_namespaced_maps_save_path(tmp_path, monkeypatch):
+    """容器部署(fs.path_map)下 sweep 目录半经 map_to_container 换算本机侧
+
+    种子半(tag 认领 + deleteFiles)不依赖本机路径; 目录半的两个认领源 —— save_path 派生
+    目录与 pending 根集扫描 —— 在容器部署下都是 qB 逻辑路径, 直 rmtree 必 FileNotFoundError
+    空转(修复前形态), 须换算后清本机侧真实目录。
+    """
+    local_src = os.path.join(str(tmp_path), "local-src")
+    local_dst = os.path.join(str(tmp_path), "local-dst")
+    os.makedirs(local_src)
+    os.makedirs(local_dst)
+    ctx, client, _src, _dst = _env(tmp_path)
+    # make_manager 构造会经 init_file_access 重建单例, 映射替换必须在其后(与命名空间探测用例同款)
+    monkeypatch.setattr(
+        file_access,
+        "_instance",
+        file_access.MappedFileAccess(
+            (PathMapEntry(src="/qb/src", dst=local_src), PathMapEntry(src="/qb/dst", dst=local_dst))
+        ),
+    )
+    # 形态1: 种子在场(save_path=逻辑路径) + 本机侧目录在场 => deleteFiles + 映射后 rmtree
+    local_probe = os.path.join(local_src, rp.PROBE_DIR_PREFIX + "deadbeef")
+    os.makedirs(local_probe)
+    with open(os.path.join(local_probe, "aqb-probe-deadbeef.bin"), "wb") as f:
+        f.write(b"leftover")
+    client.torrents["RES1"] = FakeTorrent(
+        hash="RES1", name="aqb-probe-deadbeef.bin", save_path="/qb/src/aqb-probe-deadbeef", tags=rp.TAG_PROBE
+    )
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == [] and not os.path.exists(local_probe)
+    # 形态2: 种子已删(清理半途), 本机侧目录残留, pending 账上是逻辑根 => 映射后扫描清目录
+    local_probe2 = os.path.join(local_dst, rp.PROBE_DIR_PREFIX + "cafebabe")
+    os.makedirs(local_probe2)
+    ctx.relocate.probe_pending_append("fp1", ["H1"], "/qb/src", "/qb/dst", "rule")
+    assert rp.sweep_probe_residue(ctx) == 0
+    assert not os.path.exists(local_probe2)
+    assert os.listdir(local_src) == [] and os.listdir(local_dst) == []
+
+
 def test_start_hook_sweeps_residue(tmp_path, fast_timeouts):
     """relocate 启动钩子: enabled 时清残留并在启动日志提及; disabled / dry_run 不动手"""
     residue_root = os.path.join(str(tmp_path), "src")
@@ -811,7 +1042,7 @@ def test_sweep_probe_residue_delete_failure_and_hashless(tmp_path):
 
 
 def test_sweep_probe_residue_dir_cleanup_failure_warns(tmp_path, monkeypatch):
-    """残留目录清理失败: 只告警不抛(人工/启动扫描兜底)"""
+    """残留目录清理失败: 只告警不抛(人工/启动扫描兜底); S5 目录侧兜底(pending 根集扫描)同判"""
     ctx, client, src, dst = _env(tmp_path)
     save_path = _inject_residue(ctx, client, src)
 
@@ -821,3 +1052,9 @@ def test_sweep_probe_residue_dir_cleanup_failure_warns(tmp_path, monkeypatch):
     monkeypatch.setattr(shutil, "rmtree", _boom)
     assert rp.sweep_probe_residue(ctx) == 1
     assert os.path.exists(save_path)  # 目录清理失败: 保守保留现场
+    # pending 根集扫描的目录清理失败同口径: 只告警不抛, 现场保留
+    ctx.relocate.probe_pending_append("fp1", ["H1"], src, dst, "rule")
+    scan_path = os.path.join(dst, rp.PROBE_DIR_PREFIX + "cafebabe")
+    os.makedirs(scan_path)
+    assert rp.sweep_probe_residue(ctx) == 0  # 种子上一轮已删: 返回值仍是种子条数
+    assert os.path.exists(scan_path)  # 扫描侧清理失败同样保守保留

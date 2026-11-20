@@ -20,7 +20,9 @@
   无 tracker、autoTMM=false —— 避免被用户分类/自动管理规则搬走;
 - 各阶段失败路径一律执行尽力清理(finally 语义), 绝不把探针种子留在用户 qB 里;
   清理失败不改变探测结论, 只进 evidence 并 logger.warning;
-- 崩溃残留兜底: sweep_probe_residue 按 tag 扫描删除, 挂 relocate 生命周期启动钩子。
+- 崩溃残留兜底: sweep_probe_residue 按 tag 扫描删除种子 + 按 pending 意图根集扫前缀临时
+  目录(S5: 清理半途被杀的形态种子已删, 目录侧只能按根集在 FS 侧认领), 挂 relocate
+  生命周期启动钩子。
 
 qbapi 口径: 全部 qB 调用走 ctx.api(QbApi Facade 既有透传方法 torrents_add(文件方式)/
 torrents_recheck/torrents_set_location/torrents_delete(delete_files=True)/torrents_info
@@ -33,6 +35,7 @@ import hashlib
 import hmac
 import os
 import queue
+import re
 import secrets
 import shutil
 import threading
@@ -49,6 +52,12 @@ from .relocate_units import TAG_PROBE  # 探测标签定义迁 units(S5-2): qbap
 # ---------- 常量单点(计划 §04 P2-5: 每步独立短超时, 总预算收敛; 真机实测常态 ~1.3s) ----------
 
 PROBE_DIR_PREFIX = "aqb-probe-"  # 临时子目录固定前缀(D8: 目录隔离不散落; 残留扫描按前缀认领)
+# 目录认领第二因子(与 PROBE_DIR_PREFIX 相邻单点, 呼应 run_probe 的名字生成): 自产目录名恒为
+# 前缀 + secrets.token_hex(6) = 12 位小写十六进制, 裸前缀单条件会把用户恰好叫 aqb-probe-old
+# 之类的目录当残留静默 rmtree(不可恢复), 故目录认领除前缀外还须整体匹配十六进制 token。
+# 长度窗口 6~12: 上界 12 容自产形状, 下界 6 兼容历史残留/测试夹具的 8 位形态; 认领谓词
+# _is_probe_dir_name(紧随常量区)。
+_PROBE_DIR_TOKEN_RE = re.compile(r"[0-9a-f]{6,12}")
 PROBE_FILE_SIZE = 4096  # 探针内容 4KiB(单 piece)
 PROBE_PIECE_LENGTH = 16384  # piece length 16KiB => 1 个 piece
 PROBE_READ_TIMEOUT_S = 10.0  # 证读预算: 种子可见 + recheck 进 1.0
@@ -73,6 +82,21 @@ STATUS_FAILED = "failed"
 # runner 合成 verdict 的稳定判语(线程内逃逸异常/线程侧连接构造失败; env=True 不缓存,
 # T3 重放遇 blocked 终止自动链防自环, 下次真实触发再试)
 PROBE_RUNNER_CRASHED_REASON = "runner_crashed"
+
+# ---------- 目录名认领(残留目录扫描的命名闸, 与 PROBE_DIR_PREFIX/_PROBE_DIR_TOKEN_RE 相邻单点) ----------
+
+
+def _is_probe_dir_name(name: str) -> bool:
+    """探测临时目录名认领单点(与 _is_probe_torrent 同风格的保守认领): 前缀 + 自产 token 形状
+
+    run_probe 自产目录名恒为 PROBE_DIR_PREFIX + secrets.token_hex(6) = 12 位小写十六进制,
+    两个因子全命中才认领是探测临时目录: 只看前缀会把用户目录恰好叫 aqb-probe-old 之类的
+    形状当残留静默 rmtree(不可恢复)。形状闸是 _PROBE_DIR_TOKEN_RE(紧邻 PROBE_DIR_PREFIX):
+    尾段须整体是 6~12 位小写十六进制, 形状不命中一律不碰(删除不可恢复, 保守默认宁可漏扫)。
+    """
+    if not name.startswith(PROBE_DIR_PREFIX):
+        return False
+    return _PROBE_DIR_TOKEN_RE.fullmatch(name[len(PROBE_DIR_PREFIX):]) is not None
 
 
 @dataclass
@@ -639,7 +663,70 @@ class ProbeRunner:
 PROBE_SLOT = ProbeSingleFlight()
 PROBE_VERDICT_QUEUE = queue.Queue()
 
-# ---------- 启动残留扫描(R2: 崩溃在 add 之后 delete 之前会留探测种子+文件) ----------
+# ---------- 启动残留扫描(R2: 崩溃在 add 之后 delete 之前会留探测种子+文件; S5 补目录侧兜底) ----------
+
+
+def _probe_pending_roots(ctx: Any) -> list:
+    """残留目录扫描根集(只读 pending 意图的 src/dst; S5 断点4 补洞的数据面)
+
+    清理半途被杀的残留(_cleanup 种子已删、目录未删)没有种子记录可认领 —— tag 驱动的
+    种子扫描看不见目录; 残留探测的 src/dst 根集唯一有账的地方是 pending 意图(D7 持久化,
+    T2 先落账再 kick, start/apply 挂点里 sweep 先于 recover 跑, 扫描时账面完整)。本函数
+    只读不写, 账面生命周期(超龄清扫/重 kick/消费清条目)仍归 T3 消费链 —— 与 pending
+    账面清扫是两层, 不混淆不重复建。访问面全部防御式(getattr/try): 根集读不到 = 空集,
+    绝不让残留扫描挡启动。
+    """
+    roots: list = []
+    try:
+        mod = getattr(ctx, "relocate", None)
+        list_pending = getattr(mod, "probe_pending_list", None)
+        entries = list_pending() if callable(list_pending) else ()
+    except Exception as e:  # noqa: BLE001 - 根集读不到按空处理, 目录侧兜底本轮跳过
+        logger.warning(f"relocate | probe: 残留目录扫描根集读取失败({e}) —— 目录侧兜底本轮跳过")
+        return []
+    for entry in entries or ():
+        if not isinstance(entry, dict):
+            continue
+        for key in ("src", "dst"):
+            root = str(entry.get(key) or "").strip()
+            if root and root not in roots:
+                roots.append(root)
+    return roots
+
+
+def _sweep_residue_dirs(ctx: Any) -> int:
+    """按 pending 根集扫自产形状临时目录并整目录删除(目录侧兜底, S5 断点4 补洞)
+
+    种子已删(清理半途退出)的残留没有种子可认领, 只能按根集在 FS 侧认领: 根的**直接子
+    目录**名字须是自产形状(前缀 PROBE_DIR_PREFIX + 十六进制 token, 认领单点
+    _is_probe_dir_name —— run_probe 只在根下建前缀子目录, setLocation 按整目录搬到对侧
+    根, 深度恒为 1 —— 不递归, 不扩大认领面), 命名认领与 _is_probe_torrent/种子路径清理
+    同一套纪律(本文件不设第二套口径); 非前缀目录、前缀同名文件与前缀同名但非 token
+    形状的目录(用户恰好叫 aqb-probe-old 之类)一律不碰 —— 删除不可恢复, 形状不命中
+    宁可漏扫。根集是 qB 逻辑路径, 经 _map_local 换算本机侧(与 run_probe 本机读写同
+    纪律)。幂等: 清过的根二次扫描为空。返回清理的目录数(只进日志留痕, 不并入返回值
+    —— 既有返回语义是种子条数)。
+    """
+    removed = 0
+    for root in _probe_pending_roots(ctx):
+        local_root = _map_local(root)
+        try:
+            children = os.listdir(local_root)
+        except OSError:
+            continue  # 根不存在/不可达(未落盘/映射缺失): 该根无目录残留可扫
+        for child in children:
+            if not _is_probe_dir_name(child):
+                continue  # 非自产形状(非前缀/前缀同名但非 token 形状): 一律不碰
+            path = os.path.join(local_root, child)
+            if not os.path.isdir(path):
+                continue  # 形状撞名文件不是探测目录, 不碰
+            try:
+                shutil.rmtree(path)
+                removed += 1
+                logger.warning(f"relocate | probe: 启动扫描清理残留探测目录 {path}")
+            except Exception as e:  # noqa: BLE001 - 目录清理失败只告警
+                logger.warning(f"relocate | probe: 残留探测目录清理失败 {path}({e})")
+    return removed
 
 
 def sweep_probe_residue(ctx: Any) -> int:
@@ -649,7 +736,10 @@ def sweep_probe_residue(ctx: Any) -> int:
     准入双条件(保守默认, _is_probe_torrent 单点, 与可见性轮询/清理补删同口径): tag 命中
     只说明"可能"是探测种子, 种子名或保存路径带 aqb-probe 固定前缀才认领并删文件; 未被
     认领的条目(R1#41: 用户自己打了同名 tag 的种子)零动作只 warning —— 摘记录也会让用户
-    种子静默移出 qB 中断做种, 种子与目录一概不碰; 目录侧同样只清自己命名规律的路径。
+    种子静默移出 qB 中断做种, 种子与目录一概不碰; 目录侧同样只清自己命名规律的路径,
+    且经 _map_local 换算本机侧(容器部署下 save_path 是 qB 逻辑路径, 直 rmtree 必空转)。
+    种子已删的半途残留(清理中途退出, 断点4)没有种子可认领, 由 _sweep_residue_dirs 按
+    pending 根集在 FS 侧补扫(返回值语义不变, 仍是种子条数)。
     """
     api = getattr(ctx, "api", None)
     if api is None or getattr(api, "client", None) is None:
@@ -679,10 +769,12 @@ def sweep_probe_residue(ctx: Any) -> int:
         cleaned += 1
         base = os.path.basename(str(save_path).rstrip("\\/"))
         if base.startswith(PROBE_DIR_PREFIX):  # 只清自己命名规律的目录(保守默认)
+            target = _map_local(str(save_path))  # 逻辑路径 -> 本机 syscall 路径(容器部署下必换算)
             try:
-                shutil.rmtree(save_path)
+                shutil.rmtree(target)
             except Exception as e:  # noqa: BLE001 - 目录清理失败只告警
-                logger.warning(f"relocate | probe: 残留目录清理失败 {save_path}({e})")
+                logger.warning(f"relocate | probe: 残留目录清理失败 {target}({e})")
+    _sweep_residue_dirs(ctx)  # 目录侧兜底: 种子已删的清理半途残留按 pending 根集 FS 侧认领
     if cleaned:
         logger.warning(f"relocate | probe: 启动扫描清理上次崩溃残留探测种子 {cleaned} 个")
     return cleaned
