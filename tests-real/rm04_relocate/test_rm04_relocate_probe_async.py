@@ -30,8 +30,11 @@ runner._cases 按 id 建 dict 会静默覆盖 —— real.run --case RM05-01 会
   A2 消费日志出现前「迁移发起」计数不增(probing != started);
   A3 日志出现「probe verdict 消费: 指纹 <fp8> 结论 passed/ok(缓存已写(passed))」;
   A4 之后「迁移发起」出现 + 同 cmd_id 回执被终态补发覆盖为 ok(started 带 job_id, probing==0);
-  A5 mover save_path->dst + dst 文件对齐 + member2 测试侧助推后 job done(finalized)
-  (相位取数单点 = GET /api/torrents/{hash} 的 relocate.phase, journal/state.json 30s 迟滞不作断言源);
+  A5 mover save_path->dst + dst 文件对齐 + 非 mover 测试侧助推后 job done(finalized)
+  (mover 动态识别: 产品选拔 = records[0] 即 qB 列表序首个, 非测试可控(RM11 attempt1 实测
+   低 hash 者当选, h1/h2 谁当 mover 不可预置) —— 先到 dst 的唯一成员即 mover, 测试侧助推另一个;
+   非 mover 活体停在 src 等 qB 下线窗 fastresume 改写, 断言不能等它。
+   相位取数单点 = GET /api/torrents/{hash} 的 relocate.phase, journal/state.json 30s 迟滞不作断言源);
   A6 state.json relocate.probes 含 passed 条目(30s 周期落盘, 轮询等待);
   收尾残留断言: _probe_residue 对 src/dst 双空(探针种子与目录, 批B #4)。
 - RM04-37(判据 (3), L2): 同拓扑组 + 第三枚种子(W2 观测靶)。造法 = 句柄锁: POST 受理后测试进程
@@ -497,14 +500,22 @@ def test_rm04_36_probe_accept_warn_full_chain(secondary, workdir):
             M.wait_until(
                 lambda f=f, size=size: f.is_file() and f.stat().st_size == size, 60, lambda f=f: f"dst 侧文件未对齐: {f}"
             )
-        M.wait_until(
-            lambda: M.norm((qb.torrent(h1) or {}).get("save_path")) == M.norm(dst), 60,
-            lambda: f"mover save_path 未到 dst: {(qb.torrent(h1) or {}).get('save_path')}"
+        # mover = 产品选拔(records[0] = qB 列表序首个, 测试不可控; 本轮 attempt1 实测 mover=低
+        # hash 者而非 h1) —— 动态识别: 先到 dst 的唯一成员即 mover(非 mover 活体停在 src,
+        # 等 qB 下线窗 fastresume 改写, 不可能活体到 dst), 测试侧助推另一个(RM04-05 同款)。
+        def _mover_id():
+            at_dst = [h for h in (h1, h2) if M.norm((qb.torrent(h) or {}).get("save_path")) == M.norm(dst)]
+            return at_dst[0] if len(at_dst) == 1 else None
+
+        mover_h = M.wait_until(
+            _mover_id, 60, lambda:
+            f"mover save_path 未到 dst: h1={(qb.torrent(h1) or {}).get('save_path')} h2={(qb.torrent(h2) or {}).get('save_path')}"
         )
-        qb.set_location(h2, str(dst))  # member2 助推(RM04-05 同款: 收尾链等全员 save_path==dst)
+        member_h = h2 if mover_h == h1 else h1
+        qb.set_location(member_h, str(dst))  # 非 mover 助推(RM04-05 同款: 收尾链等全员 save_path==dst)
         M.wait_until(
-            lambda: M.norm((qb.torrent(h2) or {}).get("save_path")) == M.norm(dst), 30,
-            lambda: f"member2 setLocation 未生效: {(qb.torrent(h2) or {}).get('save_path')}"
+            lambda: M.norm((qb.torrent(member_h) or {}).get("save_path")) == M.norm(dst), 30,
+            lambda: f"非 mover({member_h[:8]}) setLocation 未生效: {(qb.torrent(member_h) or {}).get('save_path')}"
         )
 
         def _job_done():
@@ -520,6 +531,7 @@ def test_rm04_36_probe_accept_warn_full_chain(secondary, workdir):
             "job_id": job_id,
             "phase": job.get("phase"),
             "reason": job.get("reason"),
+            "mover": mover_h[:8],
             "save_path_h1": str(dst),
             "save_path_h2": str(dst)
         }
