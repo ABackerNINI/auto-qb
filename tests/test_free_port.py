@@ -5,8 +5,11 @@
 - test_returns_free_port: 返回的端口立即可绑
 - test_retry_on_occupied_candidate: 占住首个候选 → 重试后拿到另一个可用端口
 - test_exhausted_raises: 候选全被抢(monkeypatch) → RuntimeError 响亮失败
-- test_hold_run_returns_bindable_run: `hold_run(3)` 返回连号三位、当场真占住、放掉后仍可绑
-- test_hold_run_discards_run_whose_offset_is_refused: 纯合成 socket 注入 10013, 整段有一位被拒 ⇒ 整段丢弃换基址, 不交坏段(不碰真实端口, 断言不受并行抢口影响)
+- test_hold_run_returns_bindable_run: `hold_run(3)` 返回连号三位、基址落私用段、当场真占住、放掉后仍可绑
+- test_hold_run_discards_run_whose_offset_is_refused: 纯合成 socket 注入 10013, 整段有一位被拒 ⇒ 整段丢弃重画随机基址, 不交坏段(不碰真实端口, 断言不受并行抢口影响)
+- test_hold_run_width_guard_rejects_oversized_count: count 超出私用段宽度 ⇒ 任何 socket 创建前 RuntimeError(零网络)
+- test_hold_run_redraws_with_new_random_base: 重画必须重新抽取随机基址(randint 定序桩, 「提出循环每轮重绑同基址」的坏实现判红)
+- test_hold_run_exhausted_retries_raises: RETRIES 轮恒拒全败 ⇒ RuntimeError 且重画轮数 == RETRIES(与 free_port 耗尽钉面对称)
 - test_http_server_exclusive_bind_and_roundtrip: `http_server` 单点行为 —— 独占 bind(同端口再绑被拒)、真回环请求往返、不查 FQDN
 - test_http_server_single_point: tests/ 下禁裸 ThreadingHTTPServer 直建, 假服一律走单点(Windows SO_REUSEADDR 双绑假红, issue 26-11-11-0114; 豁免 bind 扫描器夹具 test_flaky_timing_guards.py 的字面量测试数据)
 """
@@ -89,9 +92,11 @@ def test_exhausted_raises(monkeypatch):
 
 
 def test_hold_run_returns_bindable_run():
-    """hold_run(3): 连号三位、持有期间真占住、放掉后每位仍可绑。"""
+    """hold_run(3): 基址落私用段、连号三位、持有期间真占住、放掉后每位仍可绑。"""
     base, socks = tp.hold_run(3)
     try:
+        assert tp.HOLD_RUN_PORT_LO <= base and base + 2 <= tp.HOLD_RUN_PORT_HI, \
+            "基址必须落私用段(脱离 bind(0) 分配前沿, issue 26-11-20-0320)"
         assert [s.getsockname()[1] for s in socks] == [base, base + 1, base + 2]
         with pytest.raises(OSError), socket.socket() as probe:
             probe.bind(("127.0.0.1", base + 1))  # 持有中 ⇒ 外人绑不上
@@ -104,37 +109,38 @@ def test_hold_run_returns_bindable_run():
 
 
 def test_hold_run_discards_run_whose_offset_is_refused(monkeypatch):
-    """整段有一位被拒(排除段 10013 / 独占 10048 同形) ⇒ 整段丢弃换基址, 不把坏段交给调用方。
+    """整段有一位被拒(排除段 10013 / 独占 10048 同形) ⇒ 整段丢弃重画随机基址, 不把坏段交给调用方。
 
     第一次尝试的**第二位** bind 抛 10013(与 base+1 落 Windows 排除段同形); 若实现只验基址,
-    坏段就会原样返回, 调用方显式 bind 时炸(issue 26-11-06-0330)。断言落在「丢弃」这个动作上:
+    坏段就会原样返回, 调用方显式 bind 时炸(issue 26-11-06-0330)。断言落在「丢弃重画」上:
     第一次尝试建出来的 socket 必须全部被关掉, 返回的必须是第二次尝试的完整段。
 
-    这里用**纯合成 socket**: 除注入点外不再走真实网络。旧版把真实 socket 当底板, 全量并行下
-    别的 worker 抢口 / 排除段会让 hold_run 多重试一轮, 「恰好 2 次尝试」的断言被环境噪声打红
-    (issue 26-11-10-0456); 更隐蔽的是第一次尝试若因真实端口失败, 注入根本不触发, 用例会假绿。
-    真绑/持有语义由 test_hold_run_returns_bindable_run 用真实 socket 覆盖, 两用例分工不重叠。
+    这里用**纯合成 socket**: 除注入点外不再走真实网络。hold_run 的基址是私用段随机数(不再有
+    bind(0) 取号 socket), 尝试边界改由 close 事件判定: hold_run 被拒后必须整段 close, 合成
+    socket 在 close 里置「已见关闭」标记, 下一次 bind 即视为新尝试开头。注入点只看「本尝试
+    第几次 bind」, 与真实端口状态完全解耦(同款教训见 issue 26-11-10-0456: 真实端口噪声会
+    改变尝试次数, 「恰好 2 次尝试」的断言会被并行抢口打红)。真绑/持有语义由
+    test_hold_run_returns_bindable_run 用真实 socket 覆盖, 两用例分工不重叠。
     """
-    state = {"attempt": 0, "seq": 0}
+    state = {"attempt": 1, "seq": 0, "saw_close": False}  # 首次 bind 即第 1 次尝试(无前置 close)
     attempts: dict[int, list] = {}
 
     class _FakeSock:
-        """合成 socket: 端口由桩分配, 不创建真实 socket、不做真实 bind。"""
+        """合成 socket: 不创建真实 socket、不做真实 bind。"""
         def __init__(self):
             self.port: int | None = None
             self.closed = False
 
         def bind(self, addr):
-            if addr[1] == 0:  # 取号 socket: 新一次尝试开始, 桩分配确定性基址(每次不同)
+            if state["saw_close"]:  # 上次尝试被整段丢弃 ⇒ 本次 bind 是新尝试开头
                 state["attempt"] += 1
                 state["seq"] = 0
-                self.port = 41000 + state["attempt"] * 10
-            else:
-                self.port = addr[1]
+                state["saw_close"] = False
             state["seq"] += 1
+            self.port = addr[1]
             attempts.setdefault(state["attempt"], []).append(self)
-            # 取号(seq 1) + 基址(seq 2) + 第二位(seq 3) ⇒ 在第二位被拒
-            if state["attempt"] == 1 and state["seq"] == 3:
+            # 基址(seq 1) + 第二位(seq 2) ⇒ 在第二位被拒
+            if state["attempt"] == 1 and state["seq"] == 2:
                 raise OSError(10013, "以一种访问权限不允许的方式做了一个访问套接字的尝试")
             return None
 
@@ -143,19 +149,13 @@ def test_hold_run_discards_run_whose_offset_is_refused(monkeypatch):
 
         def close(self):
             self.closed = True
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            self.close()
-            return False
+            state["saw_close"] = True
 
     monkeypatch.setattr(tp.socket, "socket", _FakeSock)
     base, socks = tp.hold_run(3)
     try:
-        assert state["attempt"] == 2, "第二位被拒 ⇒ 必须整段丢弃并换基址重来一次"
-        assert len(attempts[1]) == 3, "拒绝必须落在第一次尝试的第二位(取号/基址/第二位)"
+        assert state["attempt"] == 2, "第二位被拒 ⇒ 必须整段丢弃并重画基址再来一次"
+        assert len(attempts[1]) == 2, "拒绝必须落在第一次尝试的第二位(基址/第二位)"
         assert not any(s in attempts[1] for s in socks), "返回的段不能来自被丢弃的第一次尝试(不交坏段)"
         assert [s.getsockname()[1] for s in socks] == [base, base + 1, base + 2]
         assert all(s.closed for s in attempts[1]), "被拒那段的 socket 必须整段关掉(不泄漏、不交坏段)"
@@ -163,6 +163,78 @@ def test_hold_run_discards_run_whose_offset_is_refused(monkeypatch):
     finally:
         for s in socks:
             s.close()
+
+
+def test_hold_run_width_guard_rejects_oversized_count():
+    """count 超出私用段宽度 ⇒ 任何 socket 创建前 RuntimeError(零网络, guard 回潮即红)。"""
+    with pytest.raises(RuntimeError, match="超出私用段宽度"):
+        tp.hold_run(tp.HOLD_RUN_PORT_HI - tp.HOLD_RUN_PORT_LO + 2)
+
+
+def test_hold_run_redraws_with_new_random_base(monkeypatch):
+    """重画必须重新抽取随机基址 —— randint 提出循环(每轮重绑同一基址)的坏实现在此判红。
+
+    注入仍只落在第 1 次尝试的第二位(与 discards 用例同款合成 socket); randint 桩按序返回
+    两个不同基址, 断言 2 次尝试恰触发 2 次抽取(每轮一次)且第二次尝试的整段端口来自第二次
+    抽取值。「每轮换新随机基址」是承重面(模块 docstring/常量注释/坑档三处), 不得只钉
+    「重画」不钉「重画出新值」。
+    """
+    state = {"draws": []}
+
+    def _fake_randint(lo, hi):
+        assert (lo, hi) == (tp.HOLD_RUN_PORT_LO, tp.HOLD_RUN_PORT_HI - 3 + 1), "抽取区间按 count 收缩"
+        state["draws"].append((lo, hi))
+        return (21000, 21999)[min(len(state["draws"]) - 1, 1)]
+
+    class _FakeSock:
+        """纯合成 socket: 零真实 bind, 第一次尝试(基址 21000)的第二位被拒。"""
+        def __init__(self):
+            self.port: int | None = None
+            self.closed = False
+
+        def bind(self, addr):
+            self.port = addr[1]
+            if self.port == 21000 + 1:
+                raise OSError(10013, "refused")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(tp.random, "randint", _fake_randint)
+    monkeypatch.setattr(tp.socket, "socket", _FakeSock)
+    base, socks = tp.hold_run(3)
+    try:
+        assert len(state["draws"]) == 2, "2 次尝试 ⇒ 恰 2 次抽取(每轮一次; 提出循环的坏实现只抽 1 次)"
+        assert base == 21999 and [s.port for s in socks] == [21999, 22000, 22001], \
+            "第二次尝试整段来自第二次抽取的新基址(不是重绑第一次的基址)"
+    finally:
+        for s in socks:
+            s.close()
+
+
+def test_hold_run_exhausted_retries_raises(monkeypatch):
+    """RETRIES 轮重画全败(恒拒) ⇒ RuntimeError 响亮失败, 重画轮数 == RETRIES。
+
+    与 free_port 的 test_exhausted_raises 对称; 本批改了耗尽文案(加私用段区间), 钉住 match
+    防文案回退时守阵静默失效。
+    """
+    state = {"created": 0}
+
+    class _DeadSock:
+        def __init__(self):
+            state["created"] += 1
+            self.closed = False
+
+        def bind(self, addr):
+            raise OSError(10048, "occupied")
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(tp.socket, "socket", _DeadSock)
+    with pytest.raises(RuntimeError, match=f"连续 {tp.RETRIES} 次"):
+        tp.hold_run(3)
+    assert state["created"] == tp.RETRIES, "每轮恰建 1 个 socket(基址位即拒), RETRIES 轮 = RETRIES 个"
 
 
 def test_http_server_exclusive_bind_and_roundtrip():

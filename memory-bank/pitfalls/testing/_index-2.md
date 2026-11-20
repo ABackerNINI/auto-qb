@@ -1,13 +1,14 @@
-# testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/8
+# testing — 测试 / 冒烟 / 仿真纪律 · 卷 2/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `consecutive-port-run.md` … `fake-server-reuse-bind.md`(共 17 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `config-validation-test-input.md` … `fake-config-shared-mutables.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [config-validation-test-input.md](config-validation-test-input.md) | 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 123` 读成 `"123"`、`enabled: true` 读成 `"true"`; ②`_strip_none` 在进 `validate_config` 之前**剥掉 `""` 与 `None`**(含**列表项**)。于是「`_check_str_list` 的第 N 项不是字符串」这类**类型分支**, 用标量(`123`)或空串(`''`)当列表项**根本进不去** —— 前者已是合法字符串, 后者被 `_strip_none` 提前删掉(列表还非空 → 不报错), 测试会「写对了断言却拿不到错误」。要打到该分支, 列表项必须是**嵌套容器**(如 `- [x]` / `- {}`), 它既不是字符串、也不会被 `_strip_none` 删。 | 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串, 类型分支进不去, 断言拿不到错误, YAML 输入构造, 列表项类型 |
 | [consecutive-port-run.md](consecutive-port-run.md) | 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。**守阵用例本体同理**: 控制流断言不得架在真实端口底板上(issue 26-11-10-0456)。 | 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh excludedportrange, 守阵用例假红, 断言写死重试次数, 真实端口底板, 纯合成 socket |
 | [corpus-capture.md](corpus-capture.md) | `scripts/qb_capture.py` 实施时实测的一批坑 —— 代理、rid 序列、秒分辨率时钟、伪名化撞车、判据空壳。 | 抓语料, 脱敏, qb_capture, 代理, rid, 伪名化, 等价类判据, 红验, argparse |
 | [corpus-fs-mock.md](corpus-fs-mock.md) | 脱敏要连"藏在 .gz 里的第二层 key"一起做; 窗口合并必须按序推进; 回放 config 的 tracker 段不能只信权威映射。 | 语料回放, disk.json, fs mock, 窗口合并, tracker 段, 脱敏 key, 反查表, group_exact |
@@ -23,5 +24,3 @@
 | [env3-test-run-prereqs.md](env3-test-run-prereqs.md) | env3 Ubuntu 24.04 上跑 test.quick/test.full/ship.gate, 不带 `PATH=$HOME/.local/node/bin:$PATH` 则 r4 node 电池族大面积假红(_run_probe 的 shutil.which("node") 落空 -> 「无 node」断言拦下), 是**环境态**红与改动面无关, 别当回归排障。存量第二条前置「TZ=Asia/Shanghai 前置」已随 issue 26-11-12-2347 根治(2026-11-13: 用例模块内自钉 TZ, POSIX 侧任何时区宿主恒绿; Windows 无 tzset 维持宿主时区, 限无 DST 时区恒绿 —— 现有 Windows=Asia/Shanghai / CI=UTC), 前缀里的 TZ= 可撤。 | env3, 原生 Linux, node 电池, 无 node, r4 batteries, node PATH, TZ, 时区, window_start_on, ship.gate 红, test.quick 红, 闸门预跑红, 环境态红 |
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真 handler。 | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
-| [fake-seed-injection.md](fake-seed-injection.md) | 大批量注入 qB 假种子(压测/测量库形)三坑合档 —— ①qB 默认入库逐种子校验 ~1s/种, 3000 种 = 45 分钟, 必须 skip_checking; ②手搓注入变体「配方漂移」三处全坏(漏 payload 数据文件 = 全组 missingFiles + 漏 announce = 永不归组 + leech 等不到 seeder)而脚本不报错(rc 只看成员数); ③首同步风暴丢归组的根因是「成员缺 announce 永不自愈」, 风暴只是放大器 —— 全员自带 announce 后风暴不丢归组。 | 批量注入, 假种子, 测量库形, skip_checking, missingFiles, 永不归组, 首同步风暴, 归组, tracker 匹配, 注入配方, inject.py, 压测库, 真机轨, stalledUP |
-| [fake-server-reuse-bind.md](fake-server-reuse-bind.md) | 测试里自起回环 HTTP 假服若用裸 `ThreadingHTTPServer`, 它继承 `HTTPServer.allow_reuse_address = 1`(SO_REUSEADDR) —— Windows 上允许抢绑已监听端口, `-n 8` 并行下两把假服可能 bind(0) 到同一端口, 连接被递给别人的假服/已关闭的 socket ⇒ 客户端 ConnectionError(被中止) 假红。修法单点: `tests/_test_ports.py::http_server`(独占 bind, 对齐生产 `_EndpointServer` 口径), tests/ 下禁裸实例化。 | ThreadingHTTPServer, 假服, 双绑, SO_REUSEADDR, allow_reuse_address, ConnectionError, 回环 HTTP, 并发假红, http_server 单点, 独占 bind |

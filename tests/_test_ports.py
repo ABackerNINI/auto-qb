@@ -9,7 +9,9 @@ TOCTOU 窗口(取到的端口在 socket 关闭后被别的进程抢走), 高机�
 别处不得复制 `def _free_port` 实现(散落守卫见 tests/test_free_port.py::test_free_port_single_source)。
 
 三个入口: `free_port()` 给"只要一个空闲端口"的用例; `hold_run(n)` 给"需要连续 n 个可绑端口
-并当场占住"的连号候选表用例(base 单验不等于整段可绑, 见 issue 26-11-06-0330);
+并当场占住"的连号候选表用例(base 单验不等于整段可绑, 见 issue 26-11-06-0330; 基址走私用段
+随机数, 不走 bind(0) —— bind(0) 恰取在 OS 分配前沿上, 连号后位正是前沿即将发给并行邻居的
+端口, 见 issue 26-11-20-0320);
 `http_server(handler)` 给"用例内自起回环 HTTP 假服"的用例 —— **禁裸 `ThreadingHTTPServer`**:
 它继承 `HTTPServer.allow_reuse_address = 1`(SO_REUSEADDR), Windows 上允许抢绑已监听端口,
 -n 8 并行下两把带 REUSEADDR 的 bind(0) 可能拿到同一端口双绑, 客户端连接被递给别人的假服/
@@ -19,10 +21,20 @@ src/auto_qb/hr/server.py::_EndpointServer)。散落守卫: test_free_port.py::te
 from __future__ import annotations
 
 import http.server
+import random
 import socket
 import socketserver
 
-RETRIES = 3  # bind(0) 取号次数上限; TOCTOU 只压窗口不可消除, 3 次连抢不到即真有端口压力
+RETRIES = 3  # 取号/重画轮次上限(free_port 回绑自验 / hold_run 私用段重画); 3 次连败即真有端口压力
+
+#: hold_run 连号段的抽取区间(含端点): 私用段, 在两个平台默认动态段之下(Windows 49152-65535 /
+#: Linux 32768-60999), 并行邻居的 bind(0) 结构性够不着 —— 旧实现经 bind(0) 取基址, 恰落在 OS
+#: 分配前沿上, base+1..+7 正是前沿即将发出去的端口, -n 8 全量下毫秒级建段窗口被邻居抢走一位
+#: 即 WinError 10048 整段失败, 3 次即时重试撞同一拥挤前沿仍败(issue 26-11-20-0320; 探针实证:
+#: 连续 20 次 bind(0) 得 55011→55030 顺沿连号)。段内偶撞真实服务端口(27017 等)/排除段碎块/
+#: 其他 worker 的 hold_run 段, 由整段真绑自验+重画兜住 —— 每轮换新随机基址。
+HOLD_RUN_PORT_LO = 21000
+HOLD_RUN_PORT_HI = 31000
 
 
 def free_port(host: str = "127.0.0.1") -> int:
@@ -46,22 +58,21 @@ def hold_run(count: int = 3, host: str = "127.0.0.1") -> tuple[int, list[socket.
     """占住**连续 count 个**端口, 返回 (基址, 句柄列表); 调用方负责 close。
 
     「连号候选表」用例(发现端点 base/base+1/base+2)要的不是"一个空闲端口", 而是"一段连续
-    可绑端口": bind(0) 只保证**基址**可用, base+1/base+2 可能落进 Windows 动态排除段
-    (`netsh interface ipv4 show excludedportrange protocol=tcp`; Hyper-V/WSL 开机预留,
-    每次开机不同)或被独占进程占住 —— 显式 bind 抛 WinError 10013/10048。issue
-    26-11-06-0330 的假红就是"基址自验过了, 连号后两位没验"。
-
-    故整段逐个 bind 且**不释放**(自验与持有是同一次 bind, 调用方拿到即已在手, 不存在"验完再绑"
-    的窗口; 取号那一步仍走 bind(0), 基址被抢就让整段失败重来); 任一位失败就关掉
-    整段换新基址重试, 连抢 RETRIES 次都不成则 RuntimeError(响亮失败, 不交半截坏段)。
+    可绑端口"。基址**不走 bind(0)**: bind(0) 从 OS 动态段前沿顺沿取号(探针实证: 连续 20 次
+    得 55011→55030 连号), 取到的基址恰在前沿上, 随后的 base+1..+count-1 正是 OS 即将分配给
+    并行 worker 的下几个端口, -n 8 全量下毫秒级建段窗口被抢一位即 WinError 10048 整段失败
+    (issue 26-11-20-0320)。改在私用段(邻居的 bind(0) 够不着, 区间见 HOLD_RUN_PORT_LO/HI)
+    里随机取基址, 整段逐位真绑且**不释放**(自验与持有是同一次 bind, 调用方拿到即已在手);
+    任一位失败(落进 Windows 动态排除段抛 10013 / 被独占进程或别的 worker 持有抛 10048 /
+    撞真实服务端口)就关掉整段、重画一个新随机基址重来 —— 基址单验不等于整段可绑的历史坑
+    见 issue 26-11-06-0330, 本函数始终整段验。连 RETRIES 次都不成则 RuntimeError
+    (响亮失败, 不交半截坏段)。
     """
+    if count > HOLD_RUN_PORT_HI - HOLD_RUN_PORT_LO + 1:
+        raise RuntimeError(f"count={count} 超出私用段宽度 {HOLD_RUN_PORT_LO}-{HOLD_RUN_PORT_HI}")
     last_err: OSError | None = None
     for _ in range(RETRIES):
-        with socket.socket() as s:
-            s.bind((host, 0))
-            base = s.getsockname()[1]
-        if base + count - 1 > 65535:
-            continue  # 越界不试: 候选表本身在 65535 截断, 连号语义已不成立
+        base = random.randint(HOLD_RUN_PORT_LO, HOLD_RUN_PORT_HI - count + 1)  # 段整体落在私用段内
         socks: list[socket.socket] = []
         try:
             for offset in range(count):
@@ -74,7 +85,10 @@ def hold_run(count: int = 3, host: str = "127.0.0.1") -> tuple[int, list[socket.
                 sock.close()
             continue
         return base, socks
-    raise RuntimeError(f"连续 {RETRIES} 次都取不到 {count} 个连续可绑端口({host}) —— 先查残留进程与排除段") from last_err
+    raise RuntimeError(
+        f"连续 {RETRIES} 次都取不到 {count} 个连续可绑端口({host}, 私用段 {HOLD_RUN_PORT_LO}-{HOLD_RUN_PORT_HI})"
+        " —— 先查残留进程与排除段"
+    ) from last_err
 
 
 #: 假服 backlog 上限: TCPServer 默认 5, -n 8 并发下(同机 8 worker 真回环流量 + CPU 饱和

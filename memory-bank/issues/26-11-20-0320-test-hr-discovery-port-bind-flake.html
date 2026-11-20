@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-20-0320">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="hr-discovery-port-bind-flake">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-20-2331-hold-run-private-range.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr_discovery bind 失败用例并行形态环境性 flake(连号端口抢占 WinError 10048)">
 <meta name="issue-summary" content="test_runtime_discovery_bind_failure_keeps_data_endpoint 在并行(-n 8)/全量次轮两度偶红: 连抢 8 个连号端口 3 轮全败, WinError 10048, 自带 RETRIES=3 仍失败, 隔离重跑恒绿 —— Windows 动态排除段/端口残留占用类环境问题, 与 relocate S5 改动零关联">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0320-test-hr-discovery-port-bind-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 03:20</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -153,11 +153,14 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-20 03:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-20 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-20 08:31 <strong>未复现（本次窗口）</strong>——隔离跑锚点+兄弟用例 2 passed；<code>test.quick -n 8</code> 连跑两轮（6556P / 6555P+1F，1F 为 <code>test_traffic_qb_bucket_cache_perf.py::test_a4_bench_group_m30_warm</code> 另条环境敏感 flake，隔离复跑绿，与本件无关）锚点均绿。注意环境窗口：本机本次开机 TCP 排除段为空（<code>netsh interface ipv4 show excludedportrange protocol=tcp</code> 仅表头），与事发时可能不同，「已消失」不成立为「已修复」。另一线索：事发记录错误码为 WinError 10048（占用）而非 10013（排除段拒绝），§05 倾向假设里的「动态排除段」与留痕证据不符，占用竞争更贴合。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(2026-11-20 23:31, 落地方向①「连号探测改随机取样」, ②退避③自适应不采纳 —— 换段后剩余失败源都是「重画换个随机位即可解」的稀疏碰撞, sleep/抬次数是给已消除的风险买保险): <code>tests/_test_ports.py::hold_run</code> 基址脱离 bind(0) —— 改私用段随机数(新常量 <code>HOLD_RUN_PORT_LO/HI</code> = 21000-31000, 两平台默认动态段 Windows 49152-65535 / Linux 32768-60999 之下, 并行邻居的 bind(0) 结构性够不着), 整段逐位真绑自验+失败整段丢弃重画结构不变, RETRIES=3/无 sleep 不变。根因改判见本页「复验」段, 探针实证(连续 20 次 bind(0) 得 55011→55030 顺沿连号)与修法叙事见坑档单点 <code>pitfalls/testing/hold-run-ephemeral-frontier.md</code>。</p>
+  <p><strong>验证方式与测试数字</strong>: 守卫钉面 5 处 —— <code>test_hold_run_returns_bindable_run</code>(基址落私用段, 回潮 bind(0) 即红)、<code>test_hold_run_discards_run_whose_offset_is_refused</code>(整段丢弃重画, 纯合成 socket 改写, 尝试边界由 close 事件判定)、<code>test_hold_run_width_guard_rejects_oversized_count</code>(超宽 guard 零网络钉面)、<code>test_hold_run_redraws_with_new_random_base</code>(重画必须重新抽取随机基址)、<code>test_hold_run_exhausted_retries_raises</code>(耗尽路径, 与 free_port 耗尽钉面对称); 后三者为评审修复轮补钉。隔离两文件 52P(41+11); <code>test_hr_discovery.py</code> 文件级 <code>-n 8</code> 连跑 3 轮 41P×3; <code>test_free_port.py -n 8</code> 11P; <code>test.full</code> 6562P/6S/0F, 覆盖率 99%(基线切片 <code>26-11-20-2331-hold-run-private-range</code>, 修复轮重测刷新)。</p>
+  <p><strong>未做(待办)</strong>: <code>test.linux</code> 一轮 —— docker CLI 本机未装, testbed 起不了; Linux 侧「动态段下界 32768 &gt; 私用段上界 31000」暂由默认值推定, 装机后先跑 <code>test.linux-env</code> 再跑 <code>test.linux</code> 核实并顺带验证本件。</p>
 </section>
 
 <footer>

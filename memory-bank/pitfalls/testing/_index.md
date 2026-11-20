@@ -12,11 +12,12 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `annotations-lazy-eval.md` … `config-validation-test-input.md` | 17 |
-| [2](_index-2.md) | `consecutive-port-run.md` … `fake-server-reuse-bind.md` | 17 |
-| [3](_index-3.md) | `fakeclock-migration-missed-forms.md` … `harness-is-stub-server.md` | 17 |
-| [4](_index-4.md) | `harness-save-flow.md` … `mutants-shared-mirror.md` | 17 |
-| [5](_index-5.md) | `mutants-wsl-shell.md` … `poll-last-round-race.md` | 17 |
-| [6](_index-6.md) | `poll-skeleton-redverify.md` … `sandbox-full-run.md` | 17 |
-| [7](_index-7.md) | `sandbox-tempfile-cwd-fallback.md` … `sync-midrun-coverage-synthesis.md` | 17 |
-| [8](_index-8.md) | `test-lock-path-injection.md` … `xdist-worker-global-snapshot.md` | 17 |
+| [1](_index-1.md) | `annotations-lazy-eval.md` … `commands-wrapper-from-python.md` | 16 |
+| [2](_index-2.md) | `config-validation-test-input.md` … `fake-config-shared-mutables.md` | 16 |
+| [3](_index-3.md) | `fake-seed-injection.md` … `guard-literal-comment-trip.md` | 16 |
+| [4](_index-4.md) | `gz-plaintext-assertion.md` … `longtask-redverify-page-task.md` | 16 |
+| [5](_index-5.md) | `manager-builder-single-point.md` … `parallel-run.md` | 16 |
+| [6](_index-6.md) | `patching.md` … `redverify-pycache-stale-verdict.md` | 16 |
+| [7](_index-7.md) | `relocate-window-machine-roster.md` … `single-file-coverage-gate.md` | 16 |
+| [8](_index-8.md) | `single-file-xdist-hang.md` … `tool-mode-coverage.md` | 16 |
+| [9](_index-9.md) | `ui-preview-harness.md` … `xdist-worker-global-snapshot.md` | 9 |
