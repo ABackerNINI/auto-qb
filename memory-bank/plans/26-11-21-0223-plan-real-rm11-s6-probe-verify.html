@@ -7,10 +7,10 @@
 <title>relocate S6 探测异步化真机复验轮(RM11) 执行计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="real-rm11-s6-probe-verify">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-21-0223">
-<meta name="doc-updated" content="26-11-21-0315">
-<meta name="doc-refs" content="memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html">
+<meta name="doc-updated" content="26-11-21-0709">
+<meta name="doc-refs" content="memory-bank/issues/26-11-10-0638-bug-legacy-review4-relocate-probe-blocking.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/tasks/26-11-15-backend-relocate-refactor.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>relocate S6 探测异步化真机复验轮(RM11) 执行计划</h1>
 <p class="lede">本篇只回答: relocate S6 探测异步化(计划 26-11-10-2350, 代码已落地)的三项真机复验判据怎么在环境2 落地成可执行用例——每项的精确判据、造法、观测面阈值与执行序; 修复类问题不在本篇范围(单测/仿真面已全绿)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-21-0223 · <b>doc-updated</b> 26-11-21-0315 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-21-0223 · <b>doc-updated</b> 26-11-21-0709 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 主会话派遣(2026-11-21): S6 真机复验轮 RM11 准备阶段; 派遣即钉三项(范围仅 S6 三项 / ③行为面代理判据零产品代码改动 / 本机=C盘机环境2 —— 见 §06 D1-D3); 前置只读取证后按代码事实定稿
 </div>
 
@@ -114,7 +114,7 @@
 <tr><td>鉴权</td><td>四实例免鉴权(「跳过本地验证」), 零凭据直连; 收 401/403 = 设置被重置 ⇒ fail-closed 修环境, 不加绕行</td></tr>
 <tr><td>盘符</td><td>本机现存仅 <b>C:</b>(实测 67.0GB free, 2026-11-21); D: 空光驱无介质, R: 缺席(26-11-01-2113 基线同)。幽灵盘符池 = C 之外任一(对照腿留痕用 Z:, 沿用 RM04-05 先例字母); 本轮主造法(句柄锁)不用幽灵盘</td></tr>
 <tr><td>假种子落点</td><td>无 R: ⇒ 全部落 <code>tests-real/.work/rm04/async/</code> 真写盘(256K-512K 级); real-fake 标签</td></tr>
-<tr><td>真实种子面</td><td>56589 真实种子 0 个; 56590 真实种子 210 个(全程 paused, guard 看门狗守护)——产品进程只连 56590, 写配置断言不指向 56589</td></tr>
+<tr><td>真实种子面</td><td><span class="wr">R3 勘误(2026-11-21): 原记「56590 真实种子 210 个(全程 paused, guard 看门狗守护)」系误标</span> —— 实为上轮遗留的 real-fake 假种子(RM04-35 attempt1 前置断言清场删除, 收尾实测 56590 共 0 种子); 误标来源 = guard「真实种子 N」计数未传 skip_tags 把 real-fake 计入(runner.py:74 cmd_guard / conftest.py:33, 行号取证 2026-11-21; snapshot 的 skip_tags 豁免语义 lib/guard.py:106 在册未兑现, 已入池 <a href="../issues/26-11-21-0639-bug-real-guard-seed-count-real-fake-mislabeled.html">26-11-21-0639</a>); 本行原值系 guard 输出誊写, 非「真实 PT 种子禁入」红线触碰; 原行两条钉死信息 R3 复核仍成立, 补回: ①主实例 56589 真实种子 0 个 ②产品进程只连 56590, 写配置断言不指向 56589(防红线断言指引)</td></tr>
 <tr><td>测试配置</td><td>schema_version: 8 + relocate.enabled + relocate.bt_backup(必带, 缺它先撞部署闸 fail-fast) + grouping.enabled + trackers 假域名; 全落 case 目录(data_dir 落 case), 仓库根 config.yml 零触碰</td></tr>
 <tr><td>证据落点</td><td>用例取证 <code>tests-real/.work/rm04/async/</code>(gitignored, 时刻后缀防覆写); guard/try 输出 tee <code>tests-real/.work/rm04/rm11_prep_*_attemptN.log</code>; 切片 <code>memory-bank/testing/real-baselines/&lt;stamp&gt;-real-rm11-sliceA.md</code>(kb.wrap 建)</td></tr>
 </table>
@@ -183,7 +183,7 @@
 <tr><td>R8</td><td><b>上轮实锤④: WEB 回执等待 30s 贴线</b>(下线窗上界 ≈29s)</td><td>处置: 本轮无 qB 停机窗(不 real.down); RM04-36 终态补发等待放宽 90s、RM04-37 同(cmd_post_and_wait 显式 timeout)。</td></tr>
 <tr><td>R9</td><td><b>上轮实锤⑤: real.seed.clean --dir 误删证据</b></td><td>处置: 收尾先 ls 盘点 .work 顶层非本轮所建内容; 证据目录(rm04/async/)不在 clean 白名单形态内, 需清的子树 --dir 显式指名逐处。</td></tr>
 <tr><td>R10</td><td><b>上轮实锤⑥: suite 失败级联环境级 skip</b></td><td>处置: 本轮逐条 real.run 不整片 suite; conftest environment 失败=整片 skip 的形态已知悉, 单条失败不级联。</td></tr>
-<tr><td>R11</td><td><b>真实种子禁入 + 401/403 + taskkill 红线</b></td><td>处置: guard 前置 pause-all+看门狗(本轮 guard 实测 56590 真实种子 210 个已全暂停); 收 401/403 fail-closed 修环境不绕行; 进程起停只 real.up/real.down; 测试配置零触碰仓库根 config.yml 与 auto-qb-data/。</td></tr>
+<tr><td>R11</td><td><b>真实种子禁入 + 401/403 + taskkill 红线</b></td><td>处置: guard 前置 pause-all+看门狗(本轮 guard 实测 56590 真实种子 210 个已全暂停<span class="wr">(R3 勘误: 实为上轮遗留 real-fake 假种子, guard 计数误标, 见 §3.2 勘误行)</span>); 收 401/403 fail-closed 修环境不绕行; 进程起停只 real.up/real.down; 测试配置零触碰仓库根 config.yml 与 auto-qb-data/。</td></tr>
 </table>
 
 <h2><span class="no">§10</span>变更记录</h2>
@@ -191,6 +191,8 @@
   <li><span class="tag">R0 · 26-11-21-0223</span> 初版: 主会话派遣的 S6 真机复验轮准备阶段产物。三项判据按 HEAD 2b63237e 逐行复核定稿; dry-run 形态核实结论(结构性互斥, 拆两腿)、FS 不可达造法核实结论(幽灵盘双向不可达, 改句柄锁)、用例编号定案(续 RM04-35/36/37)为本版三个关键定案; 环境2 钉死表按 real.env/real.guard 首跑实测填写。执行轮完成后在此追加 R3 记实测数字与三态。</li>
   <li><span class="tag">R1 · 26-11-21-0241</span> 主会话复核必修两项: (a) 轮次标签 RM05→RM11 —— RM00-RM10 已全占用(tests-real/ 实存 rm00_infra…rm10_notify), 文件名/doc-topic/标题/来源/切片命名同步改, 用例编号 RM04-35/36/37 不变; (b) D4 归属校正(诚信面): 用例编号是准备阶段按代码事实的定案(主会话任务预授权), 用户决定面仅 D1-D3 三项。</li>
   <li><span class="tag">R2 · 26-11-21-0315</span> 批A评审修复 8 条(#2-#9; #1 REFUTE 不计 —— 用例文件系主会话拆批评审临时移树, 非缺失): W1 断言改缓存条目 at 差(挂钟 epoch 秒, failed 路径无 elapsed_s)/W5 留证字段改 evidence.reason/at/五笔 hash 按母计划 2340 R7 映射表换算/GATE_SPACE 锚点订正 relocate_common.py:40-58/env=False 锚点订正 relocate_probe.py:449/单测锚点统一 :270-274(判据① 行+§4.1 两处)/母计划 2340 doc-refs 回链本计划(双向闭环)/meta doc-updated 两处对齐。注记: 母计划 2340 的回链随本批落, 其 R8 记账待执行轮完成后追加; 用例文件断言面(W1/W5 代码)由主会话随批B同步。</li>
+  <li><span class="tag">R3 · 26-11-21-0643</span> 执行轮完成(2026-11-21 04:30-04:47, 基线 commit 310f125d, 分支 relocate-rm-s6 纯本地; 测试侧 mover 动态识别修随 73e8f422 入库): 三用例 <b>3 PASS / 0 FAIL / 0 BLOCKED</b> —— RM04-35 attempt2 6.54s / RM04-36 attempt2 33.87s / RM04-37 attempt1 45.62s(pytest 汇总行口径; real.run 外层包装 7.5s/34.6s/46.4s, 计时双口径分列见切片), 产品回归 0 / 产品代码零改动; 断轮 2 起均测试侧/环境面: RM04-35 attempt1 = 上轮遗留 210 枚 real-fake 假种子撞前置 fail-closed 断言(§3.2「真实种子 210」即此误标, 本版已勘误), RM04-36 attempt1 = 用例把 mover 硬编码在 h1 而产品 mover 选拔 records[0] 随 qB 列表序轮换(两轮实测 h2/h1 相反), 测试侧改动态识别 mover(先到 dst 的唯一成员即 mover)后 attempt2 过; 判据③句柄锁造法预检成立(failed/write_proof_timeout/env=False, 无 BLOCKED), W1-W7 七项观测面全落内(W1 warn 0.04s≤5s+缓存 at 差 12.5s≥8s / W2 窗内 pause 0.03s≤8s / W3 verdict 消费 13.79s≤25s / W4 补发 error 含「已缓存」0.87s≤10s); <b>执行事故</b>: 收尾 real.seed.clean --yes 裸跑整扫误删 tests-real/.work/rm04/async/ 全部取证与 tee 日志共 38 份(gitignored 直删不可恢复), 踩中坑 pitfalls/ops/seed-clean-vs-evidence.md 复发+1(直接放大器 = clean 保护闸只查 .work 顶层、rmNN 内层不设防, 入池 <a href="../issues/26-11-21-0638-bug-real-seed-clean-rmnn-inner-blindspot.html">26-11-21-0638</a>), 减损 = 三用例关键数字执行时逐字段打印誊录 + 计时双口径来源标注(切片数字即实测值), 幸存收尾 guard 终态 tee(rm11_sliceA_guard_final.log); 收尾核净: real.seed.rm --all 命中 0 / guard 终态双实例 firewalled 真实种子 0 / 进程比对一致(pid 无轮换, real.down 未使用); 计划外四项入池: <a href="../issues/26-11-21-0638-bug-real-seed-clean-rmnn-inner-blindspot.html">26-11-21-0638</a> / <a href="../issues/26-11-21-0639-bug-real-guard-seed-count-real-fake-mislabeled.html">26-11-21-0639</a>(guard 计数误标) / <a href="../issues/26-11-21-0639-bug-review-bookkeeping-miss-real-baselines.html">26-11-21-0639</a>(review 排除面缺 real-baselines) / <a href="../issues/26-11-21-0639-bug-kb-wrap-topic-kebab-uppercase-and-guard-vv-version.html">26-11-21-0639</a>(kb.wrap topic 大写拒绝 + guard vv 拼印, cosmetic 合并); 锚 issue 26-11-10-0638 翻 Done, 母计划 26-11-15-2340 R8 回写并翻 Done; R0 尾「执行轮完成后在此追加 R3 记实测数字与三态」语义由此承接; doc-status Open → Done(执行完成)。</li>
+  <li><span class="tag">R4 · 26-11-21-0709</span> 批D1评审 2 minor 全修(均 §3.2 勘误面): §07-R11 处置列「56590 真实种子 210 个已全暂停」补 R3 勘误括注(实为上轮遗留 real-fake 假种子/guard 计数误标, 与 §3.2 勘误及 issue 26-11-21-0639 定性对齐); §3.2 勘误行尾补回两条 R3 复核仍成立的钉死值(主实例 56589 真实种子 0 个 / 产品进程只连 56590 写配置断言不指向 56589, 防红线断言指引); 判据面零改动</li>
 </ul>
 
 </div>

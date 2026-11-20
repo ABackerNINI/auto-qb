@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="legacy-review4-relocate-probe-blocking">
 <meta name="doc-refs" content="memory-bank/issues/26-11-07-0527-bug-legacy-review4-core.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-15-2340-plan-relocate-refactor.html, memory-bank/plans/26-11-21-0223-plan-real-rm11-s6-probe-verify.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate run_probe 同步阻塞主循环(FS 不可达单次探测约 25s+, 整库监控同期停滞)">
 <meta name="issue-summary" content="run_probe 证读/证写/清理轮询用 time.sleep 同步阻塞, 且经 relocate_exec._ensure_probe 在主循环线程执行: FS 不可达时单次探测阻塞约 25s+, 整库监控与其它模块任务线同期停滞, 与 on_task_line 单步零阻塞纪律矛盾(R4 汇总件 26-11-07-0527 行 8 拆出)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-10-0638-bug-legacy-review4-relocate-probe-blocking</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-10 06:38</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">relocate</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -149,11 +149,14 @@
     <li>2026-11-10 06:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-10 — 从汇总件 <a href="26-11-07-0527-bug-legacy-review4-core.html">26-11-07-0527-bug-legacy-review4-core.html</a> 明细行 8（R1#39）拆出；此前 2026-11-08 用户拍板「本轮不修」，2026-11-10 改为拆出独立认领，fix 原文两案保留待裁决</li>
     <li>2026-11-20 — 第二批 S6（探测异步化）代码已落地：五笔提交 d899e91a / 9caf2675 / 8f129b47 / 7d99ce32 / 824f6b94（并轨计划 <a href="../plans/26-11-10-2350-plan-relocate-probe-async.html">26-11-10-2350</a> R3 · 母计划 <a href="../plans/26-11-15-2340-plan-relocate-refactor.html">26-11-15-2340</a> R5），单测/仿真面验收达成（test.full 全绿，数字见 kb.baseline 26-11-20-2348）；真机复验三项待真机复验轮（①dry-run 冒烟：web 命令全链回执管线正常且无 probing 桶，notes 含「dry-run: 跳过强探测」；②受理段 warn 验证挂非 dry-run 真实探测窗，可与③同轮；③FS 不可达时主循环 tick 停摆 &lt; 单步预算），复验 PASS 后关闭 —— 状态保持 <strong>Open</strong>（评审终审校准：dry-run 短路在闸决策表第 2 位（先于缓存与未命中），--dry-run 下「探测中」受理段结构性不出现，原判据「dry-run 冒烟受理段」按代码现实不可达）</li>
-  </ul>
+    <li>2026-11-21 — S6 探测异步化真机复验三项 PASS（RM11 轮，执行计划 <a href="../plans/26-11-21-0223-plan-real-rm11-s6-probe-verify.html">26-11-21-0223</a>，切片 26-11-21-0446-real-rm11-sliceA）：①dry-run 冒烟（RM04-35 拆两腿：模块直连 dry-run 分支 note+零副作用+无 probing 键，L3 含 B 对照腿真实受理红验；web 全链回执由 RM04-36 承载——判据按 R6 校准后的代码现实拆分，web 全链+dry-run 同轮结构性不可达已核）②受理段 warn 挂真实探测窗（RM04-36 全链 warn→verdict 消费→自动续跑→done(finalized)）③FS 不可达 tick 停摆（行为面代理，RM04-37：W1 受理 0.04s≤5s+at 差 12.5s≥8s / W2 0.03s≤8s / W3 13.79s≤25s / W4 补发 error 含「已缓存」0.87s≤10s，预算 50ms 纪律锚 <code>relocate_common.py:18</code>）；三态 3 PASS / 0 FAIL / 0 BLOCKED，断轮 2 起均测试侧/环境面（环境残留假种子 + 用例 mover 硬编码），产品回归 0 —— 状态 Open → <strong>Done</strong></li>
+</ul>
   <h3>复验</h3>
   <p>复验：2026-11-10 08:32 仍复现（认领取证重跑锚点）。<code>run_probe</code>（<code>relocate_probe.py:321</code>）三段轮询 <code>time.sleep</code> 与预算常量 10+10+5s（<code>relocate_probe.py:48-51</code>）均在；<code>_ensure_probe</code> 对 <code>run_probe</code> 为纯同步调用（<code>relocate_exec.py:1209</code>），无任何线程/异步；两条上游（规则动作 <code>rules/actions/transfer.py:33</code>、web 命令 <code>commands_torrents.py:475/:707</code>）均落主循环线程。R4 行号已漂移：<code>run_probe</code> 174→321、<code>_ensure_probe</code> 707→1134。成文纪律抵触面确认：<code>relocate_lifecycle.py:267</code>「单步零阻塞」、<code>relocate_common.py:18</code>「单步 &lt; 50ms」、<code>taskqueue.py:319</code>「无 run 内 sleep」。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>：取 §06 建议第二案（独立线程执行探测、主循环消费结论），具体形态 = 并轨计划 <a href="../plans/26-11-10-2350-plan-relocate-probe-async.html">26-11-10-2350</a> 拍板案B（daemon 线程 / 意图入队+单飞 kick / verdict 消费+自动续跑重放 / web 两段回执），2026-11-20 第二批 S6 五笔提交落地（hash 与分批见上面 2026-11-20 日志行）；「相位状态机」案未取（改道原因 = 并轨设计已拍板，单飞+意图重放等价覆盖跨 tick 推进语义）。</p>
+  <p><b>验证方式</b>：单测/仿真面 test.full 全绿（基线切片 26-11-20-2348）；真机面三用例 RM04-35/36/37 逐项实跑三项复验判据（执行计划 <a href="../plans/26-11-21-0223-plan-real-rm11-s6-probe-verify.html">26-11-21-0223</a>，切片 26-11-21-0446-real-rm11-sliceA，环境2 qB v5.2.3，基线 commit 310f125d）。</p>
+  <p><b>测试数字</b>：3 PASS / 0 FAIL / 0 BLOCKED；RM04-37 观测面阈值全部落内（W1 受理 0.04s≤5s+缓存 at 差 12.5s≥8s / W2 窗内 pause 0.03s≤8s / W3 verdict 消费 13.79s≤25s / W4 终态补发 0.87s≤10s）；产品回归 0（复验轮零 src/ 产品代码改动）。</p>
 </section>
 
 <footer>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>real.guard「真实种子 N 个」计数把 real-fake 假种子计入(runner/conftest 调 snapshot 未传 skip_tags), 环境指纹误标 · bug · 计划外问题</title>
+<meta name="issue-slug" content="real-guard-seed-count-real-fake-mislabeled">
+<meta name="issue-stamp" content="26-11-21-0639">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="real-guard-seed-count-real-fake-mislabeled">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="real.guard「真实种子 N 个」计数把 real-fake 假种子计入(runner/conftest 调 snapshot 未传 skip_tags), 环境指纹误标">
+<meta name="issue-summary" content="guard.snapshot 的 skip_tags 本意豁免自造种子, 但 runner.py cmd_guard 与 conftest env fixture 两处调用都没传 —— 实例带 real-fake 残留时报「真实种子 210 个」(实为假种子), 计划/切片环境指纹跟着误标, 还撞用例 fail-closed 前置断轮">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>real.guard「真实种子 N 个」计数把 real-fake 假种子计入(runner/conftest 调 snapshot 未传 skip_tags), 环境指纹误标</h1>
+<p class="lede">guard.snapshot 的 skip_tags 本意豁免自造种子, 但 runner.py cmd_guard 与 conftest env fixture 两处调用都没传 —— 实例带 real-fake 残留时报「真实种子 210 个」(实为假种子), 计划/切片环境指纹跟着误标, 还撞用例 fail-closed 前置断轮</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-21-0639-bug-real-guard-seed-count-real-fake-mislabeled</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:39</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">real</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>RM11 真机复验轮（2026-11-21）开工环境自检，<code>real.guard</code> 首跑报「56590 真实种子 210 个，已全部暂停」；执行计划 <code>26-11-21-0223</code> §3.2 环境钉死表按该输出誊写「真实种子面：56590 真实种子 210 个」。经二分定性（切片 26-11-21-0446 §03.1 族甲）：<b>这 210 个全是上轮遗留的 real-fake 假种子</b>（名形「Boot Show 032 S01E066 1080p.bin」= seed 工具 --name 自定义名 + 合成 .bin），非 PT 真实种子。计数误标的直接后果：①环境指纹与计划誊写误标；②RM04-35 attempt1 撞用例的 fail-closed 前置断言（发现残留即红）断轮一次。非「真实 PT 种子禁入」红线触碰（seed.list/guard 复核实测 0 真实种子）。</p>
+  <p>触发条件：实例带 real-fake 残留时跑 guard / 真机用例（conftest 环境层）。与平台/配置无关。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">snapshot 本身有豁免语义但调用方没传（取证 2026-11-21 06:39）：</p>
+<pre><code># tests-real/lib/guard.py:106
+def snapshot(qb, skip_tags: tuple[str, ...] = ()) -&gt; dict:
+    """第二层: 记录真实种子(哈希 → 名称)并全部暂停。
+
+    `skip_tags`: 带这些标签的种子**既不暂停也不计入保护面** —— 自造种子(real-fake)本来就该由
+    用例/命令自己管, 把它们一起暂停会让"我刚加的假种子怎么变成 stoppedUP 了"变成日常困惑。
+    """
+
+# tests-real/runner.py:74-75 (cmd_guard, 输出「真实种子 N 个」的计数定义点)
+            hashes = guard.snapshot(qb)
+            print(f"[ok] {port} pid={rep['pid']} v{version} {status} 真实种子 {len(hashes)} 个, 已全部暂停")
+
+# tests-real/conftest.py:33 (env fixture, 同形态)
+            protected[port] = set(guard.snapshot(qb))
+
+# tests-real/runner.py:87 (cmd_pause_all, 同调用形态, 输出「暂停 N 个种子」)</code></pre>
+  <p class="hint">旁证：seed 工具族自身的认领口径只认 real-fake 标签（<code>real.seed.rm --all</code> 只删自造种子碰不到真实种子），即「自造种子按标签认领」在仓库内已有单点，snapshot 的缺省调用与之脱节。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>测试实例存在 real-fake 标签残留时跑 <code>real.guard</code> / <code>real.pause-all</code> / 任何挂 conftest env 的真机用例（残留是常态风险：用例中途断轮未收尾就会留下）</td></tr>
+    <tr><td>影响范围</td><td>①guard 输出与计划/切片的环境指纹誊写误标（本轮实证 210 枚假种子被标「真实」）；②conftest 把假种子计入看门狗保护面（语义面失真）；③撞用例 fail-closed 前置造成断轮</td></tr>
+    <tr><td>严重度</td><td class="wr">中</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>tests-real/runner.py:74</code>（取证 2026-11-21 06:39）· <code>cmd_guard</code> · grep <code>guard.snapshot</code>——「真实种子 N 个」计数误标主面（:75 输出行）</li>
+    <li><code>tests-real/runner.py:87</code>（取证 2026-11-21 06:39）· <code>cmd_pause_all</code> · grep <code>guard.snapshot</code>——同调用形态</li>
+    <li><code>tests-real/conftest.py:33</code>（取证 2026-11-21 06:39）· <code>env</code> fixture · grep <code>guard.snapshot</code>——保护面计入假种子</li>
+    <li><code>tests-real/lib/guard.py:106</code>（取证 2026-11-21 06:39）· <code>snapshot</code> · grep <code>skip_tags</code>——豁免语义定义点（缺省空元组）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">skip_tags 定义了「豁免自造种子」的语义并写进 docstring，但三处调用全走缺省空元组——豁免语义从未被任何调用方兑现；「真实种子」输出文案又直接取 <code>len(hashes)</code>，两层叠加使误标成为必然而非偶发。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <ul>
+    <li>三处调用（runner.py:74/:87、conftest.py:33）统一传 <code>skip_tags=("real-fake",)</code>——标签名与 seed 工具族认领口径同源，建议把标签常量收敛到 lib 单点（如 guard.REAL_FAKE_TAG）避免第三处手抄；</li>
+    <li>cmd_guard 输出文案同步区分：「真实种子 N 个 / 自造(real-fake) M 个」，让环境指纹誊写天然双口径；</li>
+    <li>注意 conftest 保护面改窄后看门狗行为面变化（假种子不再受保护）——这正是 docstring 本意，但需确认无用例依赖「假种子被暂停」的隐含前提。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-21 06:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-21-0639-bug-real-guard-seed-count-real-fake-mislabeled.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

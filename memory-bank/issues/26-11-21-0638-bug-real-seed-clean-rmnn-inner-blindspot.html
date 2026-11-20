@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>real.seed.clean 证据保护闸只查 .work 顶层名, rmNN 目录内层证据不设防(整树 rglob 全删) · bug · 计划外问题</title>
+<meta name="issue-slug" content="real-seed-clean-rmnn-inner-blindspot">
+<meta name="issue-stamp" content="26-11-21-0638">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="real-seed-clean-rmnn-inner-blindspot">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="real.seed.clean 证据保护闸只查 .work 顶层名, rmNN 目录内层证据不设防(整树 rglob 全删)">
+<meta name="issue-summary" content="clean --yes 整扫时 .work 顶层 seeds/rmNN 之外才拦, rm04 命中 rmNN 白名单放行后 _clean_root 对整树 rglob 全删 —— rmNN 内层新落点(如 rm04/async/ 取证)不设防, RM11 轮实损 38 份文件不可恢复">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>real.seed.clean 证据保护闸只查 .work 顶层名, rmNN 目录内层证据不设防(整树 rglob 全删)</h1>
+<p class="lede">clean --yes 整扫时 .work 顶层 seeds/rmNN 之外才拦, rm04 命中 rmNN 白名单放行后 _clean_root 对整树 rglob 全删 —— rmNN 内层新落点(如 rm04/async/ 取证)不设防, RM11 轮实损 38 份文件不可恢复</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-21-0638-bug-real-seed-clean-rmnn-inner-blindspot</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:38</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">real</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>RM11 真机复验轮（2026-11-21，切片 26-11-21-0446-real-rm11-sliceA §07）收尾核净步骤，执行代理裸跑 <code>real.seed.clean --yes</code> 整扫：<code>.work</code> 顶层当时只剩 <code>seeds/</code> 与 <code>rm04/</code>（均为「认得的落点」），证据保护闸放行；随后 <code>_clean_root</code> 对 <code>rm04</code> 整树递归全删，把本轮全部取证 <code>rm04/async/</code>（24 份 evidence json + 3 份产品日志副本）、9 份 slice tee 日志、2 份 prep 日志共 38 份文件连带清掉（gitignored 直删不进回收站，git 不可恢复，memory-bank 无副本）。这是坑档 <code>pitfalls/ops/seed-clean-vs-evidence.md</code>（2026-11-12 前科 + 2026-11-19 --dir 复发）的第三种触发形态：前科面是「误以为只清种子残留」与「--dir 定点误当只清本轮」，本轮暴露的是<b>保护闸自身的粒度盲区</b>——rmNN 内层证据完全不在闸的视野里。</p>
+  <p>触发条件：clean 整扫（不带 --dir）时 <code>.work</code> 顶层恰好只有 seeds/rmNN，而 rmNN 内层存在待留证据。与平台/配置无关（Windows/Linux 同路径）。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">seed.py 原文（取证 2026-11-21 06:38）——闸只看顶层：</p>
+<pre><code>CLEAN_KNOWN_WORK = re.compile(r"^(?:seeds|rm\d+)$")
+
+def _work_strays(work: Path) -&gt; list[Path]:
+    """`.work` 顶层不属于「认得的落点」的子项 —— 那里可能躺着测量证据, clean 不许碰。"""
+    if not work.exists():
+        return []
+    return sorted(p for p in work.iterdir() if not CLEAN_KNOWN_WORK.fullmatch(p.name))</code></pre>
+  <p class="hint">放行后 <code>_clean_root</code> 对整树递归全删（不分层、无白名单）：</p>
+<pre><code>def _clean_root(root: Path, yes: bool) -&gt; int:
+    ...
+    files = [p for p in root.rglob("*") if p.is_file()]
+    ...
+    for p in files:
+        p.unlink()</code></pre>
+  <p class="hint">实损清单（切片 26-11-21-0446 §07 誊录）：rm04/async/ 24 evidence + 3 产品日志副本；rm04/ 顶层 9 slice tee + 2 prep tee。RM04-35 attempt1 已实证同闸对 rmNN 内层无防护（前置残留断言先红，人工核对才免于误删）。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td><code>real.seed.clean --yes</code> 整扫且 <code>.work</code> 顶层仅 seeds/rmNN；或 <code>--dir</code> 指名 rmNN 子树——两形态都绕过现有闸（--dir 指向 .work 本体之外时闸根本不查顶层）</td></tr>
+    <tr><td>影响范围</td><td>rmNN 内层的全部测量/真机取证（本轮新落点 <code>rm04/async/</code> 即此形态）；gitignored 直删不可恢复，只能靠执行时誊录减损</td></tr>
+    <tr><td>严重度</td><td class="bad">高</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>tests-real/seed.py:343</code>（取证 2026-11-21 06:38）· <code>cmd_clean</code> 证据保护闸 · grep <code>_allowed(Path(args.dir))</code>——闸面只查 .work 顶层（<code>_work_strays</code> :332）</li>
+    <li><code>tests-real/seed.py:301-323</code>（取证 2026-11-21 06:38）· <code>_clean_root</code> · grep <code>rglob</code>（:305 起文件清单、:315 unlink、:317 收壳）——放行后整树递归全删</li>
+    <li><code>tests-real/seed.py:329</code>（取证 2026-11-21 06:38）· <code>CLEAN_KNOWN_WORK</code> · grep <code>seeds|rm</code>——顶层白名单 <code>^(?:seeds|rm\d+)$</code>，rmNN 整族放行</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">闸的设计粒度停在 2026-11-13 落地时的证据形态（.work 顶层散件）——rmNN 内层当时是「逐案 evidence 落 case 根」的旧惯例，被认为可整清；本轮 <code>rm04/async/</code> 是 RM11 轮新启用的专用证据落点（计划 26-11-21-0223 §3.2 钉死），闸面没有随落点演化升级，形成「白名单放行 rmNN → rglob 无差别全删」的盲区。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <ul>
+    <li>方案A（闸升级）：整扫时对 rmNN 内层做递归 strays 检查——按证据形态点名（如 <code>evidence/</code>、<code>*slice*.log</code>、<code>rm11_prep_*</code> 等白名单外内容即拒跑），代价 = 证据形态清单需随轮维护；</li>
+    <li>方案B（默认收紧）：clean 整扫对 rmNN 只删「本轮 seed 工具自建形态」（种子 .torrent/.bin），其余内层内容一律拒跑要求 --dir 逐处指名，代价 = 收尾多几步显式动作；</li>
+    <li>方向待裁决；无论取哪案，坑档 <code>pitfalls/ops/seed-clean-vs-evidence.md</code> 的「--dir 前先 ls 盘点」纪律应同步升级为「clean 前先 ls 盘点」。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-21 06:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-21-0638-bug-real-seed-clean-rmnn-inner-blindspot.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
