@@ -140,11 +140,18 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
     前端 relocateOptions 恒空, 「种子页筛选器有数据」的 relocate kind 空筛选器组恒红。
 
     与 _inject_add_options 同病同治: 默认桩恒空 => 那条渲染路径(迁移徽标/迁移筛选)永远测不到。
-    灌 5 个 job 覆盖筛选桶全部取值分支(moving / pending_finalize(armed) / failed /
-    done=只进「有过迁移」/ cancelled) + 终态账两面(issue 26-11-15-0345 e2e 面): done 带穷尽
-    恢复账余量(resume_pending 非空 + retries 达上界, P2a 定案「穷尽后照常终态 + 余量挂账」,
-    浮窗终态窄放行的数据面), cancelled 无账作「终态无余量不弹」对照; 前两个落同一组对
-    (i=0,1)让组级聚合出真实的跨状态多 job 形态。
+    灌 6 个 job 覆盖筛选桶全部取值分支(moving / pending_finalize(armed) / failed /
+    done=只进「有过迁移」/ cancelled / rewritten=收尾窗已改写) + 终态账两面
+    (issue 26-11-15-0345 e2e 面): done 带穷尽恢复账余量(resume_pending 非空 + retries 达上界,
+    P2a 定案「穷尽后照常终态 + 余量挂账」, 浮窗终态窄放行的数据面), cancelled 无账作
+    「终态无余量不弹」对照; 前两个落同一组对(i=0,1)让组级聚合出真实的跨状态多 job 形态。
+    B3-4 收尾窗行状态细化(计划 26-11-21-1600)追加 rewritten job(i=7, 收尾窗第二态
+    「已改写待回连核验」的数据面): src/dst 用独立路径 —— 与 i=0..2 的 Set000/Relocated
+    不共值, relocate-pair-filter 的 dst/src 位置集计数断言(进行中三行)不被新 pair 行冲掉。
+
+    qB 连接态(B3-4): 桩置 _last_conn_ok=False(收尾窗场景 = qB 下线改写窗)—— armed job
+    (i=1)的行标注由 views.py::_relocate_qb_connected 读 status 快照面派生 finalize=await_window;
+    状态徽标随之显「qB 断开」, 与场景同真(e2e 无状态徽标断言, 已核对零冲突)。
     """
     from auto_qb.core.modules.relocate_units import (
         PHASE_ARMED,
@@ -152,15 +159,18 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
         PHASE_DONE,
         PHASE_FAILED,
         PHASE_MOVING,
+        PHASE_REWRITTEN,
         RelocateSnapshot,
     )
-    # 守卫(评审 minor): 本注入按 torrents[0..4] 索引, --torrents<5 会 IndexError 崩在启动行打印前
-    # (e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..4 会过校验然后 webServer 捕获超时)。
-    # 同文件 _inject_site_alerts 有 len<2 守卫惯例; 少于 5 条时跳过注入(降级为恒空 relocate, 不崩)。
-    if len(torrents) < 5:
-        print(f"[harness] 迁移状态跳过注入: 种子数 {len(torrents)} < 5(索引面不足)", flush=True)
+    # 守卫(评审 minor): 本注入按 torrents[0..4,7] 索引, --torrents<8 会 IndexError 崩在启动行打印前
+    # (e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..7 会过校验然后 webServer 捕获超时)。
+    # 同文件 _inject_site_alerts 有 len<2 守卫惯例; 少于 8 条时跳过注入(降级为恒空 relocate, 不崩)。
+    if len(torrents) < 8:
+        print(f"[harness] 迁移状态跳过注入: 种子数 {len(torrents)} < 8(索引面不足)", flush=True)
         return
     now = time.time()
+    # qB 连接态最后已知值(B3-4 收尾窗场景面): False = 已断开(status_snapshot().connected 透传)
+    mgr._last_conn_ok = False
 
     def _job(h, phase, job_id, **kw):
         return {
@@ -188,6 +198,16 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
             _job(torrents[3].hash, PHASE_DONE, "job-harness-3", resume_pending=[torrents[3].hash], resume_retries=3),
         torrents[4].hash:
             _job(torrents[4].hash, PHASE_CANCELLED, "job-harness-4"),
+        # rewritten(B3-4, 计划 26-11-21-1600): 收尾窗第二态「已改写待回连核验」—— journal
+        # 合并态(job.phase=rewritten)的行标注面; src/dst 独立路径(见函数头注)
+        torrents[7].hash:
+            _job(
+                torrents[7].hash,
+                PHASE_REWRITTEN,
+                "job-harness-7",
+                src="R:\\Downloads\\Set003",
+                dst="R:\\Downloads\\Relocated3",
+            ),
     }
     # 外部旧路径种子通知态(T5, 计划 26-11-20-0434): torrents[5] 不在 job 账 -> 行标注走
     # foreign 回落(views.py::_foreign_entry)—— 旧路径 Set002(IYUU 按组旧根加种的语义与
@@ -195,31 +215,30 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
     # 「旧路径外部种子」选项(计数 = 1, 空态不显示的对照面)。
     # !torrents[6] 必须保持**无标注**(恒真无 foreign/job 条目): relocate-pop-terminal.spec
     #   的「无标注行不弹」负向对照自 T5 起从 torrents[5] 让位到 torrents[6](评审 major 2
-    #   —— i=5 现在弹 foreign 浮窗, 正向面在 relocate-foreign-notification.spec)。本注入
-    #   守卫 >=7 即为钉住这一耦合: 数据面不足 7 条时整体跳过(索引面不足, 与上方 <5 守卫
-    #   同纪律), 不给「i=6 意外带标注」留缝隙。
-    foreign = MappingProxyType({})
-    if len(torrents) >= 7:
-        foreign = MappingProxyType(
-            {
-                torrents[5].hash:
-                    MappingProxyType(
-                        {
-                            "root": "R:\\Downloads\\Set002",
-                            "kind": "B",
-                            "job_id": "job-harness-0",
-                            "phase": "done",
-                            "location": "R:\\Downloads\\Relocated",
-                            "first_seen": now - 120.0,
-                        }
-                    )
-            }
-        )
+    #   —— i=5 现在弹 foreign 浮窗, 正向面在 relocate-foreign-notification.spec)。这一耦合
+    #   由上方 <8 顶守卫钉住(不足 8 条整体跳过, 不给「i=6 意外带标注」留缝隙), 到这里
+    #   torrents[5] 必已在位, 直拼不留条件分支(旧 len>=7 分支在顶守卫收紧后恒真已删)。
+    foreign = MappingProxyType(
+        {
+            torrents[5].hash:
+                MappingProxyType(
+                    {
+                        "root": "R:\\Downloads\\Set002",
+                        "kind": "B",
+                        "job_id": "job-harness-0",
+                        "phase": "done",
+                        "location": "R:\\Downloads\\Relocated",
+                        "first_seen": now - 120.0,
+                    }
+                )
+        }
+    )
     mgr.config.relocate.enabled = True
     mgr.ctx.relocate = _FakeRelocateJobs(RelocateSnapshot(generation=1, by_hash=by_hash), foreign)
     print(
-        f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done+穷尽账/cancelled)"
-        f" foreign={len(foreign)}(对照行 i=6 保持无标注)",
+        f"[harness] 迁移状态已注入: job={len(by_hash)} "
+        f"(moving/armed/failed/done+穷尽账/cancelled/rewritten)"
+        f" foreign={len(foreign)}(对照行 i=6 保持无标注) qB断开桩=True",
         flush=True
     )
 

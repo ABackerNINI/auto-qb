@@ -132,8 +132,9 @@ window.AQB_RELOCATE_POP = {
      * relocateView(row) 为 null 时: 终态窄放行行(_relPopTerminalGate 通过)用中性 tone 替身
      * view 组装(替身只在本文件内构造, 不回写 relocateView/共享面 —— D11), 其余返回 null
      * (与触发判据双保险); 字段来源:
-     *   verdict <- relocateStateText(rel.state)(现状词表, mixed = 「迁移多任务」, 不新造文案;
-     *             done/cancelled = 「已完成/已撤销」已在词表, 终态窄放行零改动复用);
+     *   verdict <- relocateRowStateText(rel)(B3-4 单点, 计划 26-11-21-1600: coarse 词表 +
+     *             收尾窗细分档 finalize 词 + done 收尾完成词; 组行标注无 finalize 字段自然
+     *             回落 coarse 词表);
      *   phase   <- rel.phase 原始相位串(小字 mono; 组级聚合无 phase -> 省略);
      *   tone    <- view.tone(进行中四态与行内两排/单排着色同一判定, 不重算; 终态窄放行 =
      *             中性替身 "neutral", 见下);
@@ -214,7 +215,10 @@ window.AQB_RELOCATE_POP = {
         ? `原因: ${rel.reason}`
         : (isForeign && rel.kind === "mismatch" ? this.foreignMismatchText() : "");
       return {
-        verdict: this.relocateStateText(rel.state),
+        /* verdict 走 relocateRowStateText 单点(B3-4, 计划 26-11-21-1600): 种子行收尾窗细分
+         * 档(finalize)与 done 收尾完成词在浮窗与抽屉同源; 组行标注无 finalize 字段自然
+         * 回落 coarse 词表(细分面按计划只落种子行)。 */
+        verdict: this.relocateRowStateText(rel),
         phase: isForeign ? "" : (rel.phase || ""),
         tone: view.tone,
         paths,

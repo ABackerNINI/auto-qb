@@ -17,7 +17,10 @@ import { withVm } from './lib/vm.mjs';
  *     Relocated, 筛 dst 后 done 行必须离场(node 探针同款矩阵的真机对照)。
  * 桩面: ui_harness._inject_relocate_jobs 给 torrents[0..4] 灌 moving/armed(pending_finalize)/
  * failed/done(穷尽恢复账余量)/cancelled(无账, 终态无余量对照) 五态, src=R:\Downloads\Set000,
- * dst=R:\Downloads\Relocated; 轮询每 2s 服务端重建, 标注随 rebuild 稳定重现。种子页平铺视图一行一粒种子(m 分支)。
+ * dst=R:\Downloads\Relocated; B3-4(计划 26-11-21-1600)追加 rewritten job(i=7)用独立路径
+ * src=R:\Downloads\Set003, dst=R:\Downloads\Relocated3 —— 不与本 spec 断言的位置集共值,
+ * dst/src 筛选计数不被新 pair 行冲掉。轮询每 2s 服务端重建, 标注随 rebuild 稳定重现。
+ * 种子页平铺视图一行一粒种子(m 分支)。
  */
 
 const DST = 'R:\\Downloads\\Relocated';
@@ -34,10 +37,11 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
-      // 种子页平铺: moving/armed/failed 三行带 .rel-pair(done/cancelled 终态行回落单排)。
-      // 注入五粒是 torrents[0..4] = added_on 最旧 —— 默认「添加于」降序落在行窗口(P1-2 只渲染
-      // 视口附近切片)之外; 点「添加于」表头一击切升序(三态: 首击降序→再点升序, 默认已是降序),
-      // 五行进窗口顶部。真实手势, 不注入 vm 内部态。
+      // 种子页平铺: moving/armed/failed + rewritten(B3-4, i=7)四行带 .rel-pair
+      // (done/cancelled 终态行回落单排)。注入粒是 torrents[0..4, 7] = added_on 最旧 ——
+      // 默认「添加于」降序落在行窗口(P1-2 只渲染视口附近切片)之外; 点「添加于」表头一击
+      // 切升序(三态: 首击降序→再点升序, 默认已是降序), 注入行进窗口顶部。真实手势,
+      // 不注入 vm 内部态。
       await page.click('nav.tabs [data-view="torrents"]');
       // sticky 表头持续重排会让 Playwright 的 stability 判定超时 —— 走键盘激活(a11y 路径,
       // table-head-a11y.spec 同款: focus + Enter = headActivate)

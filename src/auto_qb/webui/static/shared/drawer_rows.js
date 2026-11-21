@@ -147,9 +147,12 @@ Object.assign(window.AQB_DRAWER.methods, {
       if (rel) {
         out.push({
           title: "迁移",
-          sum: `${this.relocateStateText(rel.state)}${rel.mover ? " · 搬移成员" : " · 受影响成员"}`,
+          /* 行状态词走 relocateRowStateText 单点(B3-4, 计划 26-11-21-1600): 收尾窗细分档
+           * (rel.finalize)与 done 收尾完成词(带既有账面 dst 作新保存路径)在抽屉与浮窗
+           * 同源, 不各造文案; foreign 分支通知态不在收尾窗, 照旧 coarse 词表。 */
+          sum: `${this.relocateRowStateText(rel)}${rel.mover ? " · 搬移成员" : " · 受影响成员"}`,
           rows: [
-            { icon: "#i-refresh", label: "迁移状态", text: this.relocateStateText(rel.state) },
+            { icon: "#i-refresh", label: "迁移状态", text: this.relocateRowStateText(rel) },
             { icon: "#i-info", label: "设置来源", text: this.relocateOriginText(rel.origin) },
             // 设置时间 = job 登记/发起 setLocation 的时刻(created_at); 旧 state 无该字段 => "—"
             { icon: "#i-calendar", label: "设置时间", text: rel.created_at ? ts(rel.created_at) : "—" },

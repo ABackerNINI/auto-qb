@@ -114,6 +114,23 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         getter = getattr(mod, "jobs_snapshot", None)
         return getter() if callable(getter) else None
 
+    def _relocate_qb_connected(self) -> Optional[bool]:
+        """qB 连接态最后已知值(B3-4 行状态细化输入, 计划 26-11-21-1600; 只消费既有发布面)
+
+        单点读 status_snapshot() 的 connected(None=连接中/未知, True=在线, False=离线)
+        —— 该字段已随 /api/status 与 /api/state 恒回传(前端状态徽标同源), 本处只读它做
+        收尾窗行状态细化的派生输入, 不新增任何 state 键/状态源。读不到(替身缺方法)按
+        None 收口: finalize_state 对 None 不给细分档, 消费方回落 coarse 词(最后已知语义:
+        未知不谎报)。
+        """
+        getter = getattr(self, "status_snapshot", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter().get("connected")
+        except Exception:  # noqa: BLE001 - 呈现面零异常: 读不到按未知收口(最后已知语义)
+            return None
+
     def _relocate_member(self, torrent_hash: str) -> Optional[dict]:
         """成员/种子页条目的迁移标注(快照 O(1) 查找; 无 job 时回落外部旧路径种子标注)
 
@@ -122,11 +139,14 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         job 快照同一模式(relocate 模块 foreign_notified_view 发布视图, 主循环单写线程整表
         重建, Web 构建期零活账访问)。A 类条目(已纳入收尾)必是 job 成员, job 分支先行命中,
         不落本回落。
+
+        qB 连接态(B3-4): 最后已知值作收尾窗行状态细化(member_relocate.finalize 档位)的
+        派生输入 —— 只读既有 status 快照面, 零新状态键。
         """
         snap = self._relocate_snapshot()
         job = snap.job_for(torrent_hash) if snap is not None else None
         if job is not None:
-            return member_relocate(job, torrent_hash)
+            return member_relocate(job, torrent_hash, qb_connected=self._relocate_qb_connected())
         return foreign_member(self._foreign_entry(torrent_hash))
 
     def _foreign_entry(self, torrent_hash: str) -> Optional[dict]:

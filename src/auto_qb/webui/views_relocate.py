@@ -33,19 +33,49 @@ _PRIORITY = {
 # 标注面接管, 不走外部种子投影)。词值单点在 units FOREIGN_KIND_*, 与侦测落账共用。
 _FOREIGN_PANEL_KINDS = frozenset({ru.FOREIGN_KIND_B, ru.FOREIGN_KIND_MISMATCH})
 
+# 收尾窗行状态细化档位(B3-4, 计划 26-11-21-1600 D8): 纯派生的**细分 token**(非展示词)
+# —— 展示词单点在前端 decorate.js(RELOCATE_FINALIZE_TEXT), 与 state/tone 的分工同构:
+# 后端给区分位, 前端给词。输入 = 相位(journal 合并态; armed->rewritten 单向跟进后的
+# job.phase, 投影零触盘不读 journal) + qB 连接态最后已知值, 零新 state 键。
+FINALIZE_AWAIT_WINDOW = "await_window"  # armed 收尾窗 + qB 最后已知离线: 等 qB 下线改写窗
+FINALIZE_AWAIT_RECHECK = "await_recheck"  # rewritten 收尾窗: 改写已落账, 等成员回连核验
+
 
 def state_of_phase(phase: str) -> str:
     """job 相位 -> 展示状态(派生单点 = units.display_state_of_phase, 本入口薄委托)"""
     return ru.display_state_of_phase(phase)
 
 
-def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
+def finalize_state(phase: str, qb_connected: Optional[bool]) -> str:
+    """收尾窗行状态细分档位(B3-4 纯派生; 计划 26-11-21-1600 D8)
+
+    输入 = job 相位(journal 合并态 —— _step_reconcile 对 armed->rewritten 单向跟进后的
+    job.phase, Web 构建期零触盘不读 journal 文件)+ qB 连接态**最后已知值**(None=未知/
+    连接中, True=在线, False=离线; 读既有 status 快照面, 不新造状态源):
+
+    - rewritten -> await_recheck: 改写已落账是 journal 合并的**账面事实**, 相位本身即
+      权威, 不再要求 qB 态 —— qB 回连中/快照滞后一拍都不降级回 coarse 词(降级 = 回连
+      核验窗里「已改写」信息丢失, qB 上下线翻转还会让词面来回抖动);
+    - armed + qB 离线(False) -> await_window: 等 qB 下线改写窗; qB 在线/未知时不给
+      (armed + 在线 = 别名在场正常做种, 回落 coarse「待收尾」现行为);
+    - 其余(moved/moving/终态/未知) -> "": 非收尾窗 armed/rewritten 相位, 消费方回落
+      coarse 词表。
+    """
+    p = str(phase or "")
+    if p == ru.PHASE_REWRITTEN:
+        return FINALIZE_AWAIT_RECHECK
+    if p == ru.PHASE_ARMED and qb_connected is False:
+        return FINALIZE_AWAIT_WINDOW
+    return ""
+
+
+def member_relocate(job: Optional[dict], torrent_hash: str, qb_connected: Optional[bool] = None) -> Optional[dict]:
     """单个成员(或种子页条目)的迁移标注; 无 job 返回 None(字段恒在/值为 null 的契约)
 
     mover / alias_paths / origin 全部来自 job 快照, 不做路径归属猜测:
     「是否 auto-qb 设置」严格按 job 的 hash 覆盖与 mover 精确匹配判定。
 
-    恢复确认账展示面(issue 26-11-14-1744 §06 (3), 账字段随 job_to_dict 下发):
+    恢复确认账展示面(issue 26-11-14-1744 §06 (3) 展示面, 账字段随 job_to_dict 下发):
     - resume_pending_count / resume_pending_hashes: 未确认回到运行态的成员余量(计数+hash
       列表)。账是 job 级的, 同 job 各成员标注带同一份(与 alias_count 同形); 已删成员可能
       在账(保守挂账), 如实显示不过滤不特殊标注。
@@ -53,6 +83,11 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
       达补发上界(穷尽后不再补发 —— 与在途态的展示区分单点; 展示文案不作时点承诺,
       成员仍可能自行回流, 该行随后消失)。
     空账(含旧 state 条目缺字段)计数 0, 前端按空不出行(零噪音)。
+
+    收尾窗行状态细化(B3-4, 计划 26-11-21-1600 D8): finalize 档位由 finalize_state 纯派生
+    (phase + qb_connected), qb_connected = 调用方读既有 status 快照面的 qB 连接态最后已知
+    值(缺省 None = 未知, 与快照滞后同语义: 消费展示按「最后已知」, 不新造状态源)。
+    字段恒在(空串 = 不适用), 与 resume_* 字段同契约。
     """
     if not job:
         return None
@@ -78,6 +113,8 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
         "resume_pending_hashes": list(resume_pending),
         "resume_retries": resume_retries,
         "resume_exhausted": bool(resume_pending) and resume_retries >= ru.RESUME_RETRY_MAX,
+        # 收尾窗细分档位(B3-4): 空串 = 不适用(非收尾窗 armed/rewritten), 前端回落 coarse 词表
+        "finalize": finalize_state(phase, qb_connected),
     }
 
 
@@ -137,6 +174,7 @@ def foreign_member(entry: Optional[dict]) -> Optional[dict]:
       relocate_foreign._foreign_notify_expired)—— 浮窗/抽屉按它显示降级文案, 前端不重算。
     - kind: 账条目类别透传(B/mismatch, B2 计划 26-11-21-1600)—— 呈现档位词表不扩面,
       前端 mismatch 说明行的区分位(判据只认后端, 与 expired 位同纪律)。
+    finalize 恒空串(通知态不在收尾窗, 与 member_relocate 字段契约同形: 字段恒在)。
     """
     if not entry:
         return None
@@ -163,6 +201,7 @@ def foreign_member(entry: Optional[dict]) -> Optional[dict]:
         "resume_pending_hashes": [],
         "resume_retries": 0,
         "resume_exhausted": False,
+        "finalize": "",
         "first_seen": first_seen,
         "expired": not location,
         # kind 透传(B2, 计划 26-11-21-1600): 前端 mismatch 说明行的区分位(与 expired 位同

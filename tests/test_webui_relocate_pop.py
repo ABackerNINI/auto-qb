@@ -24,7 +24,8 @@
   组行无该行(组级聚合无恢复账); 区分位单点面: retries=上界而后端 resume_exhausted=false
   仍显在途文案(前端不重算上界, 机制侧改值不谎报); 初态面: retries=0 显无后缀变体
   (不带「已补发」); 终态窄放行(26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身
-  组装(verdict 走词表「已完成/已撤销」, 待恢复 kv 走单点, 历史 src/dst 按数据在就给);
+  组装(verdict 走行状态词单点: done 收尾完成词带既有 dst, cancelled 词表「已撤销」,
+  待恢复 kv 走单点, 历史 src/dst 按数据在就给);
   调度面: done+账 调 120ms, done 无账 / 无标注行 relPopEnter 不调度(闸短路), moving 行调
   120ms、leave 调 160ms 宽限; foreign 通知态(T5, 计划 26-11-20-0434): 专属路径块
   (旧路径/数据现位置, 已过期走降级文案 foreignExpiredText 单点)+ 只给首见 kv(不出相位/
@@ -32,7 +33,10 @@
   26-11-21-1600)同挂 foreign 档(verdict/tone 词表不扩面)且 reason 槽给准确语义说明行
   (foreignMismatchText 单点, 判据读后端 kind 位, kind=B 不出该行); expired 位钉扎(minor 6:
   dst 空而 expired=false 的谎言行不落降级文案 —— 判据只认后端位); 组行 dst 数组(minor 5:
-  多现位置逐项展开, 全空数组才落降级文案)。
+  多现位置逐项展开, 全空数组才落降级文案); 收尾窗行状态细化(B3-4, 计划 26-11-21-1600):
+  verdict 走 relocateRowStateText 单点 —— pending_finalize 带 finalize 档位给细分词
+  (await_window/await_recheck), 空档位回落 coarse 词表, 组行(无 finalize 字段)自然回落;
+  done 窄放行 verdict 给收尾完成词(带既有账面 dst 作新保存路径)。
 """
 from __future__ import annotations
 
@@ -210,6 +214,16 @@ const seedDoneResume=assemble({relocate:{state:'done',src:'R:/s',dst:'R:/d',alia
 const seedCancelResume=assemble({relocate:{state:'cancelled',src:'R:/s',dst:'R:/d',alias_count:0,
   resume_pending_count:2,resume_pending_hashes:['HA','HB'],resume_retries:1,resume_exhausted:false,updated_at:999880}});
 const seedNoMark=assemble({relocate:null});
+// 收尾窗行状态细化(B3-4, 计划 26-11-21-1600): verdict 走 relocateRowStateText 单点 ——
+// 细分档给细分词; 空档位回落 coarse 词表; 组行(无 finalize 字段)自然回落
+const seedFinalizeWindow=assemble({relocate:{state:'pending_finalize',phase:'armed',finalize:'await_window',
+  src:'R:/s',dst:'R:/d',alias_count:0,origin:'web',updated_at:999880}});
+const seedFinalizeRecheck=assemble({relocate:{state:'pending_finalize',phase:'rewritten',finalize:'await_recheck',
+  src:'R:/s',dst:'R:/d',alias_count:0,origin:'web',updated_at:999880}});
+const seedFinalizeEmpty=assemble({relocate:{state:'pending_finalize',phase:'armed',finalize:'',
+  src:'R:/s',dst:'R:/d',alias_count:0,origin:'web',updated_at:999880}});
+const grpFinalizeAbsent=assemble({members:[{relocate:null}],
+  relocate:{state:'pending_finalize',src:'R:/src',dst:['R:/dst'],pending:3,total:12,updated_at:999880}});
 // foreign(T5, 计划 26-11-20-0434): 外部旧路径种子通知态 —— 旧路径/数据现位置路径块 + 首见
 // kv; 已过期(dst 空位)走降级文案; job 机械面(相位/别名/待恢复/来源/更新)不出
 const foreignHit=assemble({relocate:{state:'foreign',src:'R:/old',dst:'R:/new',phase:'done',
@@ -239,7 +253,8 @@ M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'moving',src:'R:/s',dst
 M.relPopLeave.call(M);
 process.stdout.write(JSON.stringify({grpPair,grpMixed,seedFail,seedAlias0,seedNoUpd,
   seedResume,seedExhausted,seedMaxRetriesInflight,seedRetries0,seedResumeEmpty,grpResume,
-  seedDoneResume,seedCancelResume,seedNoMark,foreignHit,foreignMismatch,foreignExpired,foreignLyingNotExpired,
+  seedDoneResume,seedCancelResume,seedNoMark,seedFinalizeWindow,seedFinalizeRecheck,seedFinalizeEmpty,
+  grpFinalizeAbsent,foreignHit,foreignMismatch,foreignExpired,foreignLyingNotExpired,
   foreignGrpMulti,foreignGrpAllExpired,timers}));
 """
 
@@ -308,10 +323,12 @@ def test_relocate_pop_assemble_node():
     assert all(k[0] != "待恢复成员" for k in out["seedResumeEmpty"]["kv"]), "空账不得出待恢复行"
     assert all(k[0] != "待恢复成员" for k in out["grpResume"]["kv"]), "组行不出待恢复行(组级聚合无该账)"
 
-    # 终态窄放行(issue 26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身, verdict 走词表
+    # 终态窄放行(issue 26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身
+    # verdict 走 relocateRowStateText 单点(B3-4, 计划 26-11-21-1600): done 给收尾完成词
+    # (带既有账面 dst 作新保存路径), cancelled 恒 coarse 词表(不在收尾窗)
     sd = out["seedDoneResume"]
-    assert sd["verdict"] == "已完成" and sd["tone"] == "neutral", \
-        "done 窄放行: verdict 必须复用词表「已完成」(零新文案), tone = 中性替身"
+    assert sd["verdict"] == "收尾完成(新保存路径 R:/d)" and sd["tone"] == "neutral", \
+        "done 窄放行: verdict 必须走行状态词单点(收尾完成 + 既有账面 dst 作新保存路径), tone = 中性替身"
     assert ["待恢复成员", "1 个 · 不再补发"] in sd["kv"], \
         "done 穷尽账的待恢复行必须走 relocateResumeText 单点(与抽屉同文案)"
     assert sd["paths"] == [["当前位置", "R:/s"], ["目标位置", "R:/d"]], \
@@ -321,6 +338,18 @@ def test_relocate_pop_assemble_node():
     assert ["待恢复成员", "2 个 · 恢复确认中(已补发 1 次)"] in sc["kv"], \
         "cancelled 在途账同样出待恢复行(单点文案)"
     assert out["seedNoMark"] is None, "无标注行 assembleRelPop 恒 null(双保险不放宽)"
+
+    # 收尾窗行状态细化(B3-4, 计划 26-11-21-1600): verdict 单点分流 —— 细分档给细分词,
+    # 空档位/组行(无 finalize 字段)回落 coarse 词表(细分面按计划只落种子行)
+    sfw = out["seedFinalizeWindow"]
+    assert sfw["verdict"] == "qB 下线等改写窗" and sfw["tone"] == "pending", \
+        "armed + qB 离线的浮窗 verdict 必须给收尾窗细分词(qB 下线等改写窗)"
+    sfr = out["seedFinalizeRecheck"]
+    assert sfr["verdict"] == "已改写待回连核验" and sfr["tone"] == "pending", \
+        "rewritten(journal 合并态)的浮窗 verdict 必须给已改写待回连核验"
+    assert out["seedFinalizeEmpty"]["verdict"] == "待收尾", "空档位回落 coarse 词表"
+    assert out["grpFinalizeAbsent"]["verdict"] == "待收尾", \
+        "组行标注无 finalize 字段, 自然回落 coarse(细分面按计划只落种子行)"
 
     # foreign(T5, 计划 26-11-20-0434): 通知态专属路径块 + 首见 kv, 不出 job 机械面
     fh = out["foreignHit"]

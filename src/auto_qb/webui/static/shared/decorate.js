@@ -29,14 +29,16 @@
  */
 const _decoCache = new WeakMap();
 
-/* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at; 26-11-07-2344 S2 组级签名补 src):
+/* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at; 26-11-07-2344 S2 组级签名补 src;
+ * B3-4 计划 26-11-21-1600 补 finalize —— qB 连接态翻转只改 finalize 档位不动 phase, 漏槽 =
+ * 收尾窗细分词停在旧档):
  * 后端每次重建会产出新的 relocate 对象, 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成
  * 值签名后再比较。P1 详情段消费 src/created_at/armed_at; 行内两排 A->B(relocateView)消费 src/dst,
  * 任一值推进必须让装饰缓存失效(漏槽 = 相位推进后两排停在旧值)。 */
 function _relocateSig(r) {
   if (!r) return "";
   return [r.state, r.phase, r.job_id, r.mover ? 1 : 0, r.origin, r.alias_kind, r.alias_count, r.src, r.dst,
-          r.created_at, r.armed_at, r.updated_at, r.reason].join("|");
+          r.created_at, r.armed_at, r.updated_at, r.reason, r.finalize || ""].join("|");
 }
 
 /* 迁移状态展示词表(plan 26-11-04-1042 P1): 筛选 / 详情段 / 单排回落语义共用一份, 禁止在模板里
@@ -49,6 +51,20 @@ const RELOCATE_STATE_TEXT = {
   superseded: "被接管(历史)",
   foreign: "旧路径外部种子",
 };
+/* 收尾窗行状态细分词表(B3-4, 计划 26-11-21-1600 D8): 后端投影 finalize 档位
+ * (views_relocate.finalize_state, token 非展示词) -> 展示词。行状态词的唯一细分面 ——
+ * 浮窗 verdict(relocate_pop)与抽屉迁移状态行(drawer_rows)消费 relocateRowStateText()
+ * 同一单点, 不各造文案; 呈现档位词表(RELOCATE_STATE_TEXT/筛选档)不扩面, 筛选仍按
+ * coarse 档「待收尾」取数(细分档是收尾窗的瞬时子态, qB 连接态翻转会让计数抖动)。
+ * 文案按「最后已知」语义不作绝对化承诺: 「已改写」是 journal 合并态的账面事实,
+ * 「待回连核验」不对完成时点作承诺; qB 态是快照滞后一拍的最后已知值。 */
+const RELOCATE_FINALIZE_TEXT = {
+  await_window: "qB 下线等改写窗",
+  await_recheck: "已改写待回连核验",
+};
+/* 收尾完成词(B3-4 第三态): done 行的行状态词 —— 新保存路径从既有账面 dst 字段取(零新增),
+ * 由 relocateRowStateText 缀在词后; 词表只收固定词面, 路径是逐行动态值。 */
+const RELOCATE_DONE_TEXT = "收尾完成";
 /* 状态 -> 色调映射(plan 26-11-07-2344 S2, 取代旧 RELOCATE_STATE_CLASS): 状态唯一载体 = 颜色
  * (.rel-tone-<tone>, row_lang.css 单点定义), 无底形无边框无药丸。done / cancelled 不在表内 ——
  * relocateView 对它们恒 null, 行内回落单排正常色。foreign = 通知/警示档(warn 色, 静态无动画)。 */
@@ -139,6 +155,25 @@ window.AQB_DECORATE = {
      * 组行读 g.relocate(后端聚合, 不取首成员推断), 种子行读 m.relocate。 */
     relocateStateText(state) {
       return RELOCATE_STATE_TEXT[state] || "未知状态";
+    },
+    /* 种子行迁移状态词(B3-4, 计划 26-11-21-1600 D8 单点): 浮窗 verdict(relocate_pop)与
+     * 抽屉迁移状态行(drawer_rows)消费的唯一细分口径, 禁止消费方另写状态字面量。
+     * - done: 「收尾完成(新保存路径 <dst>)」—— 新保存路径从既有账面 dst 字段取(零新增
+     *   state), 收尾完成后行状态带上数据现落点; dst 缺失(旧账/异常形态)只给词不谎报路径;
+     * - pending_finalize 细分档: rel.finalize 非空且在词表内给细分词(armed+qB 离线 =
+     *   等 qB 下线改写窗; rewritten = 改写已落账等回连核验), 空档位回落 coarse 词表;
+     * - 其余 state: coarse 词表原样(组行标注无 finalize 字段, 自然全回落 —— 细分面按
+     *   计划只落种子行)。
+     * 传 state 字符串的旧调用(relocate_chain 相位回落)不受影响: 本方法只收标注对象。 */
+    relocateRowStateText(rel) {
+      if (!rel) return "";
+      if (rel.state === "done") {
+        const dst = typeof rel.dst === "string" ? rel.dst : "";
+        return dst ? `${RELOCATE_DONE_TEXT}(新保存路径 ${dst})` : RELOCATE_DONE_TEXT;
+      }
+      const sub = rel.finalize ? RELOCATE_FINALIZE_TEXT[rel.finalize] : "";
+      if (sub) return sub;
+      return RELOCATE_STATE_TEXT[rel.state] || "未知状态";
     },
     relocateOriginText(origin) {
       return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");

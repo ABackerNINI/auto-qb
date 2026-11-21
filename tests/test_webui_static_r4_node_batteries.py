@@ -51,6 +51,10 @@
 - test_r4_drawer_rows_path_wide_conditional: issue 26-11-08-1621 修复回归 —— drawerGeneralSections
   契约层路径段 下载路径/根路径 wide 改条件式(值非空才 wide:true, 空值/缺失/null 行 wide 不置位
   按普通行渲染, text 兜底「—」保留, 真值行 wide 与文本透传不变); 沙箱口径与哨兵电池同式
+- test_r4_drawer_rows_row_state_finalize: B3-4(计划 26-11-21-1600)抽屉迁移段行状态词动态覆盖 ——
+  细分档(await_window)与 done 收尾完成词带既有 dst 经 relocateRowStateText **真单点**
+  (decorate.js + drawer_rows.js 同域 eval, 词值族不桩)流到 sum 与「迁移状态」行, 空档位
+  回落 coarse 词表「待收尾」
 - test_r4_dt_table_layout_geometry_equivalence: dt_table 几何等价性探针(计划 26-11-10-0027 W1(1),
   「先证后改」; 覆盖面 13 张**不含 HR 三表**(沙箱不加载 hr_status.js, HR 等价性由例外清单
   守阵静态形态钉承担, 真跑喂桩归 W3 parity e2e —— 函数 docstring 有口径)—— 对 ALL_TABLE_DEFS
@@ -2382,6 +2386,77 @@ def test_r4_drawer_rows_path_wide_conditional():
     空值行 wide 不置位按普通行渲染, text 兜底「—」保留)"""
     report = _run_probe(_NODE_DRAWER_ROWS_PATH_WIDE_PROBE, os.path.join(STATIC_ROOT, "shared", "drawer_rows.js"))
     _assert_battery(report, "drawer 路径行条件 wide 电池")
+
+
+# B3-4 收尾窗行状态细化(计划 26-11-21-1600): 抽屉迁移段行状态词的**动态覆盖**电池 ----------
+# 抽屉消费面(sum + 迁移状态行)改走 relocateRowStateText 单点后, 静态锚(接线守阵)钉不住
+# 渲染词 —— 本电池把 decorate.js 与 drawer_rows.js 并进同一沙箱, 用**真**词值单点跑
+# drawerGeneralSections, 断言细分档/收尾完成词真正流到 sum 与迁移状态行(coarse 回落对照)。
+# 沙箱口径与哨兵电池同式(两片段自给域后 eval; this 桩只给抽屉格式化族, relocate 词值族
+# 全走 decorate 真方法 —— 不桩词面, 否则测的是桩不是单点)。
+_NODE_DRAWER_ROWS_ROW_STATE_PROBE = r"""
+const fs = require("fs");
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+global.window = { AQB_DECORATE: { methods: {} }, AQB_DRAWER: { methods: {} } };
+try {
+  eval(fs.readFileSync(process.argv[1], "utf8"));  // decorate.js -> AQB_DECORATE.methods(词值单点真身)
+  eval(fs.readFileSync(process.argv[2], "utf8"));  // drawer_rows.js -> AQB_DRAWER.methods
+} catch (e) { ok("片段加载失败: " + e.message, false); }
+const M = Object.assign({}, global.window.AQB_DECORATE.methods, global.window.AQB_DRAWER.methods);
+if (typeof M.drawerGeneralSections !== "function") ok("drawerGeneralSections 未加载", false);
+if (typeof M.relocateRowStateText !== "function") ok("relocateRowStateText 未加载(词值单点缺位)", false);
+// this 桩: 抽屉格式化族(恒真值, 与哨兵电池 mkVm 同面 —— 传输/时间段被全量装配);
+// relocate 词值族全部真身(本电池的判据面)
+const mkVm = (detail) => Object.assign({}, M, {
+  drawer: { detail },
+  fmtTs: () => "ts", fmtDuration: (v) => "d" + v, fmtSizeOrDash: (v) => "s" + v,
+  fmtSize: (v) => "s" + v, fmtSpeedOrDash: () => "v", fmtEta: () => "e",
+});
+const relRow = (rel) => {
+  const secs = M.drawerGeneralSections.call(mkVm({ relocate: rel }));
+  const sec = secs.find((s) => s.title === "迁移");
+  return {
+    sum: sec ? sec.sum : null,
+    state: sec ? ((sec.rows.find((x) => x.label === "迁移状态") || {}).text || null) : null,
+  };
+};
+// 细分档(await_window): sum 与迁移状态行都渲染细分词(armed + qB 最后已知离线)
+const win = relRow({ state: "pending_finalize", phase: "armed", finalize: "await_window",
+  job_id: "jw", mover: false, src: "R:/s", dst: "R:/d", alias_kind: "", alias_count: 0,
+  created_at: 1, armed_at: 1, updated_at: 1, origin: "web", reason: "",
+  resume_pending_count: 0, resume_pending_hashes: [], resume_retries: 0, resume_exhausted: false });
+ok("细分档 sum 渲染「qB 下线等改写窗」", win.sum === "qB 下线等改写窗 · 受影响成员");
+ok("细分档迁移状态行渲染「qB 下线等改写窗」", win.state === "qB 下线等改写窗");
+// done + 既有账面 dst: 收尾完成词带新保存路径(路径从 dst 字段取, 零新增)
+const done = relRow({ state: "done", phase: "done", finalize: "",
+  job_id: "jd", mover: false, src: "R:/s", dst: "R:/dst", alias_kind: "", alias_count: 0,
+  created_at: 1, armed_at: 1, updated_at: 1, origin: "web", reason: "",
+  resume_pending_count: 0, resume_pending_hashes: [], resume_retries: 0, resume_exhausted: false });
+ok("done sum 渲染收尾完成词+新保存路径", done.sum === "收尾完成(新保存路径 R:/dst) · 受影响成员");
+ok("done 迁移状态行渲染收尾完成词+新保存路径", done.state === "收尾完成(新保存路径 R:/dst)");
+// 空档位回落 coarse 词表(收尾窗之外/未知形态不谎报)
+const coarse = relRow({ state: "pending_finalize", phase: "armed", finalize: "",
+  job_id: "jc", mover: false, src: "R:/s", dst: "R:/d", alias_kind: "", alias_count: 0,
+  created_at: 1, armed_at: 1, updated_at: 1, origin: "web", reason: "",
+  resume_pending_count: 0, resume_pending_hashes: [], resume_retries: 0, resume_exhausted: false });
+ok("空档位回落 coarse「待收尾」", coarse.state === "待收尾" && coarse.sum === "待收尾 · 受影响成员");
+
+const failed = checks.filter((c) => !c[1]).map((c) => c[0]);
+console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+"""
+
+
+def test_r4_drawer_rows_row_state_finalize():
+    """B3-4(计划 26-11-21-1600)抽屉迁移段行状态词动态覆盖: 细分档(await_window)与
+    done 收尾完成词带既有 dst 经 relocateRowStateText 真单点流到 sum/迁移状态行;
+    空档位回落 coarse 词表。沙箱 = decorate.js + drawer_rows.js 同域 eval(词值族真身)。"""
+    report = _run_probe(
+        _NODE_DRAWER_ROWS_ROW_STATE_PROBE,
+        os.path.join(STATIC_ROOT, "shared", "decorate.js"),
+        os.path.join(STATIC_ROOT, "shared", "drawer_rows.js"),
+    )
+    _assert_battery(report, "drawer 迁移段行状态词电池")
 
 
 # 计划 26-11-10-0027 W1(1): dt_table 几何等价性探针 -----------------------------------------

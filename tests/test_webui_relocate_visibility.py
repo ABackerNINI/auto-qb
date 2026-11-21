@@ -47,11 +47,35 @@
   foreignExpiredText 定义恰一次且浮窗/抽屉共用(评审 minor 6 + nit 9); mismatch 说明文案
   单点 foreignMismatchText 定义恰一次且浮窗/抽屉共用、判据读后端 kind 位, 字面只落 decorate
   单点(B2, 计划 26-11-21-1600)
+
+收尾窗行状态细化(B3-4, 计划 26-11-21-1600 D8):
+
+- test_finalize_state_derivation: finalize_state 纯派生矩阵 —— rewritten 恒 await_recheck
+  (qB 态无关: journal 合并态是账面权威事实, qB 回连中/快照滞后不降级); armed 仅 qB 最后
+  已知离线给 await_window, 在线/未知(None)回落 ""; moved/moving/终态/未知相位恒 ""(非
+  收尾窗 armed/rewritten 相位)
+- test_member_relocate_finalize_projection: 标注面 finalize 档位字段恒在(缺省 qb_connected
+  =None 同旧契约) + 真机接线面(mgr._last_conn_ok -> status_snapshot().connected ->
+  _relocate_member 派生 await_window/await_recheck; 连接态未知回落 "") + foreign_member
+  finalize 恒空串(通知态不在收尾窗, 字段契约同形)
+- test_relocate_qb_connected_fallback: _relocate_qb_connected 收口分支(views.py)—— 替身缺
+  status_snapshot 方法 / 读数异常都按 None 收口(呈现面零异常), None 沿派生链到 finalize
+  恒空串(未知不谎报)
+- test_finalize_row_state_word_node: node 探针真跑 relocateRowStateText(B3-4 行状态词单点)
+  —— done + dst 给「收尾完成(新保存路径 <dst>)」(路径取既有账面 dst, 零新增)、done 无
+  dst 只给词不谎报; pending_finalize 细分档 await_window/await_recheck 给细分词; 空档位/
+  未知档位回落 coarse 词表; 无标注恒空串; 组行形态(无 finalize 字段)自然回落; 签名槽位
+  面(_relocateSig finalize 变档签名必变)
+- test_finalize_display_wiring: 行状态词接线守阵 —— 细分词表/收尾完成词只落 decorate 单点
+  (浮窗 verdict 与抽屉 sum/迁移状态行消费 relocateRowStateText 同一单点, 不各造文案;
+  呈现档位词表 RELOCATE_STATE_TEXT 不扩面、筛选桶 _relocatePick 不读 finalize —— 细分档
+  是收尾窗瞬时子态, 筛选仍按 coarse「待收尾」取数); _relocateSig 含 finalize 槽
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 
@@ -915,3 +939,205 @@ def test_foreign_display_wiring():
     # 抽屉 foreign 专属行集(通知事实面, 不出 job 机械面)
     assert 'rel.state === "foreign"' in rows, "抽屉迁移段必须有 foreign 分支"
     assert 'label: "旧路径"' in rows and 'label: "数据现位置"' in rows and 'label: "首见"' in rows
+
+
+# ---------- 收尾窗行状态细化(B3-4, 计划 26-11-21-1600 D8) ----------
+
+
+def test_finalize_state_derivation():
+    """finalize_state 纯派生矩阵(B3-4): 输入组合(相位 x qB 连接态) -> 细分档位"""
+    from auto_qb.webui.views_relocate import (
+        FINALIZE_AWAIT_RECHECK,
+        FINALIZE_AWAIT_WINDOW,
+        finalize_state,
+    )
+
+    # rewritten(journal 合并态)恒 await_recheck: 相位本身是账面权威事实, qB 态无关 ——
+    # qB 离线(还在下线窗)/在线(回连核验中)/未知(快照滞后)都不降级回 coarse 词
+    assert finalize_state(ru.PHASE_REWRITTEN, False) == FINALIZE_AWAIT_RECHECK
+    assert finalize_state(ru.PHASE_REWRITTEN, True) == FINALIZE_AWAIT_RECHECK
+    assert finalize_state(ru.PHASE_REWRITTEN, None) == FINALIZE_AWAIT_RECHECK
+    # armed 仅 qB 最后已知离线给 await_window(等 qB 下线改写窗)
+    assert finalize_state(ru.PHASE_ARMED, False) == FINALIZE_AWAIT_WINDOW
+    # qB 在线回落现行为(armed + 在线 = 别名在场正常做种, coarse「待收尾」);
+    # None(未知/连接中, 快照滞后语义)不谎报, 同样回落
+    assert finalize_state(ru.PHASE_ARMED, True) == ""
+    assert finalize_state(ru.PHASE_ARMED, None) == ""
+    # 非收尾窗 armed/rewritten 相位恒 "": moved/moving/终态/未知/空串
+    for phase in (
+        ru.PHASE_MOVED, ru.PHASE_MOVING, ru.PHASE_WATCHING, ru.PHASE_DONE, ru.PHASE_FAILED, ru.PHASE_CANCELLED,
+        ru.PHASE_SUPERSEDED, "", "junk"
+    ):
+        assert finalize_state(phase, False) == "", f"相位 {phase!r} 不得给细分档位"
+        assert finalize_state(phase, True) == ""
+
+
+def test_member_relocate_finalize_projection(tmp_path):
+    """标注面 finalize 档位(B3-4): 字段恒在 + 真机接线面(status 快照面 -> 派生)+ foreign 同形"""
+    from auto_qb.webui.views_relocate import (
+        FINALIZE_AWAIT_RECHECK,
+        FINALIZE_AWAIT_WINDOW,
+        foreign_member,
+        member_relocate,
+    )
+
+    # 纯函数面: 缺省 qb_connected=None 与旧调用契约同形(字段恒在值为空串 = 不适用)
+    legacy = member_relocate(ru.job_to_dict(_job("j1", phase=ru.PHASE_ARMED)), "HA")
+    assert legacy["finalize"] == "", "缺省 qB 未知: armed 不给细分档(字段恒在)"
+    # 显式输入: armed+离线 / rewritten 任意态
+    assert member_relocate(ru.job_to_dict(_job("j2", phase=ru.PHASE_ARMED)), "HA",
+                           qb_connected=False)["finalize"] == FINALIZE_AWAIT_WINDOW
+    assert member_relocate(ru.job_to_dict(_job("j3", phase=ru.PHASE_REWRITTEN)), "HA",
+                           qb_connected=True)["finalize"] == FINALIZE_AWAIT_RECHECK
+
+    # 真机接线面: mgr._last_conn_ok(status_snapshot().connected)经 _relocate_member 到标注
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    mod.register_job(_job("jw", phase=ru.PHASE_ARMED))
+    env.mgr._last_conn_ok = None  # 连接中/未知: 不给细分档(最后已知语义, 未知不谎报)
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["finalize"] == ""
+    env.mgr._last_conn_ok = False  # qB 下线改写窗
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["finalize"] \
+        == FINALIZE_AWAIT_WINDOW
+    mod.register_job(_job("jw2", phase=ru.PHASE_REWRITTEN))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["finalize"] \
+        == FINALIZE_AWAIT_RECHECK
+
+    # foreign(通知态)不在收尾窗: finalize 恒空串, 字段契约与 member_relocate 同形
+    entry = {"root": "r:/old", "kind": "B", "job_id": "jd", "phase": "done", "location": "R:/new", "first_seen": 1.0}
+    assert foreign_member(entry)["finalize"] == ""
+    assert foreign_member({**entry, "kind": "mismatch"})["finalize"] == ""
+
+
+def test_relocate_qb_connected_fallback():
+    """_relocate_qb_connected 收口分支(views.py B3-4 输入面): 替身缺 status_snapshot /
+    读数异常 -> None, 经 member_relocate 到 finalize 恒空串(未知不谎报, 呈现面零异常)"""
+    from types import SimpleNamespace
+
+    from auto_qb.webui.views import WebviewMixin
+    from auto_qb.webui.views_relocate import member_relocate
+
+    # 替身缺方法(无 status_snapshot 属性): 按 None 收口
+    assert WebviewMixin._relocate_qb_connected(SimpleNamespace()) is None
+
+    # 读数异常(替身方法抛错): 呈现面零异常, 同按 None 收口
+    class _Boom:
+        def status_snapshot(self):
+            raise RuntimeError("替身读数异常")
+
+    assert WebviewMixin._relocate_qb_connected(_Boom()) is None
+    # None 输入沿派生链回落: armed 不给细分档(未知不谎报)
+    assert member_relocate(
+        ru.job_to_dict(_job("jf", phase=ru.PHASE_ARMED)),
+        "HA",
+        qb_connected=WebviewMixin._relocate_qb_connected(SimpleNamespace())
+    )["finalize"] == ""
+
+
+_NODE_ROW_STATE_PROBE = r"""
+const fs=require('fs'),vm=require('vm');
+const sandbox={window:{},console};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);
+const M=Object.assign({},sandbox.window.AQB_DECORATE.methods);
+const t=(rel)=>M.relocateRowStateText.call(Object.assign({},M),rel);
+const out={
+  donePath:t({state:'done',src:'R:/s',dst:'R:/dst'}),
+  doneNoDst:t({state:'done',src:'R:/s',dst:''}),
+  doneNullDst:t({state:'done',src:'R:/s',dst:null}),
+  window:t({state:'pending_finalize',phase:'armed',finalize:'await_window',src:'R:/s',dst:'R:/d'}),
+  recheck:t({state:'pending_finalize',phase:'rewritten',finalize:'await_recheck',src:'R:/s',dst:'R:/d'}),
+  pendingCoarse:t({state:'pending_finalize',finalize:'',src:'R:/s',dst:'R:/d'}),
+  unknownToken:t({state:'pending_finalize',finalize:'junk'}),
+  moving:t({state:'moving',finalize:'',src:'R:/s',dst:'R:/d'}),
+  failed:t({state:'failed',finalize:'',reason:'boom'}),
+  foreign:t({state:'foreign',finalize:'',src:'R:/o',dst:'R:/n'}),
+  grpPending:t({state:'pending_finalize',pending:3,total:12,src:'R:/s',dst:['R:/d']}),
+  grpMixed:t({state:'mixed',pending:1,total:8}),
+  cancel:t({state:'cancelled',finalize:''}),
+  none:t(null),
+  sigFinalize:sandbox._relocateSig({state:'pending_finalize',finalize:'await_window'})
+    !==sandbox._relocateSig({state:'pending_finalize',finalize:'await_recheck'}),
+  sigFinalizeVsEmpty:sandbox._relocateSig({state:'pending_finalize',finalize:'await_window'})
+    !==sandbox._relocateSig({state:'pending_finalize'}),
+  sigOtherStable:sandbox._relocateSig({state:'moving',src:'R:/a'})
+    ===sandbox._relocateSig({state:'moving',src:'R:/a'}),
+};
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_finalize_row_state_word_node():
+    """node 探针真跑 relocateRowStateText(B3-4 行状态词单点): 三态词 + 回落 + 签名敏感性"""
+    node = shutil.which("node")
+    if not node:
+        return
+    from pathlib import Path
+
+    js = Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static/shared/decorate.js"
+    proc = subprocess.run(
+        [node, "-e", _NODE_ROW_STATE_PROBE, str(js)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+
+    # done 第三态: 新保存路径从既有账面 dst 取(零新增), 缀在「收尾完成」词后;
+    # dst 缺失(空/null)只给词不谎报路径
+    assert out["donePath"] == "收尾完成(新保存路径 R:/dst)"
+    assert out["doneNoDst"] == "收尾完成" and out["doneNullDst"] == "收尾完成"
+    # 收尾窗两态细分词(与计划 B3-4 档名逐字同源)
+    assert out["window"] == "qB 下线等改写窗"
+    assert out["recheck"] == "已改写待回连核验"
+    # 回落面: 空档位/未知档位/其余 state/组行形态(无 finalize 字段)全走 coarse 词表
+    assert out["pendingCoarse"] == "待收尾"
+    assert out["unknownToken"] == "待收尾", "未知档位必须回落 coarse 词表(不渲染空词)"
+    assert out["moving"] == "迁移中" and out["failed"] == "迁移失败"
+    assert out["foreign"] == "旧路径外部种子"
+    assert out["grpPending"] == "待收尾" and out["grpMixed"] == "迁移多任务", \
+        "组行标注无 finalize 字段, 自然回落 coarse(细分面按计划只落种子行)"
+    assert out["cancel"] == "已撤销" and out["none"] == ""
+    # 签名敏感性(B3-4 漏槽 = 细分词停旧档): finalize 变档/有无必须让 _relocateSig 变;
+    # 其余槽位行为不变(同值同签名)
+    assert out["sigFinalize"] is True and out["sigFinalizeVsEmpty"] is True
+    assert out["sigOtherStable"] is True
+
+
+def test_finalize_display_wiring():
+    """行状态词接线守阵(B3-4): 词面单点 + 浮窗/抽屉消费同一单点 + 筛选档不扩面 + 签名槽位"""
+    deco = _static("shared/decorate.js")
+    rows = _static("shared/drawer_rows.js")
+    pop = _static("shared/relocate_pop.js")
+    # 词面检查剥注释(消费面代码态: 头注纪律文字里的同词不算使用, 与 relocate_pop 接线
+    # 守阵的零请求剥块同口径)
+    pop_code = re.sub(r"/\*.*?\*/", "", pop, flags=re.S)
+    pop_code = re.sub(r"//[^\n]*", "", pop_code)
+    rows_code = re.sub(r"/\*.*?\*/", "", rows, flags=re.S)
+    rows_code = re.sub(r"//[^\n]*", "", rows_code)
+    # 细分词表 + 收尾完成词只落 decorate 单点(消费方不各造文案)
+    assert deco.count("RELOCATE_FINALIZE_TEXT = {") == 1, "细分词表必须在 decorate 定义恰一次"
+    assert deco.count('const RELOCATE_DONE_TEXT = "收尾完成";') == 1, "收尾完成词必须单点定义"
+    assert deco.count("relocateRowStateText(rel) {") == 1, "行状态词单点必须在 decorate 定义恰一次"
+    for word in ("qB 下线等改写窗", "已改写待回连核验", "收尾完成"):
+        assert word in deco, f"细分词面缺 {word}"
+        assert word not in pop_code and word not in rows_code, \
+            f"{word} 字面只允许落 decorate 单点(浮窗/抽屉经 relocateRowStateText 消费)"
+    # 浮窗 verdict 与抽屉(sum + 迁移状态行)消费同一单点
+    assert "this.relocateRowStateText(rel)" in pop, "浮窗 verdict 必须消费行状态词单点"
+    assert rows.count("this.relocateRowStateText(rel)") == 2, \
+        "抽屉 sum 与迁移状态行都必须消费同一单点(不另写第二份口径)"
+    # 呈现档位词表不扩面: RELOCATE_STATE_TEXT 不收细分词(done 词面保持既有「已完成」——
+    # 收尾完成词只走行状态词单点, 改 coarse done 词面 = 筛选/链回落链路语义漂移, 本条即红);
+    # 筛选桶 _relocatePick 不读 finalize —— 细分档是收尾窗瞬时子态, 筛选仍按 coarse 取数,
+    # 词表/档位零扩张(qB 连接态翻转会让瞬时档计数抖动, 不进筛选面)
+    coarse = deco.split("const RELOCATE_STATE_TEXT", 1)[1].split("const RELOCATE_FINALIZE_TEXT", 1)[0]
+    assert 'done: "已完成"' in coarse, "coarse 词表 done 词面必须保持既有「已完成」(收尾完成词只走行状态词单点)"
+    assert "await_window" not in coarse, "coarse 词表不得收细分档位词(呈现档位词表不扩面)"
+    pick = deco.split("_relocatePick(r) {", 1)[1].split("_relocateBuckets(row) {", 1)[0]
+    assert "finalize" not in pick, "筛选桶不得读细分档位(呈现档位词表不扩面)"
+    # 标注签名含 finalize 槽(qB 连接态翻转只改档位不动 phase, 漏槽 = 细分词停旧档)
+    sig_body = deco.split("function _relocateSig(", 1)[1].split("\n}", 1)[0]
+    assert "r.finalize" in sig_body, "成员标注签名必须含 finalize 槽(B3-4)"
