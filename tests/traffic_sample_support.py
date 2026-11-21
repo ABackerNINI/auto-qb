@@ -21,6 +21,7 @@ from auto_qb.config.validation import validate_config
 from auto_qb.core.modules.traffic_sample_mod import (
     EVICT_CHECK_INTERVAL_S,
     GLOBAL_SERIES_KEY,
+    HourFold,
     V4_BUFFER_SLOT_CAP,
     ZRUN_CAP_SAMPLES,
     ZRUN_FLUSH_S,
@@ -182,6 +183,16 @@ def _local_epoch(hour: int, minute: int, second: int) -> float:
 
 # ---------- 聚合分层与恢复(S2b, plan 26-10-04-1957 §04) ----------
 _AGG_H0 = (1_760_000_000 // HOUR_SECONDS) * HOUR_SECONDS  # hour 对齐的现代 epoch(Windows 无负 epoch)
+
+
+def _hour_fold(*credits) -> HourFold:
+    """信用序列 (dl, up, dl_total, up_total, dt_s) 按到达顺序 merge 成 HourFold(D12 测试
+    构造辅助, 计划 26-11-21-1546: 与旧列表路径逐条 append V4HourSample 同序 —— 期望值
+    字面量沿用列表形态的逐笔元组)"""
+    fold = HourFold()
+    for dl, up, dl_total, up_total, dt_s in credits:
+        fold.merge(dl, up, dl_total, up_total, dt_s)
+    return fold
 
 
 def _agg_text(tmp_path, key: str):

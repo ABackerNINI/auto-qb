@@ -46,6 +46,19 @@ mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验
   存根无此小时追加首写(354)/ 有此小时合流替换(对照)/ 月层都不匹配日行落盘月层
   零动作(361->exit, 背日不级联翻月)
 
+D12 折叠态对拍守阵(plan 26-11-21-1546 S1/D12; 等价判据 D2 + 浮点序不变量 R2):
+- test_hour_fold_seal_bitwise_matches_v4_hour_agg_random_credits: 随机信用序列三路对拍
+  (列表路径 v4_hour_agg / fold 全序列逐笔 merge / settled 拷贝 + 合成段按原序 merge 的
+  活尾组合序)AggRow bitwise 相等 + format_agg_row 9 列文本逐位 —— R2 场景: dt_s 取
+  dt_ms/1000 二进制不精确值(亚秒残余/恰满一小时/超一小时大段), 零速率/零 dt 退化笔,
+  Σdt > 3600 截断
+- test_hour_fold_reseal_matches_list_and_seal_is_readonly: 同 epoch 桶重开续接时序对拍
+  (A 段 seal -> B 段续 merge -> 再 seal, 与列表版逐轮 bitwise 一致)+ seal 只读不变式
+- test_hour_fold_degenerate_inputs_parity: 退化值钉面(负速率 max 首笔立基线与列表 max
+  逐位一致 / totals 恒取末笔 / 全零速率桶)
+- test_hour_fold_error_and_boundary_parity: 空桶/零覆盖 ValueError 逐条对齐列表路径 +
+  cov 边界(亚秒下限 1 / Σdt > 3600 截断 / 恰 3600 / 整值不回归)
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -57,6 +70,8 @@ import inspect
 import logging
 
 import os
+
+import random
 
 import re
 
@@ -74,7 +89,7 @@ import auto_qb.core.traffic_store as traffic_store_module
 
 from auto_qb.config import QbTraffic
 
-from auto_qb.core.modules.traffic_sample_mod import GLOBAL_SERIES_KEY
+from auto_qb.core.modules.traffic_sample_mod import GLOBAL_SERIES_KEY, HourFold
 
 from auto_qb.core.traffic_store import (
     DRIFT_TOL_MS,
@@ -414,3 +429,137 @@ def test_agg_reseal_closed_day_stub_first_write_and_month_mismatch():
     _SampleAggMixin._agg_reseal_closed_day(agg_c, mk(d0 + 9 * HOUR_SECONDS, 300), rows_c)
     assert [r.kind for r in rows_c] == ["hour", "day"]  # 无 month 行
     assert agg_c.month_days == []  # 开放月累计器未动(背日行不级联翻月)
+
+
+# ======================================================================
+# D12 折叠态对拍守阵(plan 26-11-21-1546 S1/D12; 等价判据 D2 + 浮点序不变量 R2):
+# HourFold(逐笔 merge -> seal)与旧列表路径(逐条 append V4HourSample -> v4_hour_agg)
+# 的聚合输出 bitwise 等价。v4_hour_agg 本体保留作参照实现与对拍基准(生产封口已改走
+# fold.seal, 数学逐条对齐)。
+# ======================================================================
+
+
+def _list_seal(credits, hour_epoch):
+    """列表路径(参照): 信用逐条 append 成 V4HourSample 元组 -> v4_hour_agg"""
+    samples = tuple(V4HourSample(dl, up, dlt, upt, dt) for dl, up, dlt, upt, dt in credits)
+    return v4_hour_agg(hour_epoch, samples)
+
+
+def _fold_seal(credits, hour_epoch):
+    """fold 路径: 信用按到达顺序逐笔 merge -> seal(R2: 与列表路径同序才 bitwise 一致)"""
+    fold = HourFold()
+    for dl, up, dlt, upt, dt in credits:
+        fold.merge(dl, up, dlt, upt, dt)
+    return fold.seal(hour_epoch)
+
+
+def _random_credits(rng, n):
+    """随机信用序列(R2 场景生成器): dt_s = dt_ms/1000 的二进制不精确值(亚秒残余/整秒/
+    恰满一小时/超一小时大段混采), 速率 0 与大值混合, 退化零 dt 笔可现(首笔保底正覆盖
+    —— 全零覆盖两路同抛由 error_and_boundary 专测钉), totals 随机大整数。"""
+    credits = []
+    for i in range(n):
+        dt_ms = rng.choice([rng.randrange(1, 1000), rng.randrange(1, 3_600_001), 263, 1500, 3_599_999, 3_600_000, 0])
+        if i == 0 and dt_ms == 0:
+            dt_ms = 263
+        credits.append(
+            (
+                rng.choice([0, rng.randrange(0, 50_000_000)]),
+                rng.choice([0, rng.randrange(0, 50_000_000)]),
+                rng.randrange(0, 10**12),
+                rng.randrange(0, 10**12),
+                dt_ms / 1000.0,
+            )
+        )
+    return credits
+
+
+def test_hour_fold_seal_bitwise_matches_v4_hour_agg_random_credits():
+    """D12 随机对拍(D2 等价判据 / R2 浮点序): 同一随机信用序列走三条路 —— 列表路径
+    (V4HourSample 逐条 append -> v4_hour_agg)/ fold 路径(全序列逐笔 merge -> seal)/
+    活尾组合序(settled fold 拷贝成副本后合成段按原序 merge 再 seal, 即 _pending_agg_rows
+    的组合)—— 断言 AggRow bitwise 相等(NamedTuple 相等 = 逐字段相等, 另以 format_agg_row
+    文本钉 9 列逐位)。固定种子可复现。"""
+    rng = random.Random(1546)
+    for _ in range(300):
+        hour_epoch = rng.randrange(0, 2**31 - 2 * HOUR_SECONDS) // HOUR_SECONDS * HOUR_SECONDS
+        credits = _random_credits(rng, rng.randint(1, 40))
+        settled_n = rng.randint(1, len(credits))
+        row_list = _list_seal(credits, hour_epoch)
+        row_fold = _fold_seal(credits, hour_epoch)
+        settled = HourFold()
+        for credit in credits[:settled_n]:
+            settled.merge(*credit)
+        composed = settled.copy()  # 活尾副本(D12): copy 后按原序并入合成段
+        for credit in credits[settled_n:]:
+            composed.merge(*credit)
+        assert row_list == row_fold == composed.seal(hour_epoch)
+        assert format_agg_row(row_list) == format_agg_row(row_fold)  # 9 列文本逐位
+
+
+def test_hour_fold_reseal_matches_list_and_seal_is_readonly():
+    """D12 时序对拍(D2): 同 epoch 桶重开续接 —— 先并 A 段信用 seal, 再并 B 段信用再
+    seal; fold 两轮输出与列表版(A 段聚合 -> 扩展 B 段再聚合)逐轮 bitwise 一致, 且 seal
+    只读(两轮之间折叠态逐字段不变 —— 封口后迟到信用续接的形态)。"""
+    rng = random.Random(1121)
+    for _ in range(100):
+        hour_epoch = rng.randrange(0, 2**31 - 2 * HOUR_SECONDS) // HOUR_SECONDS * HOUR_SECONDS
+        a = _random_credits(rng, rng.randint(1, 15))
+        b = _random_credits(rng, rng.randint(0, 15))
+        fold = HourFold()
+        for dl, up, dlt, upt, dt in a:
+            fold.merge(dl, up, dlt, upt, dt)
+        snapshot = fold.copy()  # 第一轮 seal 前快照(seal 只读不变式的对照面)
+        row_first = fold.seal(hour_epoch)
+        assert row_first == _list_seal(a, hour_epoch)
+        assert fold == snapshot  # seal 未改折叠态
+        for dl, up, dlt, upt, dt in b:
+            fold.merge(dl, up, dlt, upt, dt)
+        assert fold.credits == len(a) + len(b)
+        assert fold.seal(hour_epoch) == _list_seal(a + b, hour_epoch)
+
+
+def test_hour_fold_degenerate_inputs_parity():
+    """D12 退化值钉面(D2): max 语义(首笔立基线逐笔取大 —— 负速率下与列表 max 逐位
+    一致, 不含隐含 0 下界)/ totals 恒取末笔(中间笔快照被覆盖)/ 全零速率桶聚合输出
+    一致。生产不产负速率, 表示面等价性仍须逐位。"""
+    h = HOUR_SECONDS
+    neg = [(-5, -3, 100, 200, 10.0), (-7, -1, 150, 250, 5.0), (-6, -9, 160, 260, 15.0)]
+    row = _fold_seal(neg, h)
+    assert row == _list_seal(neg, h)
+    assert row.dl_max == -5 and row.up_max == -1  # 隐含 0 下界会腐蚀负速率 max
+    tot = [(100, 50, 1000, 2000, 10.0), (200, 60, 3000, 4000, 10.0), (0, 0, 5000, 6000, 10.0)]
+    row = _fold_seal(tot, h)
+    assert row == _list_seal(tot, h) and (row.dl_total, row.up_total) == (5000, 6000)
+    zero = [(0, 0, 1, 2, 1800.0), (0, 0, 1, 2, 1800.0)]
+    row = _fold_seal(zero, h)
+    assert row == _list_seal(zero, h) and row.dl_avg == 0 and row.cov_s == 3600
+
+
+def test_hour_fold_error_and_boundary_parity():
+    """D12 语义边界钉面(D2): 空(无信用)与零覆盖 ValueError 逐条对齐列表路径(空桶 =
+    不出行语义由调用方 try/except 承接); cov 边界 —— 亚秒残余 cov_s 下限 1(2026-10-13
+    真机「逐级聚合无有效覆盖」不变量)/ Σdt > 3600 截 3600 / 恰 3600 / 整值形态不回归
+    —— 与 v4_hour_agg 逐位一致。"""
+    h = HOUR_SECONDS
+    with pytest.raises(ValueError, match="无样本"):
+        v4_hour_agg(h, ())
+    with pytest.raises(ValueError, match="无样本"):
+        HourFold().seal(h)
+    with pytest.raises(ValueError, match="无有效覆盖"):
+        v4_hour_agg(h, (V4HourSample(1, 1, 1, 1, 0.0), ))
+    with pytest.raises(ValueError, match="无有效覆盖"):
+        _fold_seal([(1, 1, 1, 1, 0.0)], h)
+    # 亚秒残余: cov_s 下限 1(真机 0.263s 残余形态), avg 仍按 float cov 加权, round 边界 0.5 同折 1
+    for dt in (0.001, 0.263, 0.5):
+        credits = [(100, 50, 1000, 500, dt)]
+        row = _fold_seal(credits, h)
+        assert row == _list_seal(credits, h) and row.cov_s == 1
+    # Σdt > 3600 截断: cov_s = 3600, avg 按截断后的 cov 加权
+    over = [(100, 50, 1, 2, 2000.0), (300, 150, 3, 4, 2000.0)]
+    row = _fold_seal(over, h)
+    assert row == _list_seal(over, h) and row.cov_s == 3600
+    assert row.dl_avg == int(round((100 * 2000 + 300 * 2000) / 3600))
+    # 整值形态不回归(已落盘数字不变)
+    assert _fold_seal([(1, 1, 1, 1, 3597.0)], h).cov_s == 3597
+    assert _fold_seal([(1, 1, 1, 1, 3600.0)], h).cov_s == 3600

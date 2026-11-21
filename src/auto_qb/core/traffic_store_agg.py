@@ -12,6 +12,9 @@ def v4_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
     (avg = round(Σrate/n)) —— 测试对照钉住。
     !与 v4_rollup_agg 同构双实现(加权量不同: 本函数 dt 加权 vs 逐级 cov 加权),
     issue 26-10-11-0207 R07/R10 登记不急合 —— 合并需先统一加权量语义。
+    !D12(计划 26-11-21-1546)后写侧累计器为折叠态 HourFold(traffic_sample_common),
+    生产封口走 HourFold.seal —— 本函数保留作列表路径参照与对拍基准, 数学逐条对齐
+    (bitwise 等价由对拍守阵随机数据钉死)。
 
     cov_s 下限 1(§04.1 不变量「行存在即有覆盖」): 小时已封口后迟到的补记会重建该桶并
     重封, 此时桶内只有跨小时界的亚秒残余覆盖(2026-10-13 真机实测 0.263s), round 把它

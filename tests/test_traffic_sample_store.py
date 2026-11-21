@@ -37,7 +37,7 @@
 - test_agg_z_end_anchor_interpolates_via_online: 形态 D 在线 —— z 行带末端对时游程内小时间隔
   摊配「开启快照 -> 末端快照」, 右端小时 = 末端快照、无单桶台阶; rate lane 不受影响
 - test_agg_z_end_anchor_two_paths_same_hours: 形态 D 两路同源 —— 同一 z 行分别走在线 _agg_feed
-  与离线 _agg_credit_day_file, 小时桶逐样本逐位一致(摊配共用 v4_z_totals_ramp)
+  与离线 _agg_credit_day_file, 小时桶折叠态逐字段一致(摊配共用 v4_z_totals_ramp)
 - test_agg_day_month_rollup_and_month_boundary: 逐级派生(hour→day→month)数值 = v4_rollup_agg;
   翻本地日产 day 行 / 翻自然月产 month 行; 跨月后累计器开新
 - test_flush_seals_completed_hours_only_and_no_duplicate: 水位封口(§4.2) —— 30s 连续采样跨小时界
@@ -95,6 +95,9 @@ v4 定约用例(plan 26-10-05-2200 §04 表 3/5/6/7, B2 落地):
 
 P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_hour_spans_splits_on_hour_boundary: 小时界切段纯函数 —— 跨整点出 3 段, 退化/空区间出 ()
+- test_record_slots_exact_sequences: _record_slots 逐槽 ts 精确序列(纯函数面, D12 评审 P1a
+  「源头上钉」)—— r=[cursor] / 块首单槽零推进 [anchor] / 块首多槽端点含 span/(n-1) /
+  非块首 span/n, 分界形态 [30,62,30](_record_slots_9/12、_agg_feed_8 类变异源头杀)
 - test_open_run_hour_samples_null_run_leaves_tail_null: n 游程只合成 credit 段到 run.start, 之后留
   null(断连不可归因为 0)
 - test_open_run_hour_samples_without_credit_is_empty: 无观测信用 -> 不合成任何样本(不猜)
@@ -115,8 +118,8 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
   (不产 hour 行), 空桶跳过
 - test_agg_credit_day_file_empty_block_and_null_slots: 空块零槽跳过 / n 槽 null 期不贡献
   (_slot_agg_obs 返回 None 的两条同源出口)
-- test_agg_credit_hours_never_creates_empty_bucket (issue 26-11-01-0050): 入账恒
-  setdefault+append 且 end<=start 直接返回 —— pending 空桶生产点不存在
+- test_agg_credit_hours_never_creates_empty_bucket (issue 26-11-01-0050): 入账恒按需建
+  fold + merge(D12)且 end<=start 直接返回 —— pending 空桶生产点不存在
 - test_live_tail_pending_agg_published_and_cleared_by_seal
 
 W5(R29) S5 补测守阵(mutcore 审计 core/modules/traffic_sample_mod.py; 三分类/红验对应单点
@@ -178,6 +181,7 @@ from auto_qb.core.modules import traffic_sample_mod as ts_mod
 from auto_qb.core.modules.traffic_sample_mod import (
     EVICT_CHECK_INTERVAL_S,
     GLOBAL_SERIES_KEY,
+    HourFold,
     V4_BUFFER_SLOT_CAP,
     ZRUN_CAP_SAMPLES,
     ZRUN_FLUSH_S,
@@ -226,6 +230,7 @@ from traffic_sample_support import (
     _build_tail_fixture,
     _feed_30s,
     _flush,
+    _hour_fold,
     _idle_state,
     _local_epoch,
     _mgr_with_traffic,
@@ -459,7 +464,8 @@ def test_agg_hour_row_dt_weighted_across_hour_boundary(tmp_path):
     assert row.cov_s == 3590  # Σdt = 30 + 60 + 3500
     agg = mod._agg_states[key]
     assert [h for h in agg.pending] == [h0 + HOUR_SECONDS]  # h1 未完结留累计器, h0 已弹出
-    assert len(agg.pending[h0 + HOUR_SECONDS]) == 1 and agg.pending[h0 + HOUR_SECONDS][0].dt_s == 5.0
+    tail_fold = agg.pending[h0 + HOUR_SECONDS]  # D12 折叠态: 跨小时界残余 5s 单笔信用
+    assert tail_fold.credits == 1 and tail_fold.cov == 5.0
     assert agg.day_epoch == v4_day_epoch(h0) and len(agg.day_hours) == 1  # 严格逐级: hour 并入 day
     assert agg.month_epoch is None and agg.month_days == []
 
@@ -635,7 +641,7 @@ def test_agg_flush_all_isolates_series_error_and_resets(tmp_path, monkeypatch):
     bad, good = GLOBAL_SERIES_KEY, "torrent:" + "0" * 40
     h0 = _AGG_H0
     for k in (bad, good):
-        mod._agg_state(k).pending[h0] = [V4HourSample(100, 50, 1000, 2000, 3600.0)]
+        mod._agg_state(k).pending[h0] = _hour_fold((100, 50, 1000, 2000, 3600.0))
     real = mod._agg_flush_series
 
     def boom(key, now):
@@ -646,7 +652,7 @@ def test_agg_flush_all_isolates_series_error_and_resets(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "_agg_flush_series", boom)
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         mod._agg_flush_all(now=h0 + HOUR_SECONDS)
-        mod._agg_state(bad).pending[h0] = [V4HourSample(1, 1, 1, 1, 3600.0)]  # 下一轮重试
+        mod._agg_state(bad).pending[h0] = _hour_fold((1, 1, 1, 1, 3600.0))  # 下一轮重试
         mod._agg_flush_all(now=h0 + HOUR_SECONDS + 600)
     # 隔离: 健康系列照常落盘(修复前异常一路上抛, 这里一行都不会有)
     assert parse_v4_agg_text(_agg_text(tmp_path, good)).hours[0].cov_s == 3600
@@ -707,7 +713,8 @@ def test_agg_z_end_anchor_interpolates_via_online(tmp_path):
 
 def test_agg_z_end_anchor_two_paths_same_hours(tmp_path):
     """形态 D 两路同源(plan §05 判据 4): 同一 z 行(带末端对)分别走在线 _agg_feed 与离线
-    _agg_credit_day_file, 小时桶逐样本逐位一致(槽位两路同源 + 摊配共用 v4_z_totals_ramp)"""
+    _agg_credit_day_file, hour 桶折叠态逐字段一致(D12: wsum/cov 浮点逐位 + max/totals/
+    笔数 —— 两路同序入账, 槽位同源 + 摊配共用 v4_z_totals_ramp)"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
@@ -735,10 +742,15 @@ def test_agg_z_end_anchor_two_paths_same_hours(tmp_path):
     TrafficSampleModule._agg_credit_day_file(
         pending_off, parse_v4_day_text(format_v4_day_text("global", (blk, ))), None
     )
-    assert {h: tuple(s) for h, s in mod._agg_states[key].pending.items()} == {h: tuple(s) for h, s in pending_off.items()}
+    # 在线/离线同序入账 -> 折叠态逐字段相等(D12: wsum/cov 浮点逐位 + max/totals/笔数)
+    assert mod._agg_states[key].pending == pending_off
     ramp = v4_z_totals_ramp(s0[0], s0[1], s1[0], s1[1], 120)
-    assert pending_off[h0][-1] == V4HourSample(0, 0, ramp[118][0], ramp[118][1], 30.0)
-    assert pending_off[h0 + HOUR_SECONDS] == [V4HourSample(0, 0, s1[0], s1[1], 30.0)]
+    # h0 桶: 结算 1 笔(30s) + 游程内部 119 笔(各 30s) = 120 笔, 末笔 totals = 末槽摊配值
+    assert pending_off[h0].credits == 120 and round(pending_off[h0].cov, 6) == 3600.0
+    assert (pending_off[h0].dl_total, pending_off[h0].up_total) == ramp[118]
+    # 次小时桶: 游程结束所落小时只有末端结算 1 笔(30s, totals = 末端快照)
+    off2 = pending_off[h0 + HOUR_SECONDS]
+    assert off2.credits == 1 and off2.cov == 30.0 and (off2.dl_total, off2.up_total) == s1
 
 
 def test_agg_day_month_rollup_and_month_boundary(tmp_path):
@@ -997,13 +1009,13 @@ def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
     assert empty == {}
     # 空桶(全 null 覆盖小时): 弹出不产行
     agg = mod._agg_state(key)
-    agg.pending[_AGG_H0] = []
+    agg.pending[_AGG_H0] = HourFold()  # D12: 空折叠态(credits = 0)对应旧空列表
     mod._agg_flush_series(key, now=_AGG_H0 + HOUR_SECONDS)
     assert _AGG_H0 not in agg.pending and _agg_text(tmp_path, key) is None
     # 跨日滞留(暂停恢复): 单次 flush 内前一日经 day 级联封口, 跨月月行经月检查封口
     day31, feb1 = int(datetime(2026, 1, 31).timestamp()), int(datetime(2026, 2, 1).timestamp())
     for h, dl in ((day31 + 22 * HOUR_SECONDS, 100), (day31 + 23 * HOUR_SECONDS, 200), (feb1, 300)):
-        agg.pending[h] = [V4HourSample(dl, dl, dl, dl, 3600.0)]
+        agg.pending[h] = _hour_fold((dl, dl, dl, dl, 3600.0))
     mod._agg_flush_series(key, now=feb1 + HOUR_SECONDS + 1800)
     parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
     assert len(parsed.hours) == 3 and len(parsed.days) == 1 and len(parsed.months) == 1
@@ -1023,10 +1035,10 @@ def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
         raise OSError(28, "disk full")
 
     monkeypatch.setattr(TrafficV4Store, "append_agg_rows", _raise)
-    agg.pending[_AGG_H0 + 5 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 3600.0)]
+    agg.pending[_AGG_H0 + 5 * HOUR_SECONDS] = _hour_fold((100, 50, 1, 2, 3600.0))
     with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         assert mod._agg_flush_series(key, now=_AGG_H0 + 6 * HOUR_SECONDS) is False
-        agg.pending[_AGG_H0 + 6 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 3600.0)]
+        agg.pending[_AGG_H0 + 6 * HOUR_SECONDS] = _hour_fold((100, 50, 1, 2, 3600.0))
         assert mod._agg_flush_series(key, now=_AGG_H0 + 7 * HOUR_SECONDS) is False
     assert cap.text.count("agg 行落盘失败") == 2  # 首次 WARNING + 持续期 DEBUG(防刷屏)
     # 裁剪 OSError: 告警, 内存判据不变(下轮重试); 淘汰扫描 OSError: 告警不上抛
@@ -1049,7 +1061,7 @@ def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
     mod._agg_trim(key, agg, _AGG_H0 + 40 * 86400, 30 * 86400)  # 无判据: 不读不写
     # dry_run: agg append 静默跳过(_agg_append False 支)
     mod._persistence_on = False
-    agg.pending[_AGG_H0 + 8 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 3600.0)]
+    agg.pending[_AGG_H0 + 8 * HOUR_SECONDS] = _hour_fold((100, 50, 1, 2, 3600.0))
     assert mod._agg_flush_series(key, now=_AGG_H0 + 9 * HOUR_SECONDS) is False
     assert _AGG_H0 + 8 * HOUR_SECONDS not in agg.pending  # 封口内存照常推进, 写跳过
 
@@ -1114,7 +1126,6 @@ def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypat
     pending_agg 继续进快照(raw 面磁盘接管, agg 面继续增益 —— 修复前无记录无游程的
     系列整个不进快照); 无累计器/空 pending 不出行; 跨日残余 pending 不进当日部分行"""
     from auto_qb.core.modules.traffic_sample_mod import SeriesAgg, _pending_agg_rows
-    from auto_qb.core.traffic_store import V4HourSample
 
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600))
     mod = mgr.host.get("qb_traffic")
@@ -1143,7 +1154,7 @@ def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypat
     # 跨日残余: 前一日的 pending 小时不进当日 day 部分行(hour 部分行照发, 读侧与磁盘行合流)
     agg2 = SeriesAgg()
     prev_h = v4_day_epoch(h0) - HOUR_SECONDS
-    agg2.pending[prev_h] = [V4HourSample(100, 50, 1000, 2000, 1800.0)]
+    agg2.pending[prev_h] = _hour_fold((100, 50, 1000, 2000, 1800.0))
     agg2.day_epoch = v4_day_epoch(h0)
     rows2 = _pending_agg_rows(agg2, None, h0 + 1800)
     assert [r.epoch for r in rows2 if r.kind == "hour"] == [prev_h]
@@ -1246,13 +1257,16 @@ def test_v4_cross_block_settlement_online_offline_same_source(tmp_path):
     TrafficSampleModule._agg_credit_day_file(pending_off, parse_v4_day_text(text2), tail)
 
     def cov_map(pending):
-        return {h: round(sum(s.dt_s for s in samples), 6) for h, samples in pending.items()}
+        return {h: round(fold.cov, 6) for h, fold in pending.items()}  # D12: 折叠态 cov 即 Σdt
 
     # 两路逐桶一致(核心断言: 同一判定单点 -> 镜像保证)
     assert cov_map(mod._agg_states[key].pending) == cov_map(pending_off)
     # 连续边界: 两段各 30s 入账; 崩溃间隙: 真空零入账; 00:00 跨天边界: 连续结算
     assert cov_map(pending_off) == {h0: 60.0, day2 - HOUR_SECONDS: 60.0}
-    assert all(s.dl_rate == 100 and s.up_rate == 50 for s in pending_off[h0])  # 按上一记录速率结算
+    # 按上一记录速率结算(D12: 速率面看 max/seal avg —— 桶内全为 (100, 50) 结算信用)
+    off_h0 = pending_off[h0]
+    assert off_h0.dl_max == 100 and off_h0.up_max == 50
+    assert (off_h0.seal(h0).dl_avg, off_h0.seal(h0).up_avg) == (100, 50)
 
 
 # ---------- 启动恢复按需读集(plan 26-10-12-2010, D1/D4/D5) ----------
@@ -1522,6 +1536,40 @@ def test_hour_spans_splits_on_hour_boundary():
     assert _hour_spans(h0 + 10, h0 + 5) == ()
 
 
+def test_record_slots_exact_sequences():
+    """_record_slots 逐槽 ts 精确序列(纯函数面, D12 评审 P1a「源头上钉」): r = [cursor];
+    块首单槽游程零推进 = [anchor](不取 cursor); 块首多槽游程端点含均摊 spacing =
+    span/(n-1)(首槽恰在 anchor / 末槽恰在 cursor); 非块首均摊 span/n(首槽不含 anchor,
+    末槽恰在 cursor)。分界形态: 块首游程槽序列与前末槽/下一 r 槽的信用分界 = [30, 62, 30]
+    —— _record_slots_9/12、_agg_feed_8 类变异(改 k 范围 / 改 spacing 除数 / 改结算区间)
+    在此源头杀掉, 聚合等价契约下 agg 面无需恢复逐笔断言。"""
+    from auto_qb.core.modules.traffic_sample_mod import _record_slots
+
+    t0 = float(_AGG_H0)
+    # r 记录: 单槽 = cursor
+    assert _record_slots(V4Sample(100, 50, 1000, 2000), t0 + 10, t0 + 122, False) == (t0 + 122.0, )
+    # 块首单槽游程: 读侧零推进, 恰 [anchor]
+    assert _record_slots(V4ZeroRun(1, 5, 6), t0 + 30, t0 + 92, True) == (t0 + 30.0, )
+    # 块首多槽游程(n=2): 端点含均摊 span/(n-1) = 62 -> [anchor, cursor] 两端点
+    assert _record_slots(V4ZeroRun(2, 5, 6), t0 + 30, t0 + 92, True) == (t0 + 30.0, t0 + 92.0)
+    # 块首多槽游程(n=3): span 60/(n-1) = 30, 首槽 = anchor 端点含
+    assert _record_slots(V4NullRun(3), t0, t0 + 60, True) == (t0 + 0.0, t0 + 30.0, t0 + 60.0)
+    # 非块首多槽游程(n=4): 均摊 span/n = 30, 首槽 = anchor + spacing(不含 anchor), 末槽 = cursor
+    assert _record_slots(V4ZeroRun(4, 5, 6), t0, t0 + 120, False) == (
+        t0 + 30.0,
+        t0 + 60.0,
+        t0 + 90.0,
+        t0 + 120.0,
+    )
+    # 非块首(n=3): span 60/3 = 20 -> anchor+20/40/60
+    assert _record_slots(V4NullRun(3), t0, t0 + 60, False) == (t0 + 20.0, t0 + 40.0, t0 + 60.0)
+    # 分界形态: 块首游程(显式 dt 62000, anchor = t0+30 / cursor = t0+92)的槽序列, 与前末槽
+    # t0(r 信用)和下一 r 槽 t0+122 组合 -> 信用分界 [30, 62, 30](结算 30 + 游程内部 62 + 末端结算 30)
+    slots = _record_slots(V4ZeroRun(2, 5, 6, dt_ms=62000), t0 + 30, t0 + 92, True)
+    dts = [slots[0] - t0, slots[1] - slots[0], (t0 + 122) - slots[-1]]
+    assert [round(d, 6) for d in dts] == [30.0, 62.0, 30.0]
+
+
 def test_open_run_hour_samples_null_run_leaves_tail_null():
     """断连(n 游程)只合成 credit 段到 run.start, 之后不出样本(留 null)—— 断连不可归因
     为 0(裁定 D3); 与 z 游程「整段 0」形成对照"""
@@ -1532,7 +1580,7 @@ def test_open_run_hour_samples_null_run_leaves_tail_null():
     agg.open_credit = (float(h0 + 60), 100, 50, 1000, 2000)
     run = OpenRun("n", h0 + 600, h0 + 2 * HOUR_SECONDS, 0, 0, 120, 0, 0)
     out = _open_run_hour_samples(agg, run)
-    assert out == {h0: [V4HourSample(100, 50, 1000, 2000, 540.0)]}  # 只到 run.start
+    assert out == {h0: _hour_fold((100, 50, 1000, 2000, 540.0))}  # 只到 run.start(D12 折叠态)
 
 
 def test_open_run_hour_samples_without_credit_is_empty():
@@ -1707,7 +1755,7 @@ def test_recovery_missing_day_file_breaks_tail_context(tmp_path, monkeypatch):
 
 def test_recovery_open_hour_rebuilds_pending_bucket(tmp_path, monkeypatch):
     """catch-up 遇未完结小时 -> 重建 pending 桶(不产 hour 行, 等封口); 空桶跳过(防御:
-    桶存在但无样本时不留行)"""
+    桶存在但无信用时不留行, D12 折叠态 = credits 0)"""
     now = _local_epoch(13, 0, 30)
     clock = FakeClock(start=now)
     mgr = _mgr_with_traffic(
@@ -1722,8 +1770,8 @@ def test_recovery_open_hour_rebuilds_pending_bucket(tmp_path, monkeypatch):
     cur_hour, empty_hour = today0 + 13 * HOUR_SECONDS, today0 + 12 * HOUR_SECONDS
 
     def _fake_credit(hour_samples, parsed_day, prev_tail=None, slot_counter=None):
-        hour_samples[cur_hour] = [V4HourSample(100, 50, 1, 2, 30.0)]  # 开放小时(未完结)
-        hour_samples[empty_hour] = []  # 空桶: 不留行
+        hour_samples[cur_hour] = _hour_fold((100, 50, 1, 2, 30.0))  # 开放小时(未完结)
+        hour_samples[empty_hour] = HourFold()  # 空桶: 不留行
         return None
 
     monkeypatch.setattr(TrafficSampleModule, "_agg_credit_day_file", staticmethod(_fake_credit))
@@ -1752,16 +1800,16 @@ def test_agg_credit_day_file_empty_block_and_null_slots():
 
 
 def test_agg_credit_hours_never_creates_empty_bucket():
-    """pending 空桶生产点不存在(issue 26-11-01-0050): 入账恒 setdefault+append
+    """pending 空桶生产点不存在(issue 26-11-01-0050): 入账恒按需建 fold + merge(D12)
 
-    end <= start 直接返回(不建桶), 有效区间每桶至少 append 一条 ——
+    end <= start 直接返回(不建桶), 有效区间每桶至少并入一笔信用(credits >= 1)——
     「空桶留空」在 _agg_flush_series 是防御支(空桶支 continue->break 判等价)。
     """
     pending: dict = {}
     TrafficSampleModule._agg_credit_hours(pending, 100.0, 100.0, 1, 2, 3, 4)
     assert pending == {}  # 退化区间不建桶
     TrafficSampleModule._agg_credit_hours(pending, 100.0, 101.0, 1, 2, 3, 4)
-    assert all(samples for samples in pending.values())  # 生产的桶恒非空
+    assert all(f.credits > 0 for f in pending.values())  # 生产的桶恒非空(至少 1 笔信用)
 
 
 def test_w5_blockhead_run_drift_dt_and_cursor(tmp_path, monkeypatch):
@@ -1788,8 +1836,8 @@ def test_w5_blockhead_run_drift_dt_and_cursor(tmp_path, monkeypatch):
     assert isinstance(r, V4Sample) and r.dt_ms is None  # 游标已复位实测点: r 零漂移
     assert buf.projected_ts == t0 + 122.0
     h0 = int(t0) // HOUR_SECONDS * HOUR_SECONDS
-    samples = mod._agg_states[GLOBAL_SERIES_KEY].pending[h0]
-    assert [round(s.dt_s, 6) for s in samples] == [30.0, 62.0, 30.0]  # r 信用 + 游程内部 62s + 末端结算
+    fold = mod._agg_states[GLOBAL_SERIES_KEY].pending[h0]  # D12 折叠态
+    assert fold.credits == 3 and round(fold.cov, 6) == 122.0  # r 信用 30s + 游程内部 62s + 末端结算 30s
 
 
 def test_w5_blockhead_run_drift_boundary_exact_tol(tmp_path, monkeypatch):
@@ -2061,7 +2109,7 @@ def test_w5_pending_agg_rows_day_partition(tmp_path):
     assert any(r.kind == "day" and r.epoch == y_day for r in rows_a)
     # 场景 b: 今日 pending partial + day_epoch 停昨日 -> 提日到今日, 昨日已封口小时不并入
     agg_b = ts_mod.SeriesAgg(day_epoch=y_day, day_hours=[y_row])
-    agg_b.pending[t_day] = [V4HourSample(100, 50, 1000, 2000, 60.0)]
+    agg_b.pending[t_day] = _hour_fold((100, 50, 1000, 2000, 60.0))
     rows_b = ts_mod._pending_agg_rows(agg_b, None, now)
     day_rows = [r for r in rows_b if r.kind == "day"]
     assert len(day_rows) == 1 and day_rows[0].epoch == t_day  # 提日(不出 None epoch 空日行)
@@ -2077,7 +2125,7 @@ def test_w5_pending_agg_rows_month_partition(tmp_path):
     june_day_row = AggRow("day", june, 100, 200, 50, 80, 1000, 2000, 3600)
     # 场景 a: 当月已有封口 day 行 + 今日 pending hour -> 月行含今日 day 部分行
     agg_a = ts_mod.SeriesAgg(month_epoch=june, month_days=[june_day_row])
-    agg_a.pending[t_day] = [V4HourSample(100, 50, 1000, 2000, 60.0)]
+    agg_a.pending[t_day] = _hour_fold((100, 50, 1000, 2000, 60.0))
     rows_a = ts_mod._pending_agg_rows(agg_a, None, now)
     month_a = [r for r in rows_a if r.kind == "month"]
     assert len(month_a) == 1 and month_a[0].epoch == june
@@ -2085,7 +2133,7 @@ def test_w5_pending_agg_rows_month_partition(tmp_path):
     # 场景 b: 月界窗口: month_epoch 停上月 -> 上月月行照常发布(本月日行不混入)
     may_day_row = AggRow("day", int(_w5_ts(2026, 5, 15, 0, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600)
     agg_b = ts_mod.SeriesAgg(month_epoch=may, month_days=[may_day_row])
-    agg_b.pending[t_day] = [V4HourSample(100, 50, 1000, 2000, 60.0)]
+    agg_b.pending[t_day] = _hour_fold((100, 50, 1000, 2000, 60.0))
     rows_b = ts_mod._pending_agg_rows(agg_b, None, now)
     months_b = [r for r in rows_b if r.kind == "month"]
     assert [r.epoch for r in months_b] == [may]  # 上月行在, 本月行不抢归档
@@ -2120,8 +2168,8 @@ def test_w5_ingest_acc_same_day_multi_hour(tmp_path, monkeypatch):
     h1 = int(clock.now()) // HOUR_SECONDS * HOUR_SECONDS
     h2 = h1 + HOUR_SECONDS
     agg = mod._agg_state(key)
-    agg.pending[h1] = [V4HourSample(100, 50, 1000, 2000, 1800.0)]
-    agg.pending[h2] = [V4HourSample(80, 40, 1100, 2100, 1800.0)]
+    agg.pending[h1] = _hour_fold((100, 50, 1000, 2000, 1800.0))
+    agg.pending[h2] = _hour_fold((80, 40, 1100, 2100, 1800.0))
     mod._agg_flush_series(key, h2 + 3610)  # 两个完结小时封口 -> day 累计器
     assert len(agg.day_hours) == 2  # 同日追加(第二 hour 不被丢)
     assert agg.day_epoch == v4_day_epoch(h1)
@@ -2160,9 +2208,9 @@ def test_w5_credit_day_file_null_slots_then_raw_credited(tmp_path):
     )
     pending = {}
     TrafficSampleModule._agg_credit_day_file(pending, parse_v4_day_text(format_v4_day_text("global", (blk, ))), None)
-    samples = pending[h0]
-    assert [round(s.dt_s, 6) for s in samples] == [30.0, 30.0]  # n 前只首区间 + n 后 r-r 区间
-    assert all(s.dl_rate == 100 for s in samples)
+    fold = pending[h0]  # D12 折叠态: n 前只首区间 + n 后 r-r 区间 = 2 笔各 30s
+    assert fold.credits == 2 and round(fold.cov, 6) == 60.0
+    assert fold.dl_max == 100 and fold.up_max == 50 and fold.seal(h0).dl_avg == 100  # 全为 r 速率结算信用
 
 
 def test_w5_credit_day_file_z_tail_end_anchor_cross_file(tmp_path, monkeypatch):

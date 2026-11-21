@@ -100,7 +100,8 @@ qbmanager 的 finally 与 state.save 顺序不改。
   z 游程内部槽区间速率恒 0/totals 按「开启快照 -> 末端快照」逐槽线性摊配(形态 D,
   plan 26-10-16-1509 §04: 末端快照随 z 行末端列落盘, 在线/离线两路共用 v4_z_totals_ramp;
   无末端列(旧文件)或单槽游程 = 显式退化, 恒快照 = 旧语义), 逐槽均摊折叠为逐区间记账(聚合值
-  等价); n 游程不贡献(null 期无观测, 信用清空)。hour 桶: 区间按小时界拆分入账, cov_s = Σ桶内覆盖
+  等价); n 游程不贡献(null 期无观测, 信用清空)。hour 桶(D12 折叠态: pending 桶为 HourFold
+  逐笔 merge, seal 与 v4_hour_agg 同数学, 输出 bitwise 等价): 区间按小时界拆分入账, cov_s = Σ桶内覆盖
   (≤3600, v4_hour_agg), avg = dt 加权 —— dt_i ≡ interval_s 时严格退化为 v2 纯活跃桶公式
   (对照钉住), max 逐记录取大, totals 取级末快照(桶内最后入账区间的观测快照); 只有 null
   覆盖的小时不产 hour 行(空桶 = null)。day/month 累计器严格逐级(§4.1): hour 行封口并入
@@ -210,6 +211,7 @@ from .traffic_sample_common import (  # noqa: F401
     ZRUN_CAP_SAMPLES,
     ZRUN_FLUSH_S,
     BlockBuffer,
+    HourFold,
     OpenRun,
     SeriesAgg,
     TrafficSamplePoint,

@@ -105,7 +105,7 @@ alltime_dl/up=recvBytes+IP overhead 全部流量, 协议流量每 tick 推动 to
 W5(R29) S5 补测守阵(mutcore 审计 core/modules/traffic_sample_mod.py; 三分类/红验对应单点
 tmp-analysis/mut-core-w5-classify.md, 中危真洞全盖 + 低危按簇代表, bug 面不入此列):
 - test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg: 块首游程零漂移支游标标称推进 + 块首游程
-  槽位端点含(agg 逐区间 dt 断言)(_append_record_128 / _record_slots_9/12 / _agg_feed_8)
+  槽位端点含(agg 折叠态笔数/覆盖断言)(_append_record_128 / _record_slots_9/12 / _agg_feed_8)
 - test_w5_blockhead_run_rollback_clamp_dt_min_1: 块首游程回拨钳制 dt_ms=1(_append_record_113)
 - test_w5_nonhead_zero_drift_run_no_dt: 非块首多槽游程零漂移不写 dt(_append_record_142)
 - test_w5_n_prefix_split_zero_run_no_crash: n 前缀拆块实参带 end_ts, z 游程新块首不崩(_append_record_54)
@@ -151,6 +151,7 @@ from auto_qb.core.modules import traffic_sample_mod as ts_mod
 from auto_qb.core.modules.traffic_sample_mod import (
     EVICT_CHECK_INTERVAL_S,
     GLOBAL_SERIES_KEY,
+    HourFold,
     V4_BUFFER_SLOT_CAP,
     ZRUN_CAP_SAMPLES,
     ZRUN_FLUSH_S,
@@ -201,6 +202,7 @@ from traffic_sample_support import (
     _drive_full_day,
     _feed_30s,
     _flush,
+    _hour_fold,
     _idle_state,
     _local_epoch,
     _mgr_with_traffic,
@@ -1305,11 +1307,11 @@ def test_pending_agg_rows_skips_empty_and_zero_coverage_buckets(tmp_path):
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     agg = mod._agg_state(GLOBAL_SERIES_KEY)
-    agg.pending[_AGG_H0] = []  # 空桶(全 null 覆盖的小时)
-    agg.pending[_AGG_H0 + HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 0.0)]  # 零有效覆盖
+    agg.pending[_AGG_H0] = HourFold()  # 空桶(全 null 覆盖的小时; D12: credits = 0)
+    agg.pending[_AGG_H0 + HOUR_SECONDS] = _hour_fold((100, 50, 1, 2, 0.0))  # 零有效覆盖
     assert ts_mod._pending_agg_rows(agg, None, now=_AGG_H0 + 2 * HOUR_SECONDS) == ()
     # 对照: 合法桶照常产 hour 行, day/month 两级由它上卷(无子行时两级不出行)
-    agg.pending[_AGG_H0 + 2 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 1800.0)]
+    agg.pending[_AGG_H0 + 2 * HOUR_SECONDS] = _hour_fold((100, 50, 1, 2, 1800.0))
     rows = ts_mod._pending_agg_rows(agg, None, now=_AGG_H0 + 3 * HOUR_SECONDS)
     assert [r.kind for r in rows] == ["hour", "day", "month"]
     assert rows[0].cov_s == 1800 and rows[1].epoch == v4_day_epoch(_AGG_H0)
@@ -1318,7 +1320,7 @@ def test_pending_agg_rows_skips_empty_and_zero_coverage_buckets(tmp_path):
 def test_open_run_hour_samples_idle_z_run_emits_zero_hours():
     """开放游程合成(D2/D3): 空闲 z 游程 = credit 段按上一记录速率 + 游程内恒 0;
     totals 逐段摊配到**末端锚点**(不是开启快照); 末端取 last_seen 不推 now(now 再晚
-    也不多出段); 每段恰 1 条样本"""
+    也不多出段); 每段恰 1 笔信用 merge(D12 折叠态, 期望值沿用逐笔信用元组)"""
     from auto_qb.core.modules.traffic_sample_mod import OpenRun, SeriesAgg, _open_run_hour_samples
 
     h0 = _AGG_H0
@@ -1335,13 +1337,13 @@ def test_open_run_hour_samples_idle_z_run_emits_zero_hours():
         last_up_total=4000,
     )
     out = _open_run_hour_samples(agg, run)  # 不接收 now: 末端恒为 last_seen(不推当前时刻)
-    # h0 桶: credit 段 180s@100 + 游程首段 3300s@0
-    assert out[h0] == [V4HourSample(100, 50, 1000, 2000, 180.0), V4HourSample(0, 0, 1000, 2000, 3300.0)]
+    # h0 桶: credit 段 180s@100 + 游程首段 3300s@0(两笔按到达顺序 merge)
+    assert out[h0] == _hour_fold((100, 50, 1000, 2000, 180.0), (0, 0, 1000, 2000, 3300.0))
     # 整小时游程段: rate 0, totals 沿开启->末端线性摊配(k = 1 / 2)
-    assert out[h0 + HOUR_SECONDS] == [V4HourSample(0, 0, 1667, 2667, 3600.0)]
-    assert out[h0 + 2 * HOUR_SECONDS] == [V4HourSample(0, 0, 2333, 3333, 3600.0)]
+    assert out[h0 + HOUR_SECONDS] == _hour_fold((0, 0, 1667, 2667, 3600.0))
+    assert out[h0 + 2 * HOUR_SECONDS] == _hour_fold((0, 0, 2333, 3333, 3600.0))
     # 末段 600s: totals 恰为末端锚点(不是开启快照 1000/2000)
-    assert out[h0 + 3 * HOUR_SECONDS] == [V4HourSample(0, 0, 3000, 4000, 600.0)]
+    assert out[h0 + 3 * HOUR_SECONDS] == _hour_fold((0, 0, 3000, 4000, 600.0))
     assert set(out) == {h0, h0 + HOUR_SECONDS, h0 + 2 * HOUR_SECONDS, h0 + 3 * HOUR_SECONDS}
 
 
@@ -1523,7 +1525,7 @@ def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
 
 def test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg(tmp_path, monkeypatch):
     """块首游程零漂移支(常态形态): 游标标称推进(不反向/不塌缩) + 块首游程槽位端点含
-    (agg 逐区间 dt 断言) —— _append_record_128 / _record_slots_9/12 / _agg_feed_8"""
+    (agg 折叠态笔数/覆盖断言) —— _append_record_128 / _record_slots_9/12 / _agg_feed_8"""
     clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
@@ -1548,11 +1550,10 @@ def test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg(tmp_path, monkeypa
     z, r2 = blocks[0].records
     assert isinstance(z, V4ZeroRun) and z.run_len == 3 and z.dt_ms is None
     assert isinstance(r2, V4Sample) and r2.dt_ms is None
-    # agg 面: 块首游程槽位 [anchor..cursor] 端点含 -> 游程内恰 2 个 30s 零速区间; 逐区间 dt 断言
+    # agg 面: 块首游程槽位 [anchor..cursor] 端点含 -> 游程内恰 2 个 30s 零速区间; 折叠态笔数/覆盖断言
     h0 = int(t0) // HOUR_SECONDS * HOUR_SECONDS
-    samples = mod._agg_states[GLOBAL_SERIES_KEY].pending[h0]
-    assert [round(s.dt_s, 6) for s in samples] == [30.0, 30.0, 30.0, 30.0]  # r 信用+2 游程区间+r 引导
-    assert round(sum(s.dt_s for s in samples), 6) == 120.0
+    fold = mod._agg_states[GLOBAL_SERIES_KEY].pending[h0]  # D12 折叠态
+    assert fold.credits == 4 and round(fold.cov, 6) == 120.0  # r 信用 + 2 游程区间 + r 引导, 各 30s
 
 
 def test_w5_blockhead_run_rollback_clamp_dt_min_1(tmp_path, monkeypatch):
@@ -1943,8 +1944,8 @@ def test_w5_recover_midday_restart_catchup_and_open_hour(tmp_path, monkeypatch):
     assert [d.epoch for d in parsed.days] == [int(_w5_ts(2026, 6, 2, 0, 0, 0))]  # 当日不出补算日行
     assert mod.recovery_stats["hours"] == 1
     h11 = int(_w5_ts(2026, 6, 3, 11, 0, 0))
-    pending = mod._agg_states[GLOBAL_SERIES_KEY].pending[h11]
-    assert len(pending) == 1 and pending[0].dt_s == 30  # 开放小时数据保留
+    fold = mod._agg_states[GLOBAL_SERIES_KEY].pending[h11]  # D12 折叠态
+    assert fold.credits == 1 and fold.cov == 30  # 开放小时数据保留
     assert mod._agg_states[GLOBAL_SERIES_KEY].day_epoch == int(_w5_ts(2026, 6, 3, 0, 0, 0))  # 当日累计器重建
     clock.advance(30)
     mgr.store.server_state = server_state()

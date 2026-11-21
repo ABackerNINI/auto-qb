@@ -21,20 +21,23 @@ from ..traffic_store import (
     v4_block_gap_continuous,
     v4_block_slots,
     v4_day_epoch,
-    v4_hour_agg,
     v4_merge_agg,
     v4_month_epoch,
     v4_rollup_agg,
     v4_z_totals_ramp,
 )
 
-from .traffic_sample_common import EVICT_CHECK_INTERVAL_S, OpenRun, SeriesAgg, _hour_spans, _record_slots
+from .traffic_sample_common import EVICT_CHECK_INTERVAL_S, HourFold, OpenRun, SeriesAgg, _hour_spans, _record_slots
 
 logger = logging.getLogger("auto_qb.core.modules.traffic_sample_mod")
 
 
-def _open_run_hour_samples(agg: "SeriesAgg", run: Optional[OpenRun]) -> dict:
-    """开放游程 + 未结算信用 -> hour 桶样本(活尾合成, plan 26-10-29-0231 §03; 模块级纯函数)。
+def _open_run_hour_samples(agg: "SeriesAgg", run: Optional[OpenRun], out: Optional[dict] = None) -> dict:
+    """开放游程 + 未结算信用 -> hour 桶折叠态(活尾合成, plan 26-10-29-0231 §03; 模块级
+    纯函数)。out 缺省 = 新建 dict 返回(测试探针面); 传入 out(活尾 pending 副本,
+    dict-of-fold)= 信用直接并入 —— R2 浮点序: 与旧列表路径「settled 样本列表 + 合成
+    样本按时间序 extend」的求和序同序(逐笔 merge), 两个 fold 的累计值直接相加不满足
+    结合律, 禁止(D12, 计划 26-11-21-1546)。
 
     为什么需要它: agg 记账只在记录落盘时发生(_agg_feed <- _append_record), 而 z 游程
     只在**封口**时成记录(非零样本 / 换型 / 00:00 硬切 / stop / 天级保险闸)—— 空闲期
@@ -54,11 +57,12 @@ def _open_run_hour_samples(agg: "SeriesAgg", run: Optional[OpenRun]) -> dict:
     - (3) 末端取 run.last_seen, **不推到 now**: 采样停摆时不能凭空造覆盖(裁定 D2)。
     - (4) n 游程(断连)只出 (1), 之后留 null —— 断连不可归因为 0(裁定 D3)。
 
-    每段恰 1 条 V4HourSample(O(小时数), 不是 O(槽数)): 段内速率与 totals 恒定,
-    v4_hour_agg 的 dt 加权与「级末快照 = 末记录」在等值样本下与逐槽展开等价。
-    返回 {hour_epoch: [V4HourSample, ...]}; 调用方并入 pending 副本(不与累计器共享容器)。
+    每段恰 1 笔信用 merge(O(小时数), 不是 O(槽数)): 段内速率与 totals 恒定, seal 的
+    dt 加权与「级末快照 = 末笔」在等值信用下与逐槽展开等价。
+    返回 {hour_epoch: HourFold, ...}(传 out 时即该对象; 不与累计器共享容器)。
     """
-    out: dict = {}
+    if out is None:
+        out = {}
     credit = agg.open_credit
     if credit is None:
         return out  # 无观测信用(null 期后): 不猜
@@ -94,11 +98,11 @@ def _pending_agg_rows(agg: "SeriesAgg", run: Optional[OpenRun], now: float) -> t
     活尾合成段(plan 26-10-29-0231, 用户报「3d 及以上视图 0 值区显示无采样, 特别是跨天
     后」): 累计器只记「已落盘记录」的信用, 空闲游程未封口期间 pending 为空 —— 于是把
     _open_run_hour_samples 的合成段并入 pending 的**副本**(累计器本体不动, 封口路径零
-    影响)。合成段与已结算样本同桶时按时间序追加在后, v4_hour_agg 的「级末快照 = 末
-    记录」因此拿到更晚的 totals。
+    影响)。合成段与已结算信用同桶时按时间序排在后 merge(D12 折叠态逐笔 merge, R2 同
+    序), seal 的「级末快照 = 末笔」因此拿到更晚的 totals。
 
     口径与写侧封口同源(三层各自当前桶):
-    - hour: pending 各桶逐桶 v4_hour_agg(dt 加权); 含「已完成未 flush」的桶(flush
+    - hour: pending 各桶逐桶 seal(D12 折叠态, 数学与 v4_hour_agg 同); 含「已完成未 flush」的桶(flush
       时点未到)与开放当前小时; 已封桶的迟到补记残余也在 pending(写侧重封时
       _agg_merge_prev 合流, 读侧同样按 v4_merge_agg 合流, 两端口径一致);
     - day: 开放日累计器(当日已封 hour 行)+ 当日 pending 部分行 -> v4_rollup_agg;
@@ -114,16 +118,17 @@ def _pending_agg_rows(agg: "SeriesAgg", run: Optional[OpenRun], now: float) -> t
     """
     rows: list = []
     hour_partials: list = []
-    # 副本: 合成段只进副本, 累计器本体不动(封口路径零影响; 同桶样本按时间序追加在后)
-    pending = {h: list(samples) for h, samples in agg.pending.items()}
-    for h, samples in _open_run_hour_samples(agg, run).items():
-        pending.setdefault(h, []).extend(samples)
+    # 副本: 合成段只进副本, 累计器本体不动(封口路径零影响); 合成信用经 _open_run_hour_samples
+    # 按到达顺序逐笔 merge 进副本 fold(R2 浮点序: 旧列表路径「同桶样本按时间序追加在后」
+    # 的求和序 = 逐笔 merge 序, bitwise 等价 —— 折叠值直接相加禁止, 加法不满足结合律)
+    pending = {h: fold.copy() for h, fold in agg.pending.items()}
+    _open_run_hour_samples(agg, run, pending)
     for h in sorted(pending):
-        samples = pending[h]
-        if not samples:
+        fold = pending[h]
+        if fold.credits == 0:
             continue  # 空桶不留(全 null 覆盖的小时不产行, 与 _agg_flush_series 同)
         try:
-            hour_partials.append(v4_hour_agg(h, tuple(samples)))
+            hour_partials.append(fold.seal(h))
         except ValueError:
             continue  # 无有效覆盖: 不出行(桶 = null)
     rows.extend(hour_partials)
@@ -201,16 +206,21 @@ class _SampleAggMixin:
     def _agg_credit_hours(
         pending: dict, start: float, end: float, dl: int, up: int, dl_total: int, up_total: int
     ) -> None:
-        """区间 [start, end) 按小时界拆分入账(V4HourSample, dt = 桶内覆盖秒); 在线记账
-        与恢复离线记账共用(离线传局部 dict)。末槽的信用区间跨小时界时自然拆分,
-        hour 桶 cov 上界 3600 由 v4_hour_agg 收口。"""
+        """区间 [start, end) 按小时界拆分入账(HourFold 逐笔 merge, dt = 桶内覆盖秒;
+        D12 折叠态单点 —— 在线记账与恢复离线记账共用, 离线传局部 dict)。末槽的信用
+        区间跨小时界时自然拆分, hour 桶 cov 上界 3600 由 seal 收口(= v4_hour_agg 同款
+        min 截断)。信用按到达顺序并入(R2: 与旧列表路径逐条 append 的浮点求和序同序,
+        聚合输出 bitwise 等价)。"""
         if end <= start:
             return
         cur = start
         while cur < end:
             h = int(cur) // HOUR_SECONDS * HOUR_SECONDS
             seg = min(end, h + HOUR_SECONDS) - cur
-            pending.setdefault(h, []).append(V4HourSample(dl, up, dl_total, up_total, seg))
+            fold = pending.get(h)
+            if fold is None:
+                fold = pending[h] = HourFold()
+            fold.merge(dl, up, dl_total, up_total, seg)
             cur += seg
 
     def _agg_flush_all(self, now: float) -> None:
@@ -256,10 +266,10 @@ class _SampleAggMixin:
         for h in sorted(agg.pending):
             if h + HOUR_SECONDS > now:
                 break  # 首个未完结小时即止(pending 按序, 之后只会更晚)
-            samples = agg.pending.pop(h)
-            if not samples:
+            fold = agg.pending.pop(h)
+            if fold.credits == 0:
                 continue  # 空桶不留(全 null 覆盖的小时不产行, 空桶 = null)
-            self._agg_ingest_hour(agg, v4_hour_agg(h, tuple(samples)), rows)
+            self._agg_ingest_hour(agg, fold.seal(h), rows)
         if agg.day_epoch is not None and agg.day_hours and v4_day_epoch(now) > agg.day_epoch:
             self._agg_ingest_day(agg, v4_rollup_agg("day", agg.day_epoch, tuple(agg.day_hours)), rows)
             # 已关日存根(issue R1#63): 关层复位后该日 hour 仍会被迟到信用重封, 存根是
@@ -513,7 +523,7 @@ class _SampleAggMixin:
         cur_month = v4_month_epoch(now)
         # --- hour catch-up: 读集内天文件 raw 逐槽前向记账(与在线记账同一口径);
         # --- 跨天文件末槽上下文接力(00:00 边界连续时条件结算, 缺文件断链) ---
-        hour_samples: dict = {}
+        hour_samples: dict = {}  # hour_epoch -> HourFold(D12 折叠态, 与在线 pending 同表示)
         day_tail: Optional[tuple] = None
         if wm_hour is not None:
             lower = v4_day_epoch(wm_hour)  # 按需口径: 读集下界 = 水位所在日
@@ -538,13 +548,13 @@ class _SampleAggMixin:
         for h in sorted(hour_samples):
             if wm_hour is not None and h <= wm_hour:
                 continue  # 水位之前已有行: 不重算(前向水位, §4.4)
-            samples = hour_samples[h]
-            if not samples:
-                continue
+            fold = hour_samples[h]
+            if fold.credits == 0:
+                continue  # 空桶(全 null 覆盖的小时不产行, 空桶 = null; 防御支)
             if h + HOUR_SECONDS <= now:
-                new_hours.append(v4_hour_agg(h, tuple(samples)))  # 完结缺失小时 -> 补算行
+                new_hours.append(fold.seal(h))  # 完结缺失小时 -> 补算行
             else:
-                agg.pending[h] = list(samples)  # 开放小时 -> 重建累计器
+                agg.pending[h] = fold  # 开放小时 -> 重建累计器(D12 折叠态; 信用序列与在线同序)
         # --- 当日/当月累计器从文件内行重建 + day/month catch-up(严格逐级) ---
         new_days, agg.day_epoch, agg.day_hours = self._catch_up_level(
             list(parsed.hours) + new_hours, v4_day_epoch, today, wm_day, "day"

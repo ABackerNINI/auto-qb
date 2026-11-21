@@ -4,7 +4,7 @@ from typing import Optional
 
 from typing import Any
 
-from ..traffic_store import HOUR_SECONDS, V4NullRun, V4Sample, V4ZeroRun
+from ..traffic_store import AggRow, HOUR_SECONDS, V4NullRun, V4Sample, V4ZeroRun
 
 #: 全局系列键(对应流量存储 global/ 目录的系列标识)
 GLOBAL_SERIES_KEY = "global"
@@ -116,13 +116,90 @@ class BlockBuffer:
 
 
 @dataclass
+class HourFold:
+    """hour 桶折叠累计态(D12, 计划 26-11-21-1546): 未封口 hour 桶的 7 数级累计, 取代
+    旧逐记录 V4HourSample 列表(5000 系列下列表表示序列化 54MB/快照不可接受; 折叠态
+    ~300B/系列且数学无损)。字段与 v4_hour_agg 的全部输入量一一对应, 由 merge 按信用
+    到达顺序逐笔累加:
+
+    - dl_wsum/up_wsum = Σ(rate x dt_s); cov = Σdt_s(封口时才 min 3600 截断 —— 截断在
+      求和之后, 与 v4_hour_agg 同序);
+    - dl_max/up_max = 逐笔取大(首笔立基线 —— 与列表 max 逐位等价, 不含隐含 0 下界,
+      退化负速率也逐位一致);
+    - dl_total/up_total = 末笔信用 totals 快照(= 列表「级末快照 = 末记录」);
+    - credits = 已并信用笔数(0 = 空桶, 对应列表路径的空列表)。
+
+    !浮点序不变量(R2): merge 必须按信用到达顺序逐笔执行 —— 旧列表路径 sum(...) 的
+    浮点加法序列与 fold 逐笔 += 完全同序才 bitwise 一致; 禁止任何改序的合并(先分组
+    再求和 / 两个 fold 的累计值直接相加 —— 加法不满足结合律)。seal 与 v4_hour_agg
+    逐条对齐(空/无有效覆盖同样抛 ValueError), 等价性由对拍守阵随机数据钉死
+    (tests/test_traffic_store_agg.py D12 段)。
+    """
+
+    dl_wsum: float = 0.0
+    up_wsum: float = 0.0
+    cov: float = 0.0
+    dl_max: int = 0
+    up_max: int = 0
+    dl_total: int = 0
+    up_total: int = 0
+    credits: int = 0
+
+    def merge(self, dl_rate: int, up_rate: int, dl_total: int, up_total: int, dt_s: float) -> None:
+        """单笔信用并入(信用到达顺序; 与旧列表路径 append 一条 V4HourSample 同位)"""
+        self.dl_wsum += dl_rate * dt_s
+        self.up_wsum += up_rate * dt_s
+        self.cov += dt_s
+        if self.credits == 0:
+            self.dl_max = dl_rate  # 首笔立基线(= max 逐位等价, 不含隐含 0 下界)
+            self.up_max = up_rate
+        else:
+            if dl_rate > self.dl_max:
+                self.dl_max = dl_rate
+            if up_rate > self.up_max:
+                self.up_max = up_rate
+        self.dl_total = dl_total  # 末笔快照(seal 的「级末快照 = 末记录」)
+        self.up_total = up_total
+        self.credits += 1
+
+    def copy(self) -> "HourFold":
+        """逐字段拷贝(活尾合成 pending 副本用 —— 副本续 merge 不污染累计器本体)"""
+        return HourFold(
+            self.dl_wsum, self.up_wsum, self.cov, self.dl_max, self.up_max, self.dl_total, self.up_total, self.credits
+        )
+
+    def seal(self, hour_epoch: int) -> AggRow:
+        """折叠态封口 -> hour AggRow(与 v4_hour_agg(样本列表) bitwise 等价的对拍单点):
+        cov = min(Σdt, 3600) 求和后截断; avg = int(round(wsum / cov)); cov_s 下限 1;
+        空(credits = 0)抛「无样本」/ cov <= 0 抛「无有效覆盖」—— 语义逐条对齐旧列表
+        路径。seal 只读(不改任何字段), 同 epoch 桶重开续接时折叠态原样可续 merge。"""
+        if self.credits == 0:
+            raise ValueError("hour 聚合无样本")
+        cov = min(self.cov, float(HOUR_SECONDS))
+        if cov <= 0:
+            raise ValueError("hour 聚合无有效覆盖")
+        return AggRow(
+            kind="hour",
+            epoch=hour_epoch,
+            dl_avg=int(round(self.dl_wsum / cov)),
+            dl_max=self.dl_max,
+            up_avg=int(round(self.up_wsum / cov)),
+            up_max=self.up_max,
+            dl_total=int(self.dl_total),
+            up_total=int(self.up_total),
+            cov_s=max(1, int(round(cov))),  # 下限 1: 行存在即有覆盖(亚秒残余桶不得折 0)
+        )
+
+
+@dataclass
 class SeriesAgg:
     """单系列聚合分层内存态(S2b §04, 主循环线程独占): 累计器 + 翻日/翻月状态 +
     裁剪判据。水位不在此 —— 水位 = agg 文件尾, append 成功即推进(§4.4)。
 
-    pending: 未封口 hour 桶样本(hour_epoch -> V4HourSample 列表, 按时序); 常态只含
-    当前小时, 暂停恢复跨多小时时可含多日(封口时逐桶检查完结)。同 epoch 桶重开
-    (flush 恰在小时界后区间信用补记)时入账续接, 重封行替换累计器/文件旧行。
+    pending: 未封口 hour 桶折叠累计态(hour_epoch -> HourFold, D12 计划 26-11-21-1546,
+    取代旧逐记录列表 —— 信用按到达顺序逐笔 merge, 聚合输出与列表路径 bitwise 等价);
+    常态只含当前小时, 暂停恢复跨多小时时可含多日(封口时逐桶检查完结)。同 epoch 桶
+    重开(flush 恰在小时界后区间信用补记)时入账续接, 重封行替换累计器/文件旧行。
     open_credit: 区间信用 (槽位, dl_rate, up_rate, dl_total, up_total) —— 上一非 null
     槽的前向覆盖待下一记录首槽结算; None = 无信用(null 期/无观测)。块首(v4 起)经
     v4_block_gap_continuous 条件结算: 连续边界把 [上一块末槽, 本块首槽) 按上一记录
