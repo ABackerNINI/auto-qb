@@ -21,7 +21,11 @@
  * SSE 主路径 + 低频对账(T4a, plan 26-11-18-0037 阶段 3; D7/D9/E1/E4/E7): 打开期间 per-scope
  * 一条 SSE 流(/api/traffic/qb/stream?scope=…&ticket=…, 事件驱动判定帧)—— 每帧 {seq, scope,
  * points} 为 per-tick 样本真值, 显示列 = GET 组点列 + 事件尾点替代推进(步进); 30s 对账 GET
- * (E4)与断档/静默重拉(D9)把列折叠归位到组粒度; GET 轮询骨架(_qbPollStart, 间隔从
+ * (E4)与断档/静默重拉(D9)把列折叠归位到组粒度; 两笔对账之间列头部按**名义窗**修剪
+ * (_qbStreamFrame 调 _qbTrimStaleHead, 修剪线 = 尾t - meta.span_s —— 2026-11-21 修「左移时
+ * 左边曲线不出窗口而是整列 x 向压缩」: 步进列只增尾不剪头, auto range 跨度随尾点变宽 +
+ * dx0=0 令 L0 min 恒驻; 修剪在数据入口面, store 列与显示列恒对齐, 修剪点经 F5 补点通道
+ * 滑动出窗, 对账落袋后 dx0≈0 零变化拍); GET 轮询骨架(_qbPollStart, 间隔从
  * meta.sample_interval_s 夹取)保留为**降级态**取数路径(E7: 票据满额 503 / 连续重连失败);
  * 页面隐藏不停流(帧照常合并, 渲染节流 —— 见 SSE 节头注); 关闭/切走形态/登出由
  * _stopDrawerPoll / _qbTeardown 显式收流收轮询 —— 只挂打开期间, 不后台常驻。
@@ -1211,7 +1215,10 @@ function _qbFxComb(n, yLo, yHi, powD, bi, mode, tTop, tBot) {
  *   t >  列末 t   -> 追加「最新测量」尾点(步进); 超预算从头截断(见常量注 —— 防御面);
  *   t <  列末 t   -> 丢弃(GET 竞态纪律: 快照晚于事件时按 ts 归并, 不得回退)。
  * tail = 未折叠事件尾点缓冲(GET 落袋时按 t > GET 列末 t 归并回显示列, 其余视为已被
- * GET 组粒度列折叠); 缓冲与显示列同容量界。空值点(dl/up = null)照事件原样透传(缺口真值)。 */
+ * GET 组粒度列折叠); 缓冲与显示列同容量界。空值点(dl/up = null)照事件原样透传(缺口真值)。
+ * !本函数只增尾不剪头 —— 头部陈旧点(名义窗外)由调用面(_qbStreamFrame)按尾t - meta.span_s
+ * 修剪(_qbTrimStaleHead 单点, 修剪点经 F5 补点通道出窗); 降级 GET 轮询/对账落袋整列替换
+ * 恒新鲜, 不经修剪面。 */
 function _qbPointEq(a, b) {
   return a.t === b.t
     && (a.dl == null ? b.dl == null : a.dl === b.dl)
@@ -1244,6 +1251,45 @@ function _qbStreamAppend(points, tail, p, cap, book) {
     }
   }
   return true;
+}
+
+/* ---------------- 名义窗头部修剪(SSE 步进列的窗口左缘锚, 2026-11-21) ----------------
+ * 缺陷面: SSE 主路径下显示列 = GET 组点列 + 事件尾点(_qbStreamAppend 只有尾替代/尾追加,
+ * 头部只在 30s 对账 GET 整列替换时前进)。两笔对账之间每个事件拍尾点 +si 而首点不动,
+ * x 视口(auto range = [xs[0], xs[n-1]])跨度单调变宽 -> 整条曲线 x 向压缩; 且该拍判定
+ * dx0=0 -> L0 摆回 min 恒驻数据首点, 左端从构造上就不可能滚出窗口(用户报障「左移时左边的
+ * 曲线不出窗口而是曲线整体在 x 方向上压缩」)。根治: 数据入口面(_qbStreamFrame 帧合并处)
+ * 按**名义窗**修剪列头部 —— 修剪线 = 尾t - span_s(span_s = meta 下发的窗口时长, 来源 =
+ * 后端 WINDOW_SPECS 经栅格 t1-t0 单点, 前端不复制窗名->秒映射)。修剪掉的点不丢:
+ * _qbPadTailColumns 从上一拍显示列按真值回补成 F5 补点, L0 滑动把它们送出左缘 —— 与
+ * GET 换列滚出拍同一几何通路。
+ *
+ * 语义锚(与后端窗界逐点对齐):
+ *   - 修剪线锚**尾点 t** 而非墙钟: 主循环停顿期尾点冻结 -> 修剪线冻结 -> 视图诚实冻结
+ *     (停顿面走「滞后 Ns」徽标, D3/R7 —— 挂钟锚会在停顿期把左缘滑走, 与冻结语义相悖);
+ *   - 门 = meta.schema === 2 且 span_s > 0: raw 段窗(1m-24h)是唯一点列每点带 t 的契约
+ *     (旧契约 null 元素无 t 不可判), agg 段窗(3d+)跨度增长 ≤ 对账周期/窗宽 不可见;
+ *     month 段窗(all)是数据面跨度(无固定窗长), 旧契约门同样排除 —— 历史整列本就该
+ *     随尾点增长(压缩以天计, 不可见);
+ *   - 修剪线恒 ≤ 修剪点列尾(尾点定义修剪线), 列不会被剪空; 对账 GET 落袋后其头 = 首个
+ *     窗内组点 ≈ 修剪线 -> dx0≈0 零变化拍, 锯齿(压缩累积 -> rewin 瞬跳)随之消失;
+ *   - 修剪落地在**数据入口面**(_qbStreamFrame 帧合并处): store 列(d.points)= 名义窗 +
+ *     事件尾点, 与建图显示列逐点恒等 —— 悬停取值(_qbHoverOf 读 d.points[i])与缺口区段
+ *     (_qbGapZone 链界)的索引对齐零记账面(评审 major 修正: 显示面修剪会令悬停取值错位
+ *     cut 个点); tail 缓冲与对账归并(_qbStreamOnLoad)零触碰, 模块级纯函数(node 电池真跑)。 */
+function _qbTrimStaleHead(points, spanS) {
+  const s = Number(spanS);
+  if (!(s > 0) || !points || points.length < 2) return points;
+  const tailT = Number(points[points.length - 1] && points[points.length - 1].t);
+  if (!(tailT > 0)) return points;  // 尾点无 t(旧契约形): 修剪线无处锚, 不剪(调用方门已滤)
+  const line = tailT - s;
+  let cut = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const t = Number(points[i] && points[i].t);
+    if (!(t > 0) || t >= line) break;  // 无 t 点(防御)与首个窗内点即停 —— 其后一概保留
+    cut = i + 1;
+  }
+  return cut > 0 ? points.slice(cut) : points;
 }
 
 window.AQB_QB_TRAFFIC = {
@@ -2355,16 +2401,33 @@ window.AQB_QB_TRAFFIC = {
       }
       const d = this[_QB_SCOPES[scope].data];
       let advanced = false;
+      // 隐藏节流单点(渲染与数据面同门): 页面隐藏只合并不重建 —— 修剪门与渲染门共用本值,
+      // 同拍不齐会让 store 列与冻结显示列失恒等(回场悬停错位一拍, 评审轮2 minor)。隐藏期
+      // 不剪不建, 回场后下一可见帧修剪与重建同拍完成(追加不动既有索引, 隐藏期 store 与
+      // 冻结显示列恒对齐; 长度界有 cap 截断兜底)。
+      const live = !document.hidden;
       if (d && Array.isArray(d.points)) {
         const cap = _QB_RAW_POINTS_MAX + _QB_STREAM_TAIL_HEADROOM;
         for (const p of pts) advanced = _qbStreamAppend(d.points, st.tail, p, cap) || advanced;
+        // 名义窗头部修剪(详 _qbTrimStaleHead 节注): SSE 步进列只增尾不剪头, 两笔对账之间
+        // 显示列左缘锚在上一笔 GET 的首点 -> auto x range 跨度随尾点推进变宽 = 整列 x 向
+        // 压缩 + L0 min 恒驻(dx0=0)左端永不出窗(用户报障面)。修剪在**数据入口面**落地
+        // (store 列 = 名义窗 + 事件尾点)而非建图显示面 —— 显示列与 store 列逐点恒等,
+        // 悬停取值(_qbHoverOf 读 d.points[i])/缺口区段(_qbGapZone 链界)零错位记账面;
+        // 修剪点仍经 _qbPadTailColumns 从上一拍显示列回补, L0 滑动送出左缘 —— 与 GET
+        // 换列滚出拍同一几何通路。降级 GET 轮询与对账落袋不在此面(整列替换恒新鲜)。
+        if (live) {
+          const spanS = d.meta && d.meta.schema === 2 ? Number(d.meta.span_s) : 0;
+          const trimmed = _qbTrimStaleHead(d.points, spanS);
+          if (trimmed !== d.points) d.points = trimmed;
+        }
       }
       const tEnd = Number(pts[pts.length - 1] && pts[pts.length - 1].t);
       if (tEnd > 0) st.lastT = Math.max(st.lastT, tEnd);  // 徽标量纲: 末样本 ts vs 墙钟
       if (advanced) {
         st.silentPull = false;  // 新帧到 = 静默解除
         // 页面隐藏: 合并照常(纯数据面), 渲染等回场(下一帧/对账补上 —— 节流最小化, 见节头注)
-        if (!document.hidden) this.$nextTick(() => this._qbChartBuild(scope));
+        if (live) this.$nextTick(() => this._qbChartBuild(scope));
         this._qbStallBadgeSyncChart(scope);  // 恢复(新帧到)即消显, 不等 watchdog 下一跳
       }
     },

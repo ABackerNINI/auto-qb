@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 7/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `relocate-window-machine-roster.md` … `single-file-coverage-gate.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `redverify-pycache-stale-verdict.md` … `sim-root-sentinel.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [redverify-pycache-stale-verdict.md](redverify-pycache-stale-verdict.md) | 红验/`mutants.verify` 这类「逐条 apply 变异体 → 跑 pytest → 还原」的循环里，同一条源码行若被**等长替换**（如 `get(None, view.channel_state)` ↔ `get(view.channel_state, None)`），且相邻两条的 apply/跑/还原在**同一秒内**完成，则 Python 的 `.pyc` 缓存判据 `(源文件 mtime, size)` **两条都相同**（mtime 秒级精度 + size 因为等长也相同）⇒ 子进程 import 时**直接复用上一条变异体编译出的字节码**，实际跑的还是上一轮的代码。后果：本该被守阵杀掉的变异报 **SURVIVED**（假存活），且**没有任何报错**；在同一份 dump 上重复跑还会**稳定复现**同一批假存活（不是偶发抖动）。与 [mutants-mirror-dirty-worktree](mutants-mirror-dirty-worktree.md) 同族（同是「等长替换让缓存比对失效」，那档是 git stat 缓存判净，本条是 Python 字节码缓存判新）。判别: 同一条变异**单跑 KILLED、全量跑 SURVIVED**（或反之）就要怀疑缓存；实测 hr display 轮 `_print_site m23/m24`（`CHANNEL_TEXTS.get` 的两个实参互换，等长）稳定假 SURVIVED。处置: 跑测试的子进程加 `-B` / `PYTHONDONTWRITEBYTECODE=1` **并**开工前清 `__pycache__`（`PYTHONDONTWRITEBYTECODE` 只禁写新缓存，**已有的旧 `.pyc` 仍会被读**）；`.pytest_cache` 由 `-p no:cacheprovider` 另管，与本条无关。 | 红验, 变异测试, mutmut, apply, 同构变异, 假存活, 假 SURVIVED, pyc, pycache, __pycache__, 字节码缓存, 缓存未失效, mtime 秒级, size 相同, 等长替换, 同长度替换, PYTHONDONTWRITEBYTECODE, python -B, importlib 缓存, 单跑 KILLED 全量 SURVIVED |
 | [relocate-window-machine-roster.md](relocate-window-machine-roster.md) | 真机 relocate 收尾实验: daemon 全机名册判据遇生产实例在跑, 离线窗永不开(测试接缝旁路需授权) | 收尾窗, 离线窗, daemon 开窗, 全机名册, _spawn_daemon, 测试接缝, relocate 真机, 生产实例在跑, 旁路授权 |
 | [repo-snapshot-in-tree.md](repo-snapshot-in-tree.md) | 做只读评审要导出整棵仓库快照时, 快照必须放仓库**外** —— 树内的副本会让"单点定义"守卫扫到散落实现, `test.full` 直接红两条, 而快照目录明明已 gitignore。 | 快照, snapshot, git archive, 只读评审, review.lane.start, 批量评审, test-results 放快照, 单点守卫红, test_free_port, test_tmp_bootstrap, 散落 |
 | [restart-transient-and-offline-cmd-window.md](restart-transient-and-offline-cmd-window.md) | 重启后合并与 VERIFY 同拍: 账面 rewritten 毫秒瞬态轮询不可观测 + 下线窗命令回执被重连 connect 阻塞 ~29s/次 | 账面 rewritten, rewritten 瞬态, 相位瞬态, 轮询不可观测, 合并同拍, ACT_VERIFY 同拍, 下线窗回执, cmd_post_and_wait 超时, 回执 30s 未落, urllib3 重试, connect 阻塞, 断连稳态, 重启瞬态, D13, 镜像合并, wait rewritten 超时 |
@@ -23,4 +24,3 @@
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例, 与肇事者无关 | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 sim 都撞 `B1: --root 已存在且非空, 但缺哨兵`。 | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
-| [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。**`commands run test.one` 已内置 `--no-cov`(2026-10-05 修复)**, 该假红此后只在**裸跑** `uv run pytest tests/x.py -q` 时仍会出现; 判据看 `N passed` / `FAILED` 行, 不要被 FAIL 行骗去修代码。 | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |

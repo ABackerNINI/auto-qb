@@ -3,17 +3,17 @@
 点, meta schema=2/stride=k; agg 段窗(3d+)零改动; 断言改判处见用例 docstring 内 T1b 标注)
 
 ## 测试计划(每个测试函数一条)
-- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)+ P4 meta 契约(plan 26-10-15-0829): server_started_at = 后端进程出生时刻, 未启用空态与三端点都携带(同一 _meta 装配单点), 旧键逐字不变(只增不改, 旧前端忽略未知键), 改模块常量新响应立即携带 = 无实例级缓存面
+- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)+ P4 meta 契约(plan 26-10-15-0829): server_started_at = 后端进程出生时刻, 未启用空态与三端点都携带(同一 _meta 装配单点), 旧键逐字不变(只增不改, 旧前端忽略未知键), 改模块常量新响应立即携带 = 无实例级缓存面 + span_s(2026-11-21)未启用空态同样携带 = WINDOW_SPECS 窗长 86400
 - test_api_traffic_qb_requires_token (三 GET 端点沿用全局 token 鉴权单点, 无凭证 401; 冒号键值形态会被写入侧凭据判据误报, 故用括号注记)
 - test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
-- test_api_traffic_qb_global_24h_points_totals_and_stale: (T1b 改判)global 24h 窗天文件块 -> 样本分组装配(k=6 组均值, 组点 + 显式空值点升序) + totals = 组粒度快照差分和(重置逐向 None/跨断连字节承袭) + 读取竞态降级回上一份快照标 stale + meta 全量形状(schema=2/stride=k/interval_s=组距标称 + P4 server_started_at + F6 sample_interval_s)
+- test_api_traffic_qb_global_24h_points_totals_and_stale: (T1b 改判)global 24h 窗天文件块 -> 样本分组装配(k=6 组均值, 组点 + 显式空值点升序) + totals = 组粒度快照差分和(重置逐向 None/跨断连字节承袭) + 读取竞态降级回上一份快照标 stale + meta 全量形状(schema=2/stride=k/interval_s=组距标称 + P4 server_started_at + F6 sample_interval_s + 2026-11-21 span_s=86400 名义窗左缘锚 —— 前端 SSE 步进列头部修剪 _qbTrimStaleHead 消费, 窗长语义 WINDOW_SPECS 经栅格单点下发)
 - test_api_traffic_qb_raw_rate_basis_delta_per_w_totals_unchanged: (T1b 改判)raw 5m 短窗 k=1 逐样本点列(速率 = 样本差分/覆盖, 瞬时直采值零上图) + totals 逐样本快照差分(窗首基线缺失) + 活尾样本跨盘/尾接缝差分(图尾随最新样本)
 - test_api_traffic_qb_raw_live_tail_true_tail_no_hold_clone: (T1b 改写, 取代 F4 持有延伸)raw 段窗活尾合流: 活尾槽复原即纯槽序(now/max_gap_s 形参面已随持有面退役 —— 接线钉: v4_live_tail_slots 调用无 now/max_gap_s 实参, 位置实参形态一并钉死 26-11-18-0037 评审 #5: spy 记 (a, kw) 二元组断 a == ())—— 尾点 = 最新真实样本 ts 的真值, 最新样本之后无任何点(无持有克隆), totals 尾点 = 真实差分非 0 增量; 端点取时冻结假钟消除窗界竞态
 - test_api_traffic_qb_group_raw_live_tail_true_tail_no_hold_clone: (T1b 改写)组端点 raw 段成员循环同款接线钉(同评审 #5 记 (a, kw)) —— 成员活尾(torrent:HA)复原无持有延伸, 组响应尾点 = Σ 成员最新真实样本真值且之后无点; 组空态判据计入活尾(member_has_tail)
 - test_api_traffic_qb_raw_seed_extension_window_start_baseline: (T1b 改判)窗首种子 D3: 读窗起点 = 装配消费下界 t0-si-回看界, 窗外前缀只作差分基线不产组点 —— 窗首样本速率 = 差分/覆盖(非 0 线非瞬时值), totals 窗首组含窗外种子差分(600/300, 字节守恒)
 - test_api_traffic_qb_raw_seed_vacuum_chain_break_and_recover: (T1b 改判)种子跨真空: 种子/恢复块各移 30s(未观测恰 60s = 重启缝)—— 恢复首样本 = step/实测对跨 90s 摊配回收(107/53), 次样本基线恢复; totals = 组粒度快照差分和(离线字节含在后继样本快照差分里 —— 9600/4800 入账)
 - test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band: (T1b 改判)窗首种子 1 秒边界带: 恢复样本 @g_t0+30 —— 摊配 = step/实测对跨 60.5s(149/74, 误接旧值 300 可判红), totals 离线字节入账(9000/4500)
-- test_api_traffic_qb_global_30d_hour_segment: global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分(agg 段窗零改动)
+- test_api_traffic_qb_global_30d_hour_segment: global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分(agg 段窗零改动) + span_s=2592000(2026-11-21: agg 段窗键在, 前端 schema=2 门不消费)
 - test_api_traffic_qb_global_6mo_1y_day_segment: (S3b D4 沿用)6mo/1y 窗 agg day 行直映本地日界桶 —— 滚动窗切片(300 天前行 1y 可见/6mo 不可见), 缺日断链, interval_s=86400
 - test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
 - test_api_traffic_qb_torrent_endpoint: (T1b 改判)单种端点取数(单样本窗 k 兜底 1 -> 点 t = 样本 ts)/ 非法哈希 400 + detail 种子哈希非法(存储层 v4_series_dir ValueError 转译, 多非法字符形态守阵, issue 26-11-07-0536 R4#37)/ 未知哈希空态 / 冻结种子历史仍可查
@@ -104,6 +104,8 @@ def test_api_traffic_qb_disabled_empty_state(web_env, monkeypatch):
         # sample_interval_s(plan 26-11-14-1313 F6)未启用兜底 DEFAULT_SAMPLE_INTERVAL_S=30.0
         assert body["meta"]["server_started_at"] == tq._SERVER_STARTED_AT > 0, p
         assert body["meta"]["sample_interval_s"] == 30.0, p
+        # span_s(2026-11-21): 未启用空态同样携带(空态栅格照建, span = WINDOW_SPECS 窗长)
+        assert body["meta"]["span_s"] == 86400, p
     # 与未启用空数组先例同构: /api/traffic/history 同样 200 + 空数组
     assert client.get("/api/traffic/history", headers=auth).status_code == 200
     _enable_qb_traffic(mgr, enabled=False)  # 段存在但 enabled=false: 同空态
@@ -201,10 +203,13 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     assert r.status_code == 200
     body = r.json()
     # meta 全量形状(T1b §03: 六键全保留 + schema=2/stride=k 新增, interval_s 转组距标称
-    # k x si; P4 server_started_at 一并钉住, 值语义/兼容面由未启用空态用例专测)
+    # k x si; P4 server_started_at 一并钉住, 值语义/兼容面由未启用空态用例专测;
+    # span_s = 窗口时长 2026-11-21 增键 —— 名义窗左缘锚, 前端 SSE 步进列头部修剪消费,
+    # 值 = WINDOW_SPECS 窗长(栅格 t1-t0, raw 段窗浮点挂钟差恰整))
     assert body["meta"] == {
         "window": "24h",
         "interval_s": 180,
+        "span_s": 86400,
         "sample_interval_s": 30.0,
         "schema": 2,
         "stride": 6,
@@ -569,6 +574,9 @@ def test_api_traffic_qb_global_30d_hour_segment(web_env):
     )
     body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "30d"}).json()
     assert body["meta"]["interval_s"] == 3600 and body["meta"]["window"] == "30d"
+    # span_s(2026-11-21): agg 段窗同样携带(窗长语义单点 = WINDOW_SPECS 经栅格差值;
+    # 前端 schema=2 门不消费 —— 键在, 值只作契约形状面)
+    assert body["meta"]["span_s"] == 2592000
     assert len(body["points"]) == 721  # 30d 窗 720 桶 + 1 进行中桶(26-11-14-1313 F3 floor+1: hour 段恒整倍, n 恒 721)
     p = next(p for p in body["points"] if p and p["t"] == h)
     assert p == {"t": h, "dl": 200, "up": 60}  # hour 行 avg(桶内不再聚合)

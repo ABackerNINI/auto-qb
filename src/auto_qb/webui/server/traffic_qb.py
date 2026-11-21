@@ -241,14 +241,26 @@ class QbTrafficChartApi:
         """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
         未知键, 降级 last-good 分支按键展开同样携带)。sample_interval_s = 生效采样间隔
         (plan 26-11-14-1313 F6 后端半, P4 响应契约键, 非 validate_config 面)。
+        span_s = 窗口时长(grid.t1 - grid.t0, 整值归一 int 沿桶宽惯例): 名义窗左缘锚,
+        前端 SSE 步进列头部修剪单点消费(2026-11-21, 详 _qbTrimStaleHead) —— WINDOW_SPECS
+        的窗长语义经栅格单点下发, 前端不复制窗名->秒映射(漂移面零增量)。
         raw 段窗(26-11-18-0037 §03 meta 契约, D6): stride 非 None 时 = 样本分组契约响应
         —— 六键全保留, 新增 schema=2 与 stride=k, interval_s 语义转组距标称 = k x 采样
         间隔(整值归一 int, 沿桶宽惯例); stride=None(agg 段窗/未启用空态)= 旧形,
         interval_s = grid.interval(agg 段窗一个字不动, D4)。"""
         si = self._sample_interval()
+        span = grid.t1 - grid.t0
+        if float(span).is_integer():
+            span = int(span)
         meta = {
             "window": grid.name,
             "interval_s": grid.interval,
+            # span_s = 窗口时长(t1 - t0, 名义窗左缘锚; 26-11-21 前端 SSE 步进列头部修剪
+            # _qbTrimStaleHead 消费 —— 显示列左缘 = 尾t - span_s, 两笔对账 GET 之间随尾点
+            # 推进同步前移, 根除「只增尾不剪头 -> auto x range 跨度增长 -> 整列 x 向压缩」;
+            # month 段窗(all)= 数据面跨度, 前端 schema=2 门天然不消费(旧契约无 schema 键)。
+            # F 系只增键先例: 旧前端忽略未知键, last-good 分支按键展开同样携带(P4 口径)。
+            "span_s": span,
             "sample_interval_s": si,
             "source": "qb",
             "stale": stale,

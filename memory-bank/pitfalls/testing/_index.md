@@ -16,8 +16,8 @@
 | [2](_index-2.md) | `config-validation-test-input.md` … `fake-config-shared-mutables.md` | 16 |
 | [3](_index-3.md) | `fake-seed-injection.md` … `guard-literal-comment-trip.md` | 16 |
 | [4](_index-4.md) | `gz-plaintext-assertion.md` … `longtask-redverify-page-task.md` | 16 |
-| [5](_index-5.md) | `manager-builder-single-point.md` … `parallel-run.md` | 16 |
-| [6](_index-6.md) | `patching.md` … `redverify-pycache-stale-verdict.md` | 16 |
-| [7](_index-7.md) | `relocate-window-machine-roster.md` … `single-file-coverage-gate.md` | 16 |
-| [8](_index-8.md) | `single-file-xdist-hang.md` … `tmpdir.md` | 16 |
-| [9](_index-9.md) | `tool-mode-coverage.md` … `xdist-worker-global-snapshot.md` | 10 |
+| [5](_index-5.md) | `manager-builder-single-point.md` … `node-guards-silent-skip.md` | 16 |
+| [6](_index-6.md) | `parallel-run.md` … `redverify-anchor-lineendings.md` | 16 |
+| [7](_index-7.md) | `redverify-pycache-stale-verdict.md` … `sim-root-sentinel.md` | 16 |
+| [8](_index-8.md) | `single-file-coverage-gate.md` … `timing-tolerance.md` | 16 |
+| [9](_index-9.md) | `tmpdir.md` … `xdist-worker-global-snapshot.md` | 11 |

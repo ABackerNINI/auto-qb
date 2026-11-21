@@ -1,7 +1,7 @@
 """test_webui_static_dom_panel_traffic 测试计划: webui 前端静态守阵: 详情面板 / 弹窗 / 浮层
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07; 契约适配 26-11-18-0037 阶段 3) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 点列->_qbPointsToData 直读 node 真跑(schema=2 样本分组点列每点带 t 直读(非等距真值 t/float 组距)/显式空值点 {t, dl:null, up:null} y=null 断线/尾组最新样本 ts 恒真值/anchor={xs} 全列真值时刻/空列与 interval 非法回落; agg 段窗旧「桶值|null」定长数组兼容面保留(D4 零改动): null 槽栅格重建/前导 null 推算/S3b 月行真值落点与空槽内插) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(sample_interval_s 夹取全窗统一(F7/26-11-15-1104 D6 反转旧「低频轮询=桶宽」口径) + immediate 首拍立即(F8/D4) + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归(显式空值点形态)); T4a(plan 26-11-18-0037)追钉: openDrawerTraffic 打开路径改首拉 + _qbStreamStart(SSE 主路径, GET 轮询骨架退役为降级态取数)/drawer_store 流量页签同改 + _stopDrawerPoll 同收流
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07; 契约适配 26-11-18-0037 阶段 3) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 点列->_qbPointsToData 直读 node 真跑(schema=2 样本分组点列每点带 t 直读(非等距真值 t/float 组距)/显式空值点 {t, dl:null, up:null} y=null 断线/尾组最新样本 ts 恒真值/anchor={xs} 全列真值时刻/空列与 interval 非法回落; agg 段窗旧「桶值|null」定长数组兼容面保留(D4 零改动): null 槽栅格重建/前导 null 推算/S3b 月行真值落点与空槽内插) + 轮询下界常量 1500(A4, S3b §05.5)+ 三挂点作用域表与低频轮询口径(sample_interval_s 夹取全窗统一(F7/26-11-15-1104 D6 反转旧「低频轮询=桶宽」口径) + immediate 首拍立即(F8/D4) + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在「尚无落袋结果」时接管正文(qbCurPending = loading + 无数据 + 无错误) + 同宿主 setData 原地快路 + 换肤先销毁再重建 + 错误态由成功落袋清除, 2026-10-04 修轮询期闪烁 / 2026-10-05 补齐空态与错误态闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步(含退栈顺序: 历史弹层遮罩 130 先于抽屉 80, 2026-10-06 两图同开报障)+ 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归(显式空值点形态)); T4a(plan 26-11-18-0037)追钉: openDrawerTraffic 打开路径改首拉 + _qbStreamStart(SSE 主路径, GET 轮询骨架退役为降级态取数)/drawer_store 流量页签同改 + _stopDrawerPoll 同收流; 名义窗头部修剪纯函数 _qbTrimStaleHead node 电池(2026-11-21, 修「SSE 步进列只增尾不剪头 -> auto range 跨度变宽 -> 整列 x 向压缩 + L0 min 恒驻左端不出窗」): 陈旧头部点按 尾t-span_s 剪除(修剪线含界 t>=line 保留)/纯函数不 mutate 入参(落地面在 _qbStreamFrame 数据入口面 —— store 列与显示列恒对齐, 悬停取值零错位; 见 SSE 电池 A7)/fresh 列与 span 覆盖全列原引用返回/列尾点恒存活不剪空/span_s 非法(0/负/缺参)与旧契约 null 元素(无 t 即停)防御
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏); R8 追加 state.js 数值面板接线静态钉(fx: qbInitialFx() / fxPanel 显式建字段, plan 26-11-12-1139 §05.5), 修复轮追加状态行展示值 computed 落位钉(qbFxPeriodS/qbFxBeatMs 恰 1 次定义且夹在 computed: { 与 mounted() { 之间, fx-panel.html 保持裸插值不带括号 —— 落 methods 即复现 toDisplayString 函数源码渲染 blocker)
 - test_frontend_qb_fx_store_and_sanitize_battery: 数值面板持久化读路径与逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5, §09 脏值探针) —— qbInitialFx 桩 localStorage 钉四脏值场景(坏 JSON/v:0/数组根/空串)整体回落默认且键保留(全程零 removeItem) + _qbFxSanitize 逐字段: 错类型(数字字段 null/布尔/数组不得被 Number() 误收、布尔严格 ===true/false 且类型归位、合法 false 保真)/未知枚举与空串回落/clamp 边界(impact/particles [0,1]、shiftRatio [0.2,1] 双侧, 数字串"0.9"抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 清场)/合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键) + S4-a 轮追加 section 5(§05.9 第 6 项/第 9 项的电池级等价): openFxPanel 经 overlay_fit 单点钳位 + 图宿主右缘钳位(右缘 >=8px)/重开复位 alt/Alt 看穿三路(keydown+keyup 同处理器按 e.altKey 写态 + 面板不可见早退 + blur 失焦复位)/四皮肤 .fx-panel CSS 成对(fixed 本体/max-height 兜底/fx-alt/120ms 仅 opacity/reduce 零动画)/D20 渗色禁令(fx CSS 段剥注释零 --today-up/--today-down)
@@ -18,7 +18,7 @@
 - test_frontend_qb_poll_rhythm_and_immediate_first_beat: F7/F8/A7 电池(plan 26-11-15-1104; 组距口径 26-11-18-0037 阶段 3; T4a 子波 2 起 GET 轮询骨架 = 降级态取数路径, 逐拍面不变) —— 轮询节奏 = 采样间隔全窗统一(D6): _qbPollMs 读 meta.sample_interval_s(生效采样间隔)经 [1.5s,600s] 防御夹取, si 1.5/30/600/900/0.8 逐值 + 只带 interval_s 的旧形状(桶宽 3600)不吃(30000 兜底, 旧「被夹成 600000」形态即旧口径回潮) + meta 缺失/si 非法(0/负)兜底; A7 状态行两组值同源: 周期实算 qbFxPeriodS/beat qbFxBeatMs 与采样行 qbFxSampleText 都从 sample_interval_s 来(schema=2 样本分组契约两值形态 si=1.5/iv=174(schema 2, stride 116) -> 「1.5 s · 组距 174.0 s」(interval_s = 组距标称 k x si, 桶面退役)+ beat 600, 旧口径吃组距 beat 恒 1000 即回潮; agg 段窗无 schema 键二值仍「1.5 s · 桶宽 3600.0 s」(D4 零改动); 相等形态回落单值逐字一致); F8 冷开首拍立即(D4): startPoll immediate 首拍立即(delay 0)/非 immediate 调用面零变化/直拉在途首拍被 mutex 挡掉不双发 + 短重试 AQB_POLL_FIRST_RETRY_MS=1500 不落 30s fallback/直拉落定后首拍真实执行记账清位回归节律周期/隐藏期首拍跳过拉数但重排仍短间隔; 静态钉: AQB_POLL_FIRST_RETRY_MS=1500 + 骨架首拍记账表达式 + 流量侧 immediate: true 声明; 行为面 node 电池真跑(真骨架 + 真 _qbPollMs/_qbLoad/computed, 无 node 静默跳过)
 - test_frontend_qb_tick_label_and_isolated_idxs: R5#192 —— x 轴刻度与孤点索引 node 电池(同文件其余纯函数均有电池, 唯这两处标着纯函数却零执行): _qbTickLabel 四族分支 13 档逐档断言(1m/5m 标到秒 / 30m-24h 只标时刻 / 3d/7d/30d 标日期 / 6mo/1y/all 标年月; 期望值由同一 Date 本地时区现算, 与机器时区无关)+ torrent 挂点读自己的窗口字段(三挂点窗口互不串) + _qbIsolatedIdxs 三态(两侧皆 null 的孤点收/任一侧非 null 的链中链端不收/贴边孤点与空系列边界)
 - test_frontend_qb_themechange_event_pair: R5#194 —— theme.js↔qb_traffic_chart.js 换肤事件契约成对静态锚(此前 theme.js 全文件零测试, 事件名/派发点被改名或删除时流量图 canvas 换肤残旧色且无测试变红): theme.js 手动切换(set)与系统明暗跟随(onSys, R5#180 补)两路都必须派发 autoqb:themechange 且落在 documentElement 上, qb_traffic_chart.js 必须监听同名事件且挂在同一 target(documentElement) —— 成对断言, 单侧改名/换 target 即红
-- test_frontend_qb_stream_merge_degrade_and_badge_battery: SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3 子波 2; D7/D9/E1/E4/E7) —— 判定帧节拍源换轴后的前端事件驱动面, 行为级真跑(真骨架 polling.js + 真图方法 + EventSource/票据桩): 合并语义纯函数 _qbStreamAppend(t > 列末追加「最新测量」尾点=步进 / t == 列末尾点替代 / 同值重发 false / t < 列末丢弃(GET 竞态不得回退) / 显式空值点透传 / 超预算 500+64 从头截断) + wiring(换票 POST /api/events/ticket -> EventSource ?scope=&ticket= 建流 / 对账 30s + watchdog 两张骨架定时器 / hello+onopen 双源 live) + 数据帧(首帧基线=后端「断档检测在基线之后」契约 / seq 连续推进 / 断档立即 GET 重拉 + 3s 节流防断档风暴 / GET 快照晚于事件按 ts 归并: t > GET 列末保留其余折叠) + 徽标 D3(两文案两态: 滞后 Ns = 末样本 ts vs 墙钟超 3 x si / 已断连 = retry/degraded/pullFail 叠加静默 / connecting 不惊扰; 恢复自动消显; 位置 = 判定线 x/绘图区顶沿, 变值才写; ensure 幂等) + 降级 E7(票据 503 计失败轮, 连续 3 轮 3s/轮失败 -> GET 轮询 qb:<scope> 接管 + 对账停摆 + 60s 保守重试; 恢复 = 流回来撤销降级 + 轮询退役 + 立即对账) + 清理面(_qbStreamStop 收 ES/重试定时器/三张定时器/状态缓冲, 幂等; 重开先停后起不泄漏; 目标未就绪不开流; 落票后复查= polling.js #7 同款竞态窗口); 静态钉: E4 常量五件(对账 30000/静默 3/重连 3000/失败上限 3/降级恢复 60000)+ 尾点预算(500+64)+ _QB_SCOPES stream 构建器三形态(与后端 _parse_scope 同语法)+ 生命周期挂钩(openDrawerTraffic _qbStreamStart / drawer_store 页签 _qbStreamStart("torrent") / _stopDrawerPoll 与 _qbTeardown 收流 / _qbReloadOnEnter _qbStreamResume / 换窗不动流)+ 徽标接线(build ensure + _qbFxAnchorSync 顶部搭车(anc 早退之前, 不受 FX 门控)+ destroy 清记录)+ CSS 单点(transform 右收/pointer-events:none/z-index 2 照 tooltip 惯例, --warn 断连色)+ 会话代际三件(_qbStreamStop 翻代 gen / _qbStreamConnect 两处 await 后核验 / onopen/hello/帧/onerror 四监听器来连核验 st.es === es)+ 失败计数单点(onopen 不清 —— 握手成功 ≠ 可用 / _qbStreamFrame 来帧清); 行为面含 watchdog 静默沿(>3 x si)三检查点: 静默沿立即 GET 重拉一次(D6)+ silentPull 记账防同段静默重复重拉(D6b)+ 新帧到复位(下一次静默重新判, D6c)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_stream_merge_degrade_and_badge_battery: SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3 子波 2; D7/D9/E1/E4/E7) —— 判定帧节拍源换轴后的前端事件驱动面, 行为级真跑(真骨架 polling.js + 真图方法 + EventSource/票据桩): 合并语义纯函数 _qbStreamAppend(t > 列末追加「最新测量」尾点=步进 / t == 列末尾点替代 / 同值重发 false / t < 列末丢弃(GET 竞态不得回退) / 显式空值点透传 / 超预算 500+64 从头截断) + wiring(换票 POST /api/events/ticket -> EventSource ?scope=&ticket= 建流 / 对账 30s + watchdog 两张骨架定时器 / hello+onopen 双源 live) + 数据帧(首帧基线=后端「断档检测在基线之后」契约 / seq 连续推进 / 断档立即 GET 重拉 + 3s 节流防断档风暴 / GET 快照晚于事件按 ts 归并: t > GET 列末保留其余折叠) + 徽标 D3(两文案两态: 滞后 Ns = 末样本 ts vs 墙钟超 3 x si / 已断连 = retry/degraded/pullFail 叠加静默 / connecting 不惊扰; 恢复自动消显; 位置 = 判定线 x/绘图区顶沿, 变值才写; ensure 幂等) + 降级 E7(票据 503 计失败轮, 连续 3 轮 3s/轮失败 -> GET 轮询 qb:<scope> 接管 + 对账停摆 + 60s 保守重试; 恢复 = 流回来撤销降级 + 轮询退役 + 立即对账) + 清理面(_qbStreamStop 收 ES/重试定时器/三张定时器/状态缓冲, 幂等; 重开先停后起不泄漏; 目标未就绪不开流; 落票后复查= polling.js #7 同款竞态窗口); 静态钉: E4 常量五件(对账 30000/静默 3/重连 3000/失败上限 3/降级恢复 60000)+ 尾点预算(500+64)+ _QB_SCOPES stream 构建器三形态(与后端 _parse_scope 同语法)+ 生命周期挂钩(openDrawerTraffic _qbStreamStart / drawer_store 页签 _qbStreamStart("torrent") / _stopDrawerPoll 与 _qbTeardown 收流 / _qbReloadOnEnter _qbStreamResume / 换窗不动流)+ 徽标接线(build ensure + _qbFxAnchorSync 顶部搭车(anc 早退之前, 不受 FX 门控)+ destroy 清记录)+ CSS 单点(transform 右收/pointer-events:none/z-index 2 照 tooltip 惯例, --warn 断连色)+ 会话代际三件(_qbStreamStop 翻代 gen / _qbStreamConnect 两处 await 后核验 / onopen/hello/帧/onerror 四监听器来连核验 st.es === es)+ 失败计数单点(onopen 不清 —— 握手成功 ≠ 可用 / _qbStreamFrame 来帧清); 行为面含 watchdog 静默沿(>3 x si)三检查点: 静默沿立即 GET 重拉一次(D6)+ silentPull 记账防同段静默重复重拉(D6b)+ 新帧到复位(下一次静默重新判, D6c) + A7 名义窗头部修剪真跑(2026-11-21, 修「左移时左边曲线不出窗口而是整列 x 向压缩」): _qbStreamFrame 数据入口面按 尾t - meta.span_s 剪除 store 列头部陈旧点(schema=2 + span_s 门) —— store 列与显示列恒对齐(悬停取值/缺口区段索引零错位面) + 建图触发; 无 span_s 门关不剪(旧后端/agg 回落)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -152,6 +152,13 @@ def _tpl_top_level_tags(body: str):
     return parser.roots
 
 
+# node 探针 stdin 包装器: 电池脚本本体经 subprocess input= 送 stdin, -e 位固定为这一小串
+# eval(readFileSync(0)) —— 旧形 -e 直接内联探针在 Windows 触顶 CreateProcess 32k 命令行
+# 上限(WinError 206, 2026-11-21 节拍电池 S21 追加时实爆)。argv 形状不变: 图表路径恒
+# argv[1], 各探针内 process.argv[1] 契约不动; require/process 经 -e 的 CJS 作用域可达,
+# 探针脚本体(含其内层 eval 图表文件)在同一次 eval 作用域内闭合。
+_NODE_STDIN_WRAPPER = "eval(require('fs').readFileSync(0,'utf8'))"
+
 # node 单测探针(P5a): 加载真实 qb_traffic_chart.js, 对模块级纯函数 _qbPointsToData 跑
 # 点列直读 + 断线语义电池(26-11-18-0037 阶段 3 契约适配: schema=2 样本分组点列每点带 t 直读
 # / 显式空值点 y=null / 变长真值 t / 空列与 interval 非法防御; agg 段窗旧「桶值 | null」定长
@@ -220,6 +227,26 @@ pts = [P(jan, 1, 2), null, P(mar, 5, 6)];
 d = _qbPointsToData(pts, 2592000);
 checks.push(["月视图空槽真值内插", !!d && d.xs[1] === (jan + mar) / 2 && d.up[1] === null]);
 checks.push(["月视图值透传", !!d && d.up[0] === 1 && d.dl[2] === 6]);
+// —— 名义窗头部修剪 _qbTrimStaleHead(2026-11-21; SSE 步进列左缘锚 = 尾t - span_s)——
+let tr = [P(940, 1, 1), P(1000, 2, 2), P(1030, 3, 3)];
+let trCut = _qbTrimStaleHead(tr, 60);   // 修剪线 = 1030-60 = 970: P(940) 陈旧
+checks.push(["陈旧头部点按名义窗剪除(xs[0] 前移到修剪线右侧首点)", !!trCut && trCut.length === 2
+  && trCut[0].t === 1000 && trCut[1].t === 1030]);
+checks.push(["修剪返回新数组, 入参列零改写(纯函数不 mutate)", trCut !== tr && tr.length === 3]);
+checks.push(["恰在修剪线上的点保留(t >= line 含界)", _qbTrimStaleHead([P(970, 1, 1), P(1030, 2, 2)], 60)[0].t === 970]);
+const fresh = [P(1000, 1, 1), P(1030, 2, 2)];
+checks.push(["fresh 列(全部点 >= 修剪线)原引用返回(零拷贝零重建)", _qbTrimStaleHead(fresh, 60) === fresh]);
+checks.push(["span 覆盖全列跨度(短窗大 span)不剪", _qbTrimStaleHead([P(1000, 1, 1), P(1030, 2, 2)], 300)[0].t === 1000]);
+checks.push(["列尾点恒存活(修剪线由尾点定义, 列不剪空)", _qbTrimStaleHead([P(100, 1, 1), P(200, 2, 2), P(1030, 3, 3)], 60).length === 1]);
+checks.push(["span_s 非法(0/负/缺参)不剪(旧后端/agg 段窗门)", (() => {
+  const a = [P(100, 1, 1), P(1030, 2, 2)];
+  return _qbTrimStaleHead(a, 0) === a && _qbTrimStaleHead(a, -5) === a && _qbTrimStaleHead(a, undefined) === a;
+})()]);
+checks.push(["旧契约 null 元素防御(无 t 即停, 不越界剪)", (() => {
+  const a = [null, P(1030, 2, 2)];
+  const r = _qbTrimStaleHead(a, 60);
+  return r.length === 2 && r[0] === null && r[1].t === 1030;
+})()]);
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -346,8 +373,9 @@ def test_frontend_qb_traffic_chart_wiring():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_TRAFFIC_PROBE,
+            [node, "-e", _NODE_STDIN_WRAPPER,
              os.path.join(shared, "qb_traffic_chart.js")],
+            input=_NODE_QB_TRAFFIC_PROBE,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -846,8 +874,9 @@ def test_frontend_qb_fx_store_and_sanitize_battery():
     if not node:
         return
     proc = subprocess.run(
-        [node, "-e", _NODE_QB_FX_PROBE,
+        [node, "-e", _NODE_STDIN_WRAPPER,
          os.path.join(STATIC_ROOT, "shared", "qb_traffic_chart.js")],
+        input=_NODE_QB_FX_PROBE,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -2050,7 +2079,9 @@ def test_frontend_qb_beat_kernel_battery():
         return
     for probe, tag in ((_NODE_QB_BEAT_PROBE, "节拍内核"), (_NODE_QB_BEAT_SCHED_PROBE, "节拍调度器")):
         proc = subprocess.run(
-            [node, "-e", probe, os.path.join(shared, "qb_traffic_chart.js")],
+            [node, "-e", _NODE_STDIN_WRAPPER,
+             os.path.join(shared, "qb_traffic_chart.js")],
+            input=probe,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -3152,7 +3183,9 @@ def test_frontend_qb_fx_visual_engine_battery():
         (_NODE_QB_FXVIS_DRAW_PROBE, "视觉引擎绘制面")
     ):
         proc = subprocess.run(
-            [node, "-e", probe, os.path.join(shared, "qb_traffic_chart.js")],
+            [node, "-e", _NODE_STDIN_WRAPPER,
+             os.path.join(shared, "qb_traffic_chart.js")],
+            input=probe,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -3853,7 +3886,9 @@ def test_frontend_qb_fx_scan_band_battery():
         (_NODE_QB_FXVIS_SCAN_DRAW_PROBE, "T6 表现层绘制面"),
     ):
         proc = subprocess.run(
-            [node, "-e", probe, os.path.join(shared, "qb_traffic_chart.js")],
+            [node, "-e", _NODE_STDIN_WRAPPER,
+             os.path.join(shared, "qb_traffic_chart.js")],
+            input=probe,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -4756,7 +4791,9 @@ def test_frontend_qb_fx_panel_wiring_battery():
         (_NODE_QB_FXPANEL_BUDGET_PROBE, "S3 预览同预算"),
     ):
         proc = subprocess.run(
-            [node, "-e", probe, os.path.join(shared, "qb_traffic_chart.js")],
+            [node, "-e", _NODE_STDIN_WRAPPER,
+             os.path.join(shared, "qb_traffic_chart.js")],
+            input=probe,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -5347,8 +5384,9 @@ def test_frontend_qb_traffic_scope_stale_polarity():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_SCOPE_STALE_PROBE,
+            [node, "-e", _NODE_STDIN_WRAPPER,
              os.path.join(shared, "qb_traffic_chart.js")],
+            input=_NODE_QB_SCOPE_STALE_PROBE,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -5414,8 +5452,9 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_YAXIS_PROBE,
+            [node, "-e", _NODE_STDIN_WRAPPER,
              os.path.join(shared, "qb_traffic_chart.js")],
+            input=_NODE_QB_YAXIS_PROBE,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -5866,7 +5905,8 @@ def test_frontend_qb_traffic_load_stall_fallback():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_POLL_STALL_PROBE, poll_path, js_path],
+            [node, "-e", _NODE_STDIN_WRAPPER, poll_path, js_path],
+            input=_NODE_QB_POLL_STALL_PROBE,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -6042,7 +6082,8 @@ def test_frontend_qb_poll_rhythm_and_immediate_first_beat():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_POLL_RHYTHM_PROBE, poll_path, js_path],
+            [node, "-e", _NODE_STDIN_WRAPPER, poll_path, js_path],
+            input=_NODE_QB_POLL_RHYTHM_PROBE,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -6112,8 +6153,8 @@ def test_frontend_qb_tick_label_and_isolated_idxs():
     if not node:
         return
     proc = subprocess.run(
-        [node, "-e", _NODE_QB_TICK_ISOLATED_PROBE,
-         os.path.join(shared, "qb_traffic_chart.js")],
+        [node, "-e", _NODE_STDIN_WRAPPER, os.path.join(shared, "qb_traffic_chart.js")],
+        input=_NODE_QB_TICK_ISOLATED_PROBE,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -6265,6 +6306,30 @@ const COL = (tEnd, n) => {
     for (let i = 0; i < 600; i++) adv = _qbStreamAppend(big, tbig, { t: i * 10, dl: i, up: i }, 564) || adv;
     ok("A6 超预算(MAN_RAW 500 + 余量 64)从头截断(防御双通道同故障的无界增长)",
       big.length === 564 && big[0].t === 360 && tbig.length === 564);
+    // —— A7: 名义窗头部修剪(2026-11-21, _qbStreamFrame 数据入口面; 修「左移时左边曲线不出
+    //          窗口而是整列 x 向压缩」: 修剪线 = 尾t - meta.span_s, store 列与显示列恒对齐)——
+    {
+      const col = COL(1030, 11);   // t = 730..1030 步进 30(跨度 300)
+      col.points = [{ t: 700, dl: 1, up: 2 }].concat(col.points);  // 头部补陈旧点(t=700)
+      col.meta = { interval_s: 30, sample_interval_s: 1.5, schema: 2, stride: 1, span_s: 300 };
+      const v = mkVm({ qbHistData: col, _qbStreams: { global: { want: true, tail: [], seq: null, lastT: 0 } } });
+      let buildCalls = 0;
+      v._qbChartBuild = () => { buildCalls += 1; };
+      v._qbStreamFrame("global", { seq: 5, points: [{ t: 1060, dl: 9, up: 9 }] });
+      // 尾点 1060 -> 修剪线 760: 头部 700/730 两点剪除(点列 13 -> 11), store 列即修剪列
+      ok("A7 修剪在数据入口面落地: store 列头部陈旧点剪除(首点 700 -> 760)+ 尾点推进(1060)"
+        + " + store/显示列同源(悬停索引零错位) + 建图触发",
+        v.qbHistData.points.length === 11 && v.qbHistData.points[0].t === 760
+        && v.qbHistData.points[10].t === 1060 && buildCalls === 1);
+      const col2 = COL(1030, 11);
+      col2.points = [{ t: 700, dl: 1, up: 2 }].concat(col2.points);   // META 无 span_s: 门关
+      const v2 = mkVm({ qbHistData: col2, _qbStreams: { global: { want: true, tail: [], seq: null, lastT: 0 } } });
+      v2._qbChartBuild = () => {};
+      v2._qbStreamFrame("global", { seq: 6, points: [{ t: 1060, dl: 9, up: 9 }] });
+      ok("A7 对照(无 span_s 门关, 旧后端/agg 回落): 列原样不剪(首点 700 保留, 尾点照常追加)",
+        v2.qbHistData.points.length === 13 && v2.qbHistData.points[0].t === 700
+        && v2.qbHistData.points[12].t === 1060);
+    }
   }
   // —— B: 开流 wiring(票据 -> EventSource -> live) ——
   const v = mkVm();
@@ -6806,7 +6871,8 @@ def test_frontend_qb_stream_merge_degrade_and_badge_battery():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_STREAM_PROBE, poll_path, js_path],
+            [node, "-e", _NODE_STDIN_WRAPPER, poll_path, js_path],
+            input=_NODE_QB_STREAM_PROBE,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -7233,8 +7299,8 @@ def test_frontend_qb_fx_anchor_battery():
     if not node:
         return
     proc = subprocess.run(
-        [node, "-e", _NODE_QB_FX_ANCHOR_PROBE,
-         os.path.join(shared, "qb_traffic_chart.js")],
+        [node, "-e", _NODE_STDIN_WRAPPER, os.path.join(shared, "qb_traffic_chart.js")],
+        input=_NODE_QB_FX_ANCHOR_PROBE,
         capture_output=True,
         text=True,
         encoding="utf-8",
