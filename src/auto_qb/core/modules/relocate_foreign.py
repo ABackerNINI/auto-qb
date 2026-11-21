@@ -18,6 +18,11 @@ IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种
 - 候选判定(路径单点复用): save_path 归一(_norm 既有单点)恰等活跃 job 的旧根(job.src,
   含 plan.inherited 继承根) => 场景 A; 恰等终态账(done)的 src 旧根 => 场景 B, 数据现位置
   经 _foreign_resolve_old_root 单点解析(本批 = 直连边, T4 扩成传递闭包)。
+- 内容根预筛(B1, 计划 26-11-21-1600): 纯路径门命中后、D4 比对前, 复用同一次文件表拉取
+  (记录级惰性缓存, 零附加 API)现算候选内容根(ru.foreign_gate_passes 纯函数单点), 与命中
+  job 的 scope 不同根 => 静默丢弃(DEBUG, 不入 notified 不呈现 —— D6; save_path 等值门卷入
+  的同根兄弟目录种子不再进 mismatch 面, issue 26-11-21-1500); 平铺/混合退化形态与不可判定
+  形态(文件表空/qB 缺席/scope 不可靠)恒过回落 D4(现行为兜底)。
 - 文件清单比对(D4): 命中候选比对 rec 文件表 vs 命中 job 的 plan.files(单点复用
   PlanMixin._file_map / ExecMixin._plan_files 同归一口径含大小); **一致才进入分类处置,
   不一致只告警**(WARNING + 记 mismatch 账去重)。
@@ -224,7 +229,9 @@ class ForeignMixin:
         未命中返回 None。全量兜底与差集候选共用本管线(D12 口径: 全量扫 = 逐条跑同一判定)。
         命中判据 = save_path 归一(ru._norm 既有单点, 平台折叠口径)恰等于 job 旧根 ——
         IYUU 按其缓存的成员 save_path 添加, 与 job.src 同一根; 子目录落点由添加预检
-        (precheck_add/evaluate_add 确认框)覆盖, 不在本面射程。
+        (precheck_add/evaluate_add 确认框)覆盖, 不在本面射程。命中不直接进处置: 消费面
+        (_foreign_drain)在 D4 前还有内容根预筛(B1, 计划 26-11-21-1600)—— save_path 同根
+        但内容根不同的兄弟目录种子在预筛被静默丢弃, 本判定保持纯路径零 qB 请求。
         """
         save_path = getattr(rec, "save_path", "") or ""
         if not save_path:
@@ -388,6 +395,10 @@ class ForeignMixin:
         纯路径判定的候选(不命中/成员/已记录)出队不受预算限 —— 预算只定界真 qB API 成本
         (文件表拉取); 预算尽即止, 未及候选按插入序留池(FIFO 序不变, 下拍续)。
 
+        预算扣减后、D4 比对前先过**内容根预筛**(B1, 计划 26-11-21-1600, _foreign_gate_pass):
+        候选内容根与命中 job scope 不同根 => DEBUG 静默丢弃出队(不入 notified 不呈现, D6;
+        文件表已随预筛进记录级惰性缓存, 重复时机扫零 API)。
+
         **先处理后出队**: 出队一律在候选处理成功之后 —— 单候选处理抛异常(现实触发面 =
         ExecMixin._plan_files 的 int(b) 对 state 恢复畸形 plan.files)按 lifecycle 逐 job
         护栏(on_task_line 逐 _advance 的 try/except)同款纪律就地降级记日志**不传播**,
@@ -424,6 +435,13 @@ class ForeignMixin:
                     self._foreign_pop(h)  # 已记录: 去重出队
                     continue
                 budget -= 1
+                if not self._foreign_gate_pass(rec, hit):
+                    logger.debug(
+                        f"relocate | foreign | {h[:8]} 命中旧根 {hit.old_root} 但内容根不属 job "
+                        f"{hit.job_id} scope, 预筛丢弃(不入账不呈现, B1)"
+                    )
+                    self._foreign_pop(h)  # 静默丢弃(D2/D6): 不入 notified 不呈现, 无负缓存
+                    continue
                 verdict = self._foreign_files_match(rec, hit)
                 if verdict is None:
                     logger.debug(f"relocate | foreign | {h[:8]} 文件表不可判定, 待时机兜底重扫")
@@ -454,7 +472,55 @@ class ForeignMixin:
         self._foreign_failed_warned.add(h)
         logger.warning(f"relocate | foreign | 候选 {h[:8]} 处理异常, 原位留池待下拍重试: {e}")
 
-    # ---------- 文件清单比对(D4) ----------
+    # ---------- 内容根预筛(B1)与文件清单比对(D4) ----------
+
+    def _foreign_hit_scope(self, hit: ForeignHit) -> Optional[str]:
+        """命中旧根对应的内容根 scope(B1 预筛比对锚); None = 不可判定(预筛恒过回落 D4)
+
+        取数按命中面分派(26-11-21 读码口径; 场景 A/B 两路共用本单点):
+        - 命中根恰等 job.src(场景 A 直连 / 场景 B 终态直连边): job.scope 即该根的内容根
+          (建账 content_root_of 产物, exec 侧落账单点)—— 此形态下 D4 判同必含内容根等值
+          (文件清单全等 => 顶层段全等 => content_root_of 等值), 预筛结构上不丢真命中;
+        - 命中根为继承条目 src(场景 A 继承 / 场景 B 移交条目边): 条目自带前任作用域三件套
+          (scope = 前任内容根, _handover_predecessors 落账恒非空)—— 链式迁移最老代旧根上
+          的原内容种子按前任内容根判, 不被携带 owner 的 scope 误丢; 条目 scope 缺失(空串,
+          缺键反序列化同形; 畸形/旧账)= 不可靠 -> None 恒过回落 D4, **不回落 entry.src**:
+          entry.scope or entry.src 先例(units.scope_hit/blocks_relocation 继承面)服务
+          _within 包含门(放宽作用域, 安全向), 本门是恰等判定 —— 回落会把目录形态前任
+          (真实内容根 = src/<段>)的真命中误丢(方向反转为丢弃向, 评审 minor);
+        - job 账已不在(get_job 未命中, 撤销/清账竞态)或两面对不上(脏数据): None —— 不可
+          判定保守恒过(D4 对账不在同样出 None 出队待时机重扫, 口径一致)。
+        """
+        job = self.get_job(hit.job_id)
+        if job is None:
+            return None
+        n_root = ru._norm(hit.old_root)
+        if ru._norm(job.src) == n_root:
+            return job.scope or None
+        for entry in job.inherited:
+            if entry.src and ru._norm(entry.src) == n_root:
+                return entry.scope or None  # scope 缺失 = 不可靠: None 恒过, 不回落 entry.src(评审 minor)
+        return None
+
+    def _foreign_gate_pass(self, rec: Any, hit: ForeignHit) -> bool:
+        """B1 内容根预筛(计划 26-11-21-1600): True = 放行进 D4; False = 内容根不符, 静默丢弃
+
+        判据纯函数 ru.foreign_gate_passes(候选 save_path x 文件表键 x 命中 scope); 文件表
+        经 _file_map 拉取, 记录级惰性缓存(TorrentRecord.files)使本预筛与 D4(
+        _foreign_files_match)共用同一次拉取, 零附加 API(D2), 重复时机扫零 API(D6)。
+        不可判定形态(qB 缺席 / scope 不可靠 / 文件表空)恒 True 保守回落 D4 —— D4 对同
+        形态出 None 出队待时机重扫, 判据口径一致; 丢弃只发生在调用方 drain 分支(不入
+        notified 不呈现, 无负缓存, D2)。
+        """
+        api = getattr(self._ctx, "api", None)
+        client = getattr(api, "client", None) if api is not None else None
+        if client is None:
+            return True  # qB 缺席: 不可判定(D4 同口径 None 出队, 时机兜底重扫)
+        scope = self._foreign_hit_scope(hit)
+        if scope is None:
+            return True  # scope 不可靠(账不在/两面对不上): 不可判定, 保守回落 D4
+        got = self._file_map(rec, client)  # 记录级惰性缓存: D4 复用同一次拉取, 零附加 API
+        return ru.foreign_gate_passes(str(getattr(rec, "save_path", "") or ""), list(got.keys()), scope)
 
     def _foreign_files_match(self, rec: Any, hit: ForeignHit) -> Optional[bool]:
         """种子文件清单 vs 命中 job 的 plan.files(D4: 同归一口径含大小)

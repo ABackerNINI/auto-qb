@@ -131,6 +131,7 @@ __all__ = [
     "RelocateSnapshot",
     "job_rank",
     "content_root_of",
+    "foreign_gate_passes",  # 外部候选门内容根预筛(计划 26-11-21-1600 B1)
     "resolve_physical",
     # 停滞判据与执行期恢复
     "STALL_OK",
@@ -1731,6 +1732,33 @@ def content_root_of(save_path: str, files: Sequence[str]) -> str:
     """内容根路径(目录别名的作用域; 平铺/混合 = save_path 本身)"""
     _flat, rel = layout_of(save_path, files)
     return _join(save_path, rel) if rel else save_path
+
+
+def foreign_gate_passes(save_path: str, files: Sequence[str], scope: str) -> bool:
+    """外部候选门内容根预筛(计划 26-11-21-1600 B1): 候选内容根与命中 job 的 scope 同根才放行
+
+    外部旧路径种子侦测面的判定门收窄(pitfall: save-path-equality-sibling-trap)—— qB 的
+    save_path 是下载保存根目录, 内容根在其下一层, 同一根下全部种子都过「save_path 归一恰等
+    旧根」纯路径门。本判定经 content_root_of 现算候选内容根, 与命中 job 的 scope(建账
+    content_root_of 产物 = 该组内容根, exec 侧落账单点)归一恰等才放行进 D4 文件清单比对;
+    不等 -> False(调用方静默丢弃候选: 不入 notified 不呈现, D2/D6 —— 预筛只丢通知/纳入
+    候选, 丢错下个时机扫重试, 保守向)。
+
+    全形态语义:
+    - files 空(文件表拉取失败/事实缺失)= 内容根不可判定 -> True 保守回落 D4(不把事实
+      缺失误判成「内容根不符」; D4 对空表同样按 None 口径出队待时机重扫);
+    - 平铺/混合退化形态: content_root_of 回落 save_path 本身, 与退化 scope(scope=save_path,
+      平铺/混合组的建账形)恒等值 -> 恒过回落 D4(现行为不变; D2 拍板接受残留: 平铺/混合组
+      scope 下兄弟种子仍交 D4 文件清单比对兜底); 目录候选 x 目录 scope 不同段(或平铺候选
+      x 目录 scope)不等值 -> False(兄弟目录种子丢弃面, issue 26-11-21-1500);
+    - scope 空(账面畸形/不可靠)与 save_path 空(调用方预门已挡的退化形, classify 口径):
+      不可判定 -> True 保守放行;
+    - 大小写按平台折叠(_norm 默认口径, 与 scope_hit 作用域判定一致: Windows 不敏感 /
+      POSIX 敏感); 斜杠/反斜杠形态归一平台无关。
+    """
+    if not save_path or not files or not scope:
+        return True  # 不可判定形态(空文件表/scope 不可靠/save_path 退化): 保守放行回落 D4
+    return _norm(content_root_of(save_path, files)) == _norm(scope)
 
 
 def resolve_physical(save_path: str, content_root: str, jobs: Sequence[RelocateJob]) -> str:

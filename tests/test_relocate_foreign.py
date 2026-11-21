@@ -171,6 +171,21 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   (非 dict)跳过不炸, dict 条目照常投影
 - test_state_foreign_readers_tolerate_missing_state: state 上下文缺失(data 非 dict)——
   notified 读写两 reader 都回空 dict 不炸, 零 materialize
+
+内容根预筛(B1, 计划 26-11-21-1600 S1):
+
+- test_foreign_gate_sibling_dir_seeds_dropped_no_mismatch: 预筛接线(场景 A, issue
+  26-11-21-1500 形态)—— 同 save_path 多个子目录种子仅内容根匹配 job.scope 的进 D4 并照常
+  纳入(接缝零改动); 兄弟目录种子 DEBUG 静默丢弃不入账, 零 mismatch/零 WARNING, 丢弃
+  DEBUG 一条/候选(D6)
+- test_foreign_gate_scenario_b_content_root_gate: 预筛接线(场景 B 直连边)—— done 边上同
+  内容根种子照常进 D4 记账; 兄弟目录种子静默丢弃
+- test_foreign_gate_scenario_b_entry_edge_uses_entry_scope: 预筛 scope 取数(场景 B 移交
+  条目边)—— 前任已滚出、边身份回落携带 owner 时, scope 取条目自带前任内容根(entry.scope;
+  缺失不可判定恒过), 原内容种子不被 owner.scope 误丢; 兄弟目录种子仍丢弃
+- test_foreign_gate_helpers_undeterminable_scope_passes: 预筛不可判定面 —— scope 解析不出
+  (job 账不在/命中根两面兜不上/条目 scope 缺失恒过不回落 entry.src)与 qB 缺席(api=None)
+  一律恒过回落 D4, 不丢候选
 """
 import logging
 from dataclasses import replace
@@ -534,6 +549,149 @@ def test_foreign_scenario_b_location_and_state_shape():
     assert isinstance(notified["BX"]["first_seen"], float)  # 挂钟首见时刻(展示用)
     # 容器路径钉扎: state.data["relocate"]["foreign"]["notified"](T5 面板数据源)
     assert mod._ctx.state.data["relocate"]["foreign"]["notified"] is notified
+
+
+# ---------- 内容根预筛(B1, 计划 26-11-21-1600 S1) ----------
+
+
+def test_foreign_gate_sibling_dir_seeds_dropped_no_mismatch():
+    """B1 预筛(issue 26-11-21-1500 形态, 场景 A): 同 save_path 多个子目录种子, 仅内容根匹配
+    job.scope 的进后续面; 兄弟目录种子 DEBUG 静默丢弃 —— 不产生 mismatch 记录/告警不入账;
+    纳入接缝零改动(匹配种子照常转正)"""
+    mod, store, client = _env()
+    plan = {"files": [["Show/f.bin", 10]]}
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_MOVING, src=OLD, dst=NEW, scope=OLD + "/Show", plan=plan)
+    client.files_map["HIT"] = [_fake_file("Show/f.bin", 10)]  # 内容根 = OLD/Show == scope
+    client.files_map["SIB1"] = [_fake_file("Other1/x.bin", 7)]  # 兄弟目录: 内容根 = OLD/Other1
+    client.files_map["SIB2"] = [_fake_file("Other2/y.bin", 9)]  # 兄弟目录: 内容根 = OLD/Other2
+    store.refresh(
+        [
+            FakeTorrent(hash="HIT", name="same-root", save_path=OLD),
+            FakeTorrent(hash="SIB1", name="sib1", save_path=OLD),
+            FakeTorrent(hash="SIB2", name="sib2", save_path=OLD),
+        ]
+    )
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod.on_task_line()
+    notified = mod._state_foreign_notified()
+    assert notified["HIT"]["kind"] == "A"  # 内容根匹配: 进 D4 并纳入(接缝零改动)
+    assert "HIT" in mod._jobs["ja"].hashes
+    assert "SIB1" not in notified and "SIB2" not in notified  # 静默丢弃: 不入账不呈现
+    assert not [m for m in cap.records if m.levelno == logging.WARNING]  # 零 mismatch/零告警
+    drops = [m for m in cap.records if m.levelno == logging.DEBUG and "预筛丢弃" in m.getMessage()]
+    assert len(drops) == 2  # D6: 丢弃纯 DEBUG, 一条/候选
+
+
+def test_foreign_gate_scenario_b_content_root_gate():
+    """B1 预筛(场景 B 直连边): done 边上同内容根种子照常进 D4 记账; 兄弟目录种子静默丢弃"""
+    mod, store, client = _env()
+    mod._jobs["jd"] = _job(
+        "jd", phase=ru.PHASE_DONE, src=OLD, dst=NEW, scope=OLD + "/Show", plan={"files": [["Show/f.bin", 10]]}
+    )
+    client.files_map["HIT"] = [_fake_file("Show/f.bin", 10)]  # 内容根 = OLD/Show == scope
+    client.files_map["SIB"] = [_fake_file("Other/x.bin", 7)]  # 兄弟目录: 内容根 = OLD/Other
+    store.refresh(
+        [
+            FakeTorrent(hash="HIT", name="same-root", save_path=OLD),
+            FakeTorrent(hash="SIB", name="sib", save_path=OLD),
+        ]
+    )
+    mod.on_task_line()
+    notified = mod._state_foreign_notified()
+    assert notified["HIT"]["kind"] == "B"
+    assert "SIB" not in notified
+
+
+def test_foreign_gate_scenario_b_entry_edge_uses_entry_scope():
+    """B1 预筛(场景 B 移交条目边): scope 取条目自带前任内容根(entry.scope; 缺失不可判定恒过)
+    —— 链式迁移最老代旧根上的原内容种子照常进 D4, 不被携带 owner 的 scope 误丢; 兄弟目录
+    种子仍丢弃"""
+    mod, store, client = _env()
+    plan = {
+        "files": [["Show/f.bin", 10]],
+        "inherited":
+            [
+                {
+                    "job_id": "jp",  # 前任已滚出终态账(不在 _jobs): 边身份回落携带 owner(既有口径)
+                    "src": OLD,
+                    "dst": "R:/mid",
+                    "scope": OLD + "/Show",
+                    "alias_kind": "dir",
+                    "alias_paths": [OLD + "/Show"],
+                    "link_kind": "junction",
+                }
+            ],
+    }
+    # owner 终态(done): 场景 A 继承面只扫活跃 job, 该形态必落 B 路(条目边供 B 解析)
+    mod._jobs["j2"] = _job("j2", phase=ru.PHASE_DONE, src="R:/z", dst="R:/w", plan=plan)
+    client.files_map["HIT"] = [_fake_file("Show/f.bin", 10)]  # 前任内容结构: 内容根 = OLD/Show == entry.scope
+    client.files_map["SIB"] = [_fake_file("Other/x.bin", 7)]  # 兄弟目录: 内容根 = OLD/Other
+    store.refresh(
+        [
+            FakeTorrent(hash="HIT", name="old-root", save_path=OLD),
+            FakeTorrent(hash="SIB", name="sib", save_path=OLD),
+        ]
+    )
+    mod.on_task_line()
+    notified = mod._state_foreign_notified()
+    assert notified["HIT"]["kind"] == "B"  # entry.scope 解析: 原内容种子不被 owner.scope(R:/z)误丢
+    assert "SIB" not in notified
+
+
+def test_foreign_gate_helpers_undeterminable_scope_passes():
+    """B1 预筛不可判定面: scope 解析不出(job 账不在/命中根两面兜不上/条目 scope 缺失恒过
+    不回落 entry.src)与 qB 缺席(api=None)一律恒过回落 D4, 不丢候选"""
+    mod, _store, _client = _env()
+    hit = rf.ForeignHit(
+        hash="HX", save_path=OLD, scenario="A", job_id="gone", phase="moving", old_root=OLD, location=NEW
+    )
+    assert mod._foreign_hit_scope(hit) is None  # job 账已不在 -> None
+    assert mod._foreign_gate_pass(object(), hit) is True  # 不可判定保守放行(回落 D4)
+    mod._jobs["jx"] = _job("jx", src="R:/elsewhere", plan={"files": list(PLAN_FILES)})
+    hit2 = rf.ForeignHit(
+        hash="HX", save_path=OLD, scenario="B", job_id="jx", phase="moving", old_root=OLD, location=NEW
+    )
+    assert mod._foreign_hit_scope(hit2) is None  # 命中根既非 job.src 也非任何继承条目 -> None
+    assert mod._foreign_gate_pass(object(), hit2) is True
+    # 评审 minor: 条目 scope 缺失(空串/缺键, 反序列化同形 "")= 不可靠 -> None 恒过 —— 恰等门
+    # 不回落 entry.src(回落先例服务 _within 包含门放宽向; 恰等判定下回落会把目录形态前任
+    # (真实内容根 = src/<段>)的真命中误丢)
+    plan = {
+        "files":
+            list(PLAN_FILES),
+        "inherited":
+            [
+                {
+                    "job_id": "jp",
+                    "src": OLD,
+                    "dst": "R:/mid",
+                    "scope": "",
+                    "alias_kind": "dir"
+                },
+                {
+                    "job_id": "jp2",
+                    "src": OLD + "2",
+                    "dst": "R:/mid2",
+                    "alias_kind": "dir"
+                },  # 无 scope 键
+            ],
+    }
+    mod._jobs["jy"] = _job("jy", phase=ru.PHASE_DONE, src="R:/z", dst="R:/w", plan=plan)
+    for old_root in (OLD, OLD + "2"):
+        hit_n = rf.ForeignHit(
+            hash="HX",
+            save_path=old_root,
+            scenario="B",
+            job_id="jy",
+            phase="done",
+            old_root=old_root,
+            location="R:/mid"
+        )
+        assert mod._foreign_hit_scope(hit_n) is None  # 条目 scope 缺失 -> None(不回落 entry.src)
+        assert mod._foreign_gate_pass(object(), hit_n) is True
+    # 评审 nit: qB 缺席守卫(api/client 缺失)恒过 —— 与 D4 同款不可判定口径
+    mod._ctx.api = None
+    assert mod._foreign_gate_pass(object(), hit_n) is True
 
 
 # ---------- 场景 B 通知面(T5/S5: 只通知 D8, R7 映射已过期, 发布视图) ----------

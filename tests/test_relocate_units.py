@@ -12,6 +12,10 @@
   内容根也超长 -> 拒绝(绝不静默降级)
 - test_plan_file_link_error_carried: 文件级链接不可建的原因(提权/allow_uac)进拒绝文案
 - test_layout_of: 平铺 / 单一子目录 / 混合顶层段 三布局
+- test_foreign_gate_passes_forms: B1 判定门内容根预筛全形态(计划 26-11-21-1600)—— 目录同根
+  放行/兄弟段与异根丢弃(issue 1500 形态)/平铺与混合退化 scope 恒过/目录 scope 不等丢弃/
+  空文件表·空 scope·空 save_path 不可判定保守过/反斜杠归一平台无关 + 大小写按平台 normcase
+  口径(Win 折 / POSIX 不折两分支)
 - test_evaluate_group_idempotent_skip: 全组已在目标位置 -> ok + 幂等 note(不再跑目标冲突闸门)
 - test_evaluate_group_unfinished_job_blocks: 非终态 job 碰本组 -> blocked(unfinished);
   终态 job 不拦(§3.6 第 14 行 / S10); S5 新口径断言: 文案说明收尾窗(armed/rewritten)
@@ -338,6 +342,36 @@ def test_layout_of():
     assert ru.layout_of(S, ("Show/a.mkv", "Show/sub/b.mkv")) == (False, "Show")
     assert ru.layout_of(S, ("Show/a.mkv", "Other/b.mkv")) == (False, "")  # 混合: 无单一内容根
     assert ru.layout_of(S, ()) == (True, "")
+
+
+def test_foreign_gate_passes_forms():
+    """B1 判定门内容根预筛全形态(计划 26-11-21-1600 S1): 目录/平铺/混合/退化/不可判定/大小写
+
+    判定 = content_root_of 现算候选内容根 x scope 归一恰等(_norm 平台折叠口径, 与 scope_hit
+    同); 空文件表/scope 缺失/save_path 缺失 = 不可判定保守过(回落 D4); 平铺/混合退化形与
+    退化 scope 恒过; 兄弟目录段(issue 26-11-21-1500 形态)丢弃。
+    """
+    sp = "R:/DL/Group"
+    dir_files = ("Show/e00.mkv", "Show/sub/e01.mkv")
+    # -- 目录布局: 内容根 = save_path/<段>; 与 scope 同根放行, 兄弟段/异根同段名丢弃 --
+    assert ru.foreign_gate_passes(sp, dir_files, "R:/DL/Group/Show") is True
+    assert ru.foreign_gate_passes(sp, dir_files, "R:/DL/Group/Other") is False  # 兄弟目录种子
+    assert ru.foreign_gate_passes(sp, dir_files, "R:/Elsewhere/Show") is False  # 异根同段名
+    # -- 平铺/混合退化: 内容根 = save_path 本身; 退化 scope 恒过(回落 D4), 目录 scope 不等丢弃 --
+    flat = ("e00.mkv", "e01.mkv")
+    mixed = ("Show/a.mkv", "Other/b.mkv")
+    assert ru.foreign_gate_passes(sp, flat, sp) is True
+    assert ru.foreign_gate_passes(sp, mixed, sp) is True
+    assert ru.foreign_gate_passes(sp, flat, sp + "/Show") is False  # 平铺候选 x 目录 scope
+    assert ru.foreign_gate_passes(sp, mixed, sp + "/Show") is False  # 混合候选 x 目录 scope
+    # -- 归一: 反斜杠/冗余斜杠平台无关; 大小写按平台 normcase 口径(Win 折 / POSIX 不折) --
+    assert ru.foreign_gate_passes("R:/DL/Group", ("Show/e.mkv", ), r"R:\DL\Group\Show") is True
+    assert ru.foreign_gate_passes("R:/DL/Group", ("Show/e.mkv", ),
+                                  "r:/dl/group/Show") is (True if os.name == "nt" else False)
+    # -- 不可判定: 空文件表(取数失败/事实缺失)/空 scope(账面畸形)/空 save_path 一律保守过 --
+    assert ru.foreign_gate_passes(sp, (), sp + "/Show") is True
+    assert ru.foreign_gate_passes(sp, dir_files, "") is True
+    assert ru.foreign_gate_passes("", dir_files, sp + "/Show") is True
 
 
 # ---------- evaluate_group(): 闸门 ----------
