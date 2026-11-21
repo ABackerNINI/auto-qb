@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>重启流量恢复 S0 取证: 恢复成本矩阵(现行实现) + 生产快照尺寸预算实测</title>
+<title>重启流量恢复 S0 取证: 恢复成本矩阵(现行实现) + 生产快照尺寸预算实测 + 真机轨 before 基线</title>
 <meta name="doc-type" content="report">
 <meta name="doc-topic" content="traffic-recovery-s0">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-21-1650">
-<meta name="doc-updated" content="26-11-21-1650">
+<meta name="doc-updated" content="26-11-21-2354">
 <meta name="doc-refs" content="memory-bank/plans/26-11-21-1546-plan-traffic-recovery.html">
 <style>
   :root {
@@ -72,10 +72,10 @@
 <div class="sheet">
 
 <div class="kicker">REPORT · memory-bank · doc-topic: traffic-recovery-s0</div>
-<h1>重启流量恢复 S0 取证: 恢复成本矩阵(现行实现) + 生产快照尺寸预算实测</h1>
+<h1>重启流量恢复 S0 取证: 恢复成本矩阵(现行实现) + 生产快照尺寸预算实测 + 真机轨 before 基线</h1>
 <p class="lede">本篇只回答计划 26-11-21-1546 S0①② 的两个取证问题: ①现行恢复实现(水位过滤后置 + 游程逐槽展开 + 累计器不落盘, §02.1 四缺陷)在 5000 系列三形态三场景下实际多慢 —— 作为 P1/P2 落地后同一 harness 重跑回填的 before 锚; ②生产库真实尺寸构成下, raw 保留窗(24H → 4 天文件) × 5000 系列的存储预算对照 20GiB 是否达标。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-21-1650 · <b>doc-updated</b> 26-11-21-1650 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-21-1650 · <b>doc-updated</b> 26-11-21-2354 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 计划 26-11-21-1546 S0 阶段开工(2026-11-21): 生产日志取证(启动恢复 11.72s 挡首轮)之后的机械取证步。数据 = 本机合成语料基准(<code>scripts/bench_traffic_recovery.py</code>, R 盘) + 生产快照 <code>R:\Download\qb-traffic-v4</code> 只读实测(2026-11-21 16:48)。
 </div>
 
@@ -85,6 +85,7 @@
 <p><b>236 生产形态对照(S0① 对账面)</b>: 按快照实测构成(1.5s 档 / 相位 8.23h / 读集 465.97 万槽)合成 236 系列, fresh 实测 <b>10.222s</b>, 对照生产 before <b>11.72s</b>(读集 466 万槽): 槽位差 ≈0.01%, 耗时差 12.8% —— 同量级吻合, 每槽成本 2.19µs vs 生产 2.52µs(残差 = 语料构成/机器状态差异, 见 §02.3)。</p>
 <p><b>尺寸预算(S0②, 全部实测)</b>: 生产快照构成(48 系列, z 游程主导, 全库 1.5s 档, r 行槽位占比 1.77%)折算 5000 系列 × 4 天文件 ≈ <span class="good">0.22-0.38GiB, 达标</span>; r-heavy 极端(4s 档全天全活跃, 实测 777.6KB/天文件)≈ <span class="good">14.48GiB, 达标</span>; <b>超限边界只在 1.5s 档全天全活跃兑现(实测 2.13MB/天文件 → 39.75GiB)</b> —— 与计划 R8 处置一致(配置面 <code>sample_interval_multiplier</code>), 不需要新机制。已回填计划 §03.2 预算表(新列「S0 实测」+ kb.bump R1 行)。</p>
 <p class="aside"><b>快照规模与计划正文的差异如实披露</b>: 快照实测 48 系列(1 global + 47 torrents)/25.09MB/42 天, 与计划正文「236 系列/466 万槽」对不上 —— 按任务口径如实记录, 不解读为计划错误(快照时点/生产库清理状态不明), 见 §02.5。</p>
+<p><b>真机轨 before(S0③, 追加于 R1)</b>: 环境1/R 盘 5001 系列真实主程序受控复测 —— 优雅重启中位 <b>243.8s</b>(g2/g3), 崩溃重启中位 <b>243.0s</b>(c2/c3, 与优雅同路同槽位), 补算变体 282.2s, 冷启 274.2s; flush stall = 稳态零 IO + 停机封口 5001 文件跨度 5.18-5.35s; 对照计划 §02.3 外推 ~250s 同量级吻合。全文见 §04。</p>
 
 <h2><span class="no">§02</span>证据快照</h2>
 
@@ -200,6 +201,65 @@ uv run python scripts/bench_traffic_recovery.py run-matrix --bench-root "R:/aqb-
 <ul>
   <li>fallback 场景每系列一条「无可用水位…全量兜底」INFO(读集 &gt; 2 文件另有读集 INFO): 5000 系列重启一次产生 ≥5000 行日志(计时已含其成本)。是否需要节流属计划外, 未改。</li>
   <li>后台长任务(<span class="wr">&gt;20min</span>)两次被宿主切断(mixed/fallback 与 rheavy 生成各中断一次), 靠 JSON 按 cell 落盘 + 语料幂等重跑恢复, 零数据损失 —— harness 的可重入设计由此验证。</li>
+</ul>
+
+<h2><span class="no">§04</span>真机轨 before 基线(real-machine, S0③, 2026-11-21 夜)</h2>
+<p>计划 §04 S0③ 的受控复测: 环境1(D盘机)测试副实例 + R 盘 5000 规模语料, 跑<b>真实主程序</b>(非 dry-run, 真实 qB 连接 + WEB 启动), 受控优雅重启 ×2、崩溃模拟重启 ×2、稳态 flush 窗观察。环境与驱动的完整口径见本节, 逐轮原始数据 = <code>tests-real/.work/s0traffic/boot/cycle-*.json</code> + 产品日志。</p>
+
+<h3>04.1 环境与语料口径</h3>
+<table>
+  <tr><th>面</th><th>口径(全部实测)</th></tr>
+  <tr><td>实例</td><td>环境1 副实例 36596(qB 5.2.3, 免鉴权, pid 25672); 主实例 36595 仅拉起过守卫(顺带按规程 §2.4 修 NIC 残留), 全程未用于测量; <code>real.guard</code> 全绿(真实种子 0)</td></tr>
+  <tr><td>种子</td><td>5000 枚合成假种子注入 36596(423s): 元数据-only(零 payload 落盘, --no-data 等价), 全部 <code>real-fake</code> 标签 + paused(实测状态 4992 stoppedDL + 8 checkingResumeData 瞬态), announce = 死端口 <code>http://127.0.0.1:1/announce</code>, 剧集形状名( shows 2500 / groups 5000 视图非空)</td></tr>
+  <tr><td>语料</td><td><code>R:\aqb-traffic-bench\20261121-2145\live\qb-traffic-v4</code>: 5001 系列(global 1 + torrent 5000; <b>torrent 系列键 = 测试种子真实 infohash</b>, 活跑采样追加进同一系列不另造系列), 4 天(3 整日 + 当日相位 8.227h 截断), 1.5s 档, 活跃占比 60.4%, 逐系列 r 行窗占比 2.92%(= 全库 r_share 1.77% ÷ 活跃占比, prod236 口径, 参数自 S0① snapshot-stats 实测 <code>prod-spec.json</code>); raw 632.8MB(20,004 天文件, 均值 30.9KB) + agg.dat 288.8MB(728 hour 行/系列 30d 历史 + 当日 0..7h 封口) ≈ 0.92GB —— <span class="good">D17 预算 20GiB 内</span></td></tr>
+  <tr><td>fresh 读集</td><td>5001 × 19,744 槽 ≈ <b>9874 万槽</b> —— 逐系列与生产读集口径一致(生产 466 万槽 / 236 系列 = 19,746 槽/系列; 5000 系列按同构成放大; 总量 466 万在 5000 系列 + fresh 水位场景下结构不可达: 当日封口小时要求相位 ≥1h → 读集 ≥1,200 万)</td></tr>
+  <tr><td>配置</td><td>派生配置(<code>tests-real/.work/s0traffic/boot/config.yml</code>, 零触碰生产 config.yml): data_dir = R 盘语料目录, <code>main_tick: 1.5S</code>(生产现档)+ <code>sync_interval: 1.5S</code>, <code>qb_traffic.enabled: true</code>(其余缺省 = 采样 1×main_tick / flush 600s / raw 24H / rollup 30D), grouping 开, WEB 39000(免鉴权); 先 <code>--dry-run</code> 验证(主循环正常起, 校验零报错)</td></tr>
+  <tr><td>起停</td><td>起 = <code>runner_s0.py</code> 看门壳(run_s0_boot 同款, 零 taskkill); 优雅停 = stopfile → 进程内 SIGTERM(rc=0); 崩溃 = <code>dev.port-kill</code> 定点杀 WEB 监听(杀前归属核验 = 本 clone runner_s0 的 python, rc=0, app rc=1)</td></tr>
+</table>
+
+<h3>04.2 ①优雅重启 before(6 次启动全实测, 计时 = 产品日志「启动恢复完成 … 耗时 X s」)</h3>
+<table>
+  <tr><th>启动</th><th>前置状态</th><th>恢复耗时(s)</th><th>墙钟差(s)</th><th>入账槽</th><th>µs/槽</th><th>补算小时</th><th>首拍 flat/shows(s)</th><th>全齐 groups(s)</th></tr>
+  <tr><td>g1 冷启</td><td>语料首读(fresh agg)</td><td><b>274.16</b></td><td>274.13</td><td>98,741,723</td><td>2.777</td><td>5001(hour8 catch-up)</td><td>276.4</td><td>296.0</td></tr>
+  <tr><td>g2 优雅重启#1</td><td>g1 优雅停后</td><td><b>243.95</b></td><td>243.93</td><td>102,617,498</td><td>2.377</td><td>0</td><td>245.9</td><td>266.3</td></tr>
+  <tr><td>g3 优雅重启#2</td><td>g2 优雅停后</td><td><b>243.70</b></td><td>243.68</td><td>102,962,567</td><td>2.367</td><td>0</td><td>245.7</td><td>265.9</td></tr>
+  <tr><td>c1 启动(变体)</td><td>g3 优雅停后, hour22 跨界补算</td><td><b>282.19</b></td><td>282.16</td><td>103,297,634</td><td>2.732</td><td>5001</td><td>284.2</td><td>304.2</td></tr>
+</table>
+<p><b>① 判据面数字</b>: 优雅重启(g2/g3)中位 <b>243.8s</b>; 带补算变体(c1)282.2s; 冷启首读(g1)274.2s。与计划 §02.3 外推 ~250s 同量级吻合; 每槽成本 2.34-2.78µs, 与 S0① prod236 实测 2.194µs / 生产取证 2.515µs 同量级。</p>
+<p class="aside"><b>槽位逐次精确自洽</b>: 每次优雅停把开放 z 游程封口进当日天文件, 下次启动读集逐槽吃进 —— g2-g1 = 3,875,775 = 5001 × 775(g1 活跑窗 z 行逐槽数), g3-g2 = 345,069 = 5001 × 69, c1-g3 = 335,067 = 5001 × 67, 逐项精确吻合(5001 系列每系列同一 z 行长度)。<b>补算变体</b>: 5001 个 hour catch-up append 使恢复变慢, 实测差值 —— 冷启 +30.2~30.5s(274.16 − 243.95/243.70), 补算变体 +38.2~38.5s(282.19 − 243.95/243.70; 同槽位对 c2/c3 为 +38.1~40.3s), 即 per-series agg 追加批量 ≈ +6~8ms/系列, 是 S2 acc 账本 flush 随批追加的同形状成本先例(g1 读集少 4%, 差值未按槽位折算, 属保守下界)。<b>首拍归因</b>: web_up 1.2-1.5s → 首拍(torrents/singles/shows 非空) = 恢复结束 + 1~2s(恢复占首拍 99.1-99.3%) → groups 全齐再 +20s(恢复占全齐 ≈92%, 5000 种子首轮管线, 0259 面)。</p>
+
+<h3>04.3 ②崩溃模拟重启 before(dev.port-kill 定点杀)</h3>
+<table>
+  <tr><th>启动</th><th>前置</th><th>恢复耗时(s)</th><th>入账槽</th><th>µs/槽</th><th>补算小时</th><th>首拍 / 全齐(s)</th></tr>
+  <tr><td>c2 崩溃重启#1</td><td>c1 稳态后 port-kill(rc=0, app rc=1)</td><td><b>241.93</b></td><td>103,297,634</td><td>2.342</td><td>0</td><td>244.0 / 264.1</td></tr>
+  <tr><td>c3 崩溃重启#2</td><td>c2 稳态后 port-kill(同上)</td><td><b>244.10</b></td><td>103,297,634</td><td>2.363</td><td>0</td><td>246.3 / 266.4</td></tr>
+</table>
+<p><b>② 判据面数字</b>: 崩溃重启中位 <b>243.0s</b>。c2/c3 入账槽与 c1 启动<b>逐槽相同</b>(103,297,634) —— 崩溃只丢内存开放游程(两个 180s 稳态窗的缓冲), 存储面零损失(「崩溃窗口丢缓冲 = 真空」语义), 与优雅重启(243.8s)同路同量级 —— 印证计划 §02.2「现行实现崩溃与优雅同路(累计器不落盘)」。</p>
+
+<h3>04.4 ③flush stall 基线(空闲库, 如实口径)</h3>
+<p>量法: 稳态窗内每 2s 全库 5001 个 agg.dat mtime 扫描(burst 命中后 0.3s 粒度追扫, 写窗 = mtime 跨度) + 每 ~6s WEB <code>/api/state</code> rid 探针 + state.json mtime; 稳态后解析活跑天文件的 dt_ms 行(累积漂移判据 DRIFT_TOL_MS = 250ms)。覆盖: g1 稳态 1300s = <b>2 个 flush 窗</b>(任务要求 ≥600s), g2/g3/c2/c3 各 180s。</p>
+<table>
+  <tr><th>观测面</th><th>实测</th><th>解读</th></tr>
+  <tr><td>稳态 agg 写面</td><td>全部扫描行 agg_changed = 0(g1 650 行 + 各轮 90 行, <b>零 burst</b>)</td><td>空闲采样产生开放 z 游程, 跨 flush 滞留内存(机制: 随封口或 stop 落盘) → flush tick 对 5001 系列做纯内存迭代, <b>零 IO, 文件面不可观测</b>。flush #1(恢复后首个 600s tick, ≈22:26:45)同样零写 —— hour8 的 5001 个 catch-up append 已在恢复内完成(补算小时 5001)</td></tr>
+  <tr><td>可观测的 5000 系列批量写</td><td>优雅停机封口: 5001 个当日天文件追加, mtime 跨度 <b>5.18 / 5.28 / 5.35 s</b>(g2/g3/g1 三次实测 ≈ 1.05ms/文件)</td><td>现行实现「5000 系列批量追加」的直接实测; S2 的 acc 账本 flush 随批追加是同形状 per-series 批量, 此跨度即其量级先例</td></tr>
+  <tr><td>主循环节律(dt_ms 漂移)</td><td>活跑窗有效采样间隔被拉长: g1 窗 775 槽/1301.6s(标称 867 槽, 缺 ~92 拍 ≈ 138s), g2 窗 69 槽/179.0s(标称 119 拍, 缺 50 拍), g3 窗 67 槽/180.5s; 天文件 dt_ms 行实测值 1,301,558 / 179,028 / 180,521 ms</td><td>拉长归因 = <b>5000 种子首轮任务排空</b>(5000 任务 / 20 每拍 ≈ 250 拍, 归组管线串发为 0259 已入池面), 非流量 flush —— g1 窗前段(任务排空期)拉伸 ~2.6s/拍, 排空完成后向 1.5s 回收(全窗均值 1.68s); g2/g3 的 180s 窗整体落在排空期</td></tr>
+  <tr><td>rid 探针</td><td>稳态期 366 次探针(g1 216 + g2/g3/c1/c2/c3 各 30)全部非 None, 每轮单一 rid, 零推进</td><td>空闲库无状态变化 → 无重发布, rid 不构成节律信号(如实记录, 弃用)</td></tr>
+  <tr><td>state.json 周期落盘</td><td>120s 节律保持(g1 窗 740s 内 6 次), 文件 90B</td><td>主循环线程存活 + 周期落盘不受稳态扰动</td></tr>
+</table>
+<p class="aside"><b>flush stall 判据(≤50ms/600s)在本环境的口径</b>: 空闲库下 flush tick 零 IO、无可观测 stall(未观测到任何 ≥250ms 累积漂移可归因 flush 的独立事件 —— 观测到的漂移全部由首轮任务线承担); S2 引入的账本追加在空闲库为 0 行(空闲系列零追加), 故「无恶化」是本环境能给出的诚实结论。<b>生产形状(60% 活跃 × 400 r 行/flush)的 flush 写量未复现</b> —— 需要 L2 活跃流量面, 本轮范围外; S5 真机验收若沿用本环境, 同口径复测即可对齐, 若要真活跃写面须先解决 L2 规模化。</p>
+
+<h3>04.5 方法、局限与复跑</h3>
+<ul>
+  <li><b>量法与分辨率</b>: 恢复耗时 = 产品日志「启动恢复完成 … 耗时 X s」(模块时钟, 生产 11.72s 取证同口径; 墙钟差与模块时钟差 ≤0.03s, 分辨率 = 日志毫秒); 首拍 = <code>/api/state</code> 轮询时间线(0.3s 粒度, measure_boot_first_data 同款); 稳态写面 = mtime 扫描(2s 粒度 + 0.3s 追扫, mtime 分辨率毫秒); 漂移 = dt_ms(250ms 累积判据, 值为毫秒)。</li>
+  <li><b>局限</b>: 元数据-only 种子 → 活跃流量面缺失(flush r 行写、真实速率分布未复现); R 盘内存盘 + 独占机(与生产 SSD + 常驻负载不同); 夜间单会话单次测量; 首轮任务线拉长节律为 0259 已入池面, 不计入本计划判据。</li>
+  <li><b>复跑</b>(语料/种子留存, 见 §04.1; 若跨日须按当日相位重新 gen 语料并对齐新种子): <code>uv run python tests-real/.work/s0traffic/tools/s0r.py cycle --tag X --mode graceful|crash --steady 1300 --measure-timeout 900</code>(前置: real.up 双实例 + real.guard + 36596 已含 5000 real-fake 种子; 恢复耗时另见 <code>R:\aqb-traffic-bench\20261121-2145\live\logs\auto-qb.log</code> 的「启动恢复完成」行)。</li>
+</ul>
+
+<h2><span class="no">§05</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-21-1650</span> 初版: S0①② 取证(恢复成本矩阵 15 cell + 生产快照尺寸预算实测), 计划 §03.2 回填。</li>
+  <li><span class="tag">R1 · 26-11-21-2341</span> S0③ 追加 §04 真机轨 before 基线(环境1/36596/R 盘 5001 系列): ①优雅重启中位 243.8s(g2/g3), 补算变体 282.2s, 冷启 274.2s; ②崩溃重启中位 243.0s(c2/c3, 与优雅同路同槽位); ③flush stall = 稳态零 IO + 停机封口 5001 文件跨度 5.18-5.35s + 首轮任务线节律拉伸如实归因; 语料 0.92GB 达 D17。</li>
+  <li><span class="tag">R2 · 26-11-21-2354</span> P0c 评审 minor×3 修复: 补算差值改两组实测(+30.2~30.5s 冷启 / +38.2~38.5s 变体)、恢复占首拍口径改 99.1-99.3%(全齐 ≈92%)、rid 探针 122→366 次(全非 None/每轮单一 rid/零推进)</li>
 </ul>
 
 </div>
