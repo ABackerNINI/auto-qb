@@ -1,14 +1,13 @@
 # backend — 后端 / qB / 平台 · 卷 3/3
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `ruamel-roundtrip-mask-pitfalls.md` … `windows-relocate-traps.md`(共 19 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `schema-stamp-writeback.md` … `windows-relocate-traps.md`(共 18 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
-| [ruamel-roundtrip-mask-pitfalls.md](ruamel-roundtrip-mask-pitfalls.md) | ruamel round-trip 掩码/回填三坑: 异常文本泄敏 / 引号形态继承 / alias 爆炸面 | ruamel, CommentedMap, DuplicateKeyError, 掩码, 哨兵, unmask, 回填, 引号, PlainScalarString, alias, 锚点, 共享引用, mask_yaml_text, 异常文本, 泄敏, detail |
 | [schema-stamp-writeback.md](schema-stamp-writeback.md) | 带 schema 版本链的写回(writer)若「校验走迁移后的临时副本、落盘写原始提交树 + 新版章」, | schema 迁移, 版本链, 写回, writer, 盖章, schema_version, WebUI 保存, read_tree, |
 | [sentinel-epoch-arith.md](sentinel-epoch-arith.md) | 哨兵值泄漏进算术比较: 「0 = 无位置概念」被当成 epoch 0, 覆盖判据静默恒通过 | cutoff_done, 哨兵, 0 = 没有位置概念, 位置证明, 覆盖判据, 减法, 比较, epoch 0, 恒通过, 退化, 永续放行, 缺席证明, 观察期, HR 管束 |
 | [startup-state-write-reload-discard.md](startup-state-write-reload-discard.md) | `QbManager.run()` 的启动序列里, `_reload_state()` 把 `ctx.state.data` 从磁盘**整体替换**(非合并)。模块启动期(`host.start_all` 阶段)写 state 的突变 —— 迁移器盖章/启动对账回写/prune 滚出这类「接管面」—— 若发生在 reload 之前会被那次替换静默丢弃, 周期刷盘随后把磁盘旧版原样写回; 症状是「启动期写入看似已持久, 盘面却停在旧账, 直到首个运行期写点才收敛」。修法 = 加载/物化/落盘起点整体挪到 `start_all` **之前**(issue 26-11-17-0214); reload 只依赖磁盘与 `ctx.store`(构造期已有), 与 qB 连接无关, 「必须在 connect 之后」从来不是真约束。 | 启动期, start_all, 模块 start, 写 state, reload, _reload_state, 整体替换, 丢弃, 落盘, model_version, 盖章, 对账, prune, 启动序列, 摆位 |

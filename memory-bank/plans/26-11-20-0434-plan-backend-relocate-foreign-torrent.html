@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="backend-relocate-foreign-torrent">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-20-0434">
-<meta name="doc-updated" content="26-11-21-1209">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md, memory-bank/issues/26-11-21-1326-feat-relocate-foreign-orphan-self-heal.html, memory-bank/issues/26-11-21-1326-docs-relocate-replay-note-drift.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-21-1326-feat-relocate-foreign-view-stale-gate-off.html">
+<meta name="doc-updated" content="26-11-21-1643">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md, memory-bank/issues/26-11-21-1326-feat-relocate-foreign-orphan-self-heal.html, memory-bank/issues/26-11-21-1326-docs-relocate-replay-note-drift.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-21-1326-feat-relocate-foreign-view-stale-gate-off.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>整组移动外部旧路径种子零破坏处置 (IYUU 辅种冲突)</h1>
 <p class="lede">本篇只回答: 整组移动收尾窗前后, IYUU 等外部工具经 qB WEBUI 按旧路径添加的辅种种子如何被识别与处置——收尾窗内零破坏纳入收尾、收尾后只通知; 全程不删种、不重加、不跳检、不静默全量校验。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-20-0434 · <b>doc-updated</b> 26-11-21-1209 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-20-0434 · <b>doc-updated</b> 26-11-21-1643 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-20 会话: 三轮只读子代理取证 (relocate 机制 / 种子发现与跳检 / 纳入可行性核查) + grilling 四轮 14 问拍板 (D1-D14) + 用户三次改判 (默认开启 / 场景 B 只通知 / 无周期兜底)
 </div>
 
@@ -187,6 +187,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-20-0434</span> 初版。来源: 2026-11-20 会话三轮取证 + grilling 四轮 14 问 (D1-D14, 含三次改判)。主线: 场景 A 零破坏纳入收尾 + 场景 B 只通知; 侦测走同步层 added 差集 + 时机兜底, 无周期兜底。</li>
   <li><span class="tag">R1 · 26-11-21-1209</span> 实施落地 (S1-S5 五批 T1-T5): 配置键 relocate.foreign_torrent + 侦测面 relocate_foreign.py (added 差集 + 四时机全量兜底) + 场景 A 零破坏纳入 (job.hashes 与 spec.members 双写, journal 零写) + 收尾守卫 WAIT 分流与终态账闭包解析 + 场景 B 只通知 (WARNING + WebUI relocate 面板 foreign 呈现)。评审台账: 五批双评审 23 发现 (1 blocker / 3 major / 10 minor / 9 nit) 全部修复收口; 收口批: 接缝终审 1 minor (词表单点) + 文档批评审 2 (坑档类名/枚举补) 已修, 合计 26 (23+3)。设计事实: 四时机中启动首轮与开关翻转共用闸门激活跳变信号 (已注 §04 S2)。全量测试递进绿; 收口批另覆盖率闸门收敛 20 新测 (99.48%→99.60%), 数字见基线切片。</li>
+  <li><span class="tag">R2 · 26-11-21-1643</span> doc-refs 反向补链 +2 (issue 26-11-21-1500 / 计划 26-11-21-1600 认领链, kb.new 自动并入)</li>
 </ul>
 
 </div>

@@ -12,6 +12,6 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `alias-links.md` … `gate-order-reachability.md` | 19 |
-| [2](_index-2.md) | `gtm-total-baseline.md` … `relocate-restore-issued-marker.md` | 19 |
-| [3](_index-3.md) | `ruamel-roundtrip-mask-pitfalls.md` … `windows-relocate-traps.md` | 19 |
+| [1](_index-1.md) | `alias-links.md` … `gtm-total-baseline.md` | 20 |
+| [2](_index-2.md) | `high-risk-ops.md` … `save-path-equality-sibling-trap.md` | 20 |
+| [3](_index-3.md) | `schema-stamp-writeback.md` … `windows-relocate-traps.md` | 18 |

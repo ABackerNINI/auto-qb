@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>foreign 判定门内容根收窄与收尾进展同步呈现修复计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-foreign-gate">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-21-1600">
+<meta name="doc-updated" content="26-11-21-1600">
+<meta name="doc-refs" content="memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-foreign-gate</div>
+<h1>foreign 判定门内容根收窄与收尾进展同步呈现修复计划</h1>
+<p class="lede">本篇只回答: 怎么修 foreign 侦测面把同保存路径兄弟目录种子误标「旧路径外部种子」的洪泛(issue 1500), 并让收尾窗进展在日志与 WEBUI 种子行同步可见 —— 不回答 daemon 下线窗口判据本身的任何改动(维持 26-11-10-0318 拍板: L1 即时进窗、30s 稳定期仅弱证据兜底)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-21-1600 · <b>doc-updated</b> 26-11-21-1600 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 真机报障取证会话(2026-11-21 14:11 整组迁移) + grilling 两轮 D1-D9 拍板 + issue 26-11-21-1500 / 26-11-21-1326
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>为什么做</strong>: 真机整组迁移暴露两类问题 —— ① foreign 判定门按 save_path 恰等入门, 同一下载目录下所有无关种子涌入候选, D4 落 mismatch 后直通 WEBUI「旧路径外部种子」标注与 WARNING 通知, 60:1 噪音淹没真信号, 且条目滞留到种子删除为止; ② 收尾窗 qB 下线到收尾完成的约 11 分钟全程零可见反馈(对账 WAIT 静默 + daemon 无日志面 + rewritten 合并静默 + 完成 INFO 不过面板/推送门槛), 用户误判「收尾未触发」。</p>
+<p><strong>做到什么程度算成</strong>: 兄弟目录种子不再进候选账面与呈现; mismatch 语义回归「同内容根异内容」真形态且文案准确; job 终态时 A/mismatch 条目随终态清理; 收尾窗每个推进点(qB 下线等待 / 改写完成待核验 / 收尾完成)在日志与 WEBUI 种子行同步可见; daemon 窗口行为可从日志实证(含 L1/L2 进窗路径); 真机全链验收通过。</p>
+<p><strong>设计底线/不变量</strong>: 判定门收窄只丢「通知/纳入候选」, 绝不触碰收尾链与成员面(丢错 = 下个时机扫重试, 保守向); 黄金法则 2(合法关闭配置不得被 materialize 出账键); 主循环单写线程不破(终态清理与预筛都在既有单线程面内); 幂等(预筛/清理可重复执行零副作用); 丢弃无账(D2 拍板延续: 「从来不是候选」不建持久负缓存); 零新配置键(daemon 日志路径硬编码); 场景 A 纳入接缝(<code>_foreign_on_scenario_a</code>)零改动 —— 预筛是它前面的过滤网; 判据纯函数化收编进 relocate_units 便于守阵。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><strong>判定面</strong>: <code>_foreign_classify</code>(relocate_foreign.py:232-258, 取证 26-11-21 15:00)候选门 = save_path 归一恰等 job.src/继承条目 src(场景 A)或终态账闭包边键(场景 B)——qB 的 save_path 是下载保存根目录, 内容根在其下一层, 同根全部种子命中。D4 文件清单比对拦住误纳但 mismatch 落账(<code>_foreign_record_mismatch</code>:503)即进呈现(<code>foreign_member</code>/views_relocate.py:124 只列 B/mismatch)。组键事实: 组键 = 归一 save_path + 排序文件元组(group_key_of 单点, relocate_plan.py:294-295 组装), 组员恒共享同一内容根, <code>job.scope</code> 即该内容根(混合/平铺退化时 = save_path); 候选文件表有记录级惰性缓存(<code>_file_map</code>), 内容根可零附加 API 现算。</p>
+<p><strong>账面</strong>: notified 唯一清理点 = 种子消失(<code>_foreign_cleanup_notified</code>:816); 全量兜底扫对在账 hash 跳过(<code>_foreign_full_scan</code>:205), job 翻终态无任何重评/清理 —— mismatch 条目挂已终态 job 永久呈现。</p>
+<p><strong>反馈面</strong>: 收尾窗 qB 下线对账判 WAIT 无日志(relocate_exec.py:1329 处理分支静默); daemon stdout/stderr 全 DEVNULL(_spawn_daemon→_popen_detached, relocate_exec.py:2776-2790)且模块从未配置 logging handler —— 进窗/逐成员改写成败全部丢弃; journal rewritten 相位合并无日志行(relocate_exec.py:1266); 「收尾完成」INFO 进不了 errlog 环(WARNING+ 口径, runtime.py:263)也进不了推送(min_level=ERROR, notify.py:221)。</p>
+<p><strong>痛点证据(真机 2026-11-21 14:11 会话)</strong>: activation 全量扫入池 61 条, 仅 1 条真外部种子(场景 A 纳入 2bf4b6b6), 其余 60 条全部为兄弟目录无关种子(用户逐条核对); reconnect 扫入池 0 条证明滞留; qB 下线(14:23)到收尾完成(14:34)之间除连接 ERROR 外零输出。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>三批落地, 批次互不牵连评审; 判据纯函数化收编 relocate_units 单点:</p>
+<table>
+<tr><th>批</th><th>内容</th><th>拍板</th></tr>
+<tr><td><b>B1 判定门内容根预筛</b></td><td>候选经纯路径门(现行为)入门后、D4 比对前, <strong>复用同一次文件表拉取</strong>(记录级惰性缓存, 零附加 API)经 <code>content_root_of</code> 现算候选内容根: <strong>≠ 命中 job 的 scope → 静默丢弃</strong>(DEBUG, 不入 notified 不呈现); = 才进 D4。场景 A/B 两路同修(B 经闭包边产出 job 的 scope 比对)。退化形态(平铺/混合 scope=save_path)预筛恒过回落 D4。不可判定(文件表空/取数失败)按现 None 口径出队待时机重扫</td><td>D2/D6</td></tr>
+<tr><td><b>B2 账面终态清理 + 文案</b></td><td>job 翻终态单点清理 notified 内该 job 的 kind=A 与 kind=mismatch 条目(幂等, 写在终态落账处); kind=B 保留(通知主体, 留到种子消失); 被清的真同根种子交时机扫自然重判为场景 B(收尾后正确语义)。mismatch 文案改口径: 「同内容根目录下内容不一致, 疑似外部工具重加了不同版本」, 呈现档位词表不扩面; 1326(A 类滞留)随本批收口</td><td>D3/D4/D5</td></tr>
+<tr><td><b>B3 可观测性 + WEBUI 行同步</b></td><td>① daemon 日志落盘 <code>&lt;data_dir&gt;/logs/recycle_daemon.log</code>(INFO, append 无轮转, 路径硬编码, 与 auto-qb.log 分文件); ② 收尾窗 qB 下线等待提示(状态翻转去重 INFO, 带 pending 数); ③ rewritten 相位合并加日志; ④ WEBUI 种子行迁移状态细化同步: 收尾窗内区分「qB 下线等改写窗 / 已改写待回连核验 / 收尾完成(新保存路径)」, <strong>全部派生自既有账面</strong>(phase + journal 合并态 + qB 连接态 + pending 数)经 jobs_snapshot 发布面, 零新增 state 键; 推送管道不动(无里程碑旁路)</td><td>D1/D7/D8</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td>B1: 内容根预筛纯函数入 units(候选内容根 x scope 判定, 含退化/不可判定形态) + _foreign_classify 消费面接线(A/B 两路) + DEBUG 丢弃日志</td><td>纯函数单测钉全形态(目录/平铺/混合/空文件表/大小写折叠); 现有 foreign 守阵全绿; 兄弟目录种子样例不再产生 mismatch 记录</td></tr>
+<tr><td>S2</td><td>B2: 终态清理单点(终态落账处, A/mismatch 删 B 留, 幂等) + mismatch 文案改口径(告警行 + 浮窗文案单点 decorate.js/views_relocate)</td><td>终态清理守阵(重复翻终态零副作用; B 条目保留; 合法关闭配置不 materialize 账键); 文案断言钉新口径</td></tr>
+<tr><td>S3</td><td>B3: daemon logging 落盘(FileHandler 硬编码路径) + 等待提示(翻转去重) + rewritten 合并日志 + WEBUI 行状态细化(派生投影, 四皮肤过 e2e)</td><td>daemon 日志配置守阵(单测替换路径探针); 行状态投影单测 + e2e; 全量 test.full 绿</td></tr>
+<tr><td>S4</td><td>真机验收(数据安全面, D9): 完整整组迁移真机复验走全链</td><td>① activation/reconnect 扫描兄弟目录种子零入账零呈现; ② 场景 A 纳入(如有真外部种子)与收尾/删链正常; ③ qB 下线→改写→回连→收尾完成全程日志+WEBUI 行同步可见; ④ daemon 日志实证进窗路径(L1 即时 / L2 兜底)与逐成员改写结果; ⑤ B2 面核对: 收尾完成后该 job 的 kind=A/mismatch 账条目已清(state.json 面核对), 真外部种子 kind=B 条目保留, mismatch 新文案呈现正确; ⑥ test.full 全绿 + 基线切片</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— D1-D9 已在 grilling 两轮拍板(2026-11-21), 结论全部迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>编号</th><th>结论</th><th>日期</th></tr>
+<tr><td>D1</td><td>可观测性四项并轨本计划, 批次隔离(B3)不混判定面改动</td><td>26-11-21</td></tr>
+<tr><td>D2</td><td>判定门内容根预筛: 复用 D4 同一次文件拉取零附加 API, 候选内容根 ≠ job.scope 静默丢弃; 场景 A/B 两路同修; 平铺/混合退化形态回落现行为交 D4</td><td>26-11-21</td></tr>
+<tr><td>D3</td><td>mismatch 保留 foreign 档呈现(词表不扩面), 文案改口径为「同内容根异内容」准确语义</td><td>26-11-21</td></tr>
+<tr><td>D4</td><td>job 终态单点清理: kind=A 与 kind=mismatch 删除, kind=B 保留到种子消失; 被清同根种子交时机扫自然重判场景 B</td><td>26-11-21</td></tr>
+<tr><td>D5</td><td>1326(kind=A 滞留)随本计划认领收口, 不留 Open</td><td>26-11-21</td></tr>
+<tr><td>D6</td><td>预筛丢弃纯 DEBUG(惰性缓存使重复扫零 API; 不做一次性计数行)</td><td>26-11-21</td></tr>
+<tr><td>D7</td><td>daemon 日志: 分文件 logs/recycle_daemon.log, INFO, append 无轮转, 路径硬编码非配置键(未异议按推荐)</td><td>26-11-21</td></tr>
+<tr><td>D8</td><td>呈现面 = WEBUI 种子行同步(用户改拍, 否掉「仅日志面」推荐): 收尾进展含保存路径同步到行状态, 派生既有账面零新 state 键; 推送管道不动</td><td>26-11-21</td></tr>
+<tr><td>D9</td><td>真机验收必做(涉及数据安全): 完整整组迁移全链复验, 非纯桩免验</td><td>26-11-21</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>预筛误丢真外部种子</td><td>候选文件表与磁盘布局差(qB 剥根/NoSubfolder 形态)使 content_root_of 现算结果 ≠ scope, 但 D4 本可判同</td><td>预筛只丢通知候选不触碰成员面; 误丢无账, 下个时机扫重试 + 文件表不可判定走 None 口径保守; 守阵钉 content_root_of 全 layout 形态(E7a/E7b 实证口径复用)</td></tr>
+<tr><td>退化形态洪泛残留</td><td>平铺/混合组(scope=save_path)下兄弟种子仍全量进 D4 mismatch</td><td>D2 拍板接受; 平铺共享目录种子会被组键并组为成员, 残留面罕见; 文档与文案把该边界写清</td></tr>
+<tr><td>终态清理与纳入竞态</td><td>同拍内 foreign 纳入(on_task_line 前段)与 job 翻终态(相位机推进)交错</td><td>黄金法则 5 单写线程内顺序化: 纳入先落账, 终态清理在其后同拍或下拍执行, 双面幂等(重放零副作用)</td></tr>
+<tr><td>daemon 日志写失败/双写交错</td><td>盘满/句柄被占; 同实例两 daemon(被 pid 抢占机制排除)</td><td>logging 失败静默降级(best-effort, 与主循环同纪律); 每实例一进程一文件, append 单写; 心跳/退位机制保证至多一个 watcher</td></tr>
+<tr><td>WEBUI 行状态滞后一拍误导</td><td>派生账面(qB 连接态/journal 合并)与真实现场有快照延迟</td><td>只消费既有发布快照字段不新造状态机, 展示语义按「最后已知」; 文案避免绝对化措辞</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-21-1600</span> 初版: 真机报障取证(2026-11-21 14:11 会话, 61 候选 60 误标)+ grilling 两轮 D1-D9 拍板; 主线 = 判定门内容根预筛 + 终态账面清理 + 可观测性/WEBUI 行同步三批, 真机全链验收收口; 认领 issue 26-11-21-1500 与 26-11-21-1326, 关联计划 26-11-20-0434</li>
+</ul>
+
+</div>
+</body>
+</html>

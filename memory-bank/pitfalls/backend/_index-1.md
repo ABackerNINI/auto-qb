@@ -1,7 +1,7 @@
 # backend — 后端 / qB / 平台 · 卷 1/3
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `alias-links.md` … `gate-order-reachability.md`(共 19 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `alias-links.md` … `gtm-total-baseline.md`(共 20 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -27,3 +27,4 @@
 | [fs-pathmap-tristate.md](fs-pathmap-tristate.md) | 文件访问层(2026-09-27 审查轮)踩出的两条 —— ①casefold 折叠空间匹配后回原串切片, | casefold, 大小写无关, 前缀匹配, 路径映射, path_map, 切片, 变长折叠, UNDETERMINED, |
 | [fuzzy-match-noise.md](fuzzy-match-noise.md) | 用「够长的连续重合段」判两个发布名是否同一内容时, 若不先把分辨率 / 来源 / 编码 / 音轨这些 | 粗配, 相似度, 重合段, 名称匹配, fuzzy, 阈值 K, 假重合, 假阳性, 质量标签, 判据收紧, 白烧配额, 下载触发器 |
 | [gate-order-reachability.md](gate-order-reachability.md) | 闸门顺序=语义回归面: 前置闸门与后置闸门同判时, 后置结构性不可达 | 闸门顺序, 新增闸门, 插闸门, dedup, 跳检, G3, 遮蔽, 不可达, 前置闸门, 顺序调整 |
+| [gtm-total-baseline.md](gtm-total-baseline.md) | 合计基线在过滤集收缩时被网卡生命周期累计污染 | GTM,采样,合计基线,网卡消失,断连恢复,当日流量虚高 |

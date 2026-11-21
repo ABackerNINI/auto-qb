@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>foreign 侦测面同保存路径兄弟目录种子误标 mismatch 洪泛呈现 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-foreign-sibling-mismatch-flood">
+<meta name="issue-stamp" content="26-11-21-1500">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-foreign-gate">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="In Progress">
+<meta name="issue-title" content="foreign 侦测面同保存路径兄弟目录种子误标 mismatch 洪泛呈现">
+<meta name="issue-summary" content="候选判定门按 save_path 恰等 job.src 入门, 同一下载目录下不同内容根的无关种子全部命中, D4 比对落 mismatch 账后进 WEBUI 旧路径外部种子呈现与 WARNING 通知, job 终态后条目滞留不清理">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>foreign 侦测面同保存路径兄弟目录种子误标 mismatch 洪泛呈现</h1>
+<p class="lede">候选判定门按 save_path 恰等 job.src 入门, 同一下载目录下不同内容根的无关种子全部命中, D4 比对落 mismatch 账后进 WEBUI 旧路径外部种子呈现与 WARNING 通知, job 终态后条目滞留不清理</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 15:00</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">backend/relocate</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">真机运行发现(用户报障 + 会话取证)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>真实机整组迁移收尾窗（两个 armed job）+ 启动首轮 foreign 全量兜底扫描（activation）后，WEBUI relocate 面板大量行被标注「旧路径外部种子」，通知面板被同主题 WARNING 刷屏。经核对，被标注种子绝大多数是<strong>与迁移无关的兄弟目录种子</strong>：与成员共享同一 save_path（下载保存根目录），但内容根目录完全不同、从未参与迁移。用户示例：整组移动种子 a（A/a → B/a），A 目录下其它内容根的种子全部显示「旧路径外部种子」。</p>
+  <p>发现于计划 26-11-20-0434（外部旧路径种子处置 T1-S6）落地后的首次真机整组迁移（2026-11-21 14:11 会话）；与平台/配置无关（Windows 真机，foreign_torrent 默认开启），凡「多个种子共享同一 save_path + 任一活跃/终态 job 的 src 等于该 save_path」即必现。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p>真机日志原文（2026-11-21 14:11 会话，用户贴出）：</p>
+<pre><code>14:11:41,997 - INFO  - relocate | foreign | 全量兜底扫描(activation): 入池候选 61 条
+14:11:41,999 - WARNING - relocate | foreign | 旧路径种子 029f713b 文件清单与 job jr-a2ce556d0165 计划不符,
+               不处置只告警(D4) —— 旧根 H:\PT\LongSeeding\HDHome, 请人工核对是否同目录异内容(R5)
+14:11:42,005 - INFO  - relocate | foreign | 发现旧路径外部种子 2bf4b6b6 (场景 A, job jr-d4834171bd83, 相位 armed, 旧根 H:\PT\LongSeeding\BTSchool)
+14:11:42,007 - INFO  - relocate | foreign | 场景 A 纳入: 2bf4b6b6 转正为 job jr-d4834171bd83 成员(相位 armed, 收尾窗 spec 双写)
+（…同款 WARNING 共 60 条, hash 各异, 旧根均为 H:\PT\LongSeeding\HDHome…）
+14:34:33,556 - INFO  - relocate | job jr-a2ce556d0165: 收尾完成(全员核验通过, 删链门依赖清零, 已在线删除别名 1 条, 含移交别名)
+14:34:35,145 - INFO  - relocate | foreign | 全量兜底扫描(reconnect): 入池候选 0 条</code></pre>
+  <p>要点：61 条候选里仅 1 条为真实外部种子（场景 A 纳入），其余 60 条全部是兄弟目录无关种子（60 条 mismatch WARNING 逐条计数，与 61−1 闭合；用户逐条核对确认「同一保存路径下不同根目录的其它不相关种子」）；<code>reconnect</code> 扫描 0 候选证明这批条目滞留在账（在账 hash 跳过重扫），且此时 job 已终态，条目仍按 mismatch 呈现。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>foreign_torrent 开启 + 活跃/终态 job 的 src（或终态账旧根）是一个被多颗种子共享的下载保存目录 —— PT 库按分类目录做保存根是常态布局，几乎必现</td></tr>
+    <tr><td>影响范围</td><td>WEBUI relocate 面板「旧路径外部种子」行标注 + 迁移状态筛选计数 + 抽屉迁移段；通知面板 WARNING 刷屏（主动通知 ERROR 门槛下 WARNING 全量进）；state.json 滞留条目。不触碰收尾链本身（实证：删链门清零、收尾完成，mismatch 只告警不处置）</td></tr>
+    <tr><td>严重度</td><td>中 —— 收尾功能无损，但真实外部种子信号被 60:1 的噪音淹没，呈现与通知两面同时失真；条目滞留到种子删除为止，无任何清理/重评出口</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_foreign.py:232-258</code>（取证 2026-11-21 15:00）· <code>_foreign_classify</code> · grep <code>ru._norm(job.src) == n_sp</code> —— 候选判定门：save_path 归一恰等 job.src / 继承条目 src 即场景 A；场景 B 经 <code>_foreign_resolve_old_root</code>（边集键同为归一 job.src）同口径命中</li>
+    <li><code>src/auto_qb/core/modules/relocate_foreign.py:503-517</code> · <code>_foreign_record_mismatch</code> · grep <code>请人工核对是否同目录异内容</code> —— mismatch 落 notified 账 + WARNING</li>
+    <li><code>src/auto_qb/core/modules/relocate_foreign.py:816-825</code> · <code>_foreign_cleanup_notified</code> · grep <code>已消失, 清理已通知账条目</code> —— 唯一清理点：种子不在快照才删条目</li>
+    <li><code>src/auto_qb/core/modules/relocate_foreign.py:205-217</code> · <code>_foreign_full_scan</code> · grep <code>全量兜底扫描</code> —— 在账 hash 跳过重扫（终态后 mismatch 条目永不重评）</li>
+    <li><code>src/auto_qb/webui/views_relocate.py:124-147</code> · <code>foreign_member</code> / <code>_FOREIGN_PANEL_KINDS</code> · grep <code>DISPLAY_FOREIGN</code> —— 面板只列 B/mismatch 两类</li>
+    <li><code>src/auto_qb/webui/static/shared/decorate.js:50</code> · grep <code>旧路径外部种子</code> —— 前端标注文案单点</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因</h2>
+  <p>已验证（2026-11-21 真机复现 + 代码面核对）：</p>
+  <ol>
+    <li><strong>判定门 save_path 等值入门，语义错位</strong>：qB 的 save_path 是下载保存根目录，内容根在其下一层。foreign 判定门用「save_path 归一恰等 job.src」当作「外部工具按旧路径重加」的信号，但同一保存根下<strong>所有</strong>种子（无论内容根）都满足等值 —— 兄弟目录无关种子全部涌入候选池。场景 B 同病：终态账闭包边集的键同样是归一 job.src。</li>
+    <li><strong>D4 mismatch 的产品语义与真实形态错配</strong>：R5 文案「请人工核对是否同目录异内容」预设的假阳性形态是「IYUU 重加同内容根不同版本」；实际主导形态是「同保存根不同内容根、与迁移毫无关系」。mismatch 落账即进面板投影 + WARNING 通知，噪音从判定面直通呈现面。</li>
+    <li><strong>条目滞留无出口</strong>：notified 账唯一清理点是种子消失；全量兜底扫对在账 hash 跳过（去重单点）；job 翻终态后既不重评也不降级清理 —— mismatch 条目挂着已终态 job 的 job_id 永久呈现。</li>
+  </ol>
+  <div class="callout">同类坑先例：删链门曾因「组外种子停旧根兄弟目录假依赖」从 job.src 重锚 job.scope（T1b/E7 实测，计划 26-11-07-1300 D9）；foreign 面（更晚落地）判定门未吸收同一教训。任务档案 26-11-20-backend-relocate-foreign-torrent.md 全篇无「兄弟目录」形态预判，四件 1326 入池亦未覆盖本形态（1326-refactor-relocate-foreign-notified-cleanup 只涉 kind=A 条目滞留，A 类不进面板投影，与本件 mismatch 呈现无关）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向（待 grilling 拍板后入计划，本件只记方案不做实施）：</p>
+  <ol>
+    <li><strong>判定门按内容根收窄（治本）</strong>：候选须「内容根命中 job 成员内容根集合/作用域」才入门（经 layout_of/content_root_of 现算），兄弟目录种子不再成为候选 —— 场景 A/B 两路同修。平铺/混合退化形态（scope = save_path）预筛恒过、兄弟种子仍交 D4 判，边界经拍板接受（见计划 26-11-21-1600 §07/D2）。</li>
+    <li><strong>mismatch 呈现分流</strong>：门收窄后 mismatch 语义回归「同内容根异内容」，保留呈现但文案改口径；或 mismatch 独立低档分类不占「旧路径外部种子」标注。</li>
+    <li><strong>终态后条目处置</strong>：job 翻终态时对账内相关条目（mismatch/A）重评或清理，不再等种子消失。依赖修法 1 预筛先行 —— 无预筛时被清条目的种子 save_path 仍恰等终态账闭包边键（归一 job.src），下个时机扫会经场景 B 原样重新入账，洪泛换皮。</li>
+    <li><strong>关联面（可并轨）</strong>：通知账管理面已有邻近便签 26-11-21-1326-refactor-relocate-foreign-notified-cleanup（kind=A 滞留），可一并收。</li>
+  </ol>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-21 15:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-21 — 状态 Open → In Progress（kb.status）</li>
+</ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
