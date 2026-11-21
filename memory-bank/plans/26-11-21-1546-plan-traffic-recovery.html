@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>重启流量恢复11.7s挡首份数据(过滤后置+游程逐槽展开+累计器不落盘): 游程级重建重写+acc快照账本+raw保留窗清理</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="traffic-recovery">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-21-1546">
+<meta name="doc-updated" content="26-11-21-1546">
+<meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-21-backend-traffic-recovery.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: traffic-recovery</div>
+<h1>重启流量恢复11.7s挡首份数据(过滤后置+游程逐槽展开+累计器不落盘): 游程级重建重写+acc快照账本+raw保留窗清理</h1>
+<p class="lede">本篇只回答: 重启后启动期流量恢复 ~11.7s 挡住主循环首轮同步与 WebUI 首份数据怎么修 —— 根因在<b>重建机制</b>(水位过滤后置 + 游程逐槽展开 + 累计器不落盘)而非文件组织, 修法 = <b>游程级重建重写 + acc 快照账本(追加+压实) + raw 保留窗清理</b>, 5000 系列规模优雅/崩溃重启恢复 ≤2s, 文件格式零换代零迁移。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-21-1546 · <b>doc-updated</b> 26-11-21-1546 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话「auto-qb 重启后 WEBUI 骨架快了但种子出现慢」问答轮取证(2026-11-21, 生产日志 11.72s + 本地合成基准) + 用户指令「该思考的是文件组织/读取/数据重建机制是否有问题, 而非挪位置」+ 四轮 grilling D1-D17 拍板(2026-11-21) + 用户指令「grilling然后出一个修改方案」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: 用户报 auto-qb 重启后 WEBUI 骨架秒开(D 系列前序修复成效), 但种子列表 ~15s 才出现。取证(2026-11-21 生产日志): 启动序列 <code>start_all → 连接 qB → 加载规则 → 主循环首轮同步</code> 中, 流量采样模块 <code>start()</code> 钩子的 <code>_recover_aggregates</code>(traffic_sample_mod.py:312→:614)<b>同步占住主线程 11.72s</b>(236 系列 / 466 万槽), 首轮 qB 同步、0259 提前发布、搜索索引全部被挡在它后面; 其余 ~3.2s 是首轮管线(归组 files 串发等, 由 doc-refs 所列两条已入池 issue 承接, 不入本计划)。</p>
+<p><b>North Star(D10 拍板)</b>: real-machine 轨道环境(测试 5000 种子语料<b>放 R 盘</b>, D17)受控重启: ①优雅重启恢复 ≤2s ②崩溃模拟重启 ≤2s ③无快照 fallback(水位新鲜)≤15s ④极端 fallback(水位陈旧+全天活跃)诚实记录不设硬判据; 236 生产规模对照 before = 11.72s。另: flush 追加 stall 增量 ≤50ms/600s; 语料总量 ≤20GiB。</p>
+<p><b>设计底线 / 不变量</b>:</p>
+<ul>
+  <li>黄金法则 1/2/3/4/5 照常: 快照/清理动作幂等; 清理只删超窗观测文件(保守判据); 状态持久化口径不变; 不新增配置键(D14 复用 <code>raw_window</code>); 恢复/快照/封口仍在主循环线程, 唯一新线程 = 清理子线程(D13, 目标文件与主线程写面年龄不相交, 见 §07 R5)。</li>
+  <li><b>快照与提前发布同为加速器不承载正确性</b>(D9): 账本缺失/损坏/指纹失配 → 该系列回退 B1+B2 快速重建, 单系列隔离不放大。</li>
+  <li><b>文件格式零换代零迁移</b>: 天文件(B/r/z/n 行)与 agg.dat 逐字节不动; 兼容面见 §03.5。</li>
+  <li><b>不挪恢复位置</b>(D5): 仍在 <code>start_all</code> 主线程同步执行 —— 修完它是亚秒级, 挪位置失去意义; 与用户「该思考机制而非挪位置」方向一致。</li>
+  <li><b>在线行为零变化</b>(D6): 聚合输出(封口行/活尾行/读侧合流)逐位不变; 唯一例外 = 开放小时内存表示重构(D12), 行为等价由对拍守阵承担。</li>
+  <li>与「流量图毫秒级响应」要求(plan 26-11-15-1104 F 系列)的关系(D16): <b>无冲突</b> —— 本计划全部落点在主循环线程恢复/写侧面, Web 读侧线程(<code>V4DayCache</code>/增量解析/agg 缓存/活尾合流)零触碰; 正向叠加: 恢复亚秒化后流量图冷启动活尾提前就绪。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>02.1 重建机制四缺陷(取证 2026-11-21)</h3>
+<table>
+  <tr><th>#</th><th>缺陷</th><th>证据</th></tr>
+  <tr><td>1</td><td><b>水位过滤后置</b>: 读集全部槽位入账进 hour_samples 后才在 <code>h &lt;= wm_hour</code> 丢弃 —— 注释声称「水位封口小时不读不重算」实际只做到「不重 append」, 重算照做(当天 00:00 起全部重算再扔 95%+)</td><td class="bad">traffic_sample_agg.py:531→:539</td></tr>
+  <tr><td>2</td><td><b>游程逐槽展开</b>: <code>_agg_credit_day_file</code> 经 <code>v4_block_slots</code> 把 z/n 游程展开成单槽序列逐槽 Python 循环 —— 空闲系列 3 千行文本展开出 2 万槽, 与行数无关纯浪费</td><td class="bad">traffic_sample_agg.py:601-618</td></tr>
+  <tr><td>3</td><td><b>累计器不落盘</b>: <code>SeriesAgg</code>(pending/open_credit/day_month 累计器)纯内存, 重启必须从 raw 重建 —— 这是「重建」存在的根因; 且逐记录样本列表表示使序列化代价 O(小时槽数)</td><td class="bad">traffic_sample_common.py:119-148</td></tr>
+  <tr><td>4</td><td><b>raw 保留窗删除未实现</b>: <code>raw_window</code> 文档契约「按天整文件存删」的删除半边不存在 —— 唯一删除路径是系列级淘汰(默认 30d), 天文件按日删除无代码; 5000 × 30d 尺寸预算因此失控</td><td class="bad">traffic_store.py:69(文档) vs 全库无删除调用点</td></tr>
+</table>
+<h3>02.2 本地合成基准(236 文件 × 1.98 万槽 = 467 万槽, 与生产 466 万槽同规模; 项目自身编解码函数生成真实格式数据)</h3>
+<table>
+  <tr><th>成本段</th><th>r-heavy(活跃日, 470 万行, 162MB)</th><th>z-heavy(空闲日, 3 千行, 0.1MB)</th><th>mixed</th></tr>
+  <tr><td>读盘</td><td>0.04s</td><td>0.02s</td><td>0.02s</td></tr>
+  <tr><td>文本解析</td><td class="bad">10.14s</td><td class="good">≈0s</td><td class="bad">2.65s</td></tr>
+  <tr><td>逐槽展开+入账(现行)</td><td class="bad">8.34s</td><td class="bad">11.23s</td><td class="bad">11.00s</td></tr>
+  <tr><td>游程级入账(候选 B2)</td><td>3.94s</td><td class="good">0.009s</td><td>0.66s</td></tr>
+</table>
+<p>结论: 盘不是瓶颈(SSD 直觉正确); 槽位展开+入账是主犯(与总槽数线性); 解析随 r 行数线性, 由 B1(字节级块定位 + 只解析开放段)收敛。B1+B2 组合实测相位样本(水位陈旧约 4-5h —— 当日 19-20h 相位, 重建仅尾段约 1/5 日; 全天活跃; 236 规模)端到端 2.89s, 对照同场景全量 18.5s —— 相位依赖如实披露, 水位陈旧至昨日的真最坏值留 S0 钉死。</p>
+<h3>02.3 5000 规模外推(S0 会钉死)</h3>
+<table>
+  <tr><th>形态(5000 系列)</th><th>现行机制</th><th>仅 B1+B2</th><th>B1+B2+快照</th></tr>
+  <tr><td>优雅重启(水位新鲜)</td><td class="bad">~250s</td><td class="wr">~4-12s</td><td class="good">≤2s</td></tr>
+  <tr><td>崩溃重启</td><td class="bad">~250s</td><td class="wr">同左</td><td class="good">≤2s(快照含缓冲信用, 回放≈0)</td></tr>
+  <tr><td>fallback(无快照+水位陈旧+全天活跃)</td><td class="bad">~250-500s</td><td class="wr">~60-300s</td><td class="wr">同左(罕见, 诚实记录)</td></tr>
+</table>
+<p>5000 规模下快照从「一步到位的可选项」变为承重结构 —— 这是 D1 用户改判(选 (b) 一步到位)的依据。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>四件套</b>: <b>B1</b> 水位过滤前移(字节级 <code>\nB,</code> 块定位, 封口块跳过解析与入账, 只处理开放小时尾段) + <b>B2</b> 游程级闭合式入账(z/n 游程按小时段 O(段) 记账, r 行逐行; 前向记账边界/跨块 tail 上下文/形态 D ramp 忠实移植) + <b>A</b> acc 快照账本(折叠态落盘, 恢复零重算) + <b>C</b> raw 保留窗清理(补齐 raw_window 删除半边, 5000 规模尺寸预算达标)。分期见 §04。</p>
+<h3>03.1 改造后文件组织(D8/D13/D14)</h3>
+<table>
+  <tr><th>落点</th><th>内容</th><th>写形态</th><th>生命周期</th><th>改动</th></tr>
+  <tr><td><code>qb-traffic-v4/global/&lt;日期&gt;.dat</code></td><td>全局系列 raw 天文件(B/r/z/n 文本行)</td><td>追加</td><td><b>超保留窗删除(新)</b></td><td>格式零改动, 增删除</td></tr>
+  <tr><td><code>qb-traffic-v4/torrents/&lt;infohash&gt;/&lt;日期&gt;.dat</code></td><td>种子系列 raw 天文件</td><td>追加</td><td>同上</td><td>格式零改动, 增删除</td></tr>
+  <tr><td><code>qb-traffic-v4/*/agg.dat</code></td><td>hour/day/month 封口行(9 列)</td><td>追加 + hour 裁剪重写</td><td>hour 30d 裁剪, day/month 永久</td><td class="good">零改动</td></tr>
+  <tr><td><code>qb-traffic-v4/acc.dat</code></td><td><b>快照账本</b>: 每变化系列一行(格式版本头行 + key + 游标 + agg 指纹 + 折叠态字段)</td><td>追加(每 flush 变化行; stop 全系列终态行)+ 16MB 阈值压实重写(唯一重写点, tmp+fsync+os.replace, 与 hour 裁剪同款)</td><td>压实滚动, ≤16MB</td><td><b>新增</b></td></tr>
+  <tr><td><code>qb-traffic-v4/torrents/&lt;infohash&gt;/</code></td><td>系列容器目录</td><td>—</td><td>30d 无数据整目录删(不变)</td><td class="good">零改动</td></tr>
+</table>
+<p class="aside">清理流程(D13 用户改判): <b>不做 flush 节流清扫</b> —— 启动时交给子线程做, 每天最多 1 次: start_all 完成后 spawn daemon 线程执行一次; 运行期每日闸(flush 时点检查内存日期标记, 跨日才 spawn)。扫描 = 每系列一次 listdir, 删除日期早于保留下界的 <code>&lt;日期&gt;.dat</code>; OSError(Windows 读侧占用)跳过下轮重试(evict 先例)。</p>
+<h3>03.2 raw 保留窗与尺寸预算(D14/D15)</h3>
+<p>保留下界 = <code>raw_window</code> 天数 + 3 个日界余量(读侧 24h 窗「常态 3 个 / t0 相位近日界边角至多 4 个」天文件, <code>webui/server/traffic_qb.py:21</code> + 恢复读集 ≤2 个文件 —— 余量必须盖住边角 4 文件, 否则正触 S3 自设不变量「保留下界 ≥ 读侧最大回看起点」); 复用现有 <code>raw_window</code> 配置键, 不新增键(黄金法则 4)。默认 24H → 每系列保留 4 个天文件。</p>
+<table>
+  <tr><th>构成(5000 系列)</th><th>raw 占用(默认 24H→4 文件)</th><th>20GiB 判定</th></tr>
+  <tr><td>混合构成(165KB/天文件, 基准实测口径)</td><td>≈3.3GB</td><td class="good">达标</td></tr>
+  <tr><td>r-heavy 极端(686KB/天文件)</td><td>≈13.7GB</td><td class="good">达标</td></tr>
+  <tr><td>1.5s 档全天全活跃(~2MB/天文件)</td><td>≈40GB</td><td class="bad">超限 → 配置面处置(调采样倍数), 不新造机制</td></tr>
+</table>
+<p>acc 账本 ≤16MB 可忽略; agg.dat(30d hour + 永久 day/month)≈0.5GB。S0 实测生产库日均天文件尺寸回填本表。</p>
+<h3>03.3 改造后重启读取机制(D7/D8/D9)</h3>
+<table>
+  <tr><th>重启形态</th><th>读什么</th><th>每系列操作</th><th>5000 规模估算</th></tr>
+  <tr><td><b>优雅重启</b></td><td>acc 账本整读(≤16MB)+ 逐系列 agg.dat 指纹 stat</td><td>1 次 stat, <b>零 agg 读零 raw 读</b></td><td class="good">1 listdir + 1 读 + 5000 stat ≈ 0.5-2s</td></tr>
+  <tr><td><b>崩溃重启</b></td><td>同上; raw 落后游标才补回放</td><td>1 次 stat(+罕见 ≤1 flush 窗尾段回放)</td><td class="good">≈ 优雅</td></tr>
+  <tr><td><b>fallback</b>(账本缺失/指纹失配/损坏, 按系列隔离)</td><td>agg.dat 整读 → 水位 → 天文件字节级块定位 → 开放段解析+游程级入账 → catch-up → 裁剪</td><td>1 次 agg 读 + 1-2 次天文件读</td><td class="wr">水位新鲜 ≈ 4-12s; 极端诚实记录不设判据</td></tr>
+</table>
+<h3>03.4 改造后流程</h3>
+<ul>
+  <li><b>flush 时点(600s, 主循环线程)</b>: ①raw 批量追加(不变) → ②agg 封口 append(不变) → ③acc 账本追加本 flush 有状态变化的系列行(新; 空闲系列零追加) → ④账本压实检查(超 16MB 单次重写; 新)。</li>
+  <li><b>启动恢复(start(), 主循环线程, D5 位置不挪)</b>: 扫系列键 → 账本存在: 整读+按系列取最后一行(与 agg.dat「同 epoch 取末行」同款纪律) → 逐系列 stat 指纹比对: 匹配 = 直接采信折叠态与游标(累计器/pending/earliest_hour 全部就位, 零 raw 重算); 失配/缺失/损坏 = 该系列 fallback(B1+B2); 账本不存在(升级后首次启动) = 全体 fallback, 首轮 flush 自举账本 → 恢复完成后 spawn 清理子线程(D13)。</li>
+  <li><b>stop()</b>: 封游程 + 全量 flush + 聚合封口(不变) → acc 账本全系列终态行 append(新)。</li>
+  <li><b>在线入账</b>: 信用进折叠态(D12 表示面重构; 信用到达顺序不变 → 浮点累加顺序不变 → 聚合输出逐位等价)。</li>
+  <li><b>游标语义</b>: 快照行记录「累计器已入账到的最后槽位」。crash 后 raw 尾 ≤ 游标: 缓冲信用已在账本(raw 面真空 = 现有崩溃语义, <b>agg 面比现状更完整</b>); raw 尾 &gt; 游标(crash 恰落 raw 追加与账本追加之间): 回放该小尾段。</li>
+</ul>
+<h3>03.5 兼容性(D 既有文件零迁移)</h3>
+<table>
+  <tr><th>面</th><th>结论</th></tr>
+  <tr><td>天文件 / agg.dat</td><td class="good">格式零改动零迁移 —— 旧数据直接可用; 指纹探针对任何版本的 agg.dat 成立</td></tr>
+  <tr><td>升级后首次启动</td><td>账本不存在 = 全体 fallback 快速重建(5000 规模 4-12s, 一次性), 首轮 flush 自举账本</td></tr>
+  <tr><td>回滚降级旧版</td><td>旧代码不认识根级 <code>acc.dat</code>(系列键扫描只看 global/ + torrents/, 日期名过滤跳过非日期名) —— 陌生文件原样留存不读不删, 旧版行为零变化</td></tr>
+  <tr><td>账本头行门闩</td><td>格式版本头行(与天文件头行同款机制), 不匹配 = 整本无效 → 全体 fallback, 未来换代留门</td></tr>
+  <tr><td class="wr">唯一破坏性兼容点(D15 已接受)</td><td>清理上线后首轮清扫删除现有超保留窗天文件: 聚合行全保留、四视图不受影响; 损失面 = D5 损坏重建的 raw 深度从 30d 收窄到保留窗(该路径仅 agg 损坏时触发, 触发时 hour 行已丢)</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S0</b> 取证与预算</td><td>①本地合成基准补 5000 系列三形态矩阵(现行 / B1+B2 / B1+B2+快照 × 优雅/崩溃/fallback), 数字作计划锚; ②尺寸预算实测: 生产库日均天文件尺寸 × 保留窗 × 5000 外推, 对照 20GiB 给预算表(超限给配置面处置建议); ③real-machine 轨道(测试 5000 语料放 R 盘, ≤20GiB)受控复测现实现 before + flush stall 基线</td><td>三形态矩阵数字入档案; 预算表入档案; before 数字钉死</td></tr>
+  <tr><td><b>S1</b> 重建重写</td><td>B1 字节级块定位 + 开放段限定解析/入账; B2 游程级闭合式入账(忠实移植前向记账边界/跨块 tail/形态 D ramp); D12 折叠态重构(<code>SeriesAgg.pending</code> 列表 → fold 累计器, <code>_agg_credit_hours</code> 目标改 dict-of-fold, 封口/活尾合成/恢复同走 fold)</td><td>聚合输出层对拍逐位等价(§07 R1 口径); 现有测试阵列全绿</td></tr>
+  <tr><td><b>S2</b> acc 快照账本</td><td>账本读写(追加 + last-wins + 撕裂尾跳过 + 版本头行门闩) + flush 随批追加变化行 + stop 全系列终态行 + 16MB 压实 + 指纹 stat 探针 + 按系列隔离 fallback 接线</td><td>单测钉: 追加/压实/探针/回退矩阵(缺失/损坏/失配/撕裂尾/版本不符); crash 窗口语义用例(游标 vs raw 尾两向)</td></tr>
+  <tr><td><b>S3</b> raw 保留窗清理</td><td>保留下界公式(<code>raw_window</code> 天数 + 3 日界余量, 盖读侧边角 4 文件) + 清理子线程(启动一次 + 运行期每日闸 ≤1 次/天, daemon 自终止) + OSError 重试纪律; 守阵钉「保留下界 ≥ 读侧最大回看起点」</td><td>保留窗公式钉面测试(对照读侧 24h 视图回看界与恢复复读集); 删除目标与恢复读集年龄不相交断言</td></tr>
+  <tr><td><b>S4</b> 守阵</td><td>①聚合输出对拍(随机合成数据, 新旧两路, 封口 hour/day/month 行 bitwise 相等 + pending 聚合输出相等); ②快照异常矩阵; ③清理/账本/探针静态与行为守阵; ④e2e 冷启动两跳回归(与 0259 守阵衔接)</td><td><code>commands run test.full</code> 全绿(数字见 kb.baseline)</td></tr>
+  <tr><td><b>S5</b> 真机验收</td><td>real-machine 轨道(R 盘 5000 语料)按 §01 North Star 四判据复测 + flush 追加 stall 实测 + 236 生产规模对照(11.72s 为 before); 生产观察自愿非判据</td><td>①优雅 ≤2s ②崩溃 ≤2s ③fallback(水位新鲜)≤15s ④极端记录; stall ≤50ms/600s; 全部 R 盘实测</td></tr>
+  <tr><td><b>S6</b> 收尾</td><td>回写 memory-bank(架构文档恢复语义单点/坑档) + 基线切片 + 分批评审(按 code-review skill ①)</td><td>收尾 DoD 全项</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>空 —— 17 问四轮 grilling 已全部拍板(2026-11-21), 结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>结论(2026-11-21)</th></tr>
+  <tr><td>D1</td><td>主修方向</td><td class="wr">用户改判: <b>(b) 重建重写 + 快照一步到位</b>(原推荐仅 B1+B2; 5000 规模下快照成承重结构)</td></tr>
+  <tr><td>D2</td><td>等价判据</td><td>聚合输出层逐位等价: 封口 hour/day/month 行 bitwise 相等, pending 经 <code>v4_hour_agg</code>/<code>v4_rollup_agg</code> 聚合后相等; 样本列表粒度允许不同</td></tr>
+  <tr><td>D3</td><td>读集语义</td><td>文件级读集(agg 水位所在日 → 今日, ≤2 天文件)不变; 只把文件内处理范围缩到开放段; &gt;2 天陈旧水位 INFO 日志保留</td></tr>
+  <tr><td>D4</td><td>fallback 处置</td><td>无水位/损坏全量兜底(D5 既有语义)也吃游程级入账收益, 诚实兜底语义不变, 不为它加快照</td></tr>
+  <tr><td>D5</td><td>恢复位置</td><td>不挪 —— 仍在 start_all 主线程同步执行(修后亚秒); 与「思考机制而非挪位置」一致</td></tr>
+  <tr><td>D6</td><td>范围边界</td><td>恢复路径为主; <b>在线行为零变化</b>(表示面重构例外 = D12); 归组 files 串发/pathmap 由已入池两条 issue 承接不入本计划</td></tr>
+  <tr><td>D7</td><td>快照写入时机</td><td>flush 时随批追加(崩溃窗口 ≤1 flush 窗, agg 面比现状更完整)</td></tr>
+  <tr><td>D8</td><td class="wr">快照形态</td><td class="wr">用户改判: <b>单文件追加账本</b>(变化系列逐行追加 + 16MB 压实 + stop 全量终态行), 弃「每轮整文件原子替换」—— 写 churn 216MB/天 → ~22MB/天, 绕开 os.replace 读侧竞态类, 撕裂尾纪律同 agg.dat</td></tr>
+  <tr><td>D9</td><td>一致性与异常</td><td>每系列 agg.dat 指纹(size+mtime_ns) stat 探针; 匹配=采信, 不匹配/缺失/损坏=该系列回退快速重建(单系列隔离, INFO 留痕); 快照是加速器不承载正确性</td></tr>
+  <tr><td>D10</td><td>验收判据</td><td>5000/R 盘版: 优雅 ≤2s / 崩溃 ≤2s / fallback(水位新鲜)≤15s / 极端诚实记录 / stall ≤50ms/600s / 236 对照 11.72s</td></tr>
+  <tr><td>D11</td><td>S0 取证</td><td>本地 5000 三形态矩阵 + 尺寸预算实测 + R 盘真机受控 before/stall 基线</td></tr>
+  <tr><td>D12</td><td class="wr">开放小时表示</td><td class="wr">折叠态重构(列表 → 7 数 fold + merge/seal; <code>v4_hour_agg</code> 数学已核实为纯折叠) —— 5000 下列表表示序列化 54MB/快照 + 7.8GB/天磨损不可接受; 折叠态 ~300B/系列且数学无损; 「在线零改动」修正为「在线行为零变化、表示面重构」</td></tr>
+  <tr><td>D13</td><td class="wr">清理方式</td><td class="wr">用户改判: 不做 flush 节流清扫 —— <b>启动时交给子线程做, 每天最多 1 次</b>(启动一次 + 运行期每日闸; daemon 自终止)</td></tr>
+  <tr><td>D14</td><td>保留窗锚</td><td>复用现有 <code>raw_window</code> 键(默认 24H → 4 文件/系列), 不新增配置键(黄金法则 4)</td></tr>
+  <tr><td>D15</td><td>首轮清扫破坏性</td><td>接受: 现有超窗天文件删除, 聚合行保留视图不受影响; D5 重建 raw 深度收窄为已知损失</td></tr>
+  <tr><td>D16</td><td>与流量图毫秒级要求的关系</td><td>无冲突(读侧零触碰, 本计划全落主循环恢复/写侧面); 正向叠加(恢复亚秒化后流量图冷启动活尾提前就绪)</td></tr>
+  <tr><td>D17</td><td>测试环境</td><td>测试 5000 语料放 R 盘(仅测试轨; 生产不受影响), 语料总量 ≤20GiB(合成种子可小文件占位)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>游程级重写不逐位等价</td><td>naive span 级原型已实测 26 桶中 25 桶 totals 有差(span 网格 vs 槽网格 + 前向记账边界)</td><td>忠实移植闭合数学(逐槽值等差数列, 桶内和/级末快照闭合式; 前向记账「末槽信用归下一记录」边界、跨块/跨文件 tail 上下文、形态 D ramp 全部保持); 对拍守阵随机数据钉死(D2 口径)</td></tr>
+  <tr><td>R2</td><td>折叠态浮点累加顺序差异</td><td>dt_s 二进制不精确值求和顺序不同 → round 边界翻面</td><td>fold.merge 按信用到达顺序执行(与列表逐条 append 同序) → 浮点加法顺序不变; 对拍覆盖随机 dt_ms 数据</td></tr>
+  <tr><td>R3</td><td>账本与 raw/agg 的 crash 竞态窗口</td><td>crash 落在 raw 追加与账本追加之间 / 落在 agg 封口与账本追加之间</td><td>游标语义覆盖两向(raw ≤ 游标 = 信用已在账本; raw &gt; 游标 = 回放小尾段); 指纹失配 → 按系列 fallback; 单系列隔离不放大</td></tr>
+  <tr><td>R4</td><td>Windows 文件锁(清理删除 vs Web 读侧/缓存)</td><td>读侧正持有超窗天文件句柄</td><td>OSError 跳过下轮重试(evict 删除同款先例); 告警节流</td></tr>
+  <tr><td>R5</td><td>清理子线程的写面隔离</td><td>黄金法则 5 单写线程纪律</td><td>清理目标 = 早于保留下界的天文件(边界日保留, 删其更早); 主线程写面 = 今日文件(+跨午夜昨日) —— 年龄不相交结构性无锁冲突; 与 Web 读侧竞态 = R4 重试; daemon 线程自终止, 不持任何共享结构; relocate probe daemon 先例(plan 26-11-10-2350)</td></tr>
+  <tr><td>R6</td><td>5000 规模每系列文件操作开销</td><td>Windows stat/open 延迟; R 盘可能为 HDD</td><td>愉快路径仅 5000 次 stat + 1 次账本读(元数据级, HDD 友好); fallback 才有 GB 级读 —— 数字一律 R 盘实测(D10); S0 钉基线</td></tr>
+  <tr><td>R7</td><td>清理误删在读集/读窗内的文件</td><td>保留下界公式算错 / 读侧回看界超出假设</td><td>守阵钉「保留下界 ≥ 读侧最大回看起点」(对照 24h 视图装配消费下界与恢复复读集实测); 删除目标与恢复读集年龄不相交断言(S3)</td></tr>
+  <tr><td>R8</td><td>尺寸预算边界</td><td>1.5s 档全天全活跃: 4 文件 × 2MB × 5000 ≈ 40GB &gt; 20GiB</td><td>文档记边界; 处置走配置面(sample_interval_multiplier); S0 实测生产构成回填预算表; 不新造自动节流机制</td></tr>
+  <tr><td>R9</td><td>折叠态重构回归面</td><td>在线封口/活尾合成/读侧合流消费方</td><td>消费方核实全部只吃聚合结果(grep 已核 5 处); 对拍 + 现有测试阵列全绿 + e2e 冷启动回归(0259 守阵衔接)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-21-1546</span> 初版: 会话问答轮取证(生产日志 11.72s + 本地合成基准三构成 + 5000 外推) → 用户指令「审视文件组织/读取/重建机制本身, 最不济才考虑挪线程, grilling 出方案」→ 四轮 grilling 17 问拍板(D1/D8/D12/D13 用户改判) → 计划入库 Open。S0-S6 待显式开工。</li>
+</ul>
+
+</div>
+</body>
+</html>
