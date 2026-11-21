@@ -1,11 +1,12 @@
-"""外部旧路径种子侦测面(ForeignMixin, 计划 26-11-20-0434 T2/S2)
+"""外部旧路径种子侦测与场景 A 纳入面(ForeignMixin, 计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入)
 
 侦测 = 每拍消费同步层原始 added 差集(store.last_added_diff, T1 批地基: 未过 tracker 匹配门)
 + 四时机全量兜底(启动首轮 / job arm / foreign_torrent 翻 true / qB 重连首轮), 无周期兜底(D13)。
 候选 = save_path 归一恰等活跃 job 旧根(场景 A)或终态账 done 直连边旧根(场景 B); 命中后
 比对文件清单(D4, 单点复用 _file_map/_plan_files 口径), **一致才记账分类, 不一致只告警**。
-本批(T2)只分类不处置: 场景 A/B 接缝为 DEBUG 空操作(T3/T5 落点), 已通知账记 state
-relocate.foreign.notified(种子消失清理), 单拍处理有界 FIFO(R4)。
+场景 A 接缝(T3)= 零破坏纳入收尾: job.hashes 追加 + 收尾窗读-改-写 spec.members(journal
+零写)+ pre-armed 暂停挂恢复账(D10)+ pending_tag 增量补打; 场景 B 接缝仍空操作(T5 落点)。
+已通知账记 state relocate.foreign.notified(种子消失清理), 单拍处理有界 FIFO(R4)。
 
 环境口径: 裸 RelocateModule(仿 relocate_exec_support._bare_mod)+ 真 TorrentStore —— 差集
 语义(基线轮不算/first-seen/零变化轮清空)由 test_sync.py 的 S2a 五测承重, 本文件只消费。
@@ -54,17 +55,61 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
 - test_foreign_dry_run_noop: dry-run 侦测面整体不启动(无扫描/无记账)
 - test_foreign_gate_off_noop: 开关关(enabled=false 或 foreign_torrent=false)零动作零记账
 - test_foreign_no_periodic_backstop: 无周期兜底(D13) —— 稳态无变化拍不触发全量扫(四时机外零扫描)
+
+场景 A 纳入(T3/S3):
+
+- test_include_armed_appends_job_hashes: 收尾窗(armed)纳入 = job.hashes 追加(_set_job 落账
+  + relocating 并集即时含新成员), notified 记账不变; spec 不在只告警不造账
+- test_include_armed_extends_spec_and_rewrite_list: 收尾 spec 读-改-写 members 同形追加;
+  改写清单(pending_members)含新成员; journal 零写(盘上无 <job>.json); armed 到达不暂停(D10)
+- test_include_spec_dual_hash_v2: 新成员 hash_v1/v2 双 hash(arm_members_of 单点口径,
+  BT_backup <hash>.torrent 现算); bt_backup 取 spec 在场值
+- test_include_spec_idempotent_on_repeat: 重复纳入(直接重调接缝)无重复 hashes/members
+  条目、无重复动作(黄金法则 1)
+- test_include_delete_chain_gate_exempts_member: 删链门成员豁免 —— 纳入前新种子是删链门
+  依赖, 纳入后 job.hashes 成员豁免(_chain_gate_deps 读 job.hashes 派生)
+- test_include_verify_covers_member: 核验覆盖 —— 纳入后 _all_at_dst 要求新成员到位
+  (实时派生自 job.hashes, 零额外接线)
+- test_include_prearm_pause_and_resume_account: pre-armed(moved)到达运行态种子纳入即暂停
+  + 入 resume_hashes; _resume_members 随既有出口恢复并开确认账(D10)
+- test_include_prearm_stopped_not_paused: pre-armed 到达已停种子: 不暂停不挂恢复账
+  (保守默认: 用户停的种子不因纳入被 arm 拉起), 纳入照做
+- test_include_prearm_arm_spec_covers_new_member: pre-armed 纳入后 arm 侧 _write_arm_spec
+  按 job.hashes 现算落盘, 新成员自动进改写清单(pre-arm 相位无 spec, arm 时自动覆盖)
+- test_include_pending_tag_incremental: 镜像已在 add 态时新成员单点补打待收尾标签恰一次
+  (既有 _sync_pending_tag 一次性缓存缺口); 镜像态不翻动
+- test_include_pending_tag_off_no_qb_write: 标签镜像关闭(缺省空标签): 纳入确实发生且
+  零标签 qB 写(评审 nit 5: 钉住纳入前提)
+- test_include_pending_tag_failure_resets_mirror: 补打失败摘镜像缓存 + 计数告警, 交每拍
+  补写面按退避自愈(不自建重试回路)
+- test_include_job_gone_or_terminal_noop: job 不在/已终态(竞态面)接缝零动作不炸
+- test_include_two_members_same_tick: 同拍多候选纳入同一 job: 逐个在最新账上追加,
+  无互相覆盖无重复
+
+评审修复回归(26-11-21 T3 首轮评审):
+
+- test_include_prearm_resume_account_merges_held_members: pre-armed 纳入的按住账**并入**
+  不覆盖(blocker 回归)—— _start_job 按住的原成员账保留, arm 时新旧成员一并恢复进确认账
+- test_include_armed_absence_shrinks_included_member: R9 收缩集成(minor)—— 纳入成员被删,
+  连续 ABSENCE_SHRINK_ROUNDS 拍权威缺席后从 job.hashes 收缩, 不计失败, 让路面随收缩撤出
+- test_include_pending_tag_restart_single_full_add: 重启后镜像缓存空(nit 3)—— _set_job
+  内联补写面对全成员统一 add 恰一次, 接缝(was_add 门控)不再单发, 同拍零双写
 """
 import logging
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
 from auto_qb.config.models import RelocateConfig
+from auto_qb.core import fastresume as frmod
+from auto_qb.core.qbapi import QbApi
+from auto_qb.hr.bencode import compute_infohashes
 from auto_qb.core.modules import relocate_foreign as rf
 from auto_qb.core.modules import relocate_units as ru
 from auto_qb.core.modules.relocate_foreign import _FOREIGN_TICK_BUDGET
 from auto_qb.core.modules.relocate_mod import RelocateModule
+from auto_qb.infra import relocate_journal
 from auto_qb.torrents import TorrentStore
 
 from clock import FakeClock
@@ -75,20 +120,56 @@ OLD = "R:/old"
 NEW = "R:/new"
 PLAN_FILES = [["f.bin", 10]]  # job 计划文件清单(相对路径, 大小)
 
+# 每用例的兜底 data_dir(_foreign_data_dir autouse 夹具注入; _env 缺省取用, 显式传参恒优先)
+_ENV_DATA_DIR: str = ""
 
-def _env(*, enabled=True, foreign=True, dry_run=False):
-    """裸模块 + 真 store + FakeClient 的侦测面环境(仿 relocate_exec_support._bare_mod)
 
-    api 只带 .client(侦测面唯一消费面 = rec.files 经 client 拉文件表); state.data 挂空 dict
+@pytest.fixture(autouse=True)
+def _foreign_data_dir(tmp_path):
+    """每用例给 _env() 缺省钉一个 tmp data_dir(红线卫生; 计划 26-11-20-0434 T3 补修)
+
+    本文件的盘面写点只有一处入口 = 模块侧 `self._data_dir()`(读 config.data_dir; journal/
+    spec 落盘、daemon 心跳/对账读全部经它): T2 的 armed 驱动用例(on_task_line 推进相位机)
+    在对账 ACT_REBUILD 时 write_journal(self._data_dir(), ...), T3 纳入面 read/write_spec
+    同走该点 —— data_dir 落空串会触发 _data_dir() 的 auto-qb-data 兜底 = 测试写进生产红线
+    目录(T2 起既有, 残留 j1.json/ja.json 即此来)。本夹具把缺省钉到 tmp_path, 全部用例
+    (含 armed 驱动 / write_journal 路径)永不落兜底; 显式传 data_dir 的用例不受影响。
+    函数级 autouse + 模块级游标复位: xdist 每 worker 独立进程, 无跨 worker 状态。
+    """
+    global _ENV_DATA_DIR
+    _ENV_DATA_DIR = str(tmp_path)
+    yield
+    _ENV_DATA_DIR = ""
+
+
+def _env(*, enabled=True, foreign=True, dry_run=False, data_dir=None):
+    """裸模块 + 真 store + FakeClient 的侦测/纳入面环境(仿 relocate_exec_support._bare_mod)
+
+    api = .client + 纳入面的 qB 写方法直通(见下方注释); state.data 挂空 dict
     (relocate.foreign.notified 容器由侦测面惰性创建)。ctx.dry_run 可选(dry-run 用例)。
+    data_dir 缺省(None)= 取 autouse 夹具钉的 tmp_path —— 本文件盘面写点全走模块侧
+    _data_dir()(journal/spec/对账读), 缺省即保证零 auto-qb-data 兜底触碰(红线目录);
+    显式传参恒优先(与夹具同值或自定路径均可)。
     """
     client = FakeClient()
     store = TorrentStore(client)
     mod = RelocateModule(clock=FakeClock())
+    # api 包装面 = 侦测面(.client) + T3 纳入面的 qB 写方法(pause/resume/add_tags, 与生产
+    # QbApi 同名直通 client —— client.calls 照记, 断言面不变)
+    api = SimpleNamespace(
+        client=client,
+        torrents_pause=client.torrents_pause,
+        torrents_resume=client.torrents_resume,
+        torrents_add_tags=client.torrents_add_tags,
+        torrents_remove_tags=client.torrents_remove_tags,
+    )
     mod._ctx = SimpleNamespace(
         store=store,
-        api=SimpleNamespace(client=client),
-        config=SimpleNamespace(relocate=RelocateConfig(enabled=enabled, foreign_torrent=foreign)),
+        api=api,
+        config=SimpleNamespace(
+            relocate=RelocateConfig(enabled=enabled, foreign_torrent=foreign),
+            data_dir=data_dir if data_dir is not None else _ENV_DATA_DIR,
+        ),
         state=SimpleNamespace(data={}),
         dry_run=dry_run,
     )
@@ -282,9 +363,9 @@ def test_foreign_forms_consistent_list_required():
 # ---------- 分类(A/B/继承/成员幂等/反查单点) ----------
 
 
-def test_foreign_scenario_a_with_phase_and_member_skip():
+def test_foreign_scenario_a_with_phase_and_member_skip(tmp_path):
     """场景 A 分类正确且相位随 job 现值; 活跃 job 成员 hash 幂等跳过"""
-    mod, store, client = _env()
+    mod, store, client = _env(data_dir=str(tmp_path))
     mod._jobs["ja"] = _job(
         "ja", phase=ru.PHASE_MOVING, src=OLD, dst=NEW, hashes=("MEM", ), plan={"files": list(PLAN_FILES)}
     )
@@ -530,3 +611,297 @@ def test_foreign_gate_off_noop(kw):
     mod.on_task_line()
     assert seen == []
     assert mod._ctx.state.data == {}
+
+
+# ---------- 场景 A 纳入(T3/S3) ----------
+
+
+def _hit(h="EXT", job_id="ja", phase=ru.PHASE_ARMED, old_root=OLD, location=NEW):
+    """场景 A 接缝入参构造(判定面产出的 ForeignHit 同形; 直调接缝用例用)"""
+    return rf.ForeignHit(
+        hash=h, save_path=old_root, scenario="A", job_id=job_id, phase=phase, old_root=old_root, location=location
+    )
+
+
+def _armed_job(jid="ja", phase=ru.PHASE_ARMED, hashes=("MEM", ), alias_kind="", alias_paths=(), resume_hashes=()):
+    """收尾窗 job(与命中旧根同根, 计划文件清单与 _seed 一致)"""
+    return _job(
+        jid,
+        phase=phase,
+        src=OLD,
+        dst=NEW,
+        hashes=hashes,
+        alias_kind=alias_kind,
+        alias_paths=alias_paths,
+        resume_hashes=resume_hashes,
+        plan={"files": list(PLAN_FILES)}
+    )
+
+
+def _foreign_rec(client, h="EXT", state="stalledUP"):
+    """命中旧根且清单一致的外部种子(rec + 文件表)"""
+    client.files_map[h] = _seed()
+    return FakeTorrent(hash=h, name="foreign", save_path=OLD, state=state)
+
+
+def test_include_armed_appends_job_hashes(tmp_path):
+    """收尾窗纳入: job.hashes 追加落账, relocating 并集即时含新成员; spec 不在只告警不造账"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    store.refresh([FakeTorrent(hash="MEM", name="member", save_path=OLD), _foreign_rec(client)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod.on_task_line()  # activation 扫 -> 命中 -> 纳入(armed, 收尾窗)
+    job = mod.get_job("ja")
+    assert job.hashes == ("MEM", "EXT") and not job.is_terminal
+    assert mod._state_foreign_notified()["EXT"]["kind"] == "A"
+    assert "EXT" in mod.relocating_hashes()  # 让路/拦截成员面派生即时覆盖
+    assert mod._data_dir() == str(tmp_path)
+    assert not (tmp_path / "relocate" / "ja.spec.json").exists()  # spec 不在: 只告警不造账
+    assert any("收尾 spec 不在" in m.getMessage() for m in cap.records if m.levelno == logging.WARNING)
+
+
+def test_include_armed_extends_spec_and_rewrite_list(tmp_path):
+    """收尾 spec 读-改-写 members 同形追加; 改写清单含新成员; journal 零写; armed 到达不暂停
+
+    直调接缝(侦测->接缝的管线接线由 test_include_armed_appends_job_hashes 钉): on_task_line
+    的相位机推进会同拍走对账(ACT_REBUILD 写 journal 到 tmp), 会污染「journal 零写」断言面。
+    """
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    assert mod._write_arm_spec(mod.get_job("ja"))  # arm 侧既有落盘: members = [MEM]
+    store.refresh([_foreign_rec(client)])
+    mod._foreign_on_scenario_a(_hit())
+    spec = relocate_journal.read_spec(str(tmp_path), "ja")
+    assert spec["members"] == [{"hash_v1": "MEM", "hash_v2": ""}, {"hash_v1": "EXT", "hash_v2": ""}]
+    # 改写清单 = spec.members - 已收口(journal.rewrites 现算): 旧成员已收口, 新成员在列
+    pending = relocate_journal.pending_members(spec, {"MEM": {"status": "rewritten", "ts": 1.0}})
+    assert [relocate_journal.member_key(m) for m in pending] == ["EXT"]
+    assert not (tmp_path / "relocate" / "ja.json").exists()  # journal 零写(R8)
+    assert ("pause", ["EXT"]) not in client.calls  # armed/rewritten 到达不动(D10)
+    assert mod.get_job("ja").hashes == ("MEM", "EXT")
+
+
+def test_include_spec_dual_hash_v2(tmp_path):
+    """新成员双 hash: hash_v2 经 BT_backup <hash>.torrent 现算(arm_members_of 单点口径)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._ctx.config.relocate = RelocateConfig(enabled=True, foreign_torrent=True, bt_backup=str(tmp_path / "backup"))
+    info = {b"name": b"foreignmember", b"piece length": 16384, b"pieces": b"\x00" * 20, b"length": 1}
+    blob = frmod.bencode({b"announce": b"http://tracker.example/ann", b"info": info})
+    v1, v2, _info = compute_infohashes(blob)
+    (tmp_path / "backup").mkdir()
+    (tmp_path / "backup" / f"{v1}.torrent").write_bytes(blob)
+    mod._jobs["ja"] = _armed_job()
+    assert mod._write_arm_spec(mod.get_job("ja"))  # spec 带 bt_backup 字段
+    store.refresh([FakeTorrent(hash=v1, name="foreign", save_path=OLD)])
+    client.files_map[v1] = _seed()
+    mod._foreign_on_scenario_a(_hit(h=v1))
+    spec = relocate_journal.read_spec(str(tmp_path), "ja")
+    assert spec["members"][-1] == {"hash_v1": v1, "hash_v2": v2}
+    assert mod.get_job("ja").hashes == ("MEM", v1)
+
+
+def test_include_spec_idempotent_on_repeat(tmp_path):
+    """重复纳入(直接重调接缝, 状态恢复重放同形): 零重复条目零重复动作(黄金法则 1)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    assert mod._write_arm_spec(mod.get_job("ja"))
+    store.refresh([_foreign_rec(client)])
+    mod.on_task_line()
+    spec1 = relocate_journal.read_spec(str(tmp_path), "ja")
+    calls1 = list(client.calls)
+    mod._foreign_on_scenario_a(_hit())  # 直接重调: 幂等收口
+    assert relocate_journal.read_spec(str(tmp_path), "ja") == spec1
+    assert mod.get_job("ja").hashes == ("MEM", "EXT")
+    assert client.calls == calls1  # 无第二笔动作(pause/spec/tag 均不重发)
+
+
+def test_include_delete_chain_gate_exempts_member(tmp_path):
+    """删链门成员豁免: 纳入前新种子是删链门依赖(收尾卡死根因), 纳入后按成员豁免"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(alias_kind="dir", alias_paths=("R:/old/l", ))
+    store.refresh([FakeTorrent(hash="MEM", name="member", save_path=NEW), _foreign_rec(client)])
+    job = mod.get_job("ja")
+    assert mod._chain_gate_deps(job) == [("EXT", OLD)]  # 纳入前: 第三方依赖(收尾被卡)
+    mod._foreign_on_scenario_a(_hit())
+    job = mod.get_job("ja")  # 接缝落账换代, 重取最新账(_chain_gate_deps 读入参 job.hashes)
+    assert mod._chain_gate_deps(job) == []  # 纳入后: 成员豁免(members 集 = job.hashes)
+
+
+def test_include_verify_covers_member(tmp_path):
+    """核验覆盖: 纳入后 _all_at_dst 要求新成员到位(实时派生自 job.hashes, 零额外接线)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    store.refresh([FakeTorrent(hash="MEM", name="member", save_path=NEW), _foreign_rec(client)])
+    assert mod._all_at_dst(mod.get_job("ja")) is True  # 纳入前: 新种子不在核验集合
+    mod._foreign_on_scenario_a(_hit())
+    assert mod._all_at_dst(mod.get_job("ja")) is False  # 纳入后: 新成员未到位, 核验等它
+    store.by_hash["EXT"].save_path = NEW
+    assert mod._all_at_dst(mod.get_job("ja")) is True
+
+
+def test_include_prearm_pause_and_resume_account(tmp_path):
+    """pre-armed(moved)到达运行态种子: 纳入即暂停 + 入 resume_hashes; 既有恢复面随成员恢复"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(phase=ru.PHASE_MOVED)
+    store.refresh([_foreign_rec(client, state="stalledUP")])
+    mod._foreign_on_scenario_a(_hit(phase=ru.PHASE_MOVED))
+    job = mod.get_job("ja")
+    assert ("pause", ["EXT"]) in client.calls
+    assert job.hashes == ("MEM", "EXT") and job.resume_hashes == ("EXT", )
+    assert "EXT" in mod.relocating_hashes()
+    mod._resume_members(job)  # arm/fail/cancel 共用的既有恢复出口
+    assert ("resume", ["EXT"]) in client.calls
+    assert mod.get_job("ja").resume_pending == ("EXT", )  # 恢复确认账开账(_reconcile_resume_pending 接管)
+
+
+def test_include_prearm_stopped_not_paused(tmp_path):
+    """pre-armed 到达已停种子: 不暂停不挂恢复账(用户停的不被 arm 拉起), 纳入照做"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(phase=ru.PHASE_MOVED)
+    store.refresh([_foreign_rec(client, state="stoppedUP")])
+    mod._foreign_on_scenario_a(_hit(phase=ru.PHASE_MOVED))
+    job = mod.get_job("ja")
+    assert ("pause", ["EXT"]) not in client.calls
+    assert job.hashes == ("MEM", "EXT") and job.resume_hashes == ()
+
+
+def test_include_prearm_arm_spec_covers_new_member(tmp_path):
+    """pre-armed 纳入后 arm 侧 spec 按 job.hashes 现算落盘: 新成员自动进改写清单与恢复名单"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(phase=ru.PHASE_MOVED)
+    store.refresh([_foreign_rec(client)])
+    mod._foreign_on_scenario_a(_hit(phase=ru.PHASE_MOVED))
+    mod._set_job(replace(mod.get_job("ja"), phase=ru.PHASE_ARMED, armed_at=mod._clock.now()))
+    assert mod._write_arm_spec(mod.get_job("ja"))
+    spec = relocate_journal.read_spec(str(tmp_path), "ja")
+    assert [m["hash_v1"] for m in spec["members"]] == ["MEM", "EXT"]
+    mod._resume_members(mod.get_job("ja"))  # _arm 同位: resume_hashes 含纳入成员
+    assert ("resume", ["EXT"]) in client.calls
+
+
+def test_include_pending_tag_incremental(tmp_path):
+    """镜像已在 add 态: 新成员单点补打待收尾标签恰一次(一次性缓存缺口的增量面)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._ctx.config.relocate = RelocateConfig(enabled=True, foreign_torrent=True, pending_tag="aqb-finalize")
+    mod._jobs["ja"] = replace(_armed_job(), tag_on=True)
+    mod._tag_applied["ja"] = "add"  # 模拟 armed 时已加过标签(缓存一次性: 不含后到成员)
+    store.refresh([_foreign_rec(client)])
+    mod._foreign_on_scenario_a(_hit())
+    assert client.calls == [("add_tags", "aqb-finalize")]  # 恰一次, 只补新成员(不重打旧成员)
+    assert mod.get_job("ja").tag_on is True and mod._tag_applied["ja"] == "add"  # 镜像态不翻动
+
+
+def test_include_pending_tag_off_no_qb_write(tmp_path):
+    """标签镜像关闭(缺省空标签): 纳入确实发生且零标签 qB 写(评审 nit 5: 钉住纳入前提)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    store.refresh([_foreign_rec(client)])
+    mod.on_task_line()
+    assert mod.get_job("ja").hashes == ("MEM", "EXT")  # 纳入确实发生(零 qB 写才有意义)
+    assert not [c for c in client.calls if c[0].startswith(("add_tags", "remove_tags"))]
+
+
+def test_include_pending_tag_failure_resets_mirror(tmp_path, monkeypatch):
+    """补打失败: 摘镜像缓存 + 计数告警, 交每拍补写面按退避自愈(不自建重试回路)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._ctx.config.relocate = RelocateConfig(enabled=True, foreign_torrent=True, pending_tag="aqb-finalize")
+    mod._jobs["ja"] = _armed_job()
+    mod._tag_applied["ja"] = "add"
+
+    def _boom(**kw):
+        raise RuntimeError("qb down")
+
+    monkeypatch.setattr(mod._ctx.api, "torrents_add_tags", _boom)  # 桩打在 api 包装面(生产消费面)
+    store.refresh([_foreign_rec(client)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_on_scenario_a(_hit())
+    assert mod.get_job("ja").hashes == ("MEM", "EXT")  # 纳入不受补打失败影响
+    assert "ja" not in mod._tag_applied and mod._tag_failures == 1
+    assert any("补打失败" in m.getMessage() for m in cap.records if m.levelno == logging.WARNING)
+
+
+def test_include_job_gone_or_terminal_noop(tmp_path):
+    """job 不在(撤销竞态)/已终态: 接缝零动作不炸"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._foreign_on_scenario_a(_hit(job_id="nope"))  # 账不在: 静默收口
+    assert mod._jobs == {} and mod._state_foreign_notified() == {}
+    mod._jobs["jd"] = _armed_job(jid="jd", phase=ru.PHASE_DONE)
+    mod._foreign_on_scenario_a(_hit(job_id="jd"))  # 已终态: 不往终态账写成员
+    assert mod.get_job("jd").hashes == ("MEM", )
+
+
+def test_include_two_members_same_tick(tmp_path):
+    """同拍多候选纳入同一 job: 逐个在最新账上追加, 无互相覆盖无重复"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    assert mod._write_arm_spec(mod.get_job("ja"))
+    store.refresh([_foreign_rec(client, h="E1"), _foreign_rec(client, h="E2")])
+    mod.on_task_line()
+    job = mod.get_job("ja")
+    assert len(job.hashes) == 3 and set(job.hashes) == {"MEM", "E1", "E2"}  # 差集散布序, 只断集合
+    spec = relocate_journal.read_spec(str(tmp_path), "ja")
+    assert {m["hash_v1"] for m in spec["members"]} == {"MEM", "E1", "E2"}
+
+
+# ---------- 评审修复回归(26-11-21 T3 首轮评审) ----------
+
+
+def test_include_prearm_resume_account_merges_held_members(tmp_path):
+    """pre-armed 纳入的按住账**并入**不覆盖(评审 blocker 回归)
+
+    _start_job 按住的原成员账(resume_hashes=("MEM", ), 挂到 arm 经 _resume_members 消费)
+    不得被新成员挤掉 —— 覆盖会让原被按住成员在 arm 时无人恢复且无确认账(永久暂停)。
+    """
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(phase=ru.PHASE_MOVED, resume_hashes=("MEM", ))
+    store.refresh([FakeTorrent(hash="MEM", name="member", save_path=OLD, state="pausedUP"), _foreign_rec(client)])
+    mod._foreign_on_scenario_a(_hit(phase=ru.PHASE_MOVED))
+    job = mod.get_job("ja")
+    assert job.hashes == ("MEM", "EXT")
+    assert job.resume_hashes == ("MEM", "EXT")  # 并入: 原按住账保留 + 新成员追加
+    mod._resume_members(job)  # arm 同位: 两者都必须被恢复
+    assert ("resume", ["MEM", "EXT"]) in client.calls
+    assert mod.get_job("ja").resume_pending == ("MEM", "EXT")  # 确认账覆盖两者
+
+
+def test_include_armed_absence_shrinks_included_member(tmp_path):
+    """R9 收缩集成(评审 minor): 纳入成员被用户删 -> 连续 N 拍权威缺席后从 job.hashes 收缩,
+    不计失败(非终态), 让路面随收缩撤出 —— 纳入成员无收缩特殊化
+
+    同步轮走真机器(store.apply_sync + FakeClient.sync_maindata 增量语义): 删除拍 =
+    torrents_removed 权威证据(need_validate False), 其后零变化增量轮 rounds+1 且
+    last_removed 清(确认延续靠计数>0) —— 与生产 apply_sync 轮语义一致。
+    """
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    assert mod._write_arm_spec(mod.get_job("ja"))
+    client.torrents["MEM"] = FakeTorrent(hash="MEM", name="member", save_path=NEW)
+    client.torrents["EXT"] = _foreign_rec(client)
+    store.apply_sync(QbApi(client, store))  # 首轮全量基线(真同步机器)
+    mod._foreign_on_scenario_a(_hit())
+    assert mod.get_job("ja").hashes == ("MEM", "EXT")
+    # 用户删除纳入成员: 增量轮权威删除证据, 连续 ABSENCE_SHRINK_ROUNDS 拍确认后收缩
+    del client.torrents["EXT"]
+    store.apply_sync(QbApi(client, store))
+    assert store.last_removed == ["EXT"] and not store.need_validate  # 增量轮形态(判定可用)
+    rt = mod._rt.setdefault("ja", {})
+    mod._step_absence_shrink(mod.get_job("ja"), rt, qb_up=True)
+    for _ in range(ru.ABSENCE_SHRINK_ROUNDS - 1):
+        store.apply_sync(QbApi(client, store))  # 零变化增量轮: rounds+1 且 last_removed 清
+        mod._step_absence_shrink(mod.get_job("ja"), rt, qb_up=True)
+    job = mod.get_job("ja")
+    assert job.hashes == ("MEM", )  # 纳入成员已收缩
+    assert not job.is_terminal and job.reason == ru.REASON_MEMBERS_GONE  # 收缩事件, 非失败终态
+    assert "EXT" not in mod.relocating_hashes()  # 让路/拦截成员面随收缩撤出
+
+
+def test_include_pending_tag_restart_single_full_add(tmp_path):
+    """重启后镜像缓存空(评审 nit 3): _set_job 内联补写面对全成员(含新)统一 add 恰一次,
+    接缝不再单发 —— 同拍零双写"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._ctx.config.relocate = RelocateConfig(enabled=True, foreign_torrent=True, pending_tag="aqb-finalize")
+    mod._jobs["ja"] = _armed_job()  # tag_on=False + 缓存空 = 重启后首次纳入形态
+    store.refresh([_foreign_rec(client)])
+    mod._foreign_on_scenario_a(_hit())  # was_add=False: 接缝不再单点补打
+    assert client.calls == [("add_tags", "aqb-finalize")]  # 恰一次(全成员统一 add, 无第二笔单发)
+    assert mod.get_job("ja").tag_on is True  # 补写面已把镜像落 add(tag_on 挂账)

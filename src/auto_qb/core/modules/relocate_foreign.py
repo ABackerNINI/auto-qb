@@ -1,4 +1,4 @@
-"""ForeignMixin: 外部旧路径种子侦测面(计划 26-11-20-0434 T2/S2, D7 落点 relocate 模块内新面)
+"""ForeignMixin: 外部旧路径种子侦测与场景 A 零破坏纳入面(计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入)
 
 IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种种子 —— 整组迁移改过路径后,
 这些种子落在旧路径上但不是任何 job 的成员(§02 两类坏法)。本面只做**侦测与分类**:
@@ -32,20 +32,28 @@ IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种
 - 相位信息(黄金法则 5 只读不写): 命中活跃 job 时把 job 现相位带进分类结果(T3 的
   暂停/恢复判据消费: 前段相位 = pre-armed 到达, armed/rewritten = 收尾窗到达)。
 
-**本批(T2)只分类不处置**: 场景 A/场景 B 的处置动作分别在 T3/T5 批 —— 接缝
-_foreign_on_scenario_a / _foreign_on_scenario_b 本批为空操作(DEBUG 留痕), 不得提前实现
-任何纳入/通知动作; 清单不一致的 WARNING 是本批范围(D4, S2 验收判据)。
+**场景 A 接缝(T3/S3)= 零破坏纳入收尾**: 追加 job.hashes(_set_job 单点落账)+ 收尾窗
+读-改-写 spec["members"](hash_v1/v2 双 hash, arm_members_of 单点口径; journal 零写 ——
+改写清单 = pending_members(spec, rewrites) 现算, daemon 每窗口现读)+ pre-armed 到达暂停
+挂恢复账(D10: arm 随成员恢复走既有确认账)+ pending_tag 增量补打。纳入后的自动覆盖面
+(核验覆盖/删链门成员豁免/缺文件扫描让路/跳检让路/D16 拦截成员面)实时派生自 job.hashes,
+零额外接线。场景 B 接缝仍为空操作(T5 落点); 清单不一致只告警是判定面动作(D4)。
 
 线程模型: 全部方法只在主循环线程执行(on_task_line hook, 黄金法则 5), 无新线程、无锁。
-state 写面: 只写 relocate.foreign.notified 容器(仿 _state_jobs 的 setdefault 先例),
-落盘沿用既有 state 机制(周期刷盘 + 优雅退出 save), 不自建。dry-run 全关(相位机同口径:
-state 容器虽是内存账, 侦测面按「不真写」整体不跑, 与 on_task_line 的 dry 早退一致)。
+写面: relocate.foreign.notified 容器(仿 _state_jobs 的 setdefault 先例)+ job 账
+(_set_job 单点)+ 收尾 spec 读-改-写(relocate_journal.write_spec 原子落盘, 主循环是 spec
+唯一写者, R8)+ qB 写(pause/add_tags, 只对纳入成员单点)。落盘沿用既有机制, 不自建。
+dry-run 全关(相位机同口径: state 容器虽是内存账, 侦测面按「不真写」整体不跑, 与
+on_task_line 的 dry 早退一致)。
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Optional
 
+from ...config.models import bt_backup_path_of
+from ...infra import relocate_journal
 from . import relocate_units as ru
 from .relocate_common import logger
+from .relocate_exec import arm_members_of
 
 # 每拍文件表比对的预算上限(R4 有界 FIFO 的定界常量): 一次比对 = 一次 qB files API 拉取
 # (record 级惰性缓存, 二次判定零请求)。10 = 主循环单拍最坏附加时延与「一次预检级批量
@@ -91,7 +99,7 @@ class ForeignHit:
 
 
 class ForeignMixin:
-    """外部旧路径种子侦测面(混入 RelocateModule; 全部状态在宿主 __init__ 建档)"""
+    """外部旧路径种子侦测与场景 A 纳入面(混入 RelocateModule; 全部状态在宿主 __init__ 建档)"""
 
     # ---------- 每拍入口 ----------
 
@@ -377,10 +385,10 @@ class ForeignMixin:
             return None
         return got == want
 
-    # ---------- 记账与接缝(本批只分类不处置) ----------
+    # ---------- 记账与场景接缝(A = T3 纳入, B = T5 通知) ----------
 
     def _foreign_record_hit(self, rec: Any, hit: ForeignHit) -> None:
-        """命中且清单一致: 记 notified 账 + 调场景接缝(本批接缝空操作, T3/T5 落点)"""
+        """命中且清单一致: 记 notified 账 + 调场景接缝(A = T3 纳入, B = T5 通知)"""
         notified = self._state_foreign_notified()
         notified[rec.hash] = {
             "root": ru._norm(hit.old_root),  # 来源旧根(归一形, 与判定口径一致)
@@ -392,7 +400,7 @@ class ForeignMixin:
         }
         logger.info(
             f"relocate | foreign | 发现旧路径外部种子 {rec.hash[:8]} (场景 {hit.scenario}, "
-            f"job {hit.job_id}, 相位 {hit.phase}, 旧根 {hit.old_root}) —— 已记账, 处置在 T3/T5 批"
+            f"job {hit.job_id}, 相位 {hit.phase}, 旧根 {hit.old_root})"
         )
         if hit.scenario == _KIND_SCENARIO_A:
             self._foreign_on_scenario_a(hit)
@@ -416,15 +424,139 @@ class ForeignMixin:
         )
 
     def _foreign_on_scenario_a(self, hit: ForeignHit) -> None:
-        """**场景 A 接缝**(收尾窗内到达的旧路径同内容种子): T3 批落「零破坏纳入收尾」
+        """**场景 A 接缝**(收尾窗内到达的旧路径同内容种子): 零破坏纳入收尾(计划 S3/D3)
 
-        T3 在此实现(计划 S3): 追加 job.hashes + 读-改-写 spec["members"](hash_v1/v2 双
-        hash, 复用 _torrent_v2_of); pre-armed(前段相位 moving/watching/moved)到达纳入即
-        torrents_pause + 入 resume_hashes, arm 随成员恢复(D10); armed/rewritten 到达不动;
-        pending_tag 增量补打。**本批(T2)空操作** —— 只在 DEBUG 留分类事实, 不得提前实现
-        任何纳入/暂停/标签动作。入参 hit.phase 即 pre-arm 判据的现成位(黄金法则 5 只读)。
+        纳入 = 把种子转正为命中 job 的成员, 收尾机器的既有派生面随后自动接管(§03):
+        - job.hashes 追加(经 _set_job 单点落账 + 发布快照): 核验覆盖(_all_at_dst/_step_verify
+          逐成员循环)、删链门成员豁免(_chain_gate_deps 的 members 集)、缺文件扫描让路/
+          跳检让路/D16 删种拦截成员面(relocating_hashes 派生并集)、R9 成员收缩
+          (_step_absence_shrink)全部实时派生自本账, 零额外接线;
+        - 收尾窗(armed/rewritten)读-改-写 spec["members"](_foreign_extend_spec, journal 零写);
+          pre-arm 相位(moving/watching/moved)无 spec —— arm 侧 _write_arm_spec 按 job.hashes
+          现算落盘, 新成员自动在列(零动作);
+        - pre-armed 到达(相位在 FINALIZE_WINDOW_PHASES 之外): 运行态即暂停并**并入**恢复账
+          (_foreign_hold_member + job.resume_hashes 追加, 不覆盖原按住成员的账; D10: arm
+          随成员恢复走既有 _resume_members/确认账); armed/rewritten 到达不动相位不暂停(D10),
+          纳入照做 —— 其改写未回流的收尾守卫在 T4(S4), 本批不做;
+        - pending_tag 增量补打(_foreign_tag_member): 镜像已在 add 态时对单成员补 add,
+          补打失败摘镜像缓存交每拍补写面按退避自愈;
+        - 幂等(黄金法则 1): hash 已在 job.hashes 即整体收口 —— 直接重调本接缝/状态恢复重放
+          零副作用(无重复 members 条目/无重复标签/无重复暂停)。
+
+        入参 hit.phase 即 pre-arm 判据(黄金法则 5 只读; 候选分类与本接缝同拍, 单一写线程
+        期间 _jobs 不被相位机推进 —— on_task_line 先跑本面后逐 job _advance)。job 按
+        job_id 现取: 同拍多候选纳入同一 job 时逐个在最新账上追加(前一纳入已落 _jobs)。
+        本面全程主循环线程(R8 单写者), 不触 journal(改写账唯一写者是 daemon), 不删种、
+        不重加、不跳检、不跑校验(D8/D9 设计底线)。
         """
-        logger.debug(f"relocate | foreign | 场景 A 接缝(T3 落点): {hit.hash[:8]} 待纳入收尾")
+        job = self.get_job(hit.job_id)
+        if job is None or job.is_terminal or hit.hash in job.hashes:
+            # 账已不在/已终态(撤销·收官竞态)或已在账(重放/重复纳入): 幂等收口, 不产生任何写面
+            return
+        h = hit.hash
+        pre_arm = hit.phase not in ru.FINALIZE_WINDOW_PHASES
+        # was_add = 进账前的镜像态快照(评审 nit 3): 必须在 _set_job 之前取 —— _set_job 内联
+        # 的 _sync_pending_tag 对缓存缺失会统一 add 并把缓存补成 add, 之后取值恒真, 门控失效。
+        was_add = self._tag_applied.get(hit.job_id) == "add"
+        # D10 按住账**并入**不覆盖: _start_job 发起时按住的原成员账(resume_hashes, 挂到 arm
+        # 经 _resume_members 消费)不得被新成员挤掉 —— 整账覆盖会让原被按住成员在 arm 时无人
+        # 恢复且无确认账(永久暂停, 评审 blocker)。dict.fromkeys 去重: 新成员与结转账撞 hash
+        # (理论上 T2 成员跳过已挡, 防御面)不产生重复条目。
+        held = self._foreign_hold_member(h) if pre_arm else ()
+        resume_hashes = tuple(dict.fromkeys((*job.resume_hashes, *held)))
+        self._set_job(replace(job, hashes=tuple(job.hashes) + (h, ), resume_hashes=resume_hashes))
+        if not pre_arm:
+            self._foreign_extend_spec(hit)
+            self._foreign_tag_member(hit.job_id, h, was_add=was_add)
+        logger.info(
+            f"relocate | foreign | 场景 A 纳入: {h[:8]} 转正为 job {hit.job_id} 成员"
+            f"(相位 {hit.phase}, {'pre-armed 按住待 arm' if pre_arm else '收尾窗 spec 双写'})"
+        )
+
+    def _foreign_hold_member(self, h: str) -> tuple:
+        """pre-armed 纳入的按住步(D10): 运行态种子暂停并返回单成员恢复账, 否则空账
+
+        恢复账语义 = 「被本 job 按住的成员」(_resume_members docstring); 调用方(场景 A 接缝)
+        把返回值**并入** job.resume_hashes(不覆盖 —— 原被按住成员的账必须保留到 arm)。
+        停着判据单点复用 _member_stopped(rec 缺席按停 / is_stopped 缺省 True 同款语义):
+        用户已停着的种子不因纳入被 arm 拉起(保守默认, 黄金法则 2), 零动作不入账。暂停失败
+        (qB 拒/断)不堵纳入: 种子保持原态继续跑, 只少一条恢复账 —— 纳入的收尾覆盖面不依赖
+        暂停位。
+        """
+        if self._member_stopped(h):
+            return ()  # 已停/不在客户端: 无「按住」可言, 不暂停不挂账(判据单点 _member_stopped)
+        api = getattr(self._ctx, "api", None)
+        if api is None:
+            return ()
+        try:
+            api.torrents_pause(torrent_hashes=[h])
+        except Exception as e:  # noqa: BLE001 - 暂停失败不堵纳入: 只少一条恢复账
+            logger.warning(f"relocate | foreign | {h[:8]} 纳入暂停失败({e}), 不挂恢复账照常纳入")
+            return ()
+        logger.info(f"relocate | foreign | {h[:8]} 已暂停挂恢复账, arm 随成员恢复(D10)")
+        return (h, )
+
+    def _foreign_extend_spec(self, hit: ForeignHit) -> None:
+        """收尾窗纳入的 spec["members"] 读-改-写(R8: 主循环单写者 + write_spec 原子落盘)
+
+        journal 零写: 改写清单 = pending_members(spec, rewrites) 现算(spec.members −
+        已收口), daemon 每窗口现读 —— 新成员无改写账记录即 pending, 无需任何 journal 条目。
+        新成员双 hash 与 arm 落盘同形(arm_members_of 单点: hash_v2 经 BT_backup <hash>.torrent
+        现算, 取不到留空); bt_backup 取 spec 在场值(daemon 改写的取数目录, 与成员可解析性
+        自洽), 缺失回落配置现读(_write_arm_spec 同源)。spec 不在(arm 落盘失败/账面竞态)
+        只告警不造账 —— job 账已纳入, 改写未回流面交 T4 收尾守卫(S4)。
+        """
+        data_dir = self._data_dir()
+        spec = relocate_journal.read_spec(data_dir, hit.job_id)
+        if not isinstance(spec, dict) or not spec:
+            logger.warning(
+                f"relocate | foreign | job {hit.job_id} 收尾 spec 不在(arm 落盘失败/账面竞态), "
+                f"{hit.hash[:8]} 只入 job 账, 改写清单未扩(核验未回流面交 T4 收尾守卫)"
+            )
+            return
+        h = hit.hash
+        members = [dict(m) for m in relocate_journal.spec_members(spec) if isinstance(m, dict)]
+        if any(str(m.get("hash_v1") or "") == h or str(m.get("hash_v2") or "") == h for m in members):
+            return  # 已在清单(重放面): 幂等
+        backup = str(spec.get("bt_backup") or "") or bt_backup_path_of(getattr(self._ctx, "config", None))
+        members.append(arm_members_of([h], backup)[0])
+        try:
+            relocate_journal.write_spec(data_dir, hit.job_id, {**spec, "members": members})
+        except Exception as e:  # noqa: BLE001 - spec 追加失败不堵纳入(job 账已落), 改写面交 T4 守卫
+            logger.warning(f"relocate | foreign | job {hit.job_id} 收尾 spec 追加成员失败({e}), 改写清单暂缺 {h[:8]}")
+            return
+        logger.info(f"relocate | foreign | job {hit.job_id} 收尾 spec 已追加成员 {h[:8]}(改写清单现算覆盖, journal 零写)")
+
+    def _foreign_tag_member(self, job_id: str, h: str, *, was_add: bool) -> None:
+        """pending_tag 增量补打(收尾窗纳入, 计划 26-11-04-1042 镜像的一次性缓存缺口)
+
+        _sync_pending_tag 按 _tag_applied[job_id] 单次缓存发请求 —— job 已武装加过标签后,
+        job.hashes 追加的新成员不会被既有补写面自发覆盖。本方法只在镜像已处于 add 态时对
+        单成员补 add(qB add-tag 幂等); 镜像未在 add 态(重启后缓存清空)时不动作 ——
+        _set_job 内联的 _sync_pending_tag 对缓存缺失本就会对全成员(含新)统一 add, 这里再
+        单发就是同拍双写(评审 nit 3)。was_add = 接缝进账前的镜像态快照(调用方在 _set_job
+        之前取), 按它门控而非进账后的缓存现值(那时 _sync_pending_tag 可能已把缓存补成 add)。
+        补打失败摘缓存: 交每拍补写面按退避重发(全成员 add 幂等), 不自建重试回路。
+        """
+        tag = self._tag_name()
+        if not tag or self._dry_run():
+            return
+        if not was_add or self._tag_applied.get(job_id) != "add":
+            return  # 进账前不在 add 态(全量补写已覆盖)或 _set_job 内联补写失败(退避自愈): 不单发
+        api = getattr(self._ctx, "api", None)
+        if api is None:
+            return
+        try:
+            api.torrents_add_tags(tags=tag, torrent_hashes=[h])
+        except Exception as e:  # noqa: BLE001 - 补打失败摘缓存交补写面自愈, 绝不影响迁移状态
+            self._tag_applied.pop(job_id, None)
+            self._tag_failures += 1
+            logger.warning(
+                f"relocate | foreign | job {job_id} 新成员 {h[:8]} 待收尾标签补打失败({e}) —— "
+                "已复位标签镜像缓存, 交每拍补写面按退避重发"
+            )
+            return
+        logger.info(f"relocate | foreign | job {job_id} 新成员 {h[:8]} 已补打待收尾标签(增量)")
 
     def _foreign_on_scenario_b(self, hit: ForeignHit) -> None:
         """**场景 B 接缝**(收尾完成后到达的旧路径种子): T5 批落「只通知」
