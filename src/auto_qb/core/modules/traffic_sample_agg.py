@@ -3,22 +3,32 @@
 方法体里对类级静态方法的引用写成 `_SampleAggMixin.`(搬出根模块后 `TrafficSampleModule`
 不再可见; 同一函数对象, 语义不变)。根模块以同名 logger 记录, 日志名仍为
 `auto_qb.core.modules.traffic_sample_mod`。
+
+P2b 追加(plan 26-11-21-1546 S2 第二步): acc 快照账本接线面在本文件 —— 启动快路
+(`_try_ledger_fastpath`, 指纹探针 + R3 两向判定 `raw_tail_beyond_cursor` 尾块轻量读)、
+AccSeriesState<->SeriesAgg 逐字段转换(静态守阵钉对齐)、flush 随批变化行(`_flush_acc_rows`)
+与 stop 终态行(`_acc_stop_rows`)。账本格式/追加/压实本体在 core/traffic_store_acc_ledger.py。
 """
 import logging
 import math
+import os
 import time
 from typing import Any, Callable, List, Optional, Tuple
 
 from ..traffic_store import (
     HOUR_SECONDS,
     TrafficV4Store,
+    V4DayResume,
     V4HourSample,
     V4NullRun,
     V4ParsedDay,
     V4Sample,
     V4Slot,
     V4ZeroRun,
+    parse_v4_day_text,
     v4_block_gap_continuous,
+    v4_day_block_offsets,
+    v4_day_block_starts,
     v4_day_epoch,
     v4_merge_agg,
     v4_month_epoch,
@@ -27,10 +37,183 @@ from ..traffic_store import (
     v4_z_ramp_element,
     v4_z_totals_ramp,
 )
+from ..traffic_store_acc_ledger import (
+    AccHourFoldState,
+    AccSeriesState,
+    AccSnapshot,
+    append_acc_snapshots,
+    compact_acc_ledger,
+    probe_agg_fingerprint,
+    stat_agg_fingerprint,
+)
 
 from .traffic_sample_common import EVICT_CHECK_INTERVAL_S, HourFold, OpenRun, SeriesAgg, _hour_spans, _record_slots
 
 logger = logging.getLogger("auto_qb.core.modules.traffic_sample_mod")
+
+# ---------- acc 快照账本接线(P2b, plan 26-11-21-1546 S2 第二步; 组件单点在
+# ---------- core/traffic_store_acc_ledger.py, 本节只做 modules 层消费) ----------
+
+#: R3 两向判定的表达式噪声容差(秒): 账本游标 = 写侧游标(buf.projected_ts), 尾槽游标 =
+#: 读侧 dt 链推进结果 —— 两者镜像同源但表达式不同(非块首游程可差 1 ULP; 生产 epoch
+#: ~2^31 下 ULP ~5e-7s)。容差 0.5ms 吸收表达式噪声(几个 ULP ~1e-6s, 三数量级余量), 又
+#: 严格低于 dt_ms=1 钳制边界(时钟回拨/亚毫秒到达写 dt_ms=1 合法行, 读侧 advance=1ms)下
+#: 真实超前记录的最小槽距(1ms)—— crash 窗口内恰一条 1ms 记录的超前(尾-游标 ≈ 1e-3)
+#: 大于容差必判回放, 「误判只向多回放(亏性能不丢数据)单向倾斜」的声明在该边界成立。
+ACC_RAW_TAIL_TOL_S = 5e-4
+
+#: 尾块判定窗口(字节, R3 轻量读纪律 —— 不为判定做全量读): 只读最新候选天文件的尾部
+#: 窗口扫 \nB 定位最后一个有效块头。块宽上界 = Q3 保险闸 V4_BUFFER_SLOT_CAP(3600 槽)
+#: x ~36B/r 行 ≈ 130KB, 256KB 常态一发命中; 无块头时翻倍重读至上限, 仍无 = 保守 fallback。
+_ACC_TAIL_WINDOW_BYTES = 256 * 1024
+_ACC_TAIL_WINDOW_MAX_BYTES = 1024 * 1024
+
+
+def agg_state_from_acc(state: AccSeriesState) -> SeriesAgg:
+    """AccSeriesState -> SeriesAgg 逐字段拷贝(快路直采的恢复面)。字段对齐(名字+顺序)
+    由 tests/test_traffic_acc_ledger.py 静态守阵钉死, 增删字段即红。pending 桶值
+    AccHourFoldState -> HourFold 逐字段重建(不与解析产物共享可变容器); 行表浅拷贝
+    (AggRow 冻结不可变, 换容器即可)。"""
+    agg = SeriesAgg()
+    agg.pending = {
+        h:
+            HourFold(
+                dl_wsum=f.dl_wsum,
+                up_wsum=f.up_wsum,
+                cov=f.cov,
+                dl_max=f.dl_max,
+                up_max=f.up_max,
+                dl_total=f.dl_total,
+                up_total=f.up_total,
+                credits=f.credits,
+            )
+        for h, f in state.pending.items()
+    }
+    agg.open_credit = tuple(state.open_credit) if state.open_credit is not None else None
+    agg.day_epoch = state.day_epoch
+    agg.day_hours = list(state.day_hours)
+    agg.month_epoch = state.month_epoch
+    agg.month_days = list(state.month_days)
+    if state.closed_day is not None:
+        agg.closed_day = (state.closed_day[0], list(state.closed_day[1]))
+    if state.closed_month is not None:
+        agg.closed_month = (state.closed_month[0], list(state.closed_month[1]))
+    agg.earliest_hour = state.earliest_hour
+    return agg
+
+
+def acc_state_from_agg(agg: SeriesAgg) -> AccSeriesState:
+    """SeriesAgg -> AccSeriesState 逐字段拷贝(写侧面: flush 随批变化行 / stop 终态行的
+    快照构建)。同一镜像纪律; fold 逐字段拷贝(在线折叠态是活对象, 快照必须持副本)。
+    AccSnapshot(cursor/fingerprint 列)由调用方随构建点取值(游标 = _series_cursor,
+    指纹 = 封口后的 agg.dat stat)。"""
+    st = AccSeriesState()
+    st.pending = {
+        h:
+            AccHourFoldState(
+                dl_wsum=f.dl_wsum,
+                up_wsum=f.up_wsum,
+                cov=f.cov,
+                dl_max=f.dl_max,
+                up_max=f.up_max,
+                dl_total=f.dl_total,
+                up_total=f.up_total,
+                credits=f.credits,
+            )
+        for h, f in agg.pending.items()
+    }
+    st.open_credit = tuple(agg.open_credit) if agg.open_credit is not None else None
+    st.day_epoch = agg.day_epoch
+    st.day_hours = list(agg.day_hours)
+    st.month_epoch = agg.month_epoch
+    st.month_days = list(agg.month_days)
+    if agg.closed_day is not None:
+        st.closed_day = (agg.closed_day[0], list(agg.closed_day[1]))
+    if agg.closed_month is not None:
+        st.closed_month = (agg.closed_month[0], list(agg.closed_month[1]))
+    st.earliest_hour = agg.earliest_hour
+    return st
+
+
+def _tail_block_cursor(block) -> float:
+    """尾块 dt 链推进 -> 读侧游标(R3 判定的尾槽值): 公式与 _agg_credit_day_file 逐位
+    同式 —— r = 显式 dt 或标称(块首 advance 0), 游程 = t + (base + spacing x (n-1))
+    (v4_run_geometry 推导单点)。返回末记录的槽位锚点(与写侧 projected_ts 镜像同源;
+    与「末槽 ts」表达式可差 1 ULP, 由 ACC_RAW_TAIL_TOL_S 吸收)。"""
+    interval = float(block.interval_s)
+    t = float(block.start_epoch)
+    first = True
+    for rec in block.records:
+        if isinstance(rec, V4Sample):
+            advance = 0.0 if first else ((rec.dt_ms / 1000.0) if rec.dt_ms is not None else interval)
+            ts = t + advance
+            t = ts
+        elif isinstance(rec, (V4ZeroRun, V4NullRun)):
+            spacing, base = v4_run_geometry(rec, interval, first)
+            t = t + (base + spacing * (rec.run_len - 1))
+        else:
+            raise TypeError(f"未知块记录型: {type(rec).__name__}")
+        first = False
+    return t
+
+
+def raw_tail_beyond_cursor(store: TrafficV4Store, key: str, cursor: Optional[float]) -> bool:
+    """R3 两向判定(§03.3/§07 R3, 快路直采的前置闸): raw 尾是否超前于账本游标。
+    True = 存在游标之后的槽位**或无法轻量判定**(该系列 fallback 回放, 保守口径:
+    判定失真只准亏性能不准丢数据 —— 误判单向倾斜见 ACC_RAW_TAIL_TOL_S 注);
+    False = raw 尾 <= 游标(快路直采, 折叠态已含全部 raw 信用)。
+
+    轻量读纪律(§03.3「不得为判定把快路做成全量读」): 候选文件 = 日期 >= 游标所在日的
+    天文件(块不跨天 -> 更早文件的槽位全部 < 游标日 00:00 <= 游标, 时序不变式下不可能
+    超前; 最新文件的尾槽 = 全候选集最大槽位), 只读其尾部窗口字节扫 \\nB 定位最后一个
+    有效块头, 自该偏移 resume 解析到 EOF(与 read_day_open_segment 同款续解机制),
+    dt 链推进取尾游标(_tail_block_cursor)。单系列成本 = 1 listdir + 1 尾窗口读 +
+    1 尾块解析, 零 agg 读、零全文件解析。
+
+    保守分支(一律 True -> fallback): 游标 None 且存在天文件(账本从未入账而有 raw,
+    语义上必有未回放槽位, 不读文件直判)/ 文件尺寸异常(0 字节)/ 窗口翻倍至上限仍无
+    有效块头(损坏/只有头行)/ 尾块为空块(B 行后无合法记录 —— 尾槽不可判)/ 日界换算、
+    解析或 IO 异常(全函数保守闸 —— 判定不得让恢复入口抛错)。候选文件集为空 =
+    False(游标之后无 raw 槽位)。"""
+    try:
+        if cursor is None:
+            return bool(store.series_day_dates(key, 0.0))  # 账本从未入账: 有 raw 即有未回放槽位
+        dates = store.series_day_dates(key, float(v4_day_epoch(cursor)))
+        if not dates:
+            return False  # 游标日之后无天文件: raw 尾 <= 游标
+        path = store.series_day_path(key, dates[-1])
+        size = os.path.getsize(path)
+        if size <= 0:
+            return True  # 空文件(创建中断形态): 无法判定, 保守回放
+        window = min(size, _ACC_TAIL_WINDOW_BYTES)
+        while True:
+            with open(path, "rb") as f:
+                f.seek(size - window)
+                raw = f.read(window)
+            starts = v4_day_block_starts(raw, v4_day_block_offsets(raw))
+            if starts or window >= size or window >= _ACC_TAIL_WINDOW_MAX_BYTES:
+                break
+            window = min(size, window * 2)  # 尾窗口未及任何块头(尾块超窗): 翻倍重读
+        if not starts:
+            return True  # 全文件无有效块头(损坏/只有头行): 保守回放
+        resume = V4DayResume(
+            key=key,
+            bad_lines=0,
+            data_lines=0,
+            blocks=(),
+            open_start=None,
+            open_interval=None,
+            open_dl_base=None,
+            open_up_base=None,
+            open_records=(),
+        )
+        parsed = parse_v4_day_text(raw[starts[-1][0]:].decode("utf-8", errors="replace"), resume=resume)
+        blocks = parsed.blocks
+        if not blocks or not blocks[-1].records:
+            return True  # 尾块为空块(B 行后无合法记录): 尾槽不可判, 保守回放
+        return _tail_block_cursor(blocks[-1]) > cursor + ACC_RAW_TAIL_TOL_S
+    except (OSError, ValueError, TypeError):
+        return True  # 文件/日界换算/解析异常: 保守回放(该系列走 fallback 重建)
 
 
 def _open_run_hour_samples(agg: "SeriesAgg", run: Optional[OpenRun], out: Optional[dict] = None) -> dict:
@@ -303,22 +486,26 @@ class _SampleAggMixin:
                 fold.merge(dl, up, dl_total, up_total, seg)
             cur += seg
 
-    def _agg_flush_all(self, now: float) -> None:
+    def _agg_flush_all(self, now: float) -> set:
         """全系列聚合封口(§4.2 flush 时点; stop() 复用 —— 未完结层级留累计器, 重启经
-        catch-up 重建, 零丢失)。
+        catch-up 重建, 零丢失)。返回本轮 agg 封口 append 成功的系列键集(S2 acc 随批行
+        的「变化」判据之一; 空集 = 本轮无任何 agg 落盘)。
 
         逐系列隔离(2026-10-13 真机取证): 单系列封口抛错只该影响该系列。此前异常一路上抛到
         handler, 于是 1. 其余系列本轮也不封口 2. `_agg_append` 永不执行 = 全系列 agg 静默停写
         3. 抛点在状态复位之前, 同一错每轮 flush 复现 —— 真机上一个系列抛「逐级聚合无有效
         覆盖」, 全系列小时行一个多小时没落盘。现在逐系列 catch + 善后(见
         _agg_reset_after_error), 单系列的问题不再放大成全局停写。"""
+        sealed_ok: set = set()
         for key in list(self._agg_states):
             try:
-                self._agg_flush_series(key, now)
+                if self._agg_flush_series(key, now):
+                    sealed_ok.add(key)
             except Exception as e:  # noqa: BLE001 —— 逐系列隔离即本函数职责(见 docstring)
                 self._agg_reset_after_error(key, e)
             else:
                 self._agg_warned.discard(key)  # 恢复健康: 下次再错重新告警一次
+        return sealed_ok
 
     def _agg_reset_after_error(self, key: str, err: Exception) -> None:
         """单系列封口失败善后(见 _agg_flush_all): 告警(同系列恢复前只一次, 免 6 次/分钟刷屏)
@@ -338,7 +525,11 @@ class _SampleAggMixin:
         """单系列聚合封口(§4.2): 完结整小时 -> hour 行 -> 完结本地日 -> day 行 ->
         完结自然月 -> month 行, 顺序检查; 产出行合并一批 append(每系列每 flush 至多
         +1 次 open)。dry_run / data_dir 空: 封口内存照常推进, 写静默跳过。hour 封口
-        时点 piggyback 裁剪检查(§4.5)。返回是否实际写了 agg 文件(测试用)。"""
+        时点 piggyback 裁剪检查(§4.5)。返回是否实际写了 agg 文件(测试用)。
+        开头清 _acc_append_failed(S2 硬序旗标, 单点见 _agg_append): 旗标语义 =
+        「本系列最近一次 agg append 尝试失败」, 每轮封口开头复位 —— 本轮再失败由
+        _agg_append 置位(acc 行本轮跳过), 本轮无 agg 行时保持清位(下轮 acc 行自愈)。"""
+        self._acc_append_failed.discard(key)
         agg = self._agg_states.get(key)
         if agg is None:
             return False
@@ -499,7 +690,11 @@ class _SampleAggMixin:
     def _agg_append(self, key: str, rows: tuple) -> bool:
         """聚合行批量落盘(同款追加纪律, dry_run 静默跳过): OSError 按落盘失败口径
         告警不上抛(连续失败只告警一次, 与天文件共用记忆) —— 行随累计器丢失, 重启经
-        catch-up 从天文件/agg 尾重建补算(幂等)。"""
+        catch-up 从天文件/agg 尾重建补算(幂等)。
+        S2 硬序旗标(_acc_append_failed): append 失败置位 / 成功清位 —— acc 随批行
+        (_flush_acc_rows/_acc_stop_rows)对置位系列跳过(账本行不得领先于 agg 现状:
+        行内指纹/游标语义对齐 agg, 领先会让恢复快路采到「累计器含未落盘封口行」的
+        状态); 复位点在 _agg_flush_series 开头(下一轮无 agg 行时 acc 行自愈补写)。"""
         if not rows:
             return False
         if not self._persistence_on or not self._ctx.config.data_dir:
@@ -507,8 +702,10 @@ class _SampleAggMixin:
         try:
             self._get_v4_store().append_agg_rows(key, rows)
             self._persist_warned = False
+            self._acc_append_failed.discard(key)
             return True
         except OSError as e:
+            self._acc_append_failed.add(key)
             if self._persist_warned:
                 logger.debug(f"流量采样 | {key} agg 行落盘失败(持续): {e}")
             else:
@@ -550,6 +747,9 @@ class _SampleAggMixin:
             self.latest.pop(key, None)
             self._buffers.pop(key, None)
             self._open_runs.pop(key, None)
+            self._acc_cursors.pop(key, None)  # S2: 账本接线缓存同步清理(防陈旧游标复活已删系列)
+            self._acc_dirty.discard(key)
+            self._acc_append_failed.discard(key)
         if evicted:
             logger.info(f"流量采样 | 按龄淘汰超龄系列目录 {len(evicted)} 个(天文件 + agg.dat)")
 
@@ -576,11 +776,19 @@ class _SampleAggMixin:
             out.append(v4_rollup_agg(kind, b, tuple(buckets[b])))
         return out, cur_epoch, cur_rows
 
-    def _recover_series(self, key: str, store: TrafficV4Store, now: float, window: float) -> dict:
+    def _recover_series(
+        self,
+        key: str,
+        store: TrafficV4Store,
+        now: float,
+        window: float,
+        acc_snapshot: Optional["AccSnapshot"] = None
+    ) -> dict:
         """单系列恢复(§4.3/§4.4): 扫 agg 文尾 -> 水位(= 文件尾行, 不落内存不重 append)
         + 文件内行重建当日/当月累计器 -> catch-up 逐级补算 append(hour <- 读集内天文件
         raw 游程级闭合式前向记账(B2, plan 26-11-21-1546) / day <- agg 内 hour 行 /
-        month <- day 行) -> 末尾才裁剪(硬序)。
+        month <- day 行) -> 末尾才裁剪(硬序)。S2 起入口先试 acc 快照快路(见下方
+        P2b 段; acc_snapshot = 账本该系列末行或 None)。
 
         读集按需(plan 26-10-12-2010 D1): 读集下界 = agg 水位所在日
         [v4_day_epoch(wm_hour), 今日] —— 水位封口小时不读不重算, 读集常态 1 个天文件、
@@ -603,9 +811,21 @@ class _SampleAggMixin:
         h <= wm_hour 判据保留为防御二门(开放段决策的兜底)。fallback 路径(wm None)
         零过滤全量入账, 语义零变化(D4/D5)。
 
-        返回读集埋点 {"day_dates", "bound", "new_hours", "slots"}(供 _recover_aggregates
-        汇总与测试机检读集有界; slots = B1 开放段口径: 实际解析/记账走过的块槽位数,
-        封口块不再计)。"""
+        acc 快照快路(P2b/S2 入口分支, §03.3): acc_snapshot 非 None(账本有效且该系列
+        有末行)时先走 _try_ledger_fastpath —— 指纹探针 + R3 两向判定全过 = 从折叠态
+        逐字段直采 SeriesAgg(累计器/pending/open_credit/earliest_hour 全部就位, 零
+        agg 读零 raw 读, 判定本身只有 1 次 agg.dat stat + 尾块轻量读); 失配/缺失/
+        损坏/raw 超前 = 该系列 fallback(B1+B2, 单系列隔离, INFO 留痕 per D9)。
+        fallback 重建后标记 _acc_dirty(首轮 flush 补写账本行, 快路自愈)并记忆重建
+        游标 = 读集尾槽(day_tail[0], 与在线游标同语义 —— 后续封口-only 变化的 acc 行
+        仍有正确游标)。
+
+        返回读集埋点 {"day_dates", "bound", "new_hours", "slots", "source"}(供
+        _recover_aggregates 汇总与测试机检读集有界; slots = B1 开放段口径: 实际解析/
+        记账走过的块槽位数, 封口块不再计; source = "ledger" 快路直采 / "rebuild"
+        fallback 重建 —— S2 新增字段, 快路下 bound = "ledger"、day_dates 空)。"""
+        if acc_snapshot is not None and self._try_ledger_fastpath(key, store, acc_snapshot):
+            return {"day_dates": (), "bound": "ledger", "new_hours": 0, "slots": 0, "source": "ledger"}
         parsed = store.read_agg(key)
         agg = self._agg_state(key)
         agg.earliest_hour = parsed.hours[0].epoch if parsed.hours else None
@@ -668,12 +888,146 @@ class _SampleAggMixin:
         if rows:
             self._agg_append(key, rows)  # catch-up 补算 append(幂等: 同 epoch 取最后一行)
         self._agg_trim(key, agg, now, window)  # 硬序: catch-up 全部落盘后才裁剪
+        # S2 自愈面: 重建系列标记 dirty(首轮 flush 补写账本行, 恢复快路) + 记忆重建
+        # 游标 = 读集尾槽(day_tail[0] 与在线游标同语义: 末记录槽位锚点; None = 读集无 tail)
+        self._acc_dirty.add(key)
+        if day_tail is not None:
+            self._acc_cursors[key] = day_tail[0]
         return {
             "day_dates": day_dates,
             "bound": bound,
             "new_hours": len(new_hours),
             "slots": sum(slot_counts),
+            "source": "rebuild",
         }
+
+    def _try_ledger_fastpath(self, key: str, store: TrafficV4Store, snap: AccSnapshot) -> bool:
+        """acc 快照快路(D9/§03.3, _recover_series 入口分支): 两道闸全过 = 从账本折叠态
+        逐字段直采 SeriesAgg 并返回 True(零 agg 读零 raw 读 —— 判定本身只有 1 次
+        agg.dat stat 探针 + 1 次尾块轻量读); 任一不过 = False(该系列 fallback B1+B2,
+        单系列隔离, INFO 留痕 per D9 —— 快照是加速器不承载正确性):
+        1. 指纹探针: 现 agg.dat stat == 账本行内指纹(失配/缺失 = agg 已变化, 采账本态
+           会与 agg 现状发散);
+        2. R3 两向判定: raw 尾槽 <= 账本游标(超前 = 崩溃落在 raw 追加与账本追加之间,
+           账本落后, 须回放尾段)。
+        直采时同步记忆游标(_acc_cursors —— 后续封口-only 变化的 acc 行仍要正确游标)。"""
+        if not probe_agg_fingerprint(self._ctx.config.data_dir, key, snap.agg_fingerprint):
+            logger.info(f"流量采样 | {key} acc 快照指纹失配(agg.dat 与账本行不符), 该系列走 fallback 重建(D9 单系列隔离)")
+            return False
+        if raw_tail_beyond_cursor(store, key, snap.cursor):
+            logger.info(f"流量采样 | {key} raw 尾超前于账本游标(崩溃窗口 R3 两向), 该系列走 fallback 重建回放尾段")
+            return False
+        self._agg_states[key] = agg_state_from_acc(snap.state)
+        if snap.cursor is not None:
+            self._acc_cursors[key] = snap.cursor
+        return True
+
+    def _series_cursor(self, key: str) -> Optional[float]:
+        """系列游标(acc 行 cursor 列; = 累计器已入账到的最后槽位 = 最后一条记录的槽位
+        锚点): 优先写侧游标 buf.projected_ts(与 _agg_feed 的 cursor 实参同源 —— 每记录
+        到达时两者同点推进, 缓冲对象存活期内恒有效, 关块复位不清它); 缓冲不在(壳清理)
+        回落游标记忆(_acc_cursors, 上次 acc 行构建时记下); 再回落 open_credit[0]
+        (r/z 尾与写侧游标同值)。n 尾 + 缓冲不在的窄角游标不可恢复 -> None(读侧两向
+        判定对 None 保守 fallback, 语义不损只亏一次重建)。"""
+        buf = self._buffers.get(key)
+        if buf is not None:
+            return buf.projected_ts if buf.projected_ts else None
+        cur = self._acc_cursors.get(key)
+        if cur is not None:
+            return cur
+        agg = self._agg_states.get(key)
+        credit = agg.open_credit if agg is not None else None
+        return float(credit[0]) if credit is not None else None
+
+    def _flush_acc_rows(self, sealed_ok: set) -> None:
+        """acc 账本随批追加(§03.4 flush 时点第3/4步, S2/D7/D8): 本 flush 有状态变化的
+        系列行 append(变化判定 = agg 封口发生了 append[sealed_ok] 或累计器有推进
+        [_acc_dirty, _flush_series 落盘记录时标记]; 空闲系列零追加 —— 黄金法则 1)。
+        硬序: agg 封口 append 失败的系列本轮跳过(_acc_append_failed 置位 —— 账本行不得
+        领先于 agg 现状; 系列保持 dirty, 下轮无 agg 行时自愈补写)。acc 行指纹 = 封口后
+        (append+trim)的 agg.dat stat —— 读侧探针的比对基准; 游标 = _series_cursor。
+        变化系列合一批 append(单次 open("a") piggyback), 随后压实检查(>16MB 单次重写,
+        阈值内零写)。append 与压实两处 OSError 均告警不上抛(append 失败保持 dirty 下轮
+        补写; 压实失败无数据后果 —— 行已落账, tmp+os.replace 纪律下原文件完好下轮自愈)。"""
+        if not self._persistence_on or not self._ctx.config.data_dir:
+            return
+        changed = [
+            key for key in sorted(self._agg_states)
+            if key not in self._acc_append_failed and (key in self._acc_dirty or key in sealed_ok)
+        ]
+        if not changed:
+            return  # 空闲 flush: 零追加零 stat(压实检查随写走 —— 无追加即无增长)
+        data_dir = self._ctx.config.data_dir
+        snaps = []
+        for key in changed:
+            cursor = self._series_cursor(key)
+            snaps.append(
+                AccSnapshot(
+                    key=key,
+                    cursor=cursor,
+                    agg_fingerprint=stat_agg_fingerprint(data_dir, key),
+                    state=acc_state_from_agg(self._agg_states[key]),
+                )
+            )
+            if cursor is not None:
+                self._acc_cursors[key] = cursor
+        try:
+            append_acc_snapshots(data_dir, snaps)
+        except OSError as e:
+            if self._persist_warned:
+                logger.debug(f"流量采样 | acc 账本追加失败(持续): {e}")
+            else:
+                logger.warning(f"流量采样 | acc 账本追加失败(本批快照行丢失, 系列保持 dirty 下轮补写): {e}")
+                self._persist_warned = True
+            return
+        self._acc_dirty.difference_update(changed)
+        try:
+            compact_acc_ledger(data_dir)  # (4) 压实检查(阈值内零写; 重写失败原文件完好留待下轮)
+        except OSError as e:
+            # 压实读侧/重写失败无数据后果(行已追加成功, tmp+os.replace 纪律下原文件完好,
+            # 下轮随批自愈), 与本函数 append 失败口径拉平: 告警不上抛(否则穿透采样轮)。
+            logger.warning(f"流量采样 | acc 账本压实检查失败(快照行已落账, 原文件完好下轮自愈): {e}")
+
+    def _acc_stop_rows(self) -> None:
+        """stop 终态行(§03.4/D8: 「acc 全系列终态行 append」): 优雅退出把全部系列的
+        折叠态落账本, 下次启动全量快路(零重算)。幂等: _acc_stop_done 单次闸 —— 终态行
+        内容与首发批一致, 重复 stop 零追加(黄金法则 1)。硬序同 flush: agg 封口 append
+        失败的系列跳过(重启该系列按 fallback 重建)。dry_run 零写。append 与压实两处
+        OSError 均告警不上抛 —— stop 在 host.stop_all() 内, 上抛会跳过 state.save(黄金
+        法则 3)与 _lock.release(压实失败无数据后果, 同 flush 侧口径)。"""
+        if not self._persistence_on or not self._ctx.config.data_dir or self._acc_stop_done:
+            return
+        self._acc_stop_done = True  # 单次闸: 置位在构建前 —— 失败也不重试(重启 fallback 兜底)
+        data_dir = self._ctx.config.data_dir
+        snaps = []
+        for key in sorted(self._agg_states):
+            if key in self._acc_append_failed:
+                continue  # agg 封口 append 失败: 行不领先于 agg 现状(硬序)
+            cursor = self._series_cursor(key)
+            snaps.append(
+                AccSnapshot(
+                    key=key,
+                    cursor=cursor,
+                    agg_fingerprint=stat_agg_fingerprint(data_dir, key),
+                    state=acc_state_from_agg(self._agg_states[key]),
+                )
+            )
+            if cursor is not None:
+                self._acc_cursors[key] = cursor
+            self._acc_dirty.discard(key)
+        if not snaps:
+            return
+        try:
+            append_acc_snapshots(data_dir, snaps)
+        except OSError as e:
+            logger.warning(f"流量采样 | acc 账本 stop 终态行追加失败(重启按系列 fallback 重建): {e}")
+            return
+        try:
+            compact_acc_ledger(data_dir)
+        except OSError as e:
+            # 同 flush 侧口径: 压实失败无数据后果(终态行已追加成功, 原文件完好), 告警
+            # 不上抛 —— stop 在 host.stop_all() 内, 上抛会跳过 state.save 与锁释放。
+            logger.warning(f"流量采样 | acc 账本 stop 压实检查失败(终态行已落账, 原文件完好): {e}")
 
     @staticmethod
     def _slot_agg_obs(slot: V4Slot, agg_totals: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int, int, int]]:

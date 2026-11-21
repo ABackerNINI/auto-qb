@@ -1413,10 +1413,21 @@ def test_recovery_instrumentation_logs_counts(tmp_path, monkeypatch):
     assert "启动恢复开始: 启用态, 2 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)" in text
     assert "启动恢复完成: 2 系列 / 读入天文件 5 个" in text  # A 2 + B 3
     assert "补算小时 0 个 / 处理槽 0 个(B1 开放段口径: 只计实际解析/记账走过的块, 封口块不计)/ 耗时" in text  # 空壳文件零入账(计数形状齐全; B1 口径改名)
+    assert "acc 快路直采 0 / fallback 重建 2" in text  # S2 埋点后缀(语料无 acc.dat: 升级首启全体 fallback)
+    assert "acc 账本缺失/无效(升级首启或格式不符, 全体 fallback): 0 系列快照行" in text
     assert "agg 无可用水位(缺失/损坏/无 hour 行)" in text  # B 的 D5 兜底说明
     assert "读集 3 天(>2): 下界来源 = fallback 保留窗全量" in text  # B 的下界来源
     stats = mgr.host.get("qb_traffic").recovery_stats
-    assert stats == {"series": 2, "day_files": 5, "hours": 0, "slots": 0, "elapsed_s": stats["elapsed_s"]}
+    # S2(plan 26-11-21-1546)新增 ledger_fastpath/ledger_fallback 计数字段(旧字段语义不变)
+    assert stats == {
+        "series": 2,
+        "day_files": 5,
+        "hours": 0,
+        "slots": 0,
+        "ledger_fastpath": 0,
+        "ledger_fallback": 2,
+        "elapsed_s": stats["elapsed_s"],
+    }
 
 
 @pytest.mark.parametrize("window", ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all"))

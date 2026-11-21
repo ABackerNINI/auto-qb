@@ -243,7 +243,7 @@ def _drive_full_day(tmp_path, monkeypatch, multiplier: int, day0: int):
     mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=512)
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    counts = {"day0": 0, "day1": 0, "agg": 0}
+    counts = {"day0": 0, "day1": 0, "agg": 0, "acc": 0}
     day0_suffix = v4_epoch_date_str(day0) + ".dat"
     real_open = open
 
@@ -253,6 +253,8 @@ def _drive_full_day(tmp_path, monkeypatch, multiplier: int, day0: int):
             path = os.fspath(file)
             if path.endswith("agg.dat"):
                 counts["agg"] += 1
+            elif path.endswith("acc.dat"):
+                counts["acc"] += 1  # S2 acc 快照账本追加面(plan 26-11-21-1546): 单列不计入 day 桶
             elif path.endswith(day0_suffix):
                 counts["day0"] += 1
             elif path.endswith(".dat"):

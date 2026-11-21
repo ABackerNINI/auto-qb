@@ -340,6 +340,11 @@ class _SampleBlocksMixin:
         if buf is None:
             return
         if buf.records:
+            # acc 账本变化标记(S2, plan 26-11-21-1546): 本 flush 累计器有推进(记录入账)
+            # —— 落盘失败也标记(观测保留在累计器, acc 行不得缺席); dry_run 标记无害
+            # (acc 写侧有 persistence 闸)。直接调 _flush_series 的路径(Q3 保险闸/跨天
+            # 硬切/改间隔/重置关块)不经 _flush_acc_rows, 标记保留到下一次 flush 时点。
+            self._acc_dirty.add(key)
             if self._persistence_on and self._ctx.config.data_dir:
                 header = None
                 if buf.start_epoch is not None and not buf.header_written:

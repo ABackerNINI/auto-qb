@@ -1146,6 +1146,9 @@ def test_v4_write_io_full_day_2s_interval(tmp_path, monkeypatch):
     assert c["day0"] == 144  # 86400s / 600s flush = 144(含午夜硬切的收尾落盘)
     assert c["day1"] == 1  # 次日首样本: 1 次
     assert c["agg"] == 24  # 24 个整点小时封口
+    assert c["acc"] == 144  # S2: 每个 _flush_all_series 至多 1 次账本追加(变化系列合一批单 open);
+    # 144 = flush 调用数(午夜硬切的 day0 第 144 次天文件 append 走 _close_block_and_reopen
+    # 直调 _flush_series, 不在账本追加点 —— 其快照随下一次 flush 的批次行落账)
     assert 43200 // 144 == 300  # 对照 v2 逐行追加 43200 次/天: 300x 下降
     # 数据面抽查: day0 天文件 43200 条 r 记录(interval_s=2, v4 每 flush 一块共 144 块);
     # agg 24 hour 行 + 1 day 行
@@ -1166,6 +1169,8 @@ def test_v4_write_io_full_day_30s_interval(tmp_path, monkeypatch):
     day0 = int(datetime(2026, 5, 10).timestamp())
     _mod, c = _drive_full_day(tmp_path, monkeypatch, 30, day0)
     assert c["day0"] == 144 and c["day1"] == 1 and c["agg"] == 24
+    assert c["acc"] == 144  # S2: 账本追加 = _flush_all_series 调用数(与采样密度无关; 午夜硬切直调
+    # _flush_series 不在追加点, 见 2s 档同断言注)
     assert 2880 // 144 == 20  # 对照 v2 逐行追加 2880 次/天: 20x 下降(§09.1 口径)
     parsed = parse_v4_day_text(_dat_text(tmp_path, GLOBAL_SERIES_KEY, v4_epoch_date_str(day0)))
     assert len(parsed.blocks) == 144 and all(b.interval_s == 30 for b in parsed.blocks)

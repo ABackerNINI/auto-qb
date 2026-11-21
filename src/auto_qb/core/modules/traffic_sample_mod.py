@@ -130,6 +130,21 @@ qbmanager 的 finally 与 state.save 顺序不改。
   机制退役), frozen 照删, 全局系列豁免; 触发点 = flush 时点(节流至多每
   EVICT_CHECK_INTERVAL_S 一次, 扫目录 IO 不随 600s flush 放大), 淘汰后同步清理该系列
   全部内存缓存(数据门/累计器/基线/镜像, 防陈旧门缓存复活已删系列)。
+- acc 快照账本(S2 第二步 P2b, plan 26-11-21-1546; 组件单点 core/traffic_store_acc_ledger.py,
+  接线面在 traffic_sample_agg.py): <data_dir>/qb-traffic-v4/acc.dat 单文件追加账本
+  (每变化系列一行, last-wins)。flush 时点第3步追加「本 flush 有状态变化」系列行
+  (变化 = agg 封口发生了 append 或累计器有推进[_acc_dirty]; 空闲系列零追加)+ 第4步
+  压实检查(>16MB 单次重写); 硬序 = agg 封口 append 成功后才写 acc 行(失败系列本轮
+  跳过, 下轮自愈 —— 账本行不得领先于 agg 现状), 行内指纹取封口后 agg.dat stat、游标 =
+  最后一条记录槽位锚点(_series_cursor: buf.projected_ts -> 游标记忆 -> open_credit)。
+  stop 追加全系列终态行(单次闸幂等)。启动恢复快路(_recover_series 入口): 账本整读 +
+  按系列取末行 -> agg.dat 指纹探针(失配/缺失 = 该系列 fallback, 单系列隔离 INFO 留痕
+  per D9) -> R3 两向判定(raw 尾槽 vs 账本游标, 尾块轻量读 raw_tail_beyond_cursor:
+  只看日期 >= 游标日的最新天文件尾窗口, 定位末块推游标, 不做全量读)—— raw 尾 <= 游标 =
+  直采 AccSeriesState->SeriesAgg 零 agg 读零 raw 读 / 超前(崩溃落在 raw 追加与账本追加
+  之间)或异常 = fallback 回放尾段。快照是加速器不承载正确性; crash 两向: raw 尾 <= 游标
+  = 信用已在账本(agg 面比现状完整), raw 尾 > 游标 = 回放小尾段。fallback 重建系列标记
+  dirty + 记忆重建游标(首轮 flush 补写账本行, 快路自愈)。
 - dry_run: 累计器与水位封口内存照常推进; agg append 与裁剪/淘汰写操作静默跳过;
   stop() 聚合封口随 dry_run 短路; start() 恢复(catch-up 有写)dry_run 整体跳过。
 
@@ -181,6 +196,7 @@ from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from ..traffic_store import V4NullRun, V4Sample, V4ZeroRun
 from ..traffic_limits import SpeedLimitRecorder
+from ..traffic_store_acc_ledger import AccLedgerRead, read_acc_ledger
 from ..traffic_store import (
     DRIFT_TOL_MS,
     HOUR_SECONDS,
@@ -275,13 +291,26 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         self._last_evict_check: Optional[float] = None
         # ---- 恢复埋点(§4.3, plan 26-10-12-2010: 消除静默, 读集有界可机检) ----
         # 上次 _recover_aggregates 的读集计数: 逐系列 {key: {"day_dates": 读集日期串,
-        #   "bound": 下界来源("watermark" 水位日 / "fallback" 保留窗兜底), "new_hours":
-        #   补算小时数, "slots": 处理槽数(B1 开放段口径, plan 26-11-21-1546: 实际解析/
-        #   记账走过的块槽位, 封口块不计)}}; 汇总 {"series", "day_files", "hours",
-        #   "slots", "elapsed_s"}。供测试断言「读集有界」(机检事实, 不靠读日志目测);
+        #   "bound": 下界来源("watermark" 水位日 / "fallback" 保留窗兜底 / "ledger"
+        #   acc 快路直采无读集), "new_hours": 补算小时数, "slots": 处理槽数(B1 开放段
+        #   口径, plan 26-11-21-1546: 实际解析/记账走过的块槽位, 封口块不计; 快路 = 0),
+        #   "source": "ledger" 快路直采 / "rebuild" fallback 重建(S2 新增)}}; 汇总
+        #   {"series", "day_files", "hours", "slots", "ledger_fastpath", "ledger_fallback",
+        #   "elapsed_s"}。供测试断言「读集有界」(机检事实, 不靠读日志目测);
         #   None = 未启用/未恢复(dry_run 或流量模块关闭)
         self.recovery_reads: Optional[dict] = None
         self.recovery_stats: Optional[dict] = None
+        # ---- acc 快照账本接线(S2 第二步 P2b, plan 26-11-21-1546) ----
+        # 系列游标记忆(账本行 cursor 列 = 最后一条记录的槽位锚点, 与 buf.projected_ts
+        # 同源): _series_cursor 的缓冲不在回落源(acc 行构建时记下, 快路直采/重建时重立);
+        # _acc_dirty = 本 flush 累计器有推进的系列(_flush_series 落盘记录时标记, 含落盘
+        # 失败 —— 观测保留在累计器, acc 行不得缺席); _acc_append_failed = 最近一次 agg
+        # 封口 append 失败的系列(硬序: acc 行不得领先于 agg 现状, 本轮跳过下轮自愈);
+        # _acc_stop_done = stop 终态行单次闸(幂等)。四者主循环线程独占(黄金法则 5)。
+        self._acc_cursors: dict = {}
+        self._acc_dirty: set = set()
+        self._acc_append_failed: set = set()
+        self._acc_stop_done: bool = False
         # ---- 活尾快照(S6 验收追加) ----
         # 系列键 -> LiveTail(未落盘 buffer 记录 + 开放游程的当轮冻结副本): handler 末尾
         # 整体替换引用, Web 线程只读单引用无锁(对齐 ctx.web.set_traffic_view 快照发布
@@ -603,45 +632,76 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         if buf.slots >= V4_BUFFER_SLOT_CAP:
             self._flush_series(key)  # Q3 保险闸(§3.1): 超限提前 flush(v4 关块谓词下带 r 行的块随本 flush 关闭)
 
-    def _flush_all_series(self) -> None:
+    def _flush_all_series(self, write_acc: bool = True) -> None:
         """全系列批量 flush(§3.3 驱动点; stop() 复用): 逐系列落盘待写记录; 聚合封口
-        (§4.2: 完结层级检查 + agg append, S2b); 顺带做内存卫生 —— 无开放块、无待写
-        记录、无开放游程且本轮未采样的 shell 缓冲清除。"""
+        (§4.2: 完结层级检查 + agg append, S2b); acc 账本随批追加(S2/§03.4 第3/4步:
+        变化系列行 + 压实检查 —— write_acc=False 跳过, stop() 用独立的全系列终态行);
+        顺带做内存卫生 —— 无开放块、无待写记录、无开放游程且本轮未采样的 shell 缓冲清除。"""
+        for key, buf in self._buffers.items():
+            if buf.projected_ts:
+                # 游标记忆(S2): 缓冲存活期快照 —— projected_ts 恒 = 最后一条记录的槽位
+                # 锚点(与 _agg_feed 的 cursor 实参同源), 壳清理删缓冲后 _series_cursor
+                # 仍可从此处取值(n 尾 + 封口-only 变化系列的 acc 行游标就位)。
+                self._acc_cursors[key] = buf.projected_ts
         for key in list(self._buffers):
             self._flush_series(key)
         for key in list(self._buffers):
             buf = self._buffers[key]
             if buf.start_epoch is None and not buf.records and key not in self._open_runs and key not in self._round_keys:
                 del self._buffers[key]
-        self._agg_flush_all(self._clock.now())
+        now = self._clock.now()
+        sealed_ok = self._agg_flush_all(now)
+        if write_acc:
+            self._flush_acc_rows(sealed_ok)
 
     def _recover_aggregates(self) -> None:
         """重启恢复(§4.3): 扫现存系列, 逐系列恢复水位 + 重建累计器 + catch-up 补算
         (硬序: 补算 append 全部完成后才裁剪)。单系列失败(OSError)不阻断其它系列。
+
+        acc 快照账本(S2/§03.3, plan 26-11-21-1546): 启动先整读 acc 账本一次(缺失/空/
+        门闩失守 = 全体 fallback —— 升级后首次启动的常态自举点, 读取 OSError 同判),
+        按系列取最后一行(last-wins)交 _recover_series 快路判定: 指纹探针 + R3 两向
+        判定全过 = 折叠态直采(零 agg 读零 raw 读), 任一不过 = 该系列 fallback B1+B2
+        (单系列隔离, INFO 留痕 per D9)。账本里有而系列键表里没有的快照行(已淘汰系列)
+        忽略不采(采了会复活已删系列)。埋点新增 ledger_fastpath/ledger_fallback 计数。
 
         读集按需(plan 26-10-12-2010 D1): 逐系列读集下界 = agg 水位所在日, 常态 1 个
         天文件、跨日界至多 2 个 —— 与 24h 流量图读侧契约同阶; 不打开流量图时的 0 文件
         由读侧轮询门控保证, 恢复读的是写侧缺口。起止各一条 INFO(消除静默) + 计数落
         self.recovery_reads / self.recovery_stats 供测试机检「读集有界」。slots 口径
         自 B1(plan 26-11-21-1546)起 = 开放段: 实际解析/记账走过的块槽位数, 封口块
-        不再计(完成行同步改名处理槽)。"""
+        不再计(完成行同步改名处理槽); 快路直采系列 slots = 0、bound = "ledger"。"""
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled or not self._ctx.config.data_dir:
             return
         t0 = self._clock.now()
         store = self._get_v4_store()
         keys = store.series_keys()
-        logger.info(f"流量采样 | 启动恢复开始: 启用态, {len(keys)} 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)")
+        try:
+            ledger = read_acc_ledger(self._ctx.config.data_dir)
+        except OSError as e:
+            logger.warning(f"流量采样 | acc 账本读取失败, 全体系列走 fallback 重建: {e}")
+            ledger = AccLedgerRead(snapshots={}, header_ok=False)
+        logger.info(
+            f"流量采样 | 启动恢复开始: 启用态, {len(keys)} 个现存系列(读集 = agg 水位日 -> 今日, 按需口径); "
+            f"acc 账本{'有效' if ledger.header_ok else '缺失/无效(升级首启或格式不符, 全体 fallback)'}: "
+            f"{len(ledger.snapshots)} 系列快照行"
+        )
         reads: dict = {}
         total_files = 0
         total_hours = 0
         total_slots = 0
+        total_fast = 0
         for key in keys:
             try:
-                reads[key] = self._recover_series(key, store, t0, conf.rollup_window)
+                reads[key] = self._recover_series(
+                    key, store, t0, conf.rollup_window, acc_snapshot=ledger.snapshots.get(key)
+                )
                 total_files += len(reads[key]["day_dates"])
                 total_hours += reads[key]["new_hours"]
                 total_slots += reads[key]["slots"]
+                if reads[key].get("source") == "ledger":
+                    total_fast += 1
             except OSError as e:
                 logger.warning(f"流量采样 | {key} 聚合恢复失败(该系列按 agg 现状运行): {e}")
         elapsed = self._clock.now() - t0
@@ -651,12 +711,15 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
             "day_files": total_files,
             "hours": total_hours,
             "slots": total_slots,
+            "ledger_fastpath": total_fast,
+            "ledger_fallback": len(keys) - total_fast,
             "elapsed_s": elapsed,
         }
         logger.info(
             f"流量采样 | 启动恢复完成: {len(keys)} 系列 / 读入天文件 {total_files} 个 / "
             f"补算小时 {total_hours} 个 / 处理槽 {total_slots} 个(B1 开放段口径: 只计实际"
-            f"解析/记账走过的块, 封口块不计)/ 耗时 {elapsed:.2f}s"
+            f"解析/记账走过的块, 封口块不计)/ 耗时 {elapsed:.2f}s; acc 快路直采 {total_fast} / "
+            f"fallback 重建 {len(keys) - total_fast}"
         )
 
     # ---------- 优雅退出 stop() 钩子(§3.4) ----------
@@ -665,15 +728,18 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         """stop 钩子(§3.4): 经 host.stop_all() 触发 —— 封全部开放游程 + 全量 flush +
         聚合封口(完结 hour/day/month 层级照常检查并落 agg; 未完结小时的累计器随进程
         消失, 重启经 catch-up 从天文件 raw 重建, 零丢失), 优雅退出零丢失(现行 v2 丢
-        开放行程 <=600s 的语义在此闭合)。dry_run 短路(不落盘); 幂等(重复调用缓冲
-        游程已空, 零副作用); OSError 按落盘失败口径告警不上抛。"""
+        开放行程 <=600s 的语义在此闭合); S2 追加: acc 账本全系列终态行 append(§03.4
+        —— 折叠态全部落账本, 下次启动全量快路; _flush_all_series 传 write_acc=False
+        避免随批行与终态行重复)。dry_run 短路(不落盘); 幂等(重复调用缓冲游程已空 +
+        终态行单次闸, 零副作用); OSError 按落盘失败口径告警不上抛。"""
         if not self._persistence_on:
             return  # dry_run: 不落盘(观测写盘属真实副作用)
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled or not self._ctx.config.data_dir:
             return
         self._seal_all_runs()
-        self._flush_all_series()
+        self._flush_all_series(write_acc=False)
+        self._acc_stop_rows()
 
     @staticmethod
     def _delta(key: str, direction: str, cur: Optional[int], last: Optional[int]) -> Optional[int]:

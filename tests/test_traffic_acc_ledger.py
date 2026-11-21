@@ -36,6 +36,9 @@
   落点钉: acc.dat 根级(v4_root_dir 直下, 旧版系列键扫描不见, 回滚降级零影响)
 - test_acc_ledger_read_logging_honest: 读侧留痕如实(DEBUG/INFO 分级)—— 缺失 INFO / 门闩失守 INFO /
   非撕裂坏行 INFO / 纯撕裂尾只 DEBUG(不产坏行 INFO 噪音)
+- test_acc_ledger_parse_defensive_branches_and_compact_bad_line_log: 解析/压实防御分支定向钉面
+  (P2b 覆盖率闸回补, 26-11-21-1546 S2 第二步)—— 非有限浮点列 / cov_s 下限 / epoch 空列段带行
+  (解析侧)/ 未知行型记坏 / 压实折叠损坏行 INFO 留痕且内容等价
 """
 import logging
 import os
@@ -489,3 +492,41 @@ def test_acc_ledger_read_logging_honest(tmp_path, caplog):
         read_acc_ledger(data_dir)  # 撕裂尾只 DEBUG(不产坏行 INFO 噪音)
         assert any(r.levelno == logging.DEBUG and "撕裂尾" in r.message for r in caplog.records)
         assert not any(r.levelno == logging.INFO and "损坏行" in r.message for r in caplog.records)
+
+
+def test_acc_ledger_parse_defensive_branches_and_compact_bad_line_log(tmp_path, monkeypatch, caplog):
+    """解析/压实防御分支定向钉面(P2b 覆盖率闸回补 —— 本批新增代码吃掉闸门余量后对既有
+    防御分支补测, 详见交付报告): 非有限浮点列 / cov_s 下限 / epoch 空列段带行(解析侧) /
+    未知行型 / 压实折叠损坏行的 INFO 留痕。"""
+    # 非有限浮点列(inf/nan)记坏
+    res = parse_acc_ledger_text(ACC_LEDGER_HEADER_V1 + "\nA,global,inf,1,2\n")
+    assert res.bad_lines == 1 and res.snapshots == {}
+    # 段内 cov_s = 0(下限 1)记坏
+    snap = AccSnapshot(
+        key="global",
+        cursor=1.0,
+        agg_fingerprint=(1, 2),
+        state=AccSeriesState(day_epoch=100, day_hours=[_row("hour", 100)]),
+    )
+    parts = format_acc_row(snap).split(",")
+    parts[15] = "0"  # day_hours 段首行 cov_s 列(段起 idx 8 的第 8 列)
+    res = parse_acc_ledger_text(ACC_LEDGER_HEADER_V1 + "\n" + ",".join(parts) + "\n")
+    assert res.bad_lines == 1 and res.snapshots == {}
+    # epoch 空列的段携带行(解析侧免费校验)记坏
+    parts2 = format_acc_row(snap).split(",")
+    parts2[6] = ""  # day_epoch 空列, n_dh 仍 1
+    res = parse_acc_ledger_text(ACC_LEDGER_HEADER_V1 + "\n" + ",".join(parts2) + "\n")
+    assert res.bad_lines == 1 and res.snapshots == {}
+    # 未知行型(B = 天文件块头, 非账本行型)记坏
+    res = parse_acc_ledger_text(ACC_LEDGER_HEADER_V1 + "\nB,global,1\n")
+    assert res.bad_lines == 1 and res.snapshots == {}
+    # 压实折叠损坏行的 INFO 留痕(重写自洁)
+    data_dir = str(tmp_path)
+    append_acc_snapshots(data_dir, [_snap("global", 100.0, state=AccSeriesState(earliest_hour=10))])
+    with open(v4_acc_ledger_path(data_dir), "a", encoding="utf-8", newline="\n") as f:
+        f.write("A,global,notafloat,1,2\n")  # 损坏行
+    monkeypatch.setattr(acc_ledger_mod, "ACC_LEDGER_COMPACT_BYTES", 10)
+    with caplog.at_level(logging.INFO, logger=_LEDGER_LOGGER):
+        assert compact_acc_ledger(data_dir) is True
+    assert any("压实折叠损坏" in r.message for r in caplog.records)
+    assert read_acc_ledger(data_dir).snapshots["global"].cursor == 100.0  # last-wins 折叠后内容等价

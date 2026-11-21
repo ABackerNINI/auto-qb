@@ -504,6 +504,8 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
         "wall_finished": time.strftime("%Y-%m-%d %H:%M:%S"),
         "bound_counts": bound_counts,
         "day_file_counts": dict(sorted(day_file_counts.items())),
+        "ledger_fastpath": stats.get("ledger_fastpath"),
+        "ledger_fallback": stats.get("ledger_fallback"),
         "agg_prepare": prep,
         "corpus":
             {
@@ -516,8 +518,13 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
                 "gen_date": manifest["gen_date"],
                 "raw_bytes_total": manifest["bytes_total"],
             },
-        "notes": "现行实现(B1 后): 字节级开放段限定解析 + 记账入口水位过滤(封口块不解析"
-                 "不入账); 崩溃与优雅同路(累计器不落盘); 场景差异仅在 agg 水位形态",
+        "notes":
+            "现行实现(B1 后): 字节级开放段限定解析 + 记账入口水位过滤(封口块不解析"
+            "不入账); 崩溃与优雅同路(累计器不落盘); 场景差异仅在 agg 水位形态。"
+            "S2(P2b, 26-11-21-1546)起 acc 快照账本接线已上: 本 harness 语料不含"
+            "acc.dat -> 全体系列走 fallback 重建(ledger_fastpath=0), 恢复埋点新增"
+            "ledger_fastpath/ledger_fallback 计数字段(旧字段语义不变); acc 行只在"
+            "flush/stop 写, 本 harness 只驱动 start 不触",
     }
 
 
