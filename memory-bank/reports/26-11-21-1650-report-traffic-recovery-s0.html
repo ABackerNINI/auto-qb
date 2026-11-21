@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>重启流量恢复 S0 取证: 恢复成本矩阵(现行实现) + 生产快照尺寸预算实测</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="traffic-recovery-s0">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-21-1650">
+<meta name="doc-updated" content="26-11-21-1650">
+<meta name="doc-refs" content="memory-bank/plans/26-11-21-1546-plan-traffic-recovery.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: traffic-recovery-s0</div>
+<h1>重启流量恢复 S0 取证: 恢复成本矩阵(现行实现) + 生产快照尺寸预算实测</h1>
+<p class="lede">本篇只回答计划 26-11-21-1546 S0①② 的两个取证问题: ①现行恢复实现(水位过滤后置 + 游程逐槽展开 + 累计器不落盘, §02.1 四缺陷)在 5000 系列三形态三场景下实际多慢 —— 作为 P1/P2 落地后同一 harness 重跑回填的 before 锚; ②生产库真实尺寸构成下, raw 保留窗(24H → 4 天文件) × 5000 系列的存储预算对照 20GiB 是否达标。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-21-1650 · <b>doc-updated</b> 26-11-21-1650 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 计划 26-11-21-1546 S0 阶段开工(2026-11-21): 生产日志取证(启动恢复 11.72s 挡首轮)之后的机械取证步。数据 = 本机合成语料基准(<code>scripts/bench_traffic_recovery.py</code>, R 盘) + 生产快照 <code>R:\Download\qb-traffic-v4</code> 只读实测(2026-11-21 16:48)。
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p><b>矩阵(S0①, 现行实现, R 盘, 全部实测)</b>: 5000 系列恢复耗时 fresh/stale/fallback = mixed <b>297.5 / 666.1 / 1435.5s</b>, zheavy <b>253.0 / 528.7 / 1236.2s</b>, rheavy <b>412.0 / 914.1 / 1944.1s</b>。计划 §02.3 的 ~250s 外推与实测同量级(fresh 实测 253-412s)。</p>
+<p><b>成本与读集槽数线性</b>: 同形态三场景槽数比 = 1 : 2.215 : 4.646, 耗时比 = 1 : 2.24 : 4.82(fresh:stale:fallback), 每槽成本按形态稳定(mixed 3.35-3.48µs / zheavy 2.69-2.99µs / rheavy 4.64-4.71µs) —— 证实计划 §02.1 缺陷 2(游程逐槽展开)是主犯, 且随天文件数线性放大; fresh 场景 96.2% 的槽展开入账后被水位过滤丢弃(缺陷 1「过滤后置」的定量税)。</p>
+<p><b>236 生产形态对照(S0① 对账面)</b>: 按快照实测构成(1.5s 档 / 相位 8.23h / 读集 465.97 万槽)合成 236 系列, fresh 实测 <b>10.222s</b>, 对照生产 before <b>11.72s</b>(读集 466 万槽): 槽位差 ≈0.01%, 耗时差 12.8% —— 同量级吻合, 每槽成本 2.19µs vs 生产 2.52µs(残差 = 语料构成/机器状态差异, 见 §02.3)。</p>
+<p><b>尺寸预算(S0②, 全部实测)</b>: 生产快照构成(48 系列, z 游程主导, 全库 1.5s 档, r 行槽位占比 1.77%)折算 5000 系列 × 4 天文件 ≈ <span class="good">0.22-0.38GiB, 达标</span>; r-heavy 极端(4s 档全天全活跃, 实测 777.6KB/天文件)≈ <span class="good">14.48GiB, 达标</span>; <b>超限边界只在 1.5s 档全天全活跃兑现(实测 2.13MB/天文件 → 39.75GiB)</b> —— 与计划 R8 处置一致(配置面 <code>sample_interval_multiplier</code>), 不需要新机制。已回填计划 §03.2 预算表(新列「S0 实测」+ kb.bump R1 行)。</p>
+<p class="aside"><b>快照规模与计划正文的差异如实披露</b>: 快照实测 48 系列(1 global + 47 torrents)/25.09MB/42 天, 与计划正文「236 系列/466 万槽」对不上 —— 按任务口径如实记录, 不解读为计划错误(快照时点/生产库清理状态不明), 见 §02.5。</p>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>02.1 harness 与语料口径(S0① 基准面)</h3>
+<p>基准 harness = <code>scripts/bench_traffic_recovery.py</code>(新增, 本阶段唯一代码交付物; <code>gen</code> / <code>run</code> / <code>run-matrix</code> / <code>snapshot-stats</code> 四子命令)。计时走<b>真实恢复入口</b>: 构造真实 <code>TrafficSampleModule</code> + <code>AppContext</code>, 经 <code>module.start(ctx, dry_run=False)</code> 驱动 <code>_recover_aggregates</code>(与生产 start() 钩子同路径), 不复刻任何恢复逻辑, 模块源码零改动; 恢复的 INFO 日志落文件(与生产同成本), 每槽入账/补算小时/读集计数取自模块自身的 <code>recovery_stats</code> 埋点。语料用项目自身编解码函数(<code>V4Block/V4Sample/V4ZeroRun + format_v4_day_text</code>)生成真实格式 v4 天文件, 落 <code>R:\aqb-traffic-bench\20261121-1645\corpus-*</code>(R 盘内存盘, 70G)。</p>
+<table>
+  <tr><th>语料</th><th>系列</th><th>天文件/系列</th><th>间隔</th><th>构成</th><th>体量(实测)</th><th>口径来源</th></tr>
+  <tr><td><code>corpus-mixed</code></td><td>5000</td><td>4(末日用 19:45 相位截断)</td><td>4.0s</td><td>21.7% 系列全天活跃(1086 个活跃 torrent 系列 + 1 个 global), 其余全天单 z 游程</td><td>3.24GB, 均值 158.1KB/天文件</td><td>计划 §02.2 mixed 口径(165KB 均值, 自校准命中)</td></tr>
+  <tr><td><code>corpus-zheavy</code></td><td>5000</td><td>4(同上)</td><td>4.0s</td><td>全部系列全天单 z 游程(21600 槽/行)</td><td>2.7MB(实测 2,739,832 B), 均值 137B/天文件</td><td>计划 §02.2 z-heavy 口径</td></tr>
+  <tr><td><code>corpus-rheavy</code></td><td>5000</td><td>4(同上)</td><td>4.0s</td><td>全部系列全天 r 行(21600 行/日)</td><td>14.88GB, 均值 726.6KB/天文件</td><td>计划 §02.2 r-heavy 口径(470 万行/236 文件同型)</td></tr>
+  <tr><td><code>corpus-mixed30</code></td><td>500</td><td>30</td><td>4.0s</td><td>同 mixed 构成</td><td>2.53GB, 均值 164.9KB/天文件</td><td>D5 全窗(30d)实测锚 + 线性双轴交叉验证</td></tr>
+  <tr><td><code>corpus-prod236</code></td><td>236</td><td>4(末日用 8.23h 相位截断)</td><td>1.5s</td><td>60.4% 系列带 2.92% 日内 r 行窗(前后 z 游程), 其余纯空闲</td><td>0.03GB, 均值 31.0KB/天文件</td><td>生产快照实测构成(interval/active_frac/r_share 从 snapshot-stats 派生; 相位对齐生产读集槽位)</td></tr>
+</table>
+
+<h3>02.2 恢复成本矩阵(现行实现, 15 cell 全实测)</h3>
+<p>场景口径: <b>fresh</b> = 水位新鲜(agg 含当日 00:00-18:00 整点 hour 行, 相位 19:45, 读集 1 天文件, 当日 0 点起全量展开后 96.2% 槽被水位过滤丢弃); <b>stale</b> = 水位陈旧至昨日 23:00(读集 2 天文件); <b>fallback</b> = 无水位(D5 全量兜底, 读集 = 语料全部天文件)。<b>现行实现下崩溃与优雅重启同路</b>(累计器不落盘, 恢复一律从 raw 全量重建), 故不设崩溃独立 cell, 如实标注。</p>
+<table>
+  <tr><th>cell</th><th>系列</th><th>耗时(s)</th><th>读集天文件</th><th>入账槽</th><th>µs/槽</th><th>补算小时</th></tr>
+  <tr><td>mixed / fresh</td><td>5000</td><td>297.483</td><td>5,000(1/系列)</td><td>88,875,000</td><td>3.347</td><td>0</td></tr>
+  <tr><td>mixed / stale</td><td>5000</td><td>666.077</td><td>10,000(2/系列)</td><td>196,875,000</td><td>3.383</td><td>85,000</td></tr>
+  <tr><td>mixed / fallback</td><td>5000</td><td>1435.478</td><td>20,000(4/系列)</td><td>412,875,000</td><td>3.477</td><td>445,000</td></tr>
+  <tr><td>zheavy / fresh</td><td>5000</td><td>253.003</td><td>5,000</td><td>88,875,000</td><td>2.847</td><td>0</td></tr>
+  <tr><td>zheavy / stale</td><td>5000</td><td>528.749</td><td>10,000</td><td>196,875,000</td><td>2.686</td><td>85,000</td></tr>
+  <tr><td>zheavy / fallback</td><td>5000</td><td>1236.237</td><td>20,000</td><td>412,875,000</td><td>2.994</td><td>445,000</td></tr>
+  <tr><td>rheavy / fresh</td><td>5000</td><td>411.978</td><td>5,000</td><td>88,875,000</td><td>4.635</td><td>0</td></tr>
+  <tr><td>rheavy / stale</td><td>5000</td><td>914.122</td><td>10,000</td><td>196,875,000</td><td>4.643</td><td>90,000</td></tr>
+  <tr><td>rheavy / fallback</td><td>5000</td><td>1944.086</td><td>20,000</td><td>412,875,000</td><td>4.709</td><td>455,000</td></tr>
+  <tr><td>mixed30 / fresh</td><td>500</td><td>24.874</td><td>500</td><td>8,887,500</td><td>2.799</td><td>0</td></tr>
+  <tr><td>mixed30 / stale</td><td>500</td><td>56.526</td><td>1,000</td><td>19,687,500</td><td>2.871</td><td>9,500</td></tr>
+  <tr><td>mixed30 / fallback(30 天全窗)</td><td>500</td><td>1028.860</td><td>15,000(30/系列)</td><td>322,087,500</td><td>3.194</td><td>357,500</td></tr>
+  <tr><td>prod236 / fresh(对账 cell)</td><td>236</td><td>10.222</td><td>236(1/系列)</td><td>4,659,677</td><td>2.194</td><td>236</td></tr>
+  <tr><td>prod236 / stale</td><td>236</td><td>37.332</td><td>472(2/系列)</td><td>18,253,134</td><td>2.045</td><td>2,124</td></tr>
+  <tr><td>prod236 / fallback</td><td>236</td><td>98.666</td><td>944(4/系列)</td><td>45,440,048</td><td>2.171</td><td>19,116</td></tr>
+</table>
+<p class="aside">读集边界机检: 每 cell 的 <code>bound</code> 计数 fresh/stale 全部为 watermark 5000/500(水位路径)、fallback 全部为 fallback 路径, 天文件/系列 = 1/2/4 与场景定义逐 cell 相符; 崩溃重启在现行实现下与优雅同路(累计器不落盘), 不单列。</p>
+
+<h3>02.3 236 生产形态对照: 与计划 before 11.72s 对账</h3>
+<p>生产取证(计划 §01): 启动恢复 11.72s, 236 系列 / 466 万槽。prod236 语料按快照实测构成生成(1.5s 档 / 60.4% 活跃系列 / 逐系列 r 行槽位占比 2.92% / 相位 8.23h), fresh 读集 = 236 天文件 / <b>4,659,677 槽</b>, 实测 <b>10.222s</b>:</p>
+<table>
+  <tr><th>量</th><th>生产 before(2026-11-21 日志)</th><th>prod236/fresh(S0 实测)</th><th>差</th></tr>
+  <tr><td>读集槽位</td><td>466 万</td><td>465.97 万</td><td>≈0.01%(相位按 466万/236=19746 槽/系列 反推 8.227h 对齐后实测 4,659,677)</td></tr>
+  <tr><td>恢复耗时</td><td>11.72s</td><td>10.222s</td><td class="wr">-12.8%</td></tr>
+  <tr><td>每槽成本</td><td>≈2.515µs</td><td>2.194µs</td><td class="wr">-13%</td></tr>
+</table>
+<p>同量级吻合成立。残差来源(如实列, 不折算): 生产读集逐系列构成未知(本语料 r_share 按全库均值折算, 逐系列方差大 —— 快照中位天文件 138B 纯空闲 vs p90 22.7KB); 生产机器当时负载/磁盘状态未知(本机为 R 盘内存盘 + 独占 CPU); 语料行宽 34-37B vs 生产 23.8B 均值(z 行占比高拉低均值)。对账结论: <b>计划 before 数字 11.72s 与本 harness 同机制下复现量级一致, S0 锚成立</b>; P1/P2 后同 cell 重跑即可量化改善倍数。</p>
+
+<h3>02.4 生产快照实测(S0② 数据面, 只读)</h3>
+<p><code>R:\Download\qb-traffic-v4</code>(生产数据快照, 全程只读 listdir + open("r"), 零写入)于 2026-11-21 16:48 实测:</p>
+<table>
+  <tr><th>量</th><th>实测值</th></tr>
+  <tr><td>系列数</td><td>48(global 1 + torrents 47; 目录名 40hex sha1)</td></tr>
+  <tr><td>日期范围</td><td>2026-10-11 → 2026-11-21(42 天), 1242 个天文件</td></tr>
+  <tr><td>总字节 / 总槽 / 总行 / 总块</td><td>25,089,829 B / 59,741,383 槽 / 1,055,698 行 / 7,184 块(z 游程压缩比 ≈ 56.6 槽/行)</td></tr>
+  <tr><td>块头间隔</td><td>全部 7184 块 interval_s = 1.5 —— <b>生产现档 = 1.5s 档</b>(main_tick 1.5s × 1 倍)</td></tr>
+  <tr><td>天文件字节(global, 41 个)</td><td>均值 270,247 / 中位 141,771 / p90 556,149 / max 1,266,507</td></tr>
+  <tr><td>天文件字节(torrents, 1201 个)</td><td>均值 11,665 / 中位 138(纯空闲日 ≈ 头行+key+B+z 四行) / p90 22,720 / max 533,978</td></tr>
+  <tr><td>逐系列日均字节</td><td>均值 21,879 / 中位 8,625 / max 270,247(global); 活跃系列(日均 &gt; 4KB)29/48 = 60.4%</td></tr>
+  <tr><td>全库 r 行槽位占比</td><td>1.77%(1,055,698 行 / 59,741,383 槽)—— z 游程绝对主导</td></tr>
+  <tr><td>末日(11-21)读集</td><td>48 文件 / 245,057 B / 1,588,872 槽(最新文件槽位跨度: torrent 采样止于 13:56、global 止于约 16:14 —— 快照约 16:14-16:21 摄制, 时点仍不可考)</td></tr>
+  <tr><td>打不开的文件</td><td>0(OSError 口径, 1242 文件全读; 行级坏行未纳入本统计 —— <code>V4ParsedDay.bad_lines</code> 未采集, 不据此断言全库无坏行)</td></tr>
+</table>
+
+<h3>02.5 尺寸预算表(S0②)与计划 §03.2 原表对照</h3>
+<p>外推公式: <code>raw_window</code> 默认 24H → 每系列保留 4 个天文件(计划 D14) × 5000 系列 = 20,000 个天文件。三种构成的「S0 实测」列全部为本报告实测誊写(合成值用项目 codec 生成的真实格式天文件逐字节实测, 非手抄计划外推)。单位约定(全表统一): KB = 1024 B, GB = 10^9 B, GiB = 2^30 B; 每个端点可由所示每文件字节 × 20,000 复算:</p>
+<table>
+  <tr><th>构成(5000 系列)</th><th>计划原值(合成口径)</th><th>S0 实测(26-11-21)</th><th>20GiB 判定</th></tr>
+  <tr><td>生产快照实测构成(1.5s 档, z 主导, r_share 1.77%)</td><td>—</td><td>逐目录折算 0.218GiB((1 × 270,247B + 4999 × 11,665B) × 4 文件); 全库单均值口径 0.376GiB(20,201B × 20000); 同 r-share 全活跃口径 1.16GiB(合成 1.5s 全天文件实测 62,439B[57,600 槽, r 行窗占比 2.92% = 全库 r_share 1.77% ÷ 活跃占比 60.4%] × 20000)</td><td class="good">达标(余量 17-92 倍, 覆盖上述三个口径)</td></tr>
+  <tr><td>混合构成(165KB/天文件)</td><td>≈3.3GB</td><td>合成 mixed 语料实测均值 158.1KB(161,850B)/天文件 × 20000 = 3.24GB(语料字节合计实测 3.237GB); 同构成 30 天语料实测均值 164.9KB(168,858B)/天文件 × 20000 = 3.38GB</td><td class="good">达标</td></tr>
+  <tr><td>r-heavy 极端(4s 档全天全活跃)</td><td>≈13.7GB(686KB/天文件)</td><td>实测 777,574 B/天文件(21600 槽, ≈36B/行) × 20000 = 15.55GB = 14.48GiB</td><td class="good">达标</td></tr>
+  <tr><td>1.5s 档全天全活跃</td><td>≈40GB(~2MB/天文件)</td><td>实测 2,134,328 B/天文件(57,600 槽) → 39.75GiB</td><td class="bad">超限 → 配置面处置(sample_interval_multiplier), 不新造机制(R8 同判)</td></tr>
+</table>
+<p class="aside">结论: <b>生产当前构成下预算极充裕</b>(快照 48 系列 42 天仅 25.09MB —— 未清理现状也远未失控); 计划 S3 清理(raw 保留窗删除)的预算收益在当前构成下不改变达标结论, 真正承重的是 D14 保留窗锚 + R8 的 1.5s 全活跃边界。本节已回填计划 §03.2(新列「S0 实测」+ 变更记录 R1 行, 原合成口径行保留作对照)。基准语料自身的磁盘占用(R 盘 70G): 5 个语料合计峰值 ≈ 20.7GB, 与 D17 的 20GiB(S5 真机轨道口径)同量级、互不占用。</p>
+
+<h3>02.6 48-vs-236 规模差异披露</h3>
+<p>任务口径指出已知事实「47 系列/42 天/共 27MB」与计划正文「236 系列/466 万槽」对不上。本次实测: <b>48 系列</b>(global 1 + torrents 47; 任务口径的 47 应为 torrents 目录数, 加 global 为 48)/42 天/25.09MB, 与任务口径一致。计划正文的 236 系列/466 万槽出自 2026-11-21 生产日志的恢复读集(系列键数 × 读集槽位), 两者是<b>不同时点/不同口径的事实</b>: 快照可能是生产库某个更早/更晚时点的拷贝(期间发生过种子淘汰、清理或数据目录迁移, 均不可从快照本身考证)。按任务纪律: <b>如实测如实写, 不擅自解读为计划错误</b>; 236 规模的对照改由 prod236 合成语料承担(§02.3, 语料参数照快照实测构成放大), 对账成立。</p>
+
+<h3>02.7 线性规律与 D5 全窗最坏值(拟合外推, 非实测)</h3>
+<p>同形态三场景耗时比(1 : 2.24 : 4.82)与槽数比(1 : 2.215 : 4.646)线性吻合; mixed30 的 30 天全窗 cell(500 系列 × 30 天)与 mixed 5000 × 4 在「系列×天」总量上交叉验证: 1028.9s / 1435.5s = 0.717 vs 总量比 15000/20000 = 0.75(±4.5%)。每槽成本按形态族稳定: rheavy 4.635-4.709µs(极差 ±1%), zheavy 2.686-2.994µs(±5%), mixed 族 2.799-3.477µs(±10%, 500 与 5000 系列两档的逐系列固定开销占比不同所致)。</p>
+<p><b>D5 真最坏值外推</b>(现行无清理, 淘汰龄 30d → 单系列至多 ~31 个天文件; 5000 系列 × 30 天 ≈ 3.24G 槽): 按各形态实测每槽成本区间 —— mixed 3.19-3.48µs → <b>≈ 10,340-11,270s(≈ 2.9-3.1h)</b>, zheavy 2.69-2.99µs → ≈ 8,700-9,700s, rheavy 4.64-4.71µs → ≈ 15,000-15,260s。此为拟合外推值(30 天 × 5000 系列的语料 20GB+ 未直接实测), 但线性基础有 1/2/4/30 天四点实测支撑; 计划 §02.3 fallback 行的「250-500s」量级在此被实测显著上修 —— 5000 规模下现行实现的 fallback(升级首启自举、账本损坏等场景)是真锅盖, 印证 D1 改判(快照一步到位)。</p>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<h3>方法</h3>
+<ul>
+  <li><b>真实入口</b>: 计时体 = <code>TrafficSampleModule(ctx).start(ctx, dry_run=False)</code>(生产 start() 钩子路径), 内部 <code>_recover_aggregates → _recover_series → _agg_credit_day_file → _agg_append/_agg_trim</code> 全部生产原码; ctx/config 为最小装配(SimpleNamespace + 真实 <code>QbTraffic</code> 缺省: rollup_window 30D / raw_window 24H), 恢复代码零改动、src/ 零触碰。</li>
+  <li><b>真实格式语料</b>: 全部天文件经 <code>format_v4_day_text</code>(项目 codec 单点)序列化; 活跃日 = 600s 块(B 行 + 块内 r 行按 interval 铺满, totals 单调, 块基线语义与写侧状态机同构); 空闲日 = 单块单 z 游程(显式退化末端对); prod236 混合日 = [z 前缀 | r 行窗 | z 后缀] 三段式, 槽位守恒。</li>
+  <li><b>场景实现</b>: 场景差异只在 agg.dat 水位形态(fresh = 30d hour 历史 + 当日 0-18h 整点行; stale = 止于昨日 23h; fallback = 仅头行+key 行), 每 cell 前重写 agg.dat(幂等可重入); 天文件不被恢复路径改写, 多场景安全复用。</li>
+  <li><b>计时与记录</b>: <code>time.perf_counter</code> 包住 <code>module.start</code>; 恢复 INFO 日志按生产同成本落文件(计入计时); 结果 JSON 按 <code>cell@impl_tag</code> 键实时落盘(同键覆盖、换 tag 追加), 每 cell 打进度行。</li>
+</ul>
+<h3>局限(如实列)</h3>
+<ul>
+  <li>矩阵语料间隔 4.0s(对齐计划 §02.2 的 ~2 万槽/文件口径, 21600 槽/日 +9%); 生产现档 1.5s 的绝对对账由 prod236 cell 承担。每槽成本与间隔值无关(成本 ∝ 槽数, 已由 prod236 1.5s 点旁证)。</li>
+  <li>fallback 读集受语料天数限制(4 天); 30 天全窗最坏值 = mixed30(500×30)实测 + 每槽稳定性的拟合外推(§02.7), 不是 5000×30 直接实测。</li>
+  <li>每 cell 单次计时, 无重复方差; 挂钟只影响「幸存小时的完结判定与 catch-up append 行数」(stale 补算小时 85,000 vs rheavy 90,000 即不同运行时刻的差), 主成本段(解析+展开+入账)不受影响。</li>
+  <li>合成语料不含 n 游程(断连)与 dt_ms 漂移行(生产有, 两者均为低成本路径, 不改变量级); 语料行宽 34-37B vs 生产 23.8B 均值。</li>
+  <li>基准环境: 95G 内存 / R 盘内存盘 / Windows 独占(生产为系统盘 SSD + 常驻负载)。</li>
+</ul>
+<h3>P1/P2 后如何重跑回填(同一 harness)</h3>
+<p>语料与 results.json 同在内存盘, 重启即失; 重跑前先把 before 固化到持久位置, 新 run 落<b>新的 --out 路径</b>(同文件 + 同 impl-tag 会覆盖旧行), 与固化 before 逐 cell 对照:</p>
+<pre><code># 0) 固化 before(R 盘易失): 把现行 results.json 拷出持久位置; before 数字亦已冻结在本报告
+#    §02.2 矩阵表 —— 两处任一即可作对照基准
+# 1) 重建语料(各 1 次; 间隔/构成参数与 S0 完全一致)
+uv run python scripts/bench_traffic_recovery.py gen --out "R:/aqb-traffic-bench/&lt;ts&gt;/corpus-mixed"   --shape mixed  --series 5000 --days 4 --interval 4.0 --label mixed
+uv run python scripts/bench_traffic_recovery.py gen --out "R:/aqb-traffic-bench/&lt;ts&gt;/corpus-zheavy" --shape zheavy --series 5000 --days 4 --interval 4.0 --label zheavy
+uv run python scripts/bench_traffic_recovery.py gen --out "R:/aqb-traffic-bench/&lt;ts&gt;/corpus-rheavy" --shape rheavy --series 5000 --days 4 --interval 4.0 --label rheavy
+uv run python scripts/bench_traffic_recovery.py gen --out "R:/aqb-traffic-bench/&lt;ts&gt;/corpus-mixed30" --shape mixed --label mixed30 --series 500 --days 30 --interval 4.0
+uv run python scripts/bench_traffic_recovery.py snapshot-stats --root "R:/Download/qb-traffic-v4" --emit-spec "R:/aqb-traffic-bench/&lt;ts&gt;/prod-spec.json"   # 生产快照参数(只读; 输出路径不得落在 root 之下, harness 有守卫)
+uv run python scripts/bench_traffic_recovery.py gen --out "R:/aqb-traffic-bench/&lt;ts&gt;/corpus-prod236" --shape prod236 --label prod236 --series 236 --days 4 --phase-hours 8.227 --prod-spec "R:/aqb-traffic-bench/&lt;ts&gt;/prod-spec.json"
+# 2) 全矩阵重跑(impl-tag 换成实现标签, 如 b1b2; --out 用新路径, 与固化 before 对照)
+uv run python scripts/bench_traffic_recovery.py run-matrix --bench-root "R:/aqb-traffic-bench/&lt;ts&gt;" \
+    --labels mixed,zheavy,rheavy,mixed30,prod236 --scenarios fresh,stale,fallback --impl-tag b1b2 \
+    --out "R:/aqb-traffic-bench/&lt;ts&gt;/results.json"</code></pre>
+<h3>本阶段观察(范围守恒, 未处置)</h3>
+<ul>
+  <li>fallback 场景每系列一条「无可用水位…全量兜底」INFO(读集 &gt; 2 文件另有读集 INFO): 5000 系列重启一次产生 ≥5000 行日志(计时已含其成本)。是否需要节流属计划外, 未改。</li>
+  <li>后台长任务(<span class="wr">&gt;20min</span>)两次被宿主切断(mixed/fallback 与 rheavy 生成各中断一次), 靠 JSON 按 cell 落盘 + 语料幂等重跑恢复, 零数据损失 —— harness 的可重入设计由此验证。</li>
+</ul>
+
+</div>
+</body>
+</html>

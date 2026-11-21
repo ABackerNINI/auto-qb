@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="traffic-recovery">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-21-1546">
-<meta name="doc-updated" content="26-11-21-1546">
-<meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-21-backend-traffic-recovery.md">
+<meta name="doc-updated" content="26-11-21-1657">
+<meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-21-backend-traffic-recovery.md, memory-bank/reports/26-11-21-1650-report-traffic-recovery-s0.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>重启流量恢复11.7s挡首份数据(过滤后置+游程逐槽展开+累计器不落盘): 游程级重建重写+acc快照账本+raw保留窗清理</h1>
 <p class="lede">本篇只回答: 重启后启动期流量恢复 ~11.7s 挡住主循环首轮同步与 WebUI 首份数据怎么修 —— 根因在<b>重建机制</b>(水位过滤后置 + 游程逐槽展开 + 累计器不落盘)而非文件组织, 修法 = <b>游程级重建重写 + acc 快照账本(追加+压实) + raw 保留窗清理</b>, 5000 系列规模优雅/崩溃重启恢复 ≤2s, 文件格式零换代零迁移。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-21-1546 · <b>doc-updated</b> 26-11-21-1546 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-21-1546 · <b>doc-updated</b> 26-11-21-1657 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话「auto-qb 重启后 WEBUI 骨架快了但种子出现慢」问答轮取证(2026-11-21, 生产日志 11.72s + 本地合成基准) + 用户指令「该思考的是文件组织/读取/数据重建机制是否有问题, 而非挪位置」+ 四轮 grilling D1-D17 拍板(2026-11-21) + 用户指令「grilling然后出一个修改方案」
 </div>
 
@@ -134,12 +134,12 @@
 <h3>03.2 raw 保留窗与尺寸预算(D14/D15)</h3>
 <p>保留下界 = <code>raw_window</code> 天数 + 3 个日界余量(读侧 24h 窗「常态 3 个 / t0 相位近日界边角至多 4 个」天文件, <code>webui/server/traffic_qb.py:21</code> + 恢复读集 ≤2 个文件 —— 余量必须盖住边角 4 文件, 否则正触 S3 自设不变量「保留下界 ≥ 读侧最大回看起点」); 复用现有 <code>raw_window</code> 配置键, 不新增键(黄金法则 4)。默认 24H → 每系列保留 4 个天文件。</p>
 <table>
-  <tr><th>构成(5000 系列)</th><th>raw 占用(默认 24H→4 文件)</th><th>20GiB 判定</th></tr>
-  <tr><td>混合构成(165KB/天文件, 基准实测口径)</td><td>≈3.3GB</td><td class="good">达标</td></tr>
-  <tr><td>r-heavy 极端(686KB/天文件)</td><td>≈13.7GB</td><td class="good">达标</td></tr>
-  <tr><td>1.5s 档全天全活跃(~2MB/天文件)</td><td>≈40GB</td><td class="bad">超限 → 配置面处置(调采样倍数), 不新造机制</td></tr>
+  <tr><th>构成(5000 系列)</th><th>raw 占用(默认 24H→4 文件)</th><th>20GiB 判定</th><th>S0 实测(26-11-21)</th></tr>
+  <tr><td>混合构成(165KB/天文件, 基准实测口径)</td><td>≈3.3GB</td><td class="good">达标</td><td>合成 mixed 语料实测均值 158.1KB/天文件 → 实测合计 3.24GB(5000×4 文件); 生产快照实测构成(48 系列, z 游程主导)折算 ≈0.22-0.38GiB —— <span class="good">达标</span></td></tr>
+  <tr><td>r-heavy 极端(686KB/天文件)</td><td>≈13.7GB</td><td class="good">达标</td><td>实测 777,574B/天文件(21600 槽, ≈36B/行) → 14.48GiB —— <span class="good">达标</span></td></tr>
+  <tr><td>1.5s 档全天全活跃(~2MB/天文件)</td><td>≈40GB</td><td class="bad">超限 → 配置面处置(调采样倍数), 不新造机制</td><td>实测 2.13MB/天文件(57600 槽) → 39.75GiB —— <span class="bad">超限</span>, 同判; 处置 = 配置面 sample_interval_multiplier</td></tr>
 </table>
-<p>acc 账本 ≤16MB 可忽略; agg.dat(30d hour + 永久 day/month)≈0.5GB。S0 实测生产库日均天文件尺寸回填本表。</p>
+<p>acc 账本 ≤16MB 可忽略; agg.dat(30d hour + 永久 day/month)≈0.5GB。<b>S0 实测回填(2026-11-21, 取证报告 26-11-21-1650)</b>: 生产快照 <code>R:\Download\qb-traffic-v4</code> 实测 = 48 系列(global 1 + torrents 47) / 42 天(2026-10-11 → 11-21) / 25.09MB / 5974 万槽, 全部块头 interval_s = 1.5(生产现档 = 1.5s 档); 天文件尺寸 global 均值 270,247B / torrents 均值 11,665B(中位 138B, z 游程主导, 全库 r 行槽位占比 1.77%)。快照实测 48 系列与本文正文 236 系列的规模差异如实披露(快照时点/清理状态不明, 不解读为计划错误), 见报告披露段。</p>
 <h3>03.3 改造后重启读取机制(D7/D8/D9)</h3>
 <table>
   <tr><th>重启形态</th><th>读什么</th><th>每系列操作</th><th>5000 规模估算</th></tr>
@@ -219,6 +219,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-21-1546</span> 初版: 会话问答轮取证(生产日志 11.72s + 本地合成基准三构成 + 5000 外推) → 用户指令「审视文件组织/读取/重建机制本身, 最不济才考虑挪线程, grilling 出方案」→ 四轮 grilling 17 问拍板(D1/D8/D12/D13 用户改判) → 计划入库 Open。S0-S6 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-21-1657</span> S0 实测回填 §03.2 预算表(新列 S0 实测): 生产快照 48 系列/25.09MB/42 天/5974 万槽/1.5s 档实测构成折算 0.22-0.38GiB 达标, r-heavy 实测 14.48GiB 达标, 1.5s 全活跃实测 39.75GiB 超限同判; 48-vs-236 规模差异披露见报告 26-11-21-1650</li>
 </ul>
 
 </div>
