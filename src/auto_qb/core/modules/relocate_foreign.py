@@ -65,6 +65,12 @@ _FOREIGN_TICK_BUDGET = 10
 # 不为消化洪峰扩内存或加周期兜底。1000 = 远超现实突定量级(单拍差集数十条)的防御值。
 _FOREIGN_PENDING_MAX = 1000
 
+# 闭包行走的跳数上限(T4/S4 环保护之外的深度防线): 每跳 = 同一组的一次完整再迁移代际,
+# 终态账滚动保留 DONE_HISTORY_KEEP(20)条 done —— 账面可表达的已核代际结构性封顶在 20,
+# 移交条目只增不改代际数。20 = 账面结构上限, 超过即脏数据(visited 集已保证终止, 本上限
+# 只是把最坏行走成本钉死)。非配置键(解析器内部防线, 与 _FOREIGN_TICK_BUDGET 同形态)。
+_FOREIGN_CLOSURE_MAX_HOPS = 20
+
 # 已通知账的类别取值(kind 字段; T5 WebUI 面板按此分流呈现)
 _KIND_SCENARIO_A = "A"  # 活跃 job 作用域命中(收尾窗内到达; T3 纳入)
 _KIND_SCENARIO_B = "B"  # 终态账旧根命中(收尾完成后到达; T5 通知)
@@ -73,10 +79,12 @@ _KIND_MISMATCH = "mismatch"  # 清单不一致(D4: 只告警不处置)
 
 @dataclass(frozen=True)
 class ForeignEdge:
-    """旧根 -> 现位置的直连边记录(_foreign_resolve_old_root 的产出形状)
+    """旧根 -> 现位置的边记录(_foreign_resolve_old_root 的产出形状)
 
-    T4 把解析器扩成传递闭包(A->B->C 链)时沿本形状回多跳事实(经手 job 链); T2 只产
-    单边, phase 恒 done(边来自终态账)。
+    T4(S4)已扩成传递闭包: src = 查询旧根(首跳边的账面原形), dst = 沿边集行走到的
+    最后位置, job_id/phase = 末跳边的产出 job(终态账直连边恒 done; 移交条目边 =
+    携带 owner 的现相位)。调用方(classify/通知文案)消费语义不变: src 即命中旧根,
+    dst 即数据现位置。
     """
 
     job_id: str
@@ -93,7 +101,7 @@ class ForeignHit:
     save_path: str
     scenario: str  # "A" | "B"(kind 取值同 _KIND_*)
     job_id: str  # 命中的 job(场景 A = 活跃 job; 场景 B = 终态账那条)
-    phase: str  # 命中 job 的现相位(A: 活跃相位, T3 暂停/恢复判据; B: "done")
+    phase: str  # 命中 job 的现相位(A: 活跃相位, T3 暂停/恢复判据; B: 末跳产出相位)
     old_root: str  # 命中的旧路径根(job.src / 继承条目 src 原形)
     location: str  # 数据现位置(A: job.dst; B: 终态账直连边解析值)
 
@@ -246,32 +254,96 @@ class ForeignMixin:
         )
 
     def _foreign_resolve_old_root(self, old_root: str) -> Optional[ForeignEdge]:
-        """旧根反查现位置(**单点**, 场景 B 命中面)
+        """旧根反查现位置(**单点**, 场景 B 命中面; T4/S4 起为链式传递闭包)
 
-        本批(T2)实现 = 终态账 done job 的 src->dst **直连边**(同根多条按 updated_at 新->旧
-        取最新, job_id 稳定兜底 —— 与 ru.job_rank 终态分支同序)。failed/cancelled 不产边
-        (失败零成本收尾不搬回, 数据仍在旧根, 新种子落旧根是合法落位不是场景 B)。
+        边集 = _foreign_closure_edges(done 账 src->dst 直连边 + plan.inherited 移交条目边);
+        解析 = 从 old_root 起沿边反复行走至不再有边(A->B->C 链式再迁移, 计划 S4/D2),
+        返回「查询根 -> 末跳位置」的 ForeignEdge(形状与 T2 直连边一致, 消费方无感):
+        src = 首跳边账面原形(即命中旧根), dst = 末跳 dst(数据现位置), job_id/phase =
+        末跳产出 job。行走有 visited 环保护(脏数据 A->B->A 不得死循环, 行走到已访根即停,
+        回报已走到的最后一条边)与跳数上限(_FOREIGN_CLOSURE_MAX_HOPS, 超限同停 —— 尽力
+        而为, D2)。
 
-        **T4 扩展点**(计划 S4: 链式闭包解析器): 链式再迁移 A->B->C 的老边在链上各代 job 账
-        / plan.inherited 里, 本方法届时改写为「从 old_root 起沿终态账边反复行走至不再有边」
-        的闭包解析(同根多条按 job_rank 取新), 入参/出参形状(ForeignEdge)不变, 消费方
-        (classify/通知文案)无感。老边滚出终态账(20 条滚动) => 返回 None, 调用方按
-        「映射已过期」处置(R7)。
+        同根多条边取新口径 = 产出 owner 的 (updated_at, job_id) 新->旧、同 owner 平手时
+        自身边压过其携带的移交条目边 —— 与 ru.job_rank 终态分支((not terminal, updated_at,
+        job_id) 的终态退化形)同序: 本解析器的候选域里 done 边占主体, job_rank 的「非终态
+        优先」位在纯 done 域恒同值(等价性核实), 携带 owner 混入时不采 job_rank 全形 ——
+        「非终态优先」服务的是同 hash 现值选取, 拿它选历史真值边会让活跃 owner 的移交
+        条目压过更新的 done 真值(错)。
+
+        边源口径: done job 的 src->dst(核验过的真位置; failed/cancelled/superseded 不产
+        自身边 —— 失败/被接管零成本收尾不搬回, 数据位置不再由其 src 边表达); 移交条目
+        边(src->dst = 前任收官/接管时刻的真实位置记录, 历史真值)对全部 owner 开放 ——
+        D2 尽力而为: 搬迁窗内前任位置与新位置并存的过渡态, 通知文案按最后已核位置表达。
+
+        None = 无边可走: 查询根不在任何边集源上 —— 含「最老代映射已滚出终态账(DONE_
+        HISTORY_KEEP 20 条滚动, R7)」的**映射已过期**形态(判据面与「从来不是旧根」不可
+        区分 —— 不加持久账是 D2 拍板; T5 通知文案按 None 口径降级「映射已过期」)。行走
+        中断(无下一条边/环/超限)不返回 None: 已走到的最后位置仍是尽力争得的现位置提示。
         """
         n_root = ru._norm(old_root)
         if not n_root:
             return None
-        best = None
-        for job in self._jobs.values():
-            if job.phase != ru.PHASE_DONE or ru._norm(job.src) != n_root:
-                continue
-            # 终态选取序 = ru.job_rank 的终态分支((not terminal, updated_at, job_id) 的
-            # 终态退化形): 同根多条 done 按 updated_at 新->旧, job_id 稳定兜底
-            if best is None or (best.updated_at, best.job_id) < (job.updated_at, job.job_id):
-                best = job
-        if best is None:
+        edges = self._foreign_closure_edges()
+        n_cur = n_root
+        first = last = None
+        seen = {n_root}
+        hops = 0
+        while True:
+            edge = edges.get(n_cur)
+            if edge is None:
+                break
+            if first is None:
+                first = edge
+            n_dst = ru._norm(edge[3])
+            # 环/超限/空 dst: 行走即停 —— last 只记**成功行走**的边(被拒边不进结果)
+            if not n_dst or n_dst in seen or hops >= _FOREIGN_CLOSURE_MAX_HOPS:
+                break
+            last = edge
+            seen.add(n_dst)
+            n_cur = n_dst
+            hops += 1
+        if first is None:
             return None
-        return ForeignEdge(job_id=best.job_id, src=best.src, dst=best.dst, phase=best.phase)
+        if last is None:
+            last = first  # 首跳即被拒(自环/空 dst): 单边尽力而为
+        return ForeignEdge(job_id=last[1], src=first[2], dst=last[3], phase=last[4])
+
+    def _foreign_closure_edges(self) -> dict:
+        """闭包边集(归一 src -> 边事实; 每次解析现算, _jobs 即权威账, 零缓存零持久账)
+
+        边事实 = (rank, job_id, src 原形, dst 原形, phase); rank = (owner updated_at,
+        owner job_id, 自身边 1/移交条目边 0) —— 同根多条按 rank max 取新(owner 时刻序 +
+        同 owner 自身边优先: 自身收官是最新真值, 压过其携带的继承史)。
+        """
+        best: dict = {}
+
+        def _offer(n_src: str, rank: tuple, job_id: str, src: str, dst: str, phase: str) -> None:
+            cur = best.get(n_src)
+            if cur is None or rank > cur[0]:
+                best[n_src] = (rank, job_id, src, dst, phase)
+
+        for job in self._jobs.values():
+            rank_head = (float(job.updated_at or 0.0), str(job.job_id or ""))
+            if job.phase == ru.PHASE_DONE and job.dst:
+                _offer(ru._norm(job.src), (*rank_head, 1), job.job_id, job.src, job.dst, job.phase)
+            for entry in job.inherited:
+                if entry.src and entry.dst:
+                    # 边身份回落(评审 minor 修): 移交条目的 job_id 指向前任, 前任可能已被
+                    # purge_terminal_chain 清账/滚出终态账(_jobs 无此 id)—— 悬空 id 会让
+                    # 消费面 get_job 未命中(_foreign_files_match 判「不可判定」出队, 场景 B
+                    # 命中在 owner 收官前每次时机扫零进展记不上账)。回落携带 owner: 条目由
+                    # owner 账承载与背书, owner 恒在 _jobs(本次遍历的来源)。
+                    edge_job_id = entry.job_id if entry.job_id in self._jobs else job.job_id
+                    _offer(
+                        ru._norm(entry.src),
+                        (*rank_head, 0),
+                        edge_job_id or job.job_id,
+                        entry.src,
+                        entry.dst,
+                        job.phase,
+                    )
+        return best
 
     # ---------- 候选池(R4 有界 FIFO, 只存内存) ----------
 
@@ -394,7 +466,7 @@ class ForeignMixin:
             "root": ru._norm(hit.old_root),  # 来源旧根(归一形, 与判定口径一致)
             "kind": hit.scenario,  # 类别: A / B(T5 面板分流)
             "job_id": hit.job_id,
-            "phase": hit.phase,  # A: 活跃相位(T3 暂停/恢复判据); B: "done"
+            "phase": hit.phase,  # A: 活跃相位(T3 暂停/恢复判据); B: 末跳产出相位(直连边恒 done; 继承条目末跳 = owner 现相位)
             "location": hit.location,  # B: 数据现位置(通知文案用); A: job.dst
             "first_seen": self._clock.now(),  # 首见时刻(挂钟, 展示用)
         }
@@ -583,6 +655,27 @@ class ForeignMixin:
         if not isinstance(data, dict):
             return {}
         return data.setdefault("relocate", {}).setdefault("foreign", {}).setdefault("notified", {})
+
+    def _state_foreign_notified_view(self) -> dict:
+        """已通知账的**只读视图**(三段 get, 绝不 setdefault materialize; 上下文缺失/账不在/
+        形不符返回空 dict)
+
+        与 _state_foreign_notified(惰性创建, 写面)的分工: 供**非 foreign 面**的判定步
+        (S4 收尾守卫孤儿可见性等)零副作用读账 —— 黄金法则 2: foreign_torrent=False 的
+        合法配置不得因守卫步被新增 relocate.foreign.notified 持久键(评审 minor 修)。
+        """
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        if not isinstance(data, dict):
+            return {}
+        relocate_box = data.get("relocate")
+        if not isinstance(relocate_box, dict):
+            return {}
+        foreign_box = relocate_box.get("foreign")
+        if not isinstance(foreign_box, dict):
+            return {}
+        notified = foreign_box.get("notified")
+        return notified if isinstance(notified, dict) else {}
 
     def _foreign_cleanup_notified(self) -> None:
         """已通知账清理: 种子不在当前快照即清条目(重现 = 重新 first-seen, 重处理重告警)"""

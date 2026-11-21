@@ -38,6 +38,21 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   T5 面板直接消费不改结构)
 - test_foreign_resolve_old_root_picks_newest_done_edge: 旧根反查单点 —— 同根多条 done 按
   updated_at 新->旧取最新; failed 不产边(失败不搬回, 旧根落种合法); 未命中返回 None
+- test_foreign_resolve_closure_chain_two_done_hops: 链式闭包(T4/S4)—— A->B->C 两代 done
+  边拼成传递闭包, resolve(A) 报现位置 C(job_id/phase 取末跳); 中间代旧根仍是查询起点
+- test_foreign_resolve_closure_via_inherited_entry: 移交条目(plan.inherited)并入边集 ——
+  最老代 done 账滚出后继承条目仍供边接链; 继承条目作末跳时 phase 随 owner 现相位
+- test_foreign_resolve_closure_cycle_no_hang: 环保护 —— 脏数据 A->B->A 行走到已访根即停,
+  回报已走到的最后一条真边, 双向查询都不挂死
+- test_foreign_resolve_closure_depth_cap_partial: 深度上限(_FOREIGN_CLOSURE_MAX_HOPS 压到
+  2)—— 超限停走回报已走到的部分位置(尽力而为 D2), 不挂死不抛
+- test_foreign_resolve_same_root_rank_owner_newest_and_own_beats_inherited: 同根多条边取新
+  口径 —— owner (updated_at, job_id) 最新优先; 同 owner 平手自身边压过携带的移交条目
+- test_foreign_resolve_expired_mapping_is_none: R7 映射过期语义 —— 终态账滚动(载体滚出)后
+  解析不出 -> None(与「非旧根」同形, 不加持久账; T5 文案按 None 降级「映射已过期」)
+- test_foreign_resolve_purged_pred_falls_back_to_owner_and_matchable: 边身份回落(评审 minor
+  修)—— 继承条目指向已滚出/清账的前任(_jobs 无此 id)时 edge.job_id 回落携带 owner,
+  消费面 get_job 命中 + _foreign_files_match 出判定(场景 B 命中在 owner 收官前能记账)
 - test_foreign_member_of_other_active_job_skipped: 命中他 job 旧根但自身是另一活跃 job 成员
   -> 幂等跳过(relocating_hashes 并集口径)
 - test_foreign_diff_consumption_is_o_new: 差集消费 O(本拍新增) —— 分类调用次数 = 新到条数,
@@ -460,6 +475,188 @@ def test_foreign_resolve_old_root_picks_newest_done_edge():
     assert (edge.job_id, edge.dst, edge.phase) == ("j2", "R:/b2", "done")
     assert mod._foreign_resolve_old_root("R:/nowhere") is None
     assert mod._foreign_resolve_old_root("") is None
+
+
+# ---------- 链式闭包解析器(T4/S4: 直连边 -> 传递闭包 A->B->C, 计划 D2/R7) ----------
+
+
+def test_foreign_resolve_closure_chain_two_done_hops():
+    """链式 A->B->C: 两代 done 终态账边拼成闭包 —— resolve(A) 报现位置 C(job_id/phase 取末跳)"""
+    mod, _store, _client = _env()
+    mod._jobs = {
+        "j1": _job("j1", phase=ru.PHASE_DONE, src="R:/a", dst="R:/b", updated_at=100.0),
+        "j2": _job("j2", phase=ru.PHASE_DONE, src="R:/b", dst="R:/c", updated_at=200.0),
+    }
+    edge = mod._foreign_resolve_old_root("R:/a")
+    assert (edge.src, edge.dst, edge.job_id, edge.phase) == ("R:/a", "R:/c", "j2", "done")
+    # 中间代旧根仍是合法查询起点: B -> C 单跳
+    edge_b = mod._foreign_resolve_old_root("R:/b")
+    assert (edge_b.src, edge_b.dst, edge_b.job_id) == ("R:/b", "R:/c", "j2")
+
+
+def test_foreign_resolve_closure_via_inherited_entry():
+    """移交条目(plan.inherited)并入边集: 最老代 done 账滚出后, 继承条目仍供 A->B 边接链"""
+    mod, _store, _client = _env()
+    plan = {
+        "files":
+            list(PLAN_FILES),
+        "inherited":
+            [
+                {
+                    "job_id": "j1",
+                    "src": "R:/a",
+                    "dst": "R:/b",
+                    "scope": "R:/a",
+                    "alias_kind": "dir",
+                    "alias_paths": ["R:/a"],
+                    "link_kind": "junction",
+                }
+            ],
+    }
+    mod._jobs = {
+        # j1 已滚出终态账(不在 _jobs); j2 done 携带其移交条目 + 自身 B->C 边
+        "j2": _job("j2", phase=ru.PHASE_DONE, src="R:/b", dst="R:/c", plan=plan, updated_at=200.0),
+    }
+    edge = mod._foreign_resolve_old_root("R:/a")
+    assert (edge.src, edge.dst, edge.job_id, edge.phase) == ("R:/a", "R:/c", "j2", "done")
+    # 继承条目作末跳(携带 owner 无自身边, 如 owner 未收官): 边照走, phase 随 owner 现相位;
+    # 条目 job_id 指向已滚出的前任(_jobs 无 j1) -> 边身份回落携带 owner(评审 minor 修,
+    # 消费面 get_job/files_match 可解析)
+    mod._jobs["j2"] = _job("j2", phase=ru.PHASE_ARMED, src="R:/z", dst="R:/w", plan=plan, updated_at=200.0)
+    edge2 = mod._foreign_resolve_old_root("R:/a")
+    assert (edge2.src, edge2.dst, edge2.job_id, edge2.phase) == ("R:/a", "R:/b", "j2", "armed")
+
+
+def test_foreign_resolve_closure_cycle_no_hang():
+    """环保护: 脏数据 A->B->A 不得死循环 —— 行走到已访根即停, 回报已走到的最后一条真边"""
+    mod, _store, _client = _env()
+    mod._jobs = {
+        "j1": _job("j1", phase=ru.PHASE_DONE, src="R:/a", dst="R:/b", updated_at=100.0),
+        "j2": _job("j2", phase=ru.PHASE_DONE, src="R:/b", dst="R:/a", updated_at=200.0),
+    }
+    edge = mod._foreign_resolve_old_root("R:/a")
+    assert (edge.src, edge.dst, edge.job_id) == ("R:/a", "R:/b", "j1")
+    # 反向查询同样收在自身首跳(visited 集, 双向都不挂死)
+    edge_b = mod._foreign_resolve_old_root("R:/b")
+    assert (edge_b.src, edge_b.dst, edge_b.job_id) == ("R:/b", "R:/a", "j2")
+
+
+def test_foreign_resolve_closure_depth_cap_partial(monkeypatch):
+    """深度上限: 超限停走回报已走到的部分位置(尽力而为, D2), 不挂死不抛"""
+    monkeypatch.setattr(rf, "_FOREIGN_CLOSURE_MAX_HOPS", 2)
+    mod, _store, _client = _env()
+    mod._jobs = {
+        "j1": _job("j1", phase=ru.PHASE_DONE, src="R:/a", dst="R:/b", updated_at=100.0),
+        "j2": _job("j2", phase=ru.PHASE_DONE, src="R:/b", dst="R:/c", updated_at=200.0),
+        "j3": _job("j3", phase=ru.PHASE_DONE, src="R:/c", dst="R:/d", updated_at=300.0),
+    }
+    edge = mod._foreign_resolve_old_root("R:/a")
+    assert (edge.src, edge.dst, edge.job_id) == ("R:/a", "R:/c", "j2"), "上限 2 跳: 走到 C 即停"
+
+
+def test_foreign_resolve_same_root_rank_owner_newest_and_own_beats_inherited():
+    """同根多条边取新口径: 按 owner (updated_at, job_id) 取最新; 同 owner 平手时自身边压过继承条目"""
+    mod, _store, _client = _env()
+    plan_old = {
+        "files":
+            list(PLAN_FILES),
+        "inherited":
+            [
+                {
+                    "job_id": "jp",
+                    "src": OLD,
+                    "dst": "R:/stale",
+                    "scope": OLD,
+                    "alias_kind": "dir",
+                    "alias_paths": [OLD],
+                    "link_kind": "junction",
+                }
+            ]
+    }
+    mod._jobs = {
+        # 同 owner(j2)自身 done 边与携带的继承条目同根: 自身边优先(自身收官压过继承史);
+        # jp 在账(done, 无关根)—— 条目身份可解析时照报条目 job_id(悬空回落是另一支, 专属测钉)
+        "jp": _job("jp", phase=ru.PHASE_DONE, src="R:/unrelated", dst="R:/u", updated_at=50.0),
+        "j2": _job("j2", phase=ru.PHASE_DONE, src=OLD, dst="R:/own", plan=plan_old, updated_at=200.0),
+        "j1": _job("j1", phase=ru.PHASE_DONE, src=OLD, dst="R:/older", updated_at=100.0),
+    }
+    edge = mod._foreign_resolve_old_root(OLD)
+    assert (edge.job_id, edge.dst) == ("j2", "R:/own")
+    # 更新 owner 的继承条目压过更老 done 自身边(取新 = owner 时刻序, 与 ru.job_rank 终态分支同序)
+    plan_new = {
+        "files":
+            list(PLAN_FILES),
+        "inherited":
+            [
+                {
+                    "job_id": "jp2",
+                    "src": OLD,
+                    "dst": "R:/fresh",
+                    "scope": OLD,
+                    "alias_kind": "dir",
+                    "alias_paths": [OLD],
+                    "link_kind": "junction",
+                }
+            ]
+    }
+    # jp2 同样入账(done, 无关根): 条目身份可解析 -> 照报条目 job_id(悬空回落支不在此测)
+    mod._jobs["jp2"] = _job("jp2", phase=ru.PHASE_DONE, src="R:/unrelated2", dst="R:/u2", updated_at=50.0)
+    mod._jobs["j3"] = _job("j3", phase=ru.PHASE_ARMED, src="R:/x", dst="R:/y", plan=plan_new, updated_at=300.0)
+    edge2 = mod._foreign_resolve_old_root(OLD)
+    assert (edge2.job_id, edge2.dst, edge2.phase) == ("jp2", "R:/fresh", "armed")
+
+
+def test_foreign_resolve_expired_mapping_is_none():
+    """R7 映射过期语义: 终态账滚动(载体 job 全部滚出)后解析不出 -> None(与「非旧根」同形,
+    判据面不加持久账不可区分 —— D2; T5 通知文案按 None 口径降级「映射已过期」)"""
+    mod, _store, _client = _env()
+    mod._jobs = {"jx": _job("jx", phase=ru.PHASE_DONE, src="R:/other", dst="R:/z", updated_at=100.0)}
+    assert mod._foreign_resolve_old_root(OLD) is None
+    mod._jobs = {}
+    assert mod._foreign_resolve_old_root(OLD) is None
+
+
+def test_foreign_resolve_purged_pred_falls_back_to_owner_and_matchable():
+    """边身份回落(评审 minor 修): 继承条目指向已滚出/清账的前任(_jobs 无此 id)时
+    edge.job_id 回落携带 owner —— 消费面 get_job 命中、_foreign_files_match 出判定
+    (不再判「不可判定」出队), 场景 B 命中在 owner 收官前能记账"""
+    mod, store, client = _env()
+    plan = {
+        "files":
+            list(PLAN_FILES),
+        "inherited":
+            [
+                {
+                    "job_id": "jp",
+                    "src": OLD,
+                    "dst": "R:/mid",
+                    "scope": OLD,
+                    "alias_kind": "dir",
+                    "alias_paths": [OLD],
+                    "link_kind": "junction",
+                }
+            ],
+    }
+    mod._jobs = {
+        # 前任 jp 已被清账/滚出(不在 _jobs); owner j2 未收官(armed), 边来自其移交条目
+        "j2": _job("j2", phase=ru.PHASE_ARMED, src="R:/z", dst="R:/w", plan=plan, updated_at=200.0),
+    }
+    edge = mod._foreign_resolve_old_root(OLD)
+    assert (edge.src, edge.dst, edge.job_id, edge.phase) == (OLD, "R:/mid", "j2", "armed")
+    assert mod.get_job(edge.job_id) is not None, "回落后的 job_id 必须在账可解析"
+    client.files_map["BX"] = _seed()
+    store.refresh([FakeTorrent(hash="BX", name="done-root", save_path=OLD)])
+    rec = store.get("BX")
+    hit = rf.ForeignHit(
+        hash="BX",
+        save_path=OLD,
+        scenario="B",
+        job_id=edge.job_id,
+        phase=edge.phase,
+        old_root=edge.src,
+        location=edge.dst
+    )
+    assert mod._foreign_files_match(rec, hit) is True, "清单一致 -> 可判定(不再因 get_job 未命中出队)"
 
 
 def test_foreign_member_of_other_active_job_skipped():

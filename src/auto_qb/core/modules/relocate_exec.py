@@ -1276,6 +1276,12 @@ class ExecMixin:
             if shrunk is not None:
                 job = shrunk
         at_dst = self._all_at_dst(job)
+        if not at_dst and j_phase != ru.PHASE_FAILED:
+            # S4 收尾守卫生产面(计划 26-11-20-0434 R1/T3 遗留承接): 核验(_step_verify)只在
+            # 全员到位时进入 —— 纳入成员改写未回流时 job 停在对账 WAIT(本分支), _verify_hang
+            # 的分流守卫不可达; 「改写从未落账」的孤儿成员(T3 纳入落账时 spec 追加失败遗留)
+            # 在此形态下永久停 WAIT, 本步给它一张告警脸(不写账不触处置, 零破坏底线)。
+            self._warn_orphan_rewrites(job, rt, journal)
         action = ru.reconcile(
             job,
             alias_present=alias_present,
@@ -1471,7 +1477,7 @@ class ExecMixin:
         """
         bad = [(h, self._verify_member_state(h, job)) for h in job.hashes if not self._member_at_dst(h, job)]
         if bad:
-            self._verify_hang(job, bad)
+            self._verify_hang(job, bad, rt)
             return
         deps = self._chain_gate_deps(job)
         if deps:
@@ -1494,18 +1500,169 @@ class ExecMixin:
             return "已不在客户端"
         return f"save_path 仍在 {getattr(rec, 'save_path', '') or '(空)'}"
 
-    def _verify_hang(self, job: RelocateJob, bad: list) -> None:
+    def _rewrite_cover_of(self, job_id: str, hashes) -> dict:
+        """未到位成员的改写覆盖面分流单点(S4 收尾守卫判定依据, 计划 26-11-20-0434 R1)
+
+        返回 {hash: "recorded" | "spec" | "orphan" | "unknown"}:
+        - recorded: journal.rewrites 有账(daemon 已处理过该成员的改写)—— 走既有真失败/
+          重放/悬挂面, 语义不变;
+        - spec: 无账但在 spec.members —— 改写在途, daemon 将在下一窗口处理。收尾窗纳入
+          成员的**常态**: 纳入面 journal 零写(改写账唯一写者是 daemon), daemon 改写之前
+          纳入成员恒无账 —— 其改写来源是 spec.members 不是 journal(R1 判定依据);
+        - orphan: 无账且不在 spec.members —— 改写从未落账(纳入落账时 spec 追加失败/
+          账面竞态的遗留, T3 注记交本守卫承接), 机械面无法自愈;
+        - unknown: spec 不可读(缺失/坏形/空)且无账 —— 无法证明孤儿, 保守按在途
+          (不把「读不出 spec」误报成「改写未落账」)。
+
+        成员账键解析: rewrites 键 = daemon 的 member_key(hash_v1 优先退 hash_v2), job.hashes
+        是 qB hash —— 先直查; 未命中经 spec 成员解析(任一 hash 形命中即锁定该成员), 再按其
+        **候选账键序**(member_key / hash_v1 / hash_v2 去重)逐个复查 —— v2/hybrid 形态面:
+        qB hash 与账键不同形时不得因键向错配把真失败成员误判 WAIT 支(评审 minor 修, 两个
+        键向都解析: 账键 = member_key(v1) 而 qB hash = v2, 与反置形态)。
+        """
+        data_dir = self._data_dir()
+        rewrites = relocate_journal.read_rewrites(data_dir, job_id)
+        spec = relocate_journal.read_spec(data_dir, job_id)
+        spec_ok = isinstance(spec, dict) and bool(spec)
+        keyed: dict = {}
+        known: set = set()
+        if spec_ok:
+            for m in relocate_journal.spec_members(spec):
+                k = relocate_journal.member_key(m)
+                v1 = str(m.get("hash_v1") or "")
+                v2 = str(m.get("hash_v2") or "")
+                cand = tuple(x for x in dict.fromkeys((k, v1, v2)) if x)
+                for v in (v1, v2):
+                    if v:
+                        known.add(v)
+                        keyed.setdefault(v, cand)
+        out = {}
+        for h in hashes:
+            h = str(h or "")
+            if not h:
+                continue
+            rec = rewrites.get(h)
+            if rec is None:
+                for k in keyed.get(h, ()):
+                    rec = rewrites.get(k)
+                    if rec is not None:
+                        break
+            if rec is not None:
+                out[h] = "recorded"
+            elif h in known:
+                out[h] = "spec"
+            elif spec_ok:
+                out[h] = "orphan"
+            else:
+                out[h] = "unknown"
+        return out
+
+    def _warn_orphan_rewrites(self, job: RelocateJob, rt: dict, journal: dict) -> None:
+        """收尾窗「改写从未落账」孤儿成员的可见性步(S4 收尾守卫生产面; 只告警零写面)
+
+        生产路径上 _verify_hang 的分流守卫只在核验(全员到位)时可达 —— 纳入成员改写未
+        回流时 job 停在对账 WAIT(at_dst=False), 孤儿成员(收尾窗纳入时 spec 追加失败/
+        账面竞态遗留: 在 job.hashes 却不在改写清单, daemon 的 pending 集永远不含它)会
+        让收尾永久停在本相位且无任何解释。本步按文本 rt 去重 WARNING 一次, 名点孤儿 +
+        人工出路(删除该种子 -> R9 组账收缩自愈); 不写 state/reason(良性挂起语义不变),
+        不触发任何处置动作(零破坏底线)。
+
+        预门(零附加 I/O + 零写面): 未到位成员里先找「无改写账 + 已在 foreign notified 账记
+        为场景 A 且属于本 job」的候选 —— 无纳入史的 job(pre-T3 全部存量)在此零成本返回,
+        不读 spec; 有候选才读一次 spec 判孤儿(spec 不可读 = 无法证明孤儿, 保守不告警 ——
+        与 _rewrite_cover_of 的 unknown 支同口径)。改写账取调用方已读的 journal(对账每拍
+        已读, 不重复落盘 I/O)。notified 账走**只读视图**(_state_foreign_notified_view,
+        三段 get 不 setdefault)—— 本步声明「不写 state」, 合法配置(foreign_torrent=False/
+        从未记账)不得被 materialize 出 relocate.foreign.notified 持久键(黄金法则 2,
+        评审 minor 修)。
+        """
+        missing = [h for h in job.hashes if not self._member_at_dst(h, job)]
+        if not missing:
+            return
+        rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+        notified = self._state_foreign_notified_view()
+        candidates = []
+        for h in missing:
+            if h in rewrites:
+                continue
+            entry = notified.get(h)
+            if isinstance(entry, dict) and entry.get("kind") == "A" and entry.get("job_id") == job.job_id:
+                candidates.append(h)
+        if not candidates:
+            return
+        spec = relocate_journal.read_spec(self._data_dir(), job.job_id)
+        if not isinstance(spec, dict) or not spec:
+            return  # spec 不可读: 无法证明孤儿(保守不告警)
+        known = set()
+        for m in relocate_journal.spec_members(spec):
+            for v in (m.get("hash_v1"), m.get("hash_v2")):
+                v = str(v or "")
+                if v:
+                    known.add(v)
+        orphans = [h for h in candidates if h not in known]
+        if not orphans:
+            return  # 全部在改写清单上 = 改写在途(daemon 下一窗口): 正常等待态, 不告警
+        names = ", ".join(h[:8] for h in orphans[:3])
+        more = f" 等共 {len(orphans)} 个" if len(orphans) > 3 else ""
+        text = (
+            f"成员 {names}{more} 未到位且改写清单未含(收尾窗纳入落账时 spec 追加失败的遗留)"
+            " —— 改写不会自发回流, 收尾按 WAIT 挂起(不判失败不触处置); "
+            "人工出路: 删除该种子(组账收缩自愈后收尾自动续推)"
+        )
+        if rt.get("orphan_rewrite_warned") == text:
+            logger.debug(f"relocate | job {job.job_id}: 孤儿改写成员未回流(已告警过): {names}{more}")
+            return
+        rt["orphan_rewrite_warned"] = text
+        logger.warning(f"relocate | job {job.job_id}: {text}")
+
+    def _verify_hang(self, job: RelocateJob, bad: list, rt: Optional[dict] = None) -> None:
         """核验不过: journal 悬挂维持 + 首次请求重放一轮(保守节奏), 不判 failed
 
         重放 = rj.reset_rewrites 清 settled 记录使其重回 pending(daemon 下一窗口重放改写,
         qB 再重启后核验重判)。verify_replays 计数闸: 重放一次后仍不过 → 维持悬挂 + 告警,
         不再清账(防「改写→重启→核验不过→再改写」无限循环)。日志与账只在状态变化时写
         一笔(对账每拍都会走到这里, 不设变化门会每 tick 刷屏/推 updated_at)。
+
+        S4 收尾守卫(计划 26-11-20-0434 R1): 未过成员先按改写覆盖面分流(_rewrite_cover_of)
+        —— 只要任一成员有改写账(recorded)就走既有重放/悬挂面(有账成员语义不变); 全体
+        无账(收尾窗纳入成员的改写在途/落账缺失形态)则核验按 **WAIT 良性挂起**: 不调
+        reset_rewrites(清 settled 会让既有真值改写账整表重回 pending, 换来一轮全成员重放
+        + qB 重启 —— 纳入成员的在途改写本就该等 daemon 下一窗口, 重放闸被它空耗后真失败
+        的单次重放额度反被提前烧掉, R1), 不写 verify_failed 反馈位(悬挂不再被纳入成员
+        触发)。告警按 rt 挂文本去重(同参重入 DEBUG 静默, 与既有 changed 门同纪律)。
         """
         detail = "; ".join(f"{h[:8]} {state}" for h, state in bad[:3])
         more = f" 等共 {len(bad)} 个" if len(bad) > 3 else ""
         text = f"核验未过: {detail}{more}(别名维持, 成员经别名可读)"
         data_dir = self._data_dir()
+        cover = self._rewrite_cover_of(job.job_id, [h for h, _state in bad])
+        if not any(v == "recorded" for v in cover.values()):
+            # S4 WAIT 支: 全体无账 —— 纳入成员的改写在途(在 spec)或落账缺失(不在 spec)。
+            # 零写面: 不清账、不重放、不动相位、不写 reason/last_error, 只留一张告警脸。
+            orphans = [h for h, _state in bad if cover.get(h) == "orphan"]
+            if orphans:
+                names = ", ".join(h[:8] for h in orphans[:3])
+                more_o = f" 等共 {len(orphans)} 个" if len(orphans) > 3 else ""
+                wait_text = (
+                    f"{text} —— 含改写未落账的纳入成员 {names}{more_o}: 改写清单未含"
+                    "(纳入落账时 spec 追加失败遗留), 机械面无法自愈; 核验按 WAIT 挂起"
+                    "(不清账不重放不判失败), 人工出路: 删除该种子(组账收缩自愈后收尾自动续推)"
+                )
+            elif any(cover.get(h) == "spec" for h, _state in bad):
+                wait_text = (
+                    f"{text} —— 含收尾窗纳入成员(改写在途, 无改写账): 改写清单经 spec.members "
+                    "现算待 daemon 下线窗, 核验按 WAIT 等待回流(不清账不重放, S4 守卫)"
+                )
+            else:
+                wait_text = (f"{text} —— 含收尾窗纳入成员(无改写账, spec 暂不可读无法证明落账缺失): "
+                             "核验按 WAIT 良性挂起等改写回流(不清账不重放, S4 守卫)")
+            if rt is not None and rt.get("verify_foreign_wait") == wait_text:
+                logger.debug(f"relocate | job {job.job_id}: 纳入成员改写未回流(悬挂维持, 已告警过): {text}")
+                return
+            if rt is not None:
+                rt["verify_foreign_wait"] = wait_text
+            logger.warning(f"relocate | job {job.job_id}: {wait_text}")
+            return
         replays = relocate_journal.verify_replays_of(data_dir, job.job_id)
         changed = job.reason != ru.REASON_VERIFY_FAILED or job.last_error != text
         if replays < 1:

@@ -17,6 +17,22 @@
 - test_step_verify_member_gone_hangs: 成员已不在客户端 → 同悬挂(良性态, FAILED_GONE 已退役)
 - test_step_verify_replay_only_once: 重放一轮后仍不过 → 不再清账(rewrites 保持 settled),
   job 停 rewritten + reason=verify_failed(防无限改写循环)
+### S4 收尾守卫(计划 26-11-20-0434 R1: 悬挂不再被纳入成员触发)
+- test_verify_hang_included_inflight_waits_without_replay: 纳入成员改写在途(无账 + 在
+  spec.members)—— 核验按 WAIT: 不清账不重放相位不抖, 不写 verify_failed(红绿主测)
+- test_verify_hang_included_orphan_waits_without_replay: 纳入成员改写从未落账(T3 遗留:
+  无账 + 不在 spec.members)—— 同按 WAIT 挂起不清账不判失败, 告警带人工出路(收缩自愈)
+- test_verify_hang_inflight_spec_missing_conservative_wait: spec 不可读 —— 无账成员保守按
+  在途 WAIT(不误报孤儿文案), 不清账
+- test_verify_hang_inflight_after_gate_exhausted_stays_wait: 重放闸已用尽后纳入成员才变坏
+  —— 同按 WAIT, 不得把 verify_failed 落到纳入成员头上(R1 永久悬挂面)
+- test_verify_hang_mixed_recorded_and_inflight_keeps_replay: 混批(有账真失败 + 无账在途)
+  —— 既有重放面照走(有账成员语义不变)
+- test_verify_hang_inflight_wait_warning_deduped_per_text: WAIT 支告警按文本 rt 去重
+  (同参重入只 WARNING 一次, 不逐拍刷屏)
+- test_rewrite_cover_hybrid_v2_ledger_key_resolves_and_replays: v2/hybrid 键向(评审 minor
+  修)—— 改写账按 hash_v2 记键 + qB hash 给 hash_v1: 成员判 recorded(候选账键序解析),
+  混批真失败走既有重放面且 reset 只清 settled(failed 记录不动)
 ### 删链门(_step_verify 依赖扫描)
 - test_step_verify_deps_block_then_release: 门外共享者 save_path 恰等于旧根(N5 形态)→
   reason=chain_deps 别名不删; 依赖消失后重跑 → 收尾完成
@@ -252,6 +268,206 @@ def test_step_verify_replay_only_once(tmp_path):
     saved = mod.get_job("j1")
     assert saved.phase == ru.PHASE_REWRITTEN and saved.reason == ru.REASON_VERIFY_FAILED, (saved.phase, saved.reason)
     assert "维持悬挂" in " ".join(cap.messages), cap.messages
+
+
+# ---------------------------------------------------------------- S4 收尾守卫(计划 26-11-20-0434 R1)
+# 纳入成员(收尾窗纳入)的改写来源是 spec.members 不是 journal(journal 零写, 改写账唯一写者是
+# daemon)—— daemon 改写前纳入成员恒无改写账记录。守卫按「有无改写账」分流: 有账成员走既有
+# 重放/悬挂面(语义不变), 无账成员一律核验按 WAIT 良性挂起: 不清账重放(防重放闸被纳入成员
+# 空耗 + 相位抖动)不写 verify_failed 反馈位(悬挂不再被纳入成员触发)。
+
+
+def _included_env(tmp_path, *, in_spec=True, replays=0):
+    """rewritten job + settled 原成员 HA(已到 dst) + 纳入成员 HF(无改写账, 仍在旧路径)底座
+
+    in_spec=True 时 spec.members 含 HF(改写在途形态); False 时 spec 不含 HF(T3 纳入落账时
+    spec 追加失败遗留的「改写从未落账」形态); spec 文件不给 = 不可读形态。replays 预置重放计数。
+    """
+    by_hash = {"HA": _rec("HA", "R:/dst"), "HF": _rec("HF", "R:/src")}
+    mod = _bare_mod(store=types.SimpleNamespace(by_hash=by_hash), data_dir=str(tmp_path))
+    body = {
+        "phase": ru.PHASE_REWRITTEN,
+        "rewrites": {
+            "HA": {
+                "status": "rewritten",
+                "ts": 1.0
+            }
+        },
+        "ts": 1.0,
+    }
+    if replays:
+        body[rj.VERIFY_REPLAYS_KEY] = replays
+    rj.write_journal(str(tmp_path), "j1", body)
+    if in_spec is not None:
+        members = [{"hash_v1": "HA", "hash_v2": ""}]
+        if in_spec:
+            members.append({"hash_v1": "HF", "hash_v2": ""})
+        rj.write_spec(str(tmp_path), "j1", {"members": members})
+    job = _job("j1", phase=ru.PHASE_REWRITTEN, hashes=("HA", "HF"), alias_paths=("R:/src/l", ), alias_kind="dir")
+    mod.register_job(job)
+    removed = []
+    mod._remove_links = lambda paths: (removed.extend(list(paths)), len(removed))[1]
+    return mod, job, {}, removed
+
+
+def test_verify_hang_included_inflight_waits_without_replay(tmp_path):
+    """纳入成员改写在途(无账 + 在 spec.members): 核验按 WAIT —— 不清账不重放相位不抖,
+    不写 verify_failed(悬挂不再被纳入成员触发, R1 红绿主测; 修前此形触发放闸 + 相位回 armed)"""
+    mod, job, rt, removed = _included_env(tmp_path, in_spec=True)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_verify(job, rt)
+    j = rj.read_journal(str(tmp_path), "j1")
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 0, "纳入成员在途改写不得触发重放(reset_rewrites 不被调用)"
+    assert j["rewrites"]["HA"]["status"] == "rewritten", "原成员 settled 账不得被清回 pending"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_REWRITTEN and not saved.is_terminal, (saved.phase, saved.reason)
+    assert saved.reason != ru.REASON_VERIFY_FAILED, saved.reason
+    assert removed == [], "核验不过绝不删别名"
+    assert "WAIT" in " ".join(cap.messages) or "等待" in " ".join(cap.messages), cap.messages
+
+
+def test_verify_hang_included_orphan_waits_without_replay(tmp_path):
+    """纳入成员改写从未落账(无账 + 不在 spec.members, T3 遗留): 同按 WAIT 挂起不清账不判失败,
+    告警给人工出路(删除该种子组账收缩自愈)—— 机械面无法自愈也不得用重放闸空转"""
+    mod, job, rt, _removed = _included_env(tmp_path, in_spec=False)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_verify(job, rt)
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 0, "改写从未落账的成员同样不得触发重放"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_REWRITTEN and saved.reason != ru.REASON_VERIFY_FAILED, (saved.phase, saved.reason)
+    warn = " ".join(cap.messages)
+    assert "未落账" in warn or "未含" in warn, cap.messages
+    assert "收缩" in warn, "告警必须带人工出路(组账收缩自愈)"
+
+
+def test_verify_hang_inflight_spec_missing_conservative_wait(tmp_path):
+    """spec 不可读(缺失/坏形): 无账成员无法证明孤儿 —— 保守按在途 WAIT(不误报孤儿文案), 不清账"""
+    mod, job, rt, _removed = _included_env(tmp_path, in_spec=None)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_verify(job, rt)
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 0
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_REWRITTEN and saved.reason != ru.REASON_VERIFY_FAILED, (saved.phase, saved.reason)
+    warn = " ".join(cap.messages)
+    assert "未落账" not in warn, "spec 不可读不得断言孤儿(无法证明)"
+
+
+def test_verify_hang_inflight_after_gate_exhausted_stays_wait(tmp_path):
+    """重放闸已用尽(replays=1)后纳入成员才变坏: 同按 WAIT —— 不得把 verify_failed 反馈位
+    落到纳入成员头上(R1 永久悬挂面; 修前此形被记 verify_failed 悬挂标签)"""
+    mod, job, rt, _removed = _included_env(tmp_path, in_spec=True, replays=1)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_verify(job, rt)
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_REWRITTEN and saved.reason != ru.REASON_VERIFY_FAILED, (saved.phase, saved.reason)
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 1, "闸已用尽: 不得二次清账"
+    assert "WAIT" in " ".join(cap.messages) or "等待" in " ".join(cap.messages), cap.messages
+
+
+def test_verify_hang_mixed_recorded_and_inflight_keeps_replay(tmp_path):
+    """混批(有账真失败成员 + 无账在途纳入成员): 既有重放面照走 —— 有账成员语义不变
+    (重放为真失败成员服务, 在途成员无账不受 reset 影响, daemon 经 spec 照常接管)"""
+    mod, _job, rt, _removed = _included_env(tmp_path, in_spec=True)
+    mod._ctx.store.by_hash["HA"].save_path = "R:/src"  # HA 真失败: 改写落账却未回流
+    with capture_logs("auto_qb.core.modules.relocate_mod"):
+        mod._step_verify(mod.get_job("j1"), rt)
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 1, "有账成员未回流: 既有重放面照走"
+    j = rj.read_journal(str(tmp_path), "j1")
+    assert j["rewrites"]["HA"]["status"] == rj.REWRITE_RESET_STATUS, "真失败成员照常清回 pending"
+    assert mod.get_job("j1").phase == ru.PHASE_ARMED, "重放期相位回 armed(既有语义)"
+
+
+def test_verify_hang_inflight_wait_warning_deduped_per_text(tmp_path):
+    """WAIT 支告警按文本去重(同参重入只 WARNING 一次, 不逐拍刷屏 —— 与既有 changed 门同纪律)"""
+    mod, job, rt, _removed = _included_env(tmp_path, in_spec=True)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap1:
+        mod._step_verify(job, rt)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod._step_verify(mod.get_job("j1"), rt)
+    warn1 = [m for m in cap1.messages if "WAIT" in m or "等待" in m]
+    warn2 = [m for m in cap2.messages if "WAIT" in m or "等待" in m]
+    assert len(warn1) == 1, cap1.messages
+    assert len(warn2) == 0, "同文本重入转 DEBUG 静默(不逐拍刷屏)"
+
+
+def test_rewrite_cover_hybrid_v2_ledger_key_resolves_and_replays(tmp_path):
+    """v2/hybrid 键向(评审 minor 修): 改写账按 hash_v2 记键、qB hash 给 hash_v1 —— 成员仍判
+    recorded(候选账键序解析), 混批真失败走既有重放面且 reset 只清 settled(键映射错向不得
+    把真失败 hybrid 成员误判 WAIT 支、重放面不触发)"""
+    hybrid_v1, hybrid_v2 = "V" * 40, "W" * 40
+    by_hash = {
+        "HA": _rec("HA", "R:/src"),  # 真失败: 有账(settled)未回流
+        hybrid_v1: _rec(hybrid_v1, "R:/src"),  # hybrid 真失败: 账按 hash_v2 记键(夹具形态)
+        "HP": _rec("HP", "R:/src"),  # 有账但未收口(failed): reset 不得动(只清 settled)
+        "HF": _rec("HF", "R:/dst"),  # 在途纳入成员(无账在 spec): 已到 dst 不进 bad
+    }
+    mod = _bare_mod(store=types.SimpleNamespace(by_hash=by_hash), data_dir=str(tmp_path))
+    rj.write_journal(
+        str(tmp_path),
+        "j1",
+        {
+            "phase": ru.PHASE_REWRITTEN,
+            "rewrites":
+                {
+                    "HA": {
+                        "status": "rewritten",
+                        "ts": 1.0
+                    },
+                    hybrid_v2: {
+                        "status": "rewritten",
+                        "ts": 1.0
+                    },
+                    "HP": {
+                        "status": "failed",
+                        "ts": 1.0
+                    },
+                },
+            "ts": 1.0,
+        },
+    )
+    rj.write_spec(
+        str(tmp_path),
+        "j1",
+        {
+            "members":
+                [
+                    {
+                        "hash_v1": "HA",
+                        "hash_v2": ""
+                    },
+                    {
+                        "hash_v1": hybrid_v1,
+                        "hash_v2": hybrid_v2
+                    },
+                    {
+                        "hash_v1": "HP",
+                        "hash_v2": ""
+                    },
+                    {
+                        "hash_v1": "HF",
+                        "hash_v2": ""
+                    },
+                ]
+        },
+    )
+    job = _job(
+        "j1",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=("HA", hybrid_v1, "HP", "HF"),
+        alias_paths=("R:/src/l", ),
+        alias_kind="dir",
+    )
+    mod.register_job(job)
+    cover = mod._rewrite_cover_of("j1", [hybrid_v1])
+    assert cover[hybrid_v1] == "recorded", f"v2 键向账必须解析到 recorded: {cover}"
+    with capture_logs("auto_qb.core.modules.relocate_mod"):
+        mod._step_verify(mod.get_job("j1"), {})
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 1, "真失败混批: 既有重放面触发(不落 WAIT 支)"
+    j = rj.read_journal(str(tmp_path), "j1")
+    assert j["rewrites"][hybrid_v2]["status"] == rj.REWRITE_RESET_STATUS, "hybrid 账(v2 键)被清回 pending"
+    assert j["rewrites"]["HA"]["status"] == rj.REWRITE_RESET_STATUS
+    assert j["rewrites"]["HP"]["status"] == "failed", "reset 只清 settled: failed 记录不动"
+    assert mod.get_job("j1").phase == ru.PHASE_ARMED, "重放期相位回 armed(既有语义)"
 
 
 # ---------------------------------------------------------------- 删链门(_step_verify 依赖扫描)
@@ -770,11 +986,27 @@ def test_webui_delete_blocked_receipt_single_and_group(tmp_path):
 
 
 def test_verify_hang_unchanged_state_is_debug_only(tmp_path):
-    """重放一轮后仍不过且反馈面无变化: 只落 DEBUG(不重复清账/不重复刷警告, 防每拍刷屏)"""
+    """重放一轮后仍不过且反馈面无变化: 只落 DEBUG(不重复清账/不重复刷警告, 防每拍刷屏)
+
+    S4 收尾守卫(计划 26-11-20-0434 R1)后有账成员才走重放/悬挂面 —— 夹具给成员预置改写
+    账(recorded), 落既有 recorded 支: 闸已用尽 + 反馈面无变化 => DEBUG 静默。
+    """
     import logging
 
     mod = _bare_mod(data_dir=str(tmp_path / "data"))
-    rj.write_journal(mod._data_dir(), "j1", {"verify_replays": 1})
+    rj.write_journal(
+        mod._data_dir(),
+        "j1",
+        {
+            "verify_replays": 1,
+            "rewrites": {
+                "a" * 40: {
+                    "status": "rewritten",
+                    "ts": 1.0
+                }
+            }
+        },
+    )
     bad = [("a" * 40, "已不在客户端")]
     detail = "; ".join(f"{h[:8]} {state}" for h, state in bad[:3])
     text = f"核验未过: {detail}(别名维持, 成员经别名可读)"

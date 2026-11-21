@@ -12,7 +12,7 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 - test_rebuild_capped_then_failed_keeps_scene: 重建达上限 ⇒ failed 留现场(不再永不终态)
 - test_apply_reconcile_rebuild_faces: 重建退避账/stage 值/journal 回滚 armed/rebuild_exhausted 文案
 - test_rebuild_first_attempt_not_backoff_on_fresh_boot: 开机窗口 —— monotonic < REBUILD_BACKOFF 时首次重建不得被 0.0 哨兵退避吞掉(issue 26-10-31-0932)
-- test_apply_reconcile_verify_hangs_benign: ACT_VERIFY 接线 —— 核验不过 = 良性悬挂, rewritten 不推进不判 failed(S4a 退役 FAILED_TIMEOUT), 账留 verify_failed 供反馈面
+- test_apply_reconcile_verify_hangs_benign: ACT_VERIFY 接线 —— 核验不过 = 良性悬挂, rewritten 不推进不判 failed(S4a 退役 FAILED_TIMEOUT); S4 收尾守卫后无账成员按 WAIT 挂起, verify_failed 反馈位不再落在纳入成员头上(有账成员语义不变, 承重在 test_relocate_exec_verify)
 ### journal 镜像合并(_step_reconcile)
 - test_step_reconcile_merges_rewritten_forward: armed + journal rewritten -> 跟进 rewritten; rewritten + 旧 journal 相位 -> 不回退
 - test_step_reconcile_same_journal_phase_no_remerge: 相位一致 -> 不重复落账, 对账照常走完
@@ -74,6 +74,18 @@ R4 成员收缩接线追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的
   -> 删链门(组外交集豁免: 组外异名停 src 等值面但清单与 alias_paths 不相交, R2 x R4
   跨批组合钉, 接缝终审 I) -> 收尾 done 别名照删(收缩当拍顺 VERIFY 链自然走通);
   move 相位 torrent_gone -> failed 不受影响由 test_step_move_mover_gone_marks_failed 钉住
+
+### S4 收尾守卫生产面(计划 26-11-20-0434 R1/T3 遗留承接: 孤儿改写成员可见性)
+- test_step_reconcile_orphan_rewrite_warns_once: 孤儿成员(无账 + 不在 spec.members +
+  notified 场景 A 在账)—— 对账 WAIT 拍 WARNING 一次(rt 按文本去重), 不写 reason/last_error
+  不动相位不终态(零处置动作); 告警带人工出路(组账收缩自愈)
+- test_step_reconcile_inflight_member_no_warning: 在途形态(无账但在 spec.members)——
+  正常等待态不告警
+- test_step_reconcile_no_foreign_history_no_orphan_scan: 无纳入史(notified 无场景 A 条目)
+  —— 预门零成本返回, 不读 spec 不告警(pre-T3 存量零扰动)
+- test_step_reconcile_orphan_gate_never_materializes_state: 零写面(评审 minor 修)—— 空
+  notified 账跑孤儿步, state.data 不得被 materialize 出 relocate.foreign.notified 持久键
+  (只读视图三段 get, 黄金法则 2)
 """
 
 import os
@@ -202,15 +214,19 @@ def test_rebuild_first_attempt_not_backoff_on_fresh_boot(tmp_path, monkeypatch):
 
 def test_apply_reconcile_verify_hangs_benign(tmp_path):
     """ACT_VERIFY 接线(_step_verify 单点): 核验不过 = 良性悬挂 —— rewritten 不推进不判
-    failed(S4a 退役 FAILED_TIMEOUT), 账上留 verify_failed 供反馈面(全量核验/删链面在
-    test_relocate_exec_verify)"""
+    failed(S4a 退役 FAILED_TIMEOUT)。S4 收尾守卫(计划 26-11-20-0434 R1)后无账成员(本夹具
+    形态: 无改写账无 spec)按 WAIT 良性挂起, verify_failed 反馈位不再落下(有账成员的重放/
+    悬挂面与反馈位语义不变, 承重面在 test_relocate_exec_verify)"""
     mod = _bare_mod(data_dir=str(tmp_path))
     job = _job(phase=ru.PHASE_REWRITTEN, alias_paths=("R:/src/l", ))
     mod.register_job(job)
-    mod._apply_reconcile(job, {}, ru.ACT_VERIFY)
+    rt = {}
+    mod._apply_reconcile(job, rt, ru.ACT_VERIFY)
     saved = mod._jobs.get("j1")
     assert saved is not None and not saved.is_terminal, saved
-    assert saved.reason == ru.REASON_VERIFY_FAILED, saved.reason
+    assert saved.phase == ru.PHASE_REWRITTEN, saved.phase
+    assert saved.reason != ru.REASON_VERIFY_FAILED, saved.reason
+    assert "WAIT" in rt.get("verify_foreign_wait", ""), "S4 WAIT 支告警落 rt 去重账"
 
 
 # ---------------------------------------------------------------- journal 镜像合并(_step_reconcile)
@@ -967,6 +983,97 @@ def test_step_reconcile_absence_counts_persist_in_state(tmp_path, monkeypatch):
     assert box["j1"]["absent_counts"] == [["HA", 1]], "state.json 落账形态"
     rebuilt = ru.job_from_dict(box["j1"])
     assert dict(rebuilt.absent_counts) == {"HA": 1}, "重启重建后计数仍在"
+
+
+# ---------------------------------------------------------------- S4 收尾守卫生产面(计划 26-11-20-0434 R1)
+# 核验(_step_verify)只在全员到位时进入 —— 纳入成员改写未回流时 job 停在对账 WAIT(at_dst
+# = False), _verify_hang 的分流守卫不可达。「改写从未落账」的孤儿成员(T3 纳入落账时 spec
+# 追加失败遗留)在此形态下永久停 WAIT 无脸。本步给孤儿一张 WARNING 脸: 不写 state/reason,
+# 不触处置(零破坏底线); 无纳入史的 job 预门零成本跳过。
+
+
+def _orphan_env(tmp_path, *, in_spec=True):
+    """armed job + 纳入成员 HF(未到位, notified 场景 A 在账)的孤儿可见性底座
+
+    in_spec=True: spec.members 含 HF(在途形态, 不告警); False: 不含(孤儿形态, 告警)。
+    """
+    mod = _bare_mod(
+        store=types.SimpleNamespace(
+            by_hash={
+                "HA": types.SimpleNamespace(hash="HA", save_path="R:/dst", state="pausedUP"),
+                "HF": types.SimpleNamespace(hash="HF", save_path="R:/src", state="pausedUP"),
+            }
+        ),
+        api=types.SimpleNamespace(client=types.SimpleNamespace(app_preferences=lambda: None)),
+        data_dir=str(tmp_path),
+    )
+    mod._alias_live = lambda p: True
+    members = [{"hash_v1": "HA", "hash_v2": ""}]
+    if in_spec:
+        members.append({"hash_v1": "HF", "hash_v2": ""})
+    relocate_journal.write_spec(str(tmp_path), "j1", {"members": members})
+    mod._jobs["j1"] = _job("j1", phase=ru.PHASE_ARMED, hashes=("HA", "HF"), alias_paths=("R:/src/l", ))
+    mod.register_job(mod._jobs["j1"])
+    mod._ctx.state.data.setdefault("relocate", {}).setdefault("foreign", {}).setdefault("notified", {})["HF"] = {
+        "root": ru._norm("R:/src"),
+        "kind": "A",
+        "job_id": "j1",
+        "phase": "armed",
+        "location": "R:/dst",
+        "first_seen": 1.0,
+    }
+    return mod
+
+
+def test_step_reconcile_orphan_rewrite_warns_once(tmp_path):
+    """孤儿成员(无账 + 不在 spec + notified 场景 A): 对账拍 WARNING 一次(rt 按文本去重),
+    不写 reason/last_error 不动相位不终态(良性挂起, 零处置动作)"""
+    mod = _orphan_env(tmp_path, in_spec=False)
+    rt = mod._rt.setdefault("j1", {})
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    warn = " ".join(cap.messages)
+    assert "HF" in warn and ("未含" in warn or "未落账" in warn), cap.messages
+    assert "收缩" in warn, "告警必须带人工出路(组账收缩自愈)"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and not saved.is_terminal, (saved.phase, saved.reason)
+    assert saved.reason == "" and saved.last_error == "", (saved.reason, saved.last_error)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    assert "未含" not in " ".join(cap2.messages) and "未落账" not in " ".join(cap2.messages), \
+        "同文本重入不重复告警(rt 去重)"
+
+
+def test_step_reconcile_inflight_member_no_warning(tmp_path):
+    """在途形态(无账但在 spec.members, daemon 将在下一窗口改写): 正常等待态, 不告警"""
+    mod = _orphan_env(tmp_path, in_spec=True)
+    rt = mod._rt.setdefault("j1", {})
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    assert "未含" not in " ".join(cap.messages) and "未落账" not in " ".join(cap.messages), cap.messages
+
+
+def test_step_reconcile_no_foreign_history_no_orphan_scan(tmp_path):
+    """无纳入史(notified 无场景 A 条目): 预门零成本返回, 不读 spec 不告警(pre-T3 存量零扰动)"""
+    mod = _orphan_env(tmp_path, in_spec=False)
+    del mod._ctx.state.data["relocate"]["foreign"]["notified"]["HF"]
+    rt = mod._rt.setdefault("j1", {})
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    assert "未含" not in " ".join(cap.messages) and "未落账" not in " ".join(cap.messages), cap.messages
+
+
+def test_step_reconcile_orphan_gate_never_materializes_state(tmp_path):
+    """零写面(评审 minor 修): 空 notified 账(从未记账 / foreign_torrent=False 的合法形态)跑
+    孤儿步, state.data 不得被 materialize 出 relocate.foreign.notified 持久键(黄金法则 2 ——
+    只读视图三段 get, 不 setdefault)"""
+    mod = _orphan_env(tmp_path, in_spec=False)
+    mod._ctx.state.data = {}  # 整账清空: 从未记账形态
+    rt = mod._rt.setdefault("j1", {})
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(mod.get_job("j1"), rt)
+    assert mod._ctx.state.data == {}, f"state.data 不得被 materialize: {mod._ctx.state.data}"
+    assert "未含" not in " ".join(cap.messages) and "未落账" not in " ".join(cap.messages), cap.messages
 
 
 def test_step_reconcile_all_shrunk_vacuous_verify_finalizes(tmp_path, monkeypatch):
