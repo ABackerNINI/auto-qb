@@ -5,6 +5,7 @@
 `auto_qb.core.modules.traffic_sample_mod`。
 """
 import logging
+import math
 import time
 from typing import Any, Callable, List, Optional, Tuple
 
@@ -17,13 +18,13 @@ from ..traffic_store import (
     V4Sample,
     V4Slot,
     V4ZeroRun,
-    v4_block_agg_totals,
     v4_block_gap_continuous,
-    v4_block_slots,
     v4_day_epoch,
     v4_merge_agg,
     v4_month_epoch,
     v4_rollup_agg,
+    v4_run_geometry,
+    v4_z_ramp_element,
     v4_z_totals_ramp,
 )
 
@@ -155,6 +156,72 @@ def _pending_agg_rows(agg: "SeriesAgg", run: Optional[OpenRun], now: float) -> t
     except (ValueError, OSError, OverflowError):
         pass  # 同上
     return tuple(rows)
+
+
+def _agg_credit_z_run(
+    hour_samples: dict, first_ts: float, spacing: float, rec: V4ZeroRun, skip_through_hour: Optional[int]
+) -> None:
+    """z 游程内部槽区间的桶级闭合式入账(B2, plan 26-11-21-1546 S1; 模块级纯函数)。
+
+    取代逐槽展开(B1 前的 _agg_credit_day_file 主循环): 游程 n 槽槽位 ts_k =
+    (t + base) + spacing*k(k = 0..n-1, 与 v4_block_slots 同式逐位 —— first_ts 即
+    ts_0 = fl(t + base), spacing/base 由 v4_run_geometry 推导), 槽区间 [ts_k, ts_{k+1})
+    的信用 = (0, 0, ramp[k], spacing)(ramp = v4_z_totals_ramp 摊配)。n-1 个内部区间
+    按小时桶分组: 每桶一笔 merge(0, 0, ramp[ki], Σdt)—— ki = 桶内最后一个**正长度**
+    区间的起点槽, Σdt = 桶内正长度区间并集的端点差一次减法 —— O(桶数)(<= 游程跨的
+    小时数, 天文件块不跨天 => <= 25), 不随槽数放大。
+
+    FP 等价层级(D2 口径, 对拍守阵 tests/traffic_recovery_support.py 随机语料钉死):
+    - 必须逐位: wsum(z 信用每笔 +0.0: x + 0.0 = x 精确, 非负 float 无 -0 反例, r 信用
+      求和序不变)/ max(z rate 恒 0 不动 max, 桶首笔基线信用两路同一笔)/ totals 末笔
+      (ramp[ki] 为整数, 与逐槽路径「桶内最后一笔 merge」同值 —— 零长度塌缩区间在逐槽
+      路径本就不产 merge, 末笔同取正长度区间)/ 信用区间边界(槽 ts 同式)。
+    - ULP 免责: fold.cov(桶内 Σdt)—— 闭合式 = 端点差一次 Sterbenz 精确减法(= 真实
+      telescoping 和); 逐槽参照 = 精确分段差的 FP 累加(每段 ts 差精确, 累加含舍入)。
+      两路差 = 参照累加舍入, 上界 ≈ 段数 x ULP(3600) <= ~1.6e-9(段数 <= 3600,
+      ULP(3600) = 2^-41)—— 只经 round() 进 cov_s(整型吸收)与 avg 分母(z 桶 rate = 0
+      分子恒 0)。实施期实测(强于上界): 生产 epoch(ts ∈ [2^30, 2^31))下全部 ts 共享
+      2^-22 栅格且桶内 cov < 2^12 => 逐槽累加每步精确(Sterbenz 型归纳, 论证全量见
+      tests/traffic_recovery_support.py COV_ULP_TOL 注), 闭合式与逐槽 cov **恒逐位
+      相等**(随机 dt 语料 + 4000 例混排块压力实测 0 差); 容差仅作契约面保留(论证
+      依赖 epoch binade 与桶宽数量关系, 不改断言层级)。
+    - 结构豁免: fold.credits(merge 笔数, 桶级合并后变少)—— 仅 ==0 判空消费, 不进任何
+      聚合输出(D2「样本列表粒度允许不同」的同款口径)。
+
+    零长度塌缩区间(spacing < ULP(ts) 时相邻槽舍入同点; 语料/生产 spacing >> ULP 不出现)
+    在逐槽路径 end <= start 跳过不 merge —— 闭合式桶内并集不含零宽区间(区间连续铺贴无
+    洞), ki 回退跳过塌缩链, Σdt 与末笔均与逐槽路径一致。
+
+    每桶经 _agg_credit_hours 单区间入账(区间恒落单桶: s_start >= b、s_end <= 桶界,
+    恰一笔 merge; skip_through_hour 过滤与首桶定位 int(cur)//HOUR_SECONDS*HOUR_SECONDS
+    与逐槽路径同式同判)。"""
+    n = rec.run_len
+    span_end = first_ts + spacing * (n - 1)  # 末槽 ts_{n-1}(与 v4_block_slots 槽位表达式同式)
+    if n < 2 or span_end <= first_ts:
+        return  # 单槽游程无内部区间(尾部信用由调用方 pending 结算); span_end 防御支
+    b = int(first_ts) // HOUR_SECONDS * HOUR_SECONDS  # 首桶(与 _agg_credit_hours 的 h 计算同式)
+    while b < span_end:
+        be = b + HOUR_SECONDS
+        # ki_naive = 「桶界 be 之前最后一个槽」为起点的区间: 先 O(1) 反推首个 >= be 的
+        # 槽下标(候选按实数除法, FP 修正 <= 2 步; 塌缩链回退步数有界且不超过逐槽路径
+        # 本要走的槽数 —— 语料/生产 spacing >> ULP(ts) 恒为 0 步)
+        i = max(1, min(n, math.ceil((be - first_ts) / spacing)))
+        while i > 1 and first_ts + spacing * (i - 1) >= be:
+            i -= 1
+        while i < n and first_ts + spacing * i < be:
+            i += 1
+        ki = (n - 2) if i >= n else i - 1  # ts_{i-1} < be <= ts_i: 候选桶末区间起点
+        while ki >= 0 and first_ts + spacing * ki >= first_ts + spacing * (ki + 1):
+            ki -= 1  # 塌缩区间(零长度)无 merge: 回退到正长度区间
+        if ki < 0:
+            b += HOUR_SECONDS
+            continue  # 桶内无正长度区间: 不入账(与逐槽路径一致)
+        s_start = first_ts if first_ts > b else b  # max(b, ts_0): 桶内并集起点
+        last_end = first_ts + spacing * (ki + 1)
+        s_end = be if last_end > be else last_end  # min(be, ts_{ki+1}): 桶内并集终点
+        ramp_dl, ramp_up = v4_z_ramp_element(rec.dl_total, rec.up_total, rec.dl_total_end, rec.up_total_end, n, ki)
+        _SampleAggMixin._agg_credit_hours(hour_samples, s_start, s_end, 0, 0, ramp_dl, ramp_up, skip_through_hour)
+        b += HOUR_SECONDS
 
 
 class _SampleAggMixin:
@@ -512,7 +579,8 @@ class _SampleAggMixin:
     def _recover_series(self, key: str, store: TrafficV4Store, now: float, window: float) -> dict:
         """单系列恢复(§4.3/§4.4): 扫 agg 文尾 -> 水位(= 文件尾行, 不落内存不重 append)
         + 文件内行重建当日/当月累计器 -> catch-up 逐级补算 append(hour <- 读集内天文件
-        raw 逐槽前向记账 / day <- agg 内 hour 行 / month <- day 行) -> 末尾才裁剪(硬序)。
+        raw 游程级闭合式前向记账(B2, plan 26-11-21-1546) / day <- agg 内 hour 行 /
+        month <- day 行) -> 末尾才裁剪(硬序)。
 
         读集按需(plan 26-10-12-2010 D1): 读集下界 = agg 水位所在日
         [v4_day_epoch(wm_hour), 今日] —— 水位封口小时不读不重算, 读集常态 1 个天文件、
@@ -546,8 +614,8 @@ class _SampleAggMixin:
         wm_month = parsed.months[-1].epoch if parsed.months else None
         today = v4_day_epoch(now)
         cur_month = v4_month_epoch(now)
-        # --- hour catch-up: 读集内天文件 raw 逐槽前向记账(与在线记账同一口径);
-        # --- 跨天文件末槽上下文接力(00:00 边界连续时条件结算, 缺文件断链) ---
+        # --- hour catch-up: 读集内天文件 raw 前向记账(B2 起游程级闭合式, 成本 ∝ 行数;
+        # --- 与在线记账同一口径); 跨天文件末槽上下文接力(00:00 边界连续时条件结算, 缺文件断链) ---
         hour_samples: dict = {}  # hour_epoch -> HourFold(D12 折叠态, 与在线 pending 同表示)
         day_tail: Optional[tuple] = None
         if wm_hour is not None:
@@ -609,9 +677,14 @@ class _SampleAggMixin:
 
     @staticmethod
     def _slot_agg_obs(slot: V4Slot, agg_totals: Optional[Tuple[int, int]]) -> Optional[Tuple[int, int, int, int]]:
-        """单槽的 agg 入账观测(离线恢复用, 形态 D 单点): z 槽 = (0, 0, 摊配 dl, 摊配 up)
+        """单槽的 agg 入账观测(形态 D 单点): z 槽 = (0, 0, 摊配 dl, 摊配 up)
         (v4_block_agg_totals 的逐槽值 —— 无末端列/单槽游程时 = 开启快照, 与旧语义逐位一致);
-        r 槽 = 原 obs(速率 + 冻结 totals); n 槽 = None(null 期不贡献)。"""
+        r 槽 = 原 obs(速率 + 冻结 totals); n 槽 = None(null 期不贡献)。
+
+        B2(plan 26-11-21-1546 S1)起生产恢复路径不再逐槽展开, 本函数仅剩测试侧逐槽
+        参照件(tests/traffic_recovery_support.reference_slot_credit, 改造前实现逐字镜像)
+        消费 —— 保留作对拍基准, 与 v4_hour_agg 同款先例; 生产语义由 _agg_credit_day_file
+        的游程级闭合式承载(观测形态逐位同源)。"""
         if slot.obs is None:
             return None
         if agg_totals is None:
@@ -626,47 +699,99 @@ class _SampleAggMixin:
         slot_counter: Optional[List[int]] = None,
         skip_through_hour: Optional[int] = None
     ) -> Optional[tuple]:
-        """单天文件逐槽前向记账(恢复离线侧): 逐块展开槽位(块内相邻槽区间 [slot_k,
-        slot_k+1) 记 slot_k 的观测 —— r = 其速率 / z = 摊配值(v4_block_agg_totals) / n =
-        null 不记), 与在线 _agg_feed 结算区间信用同一口径(槽位两路同源, z 的 agg totals
-        两路共用 v4_z_totals_ramp)。
+        """单天文件游程级闭合式记账(恢复离线侧; B2, plan 26-11-21-1546 S1 —— 取代逐槽
+        展开: 成本 ∝ 记录行数 + 小时桶数, 不随槽数放大; 空闲系列 3 千行文本展开 2 万槽
+        的纯浪费根除)。与在线 _agg_feed 结算区间信用同一口径(信用区间边界/tail 逐位
+        同源, z 的 agg 摊配两路共用 v4_z_totals_ramp/v4_z_ramp_element 同式)。
+
+        逐块逐记录推进 dt 链游标(公式与 v4_block_slots 逐位同式, 推导单点
+        v4_run_geometry):
+        - r 记录(1 槽): ts = fl(t + advance)(advance = 显式 dt 或标称 interval; 块首
+          advance = 0, 首槽恰在 B.start), 信用逐行不变(单区间 O(桶));
+        - z 游程: 内部槽区间按小时桶闭合式入账(_agg_credit_z_run, O(桶数));
+        - n 游程: O(1) 跳过(槽 obs 全 None 不贡献, 只推进游标);
+        - 前向记账「末槽信用归下一记录」边界忠实: 每记录先在其首槽结算上一记录末槽的
+          待结算信用 pending(单区间 O(桶)), 再入账自身内部区间 —— 信用区间序列与逐槽
+          路径逐一同位(obs/边界全同)。游程末槽 pending = (末槽 ts, 摊配末端值
+          ramp[n-1], 与在线 z 记录的尾部信用同值) / n 游程 = (末槽 ts, None)。
+        游标推进逐位同源: 游程游标 = fl(t + fl(base + fl(spacing*(n-1))))(v4_block_slots
+        游标行同式 —— 与末槽 ts 是两个表达式, 非块首可差 1 ULP, 逐槽路径本就如此,
+        闭合式照抄两式)。
 
         跨块覆盖结算(v4 计划 §01「覆盖结算」, 与在线路复用判定单点 v4_block_gap_continuous):
         块间(含跨天文件 —— prev_tail 由 _recover_series 传入上一文件末槽上下文)gap =
-        下一块首槽 - 上一块末槽, 连续(<= interval + DRIFT_TOL)则按上一槽速率把
-        [末槽, 首槽) 结算进覆盖, 崩溃/停机间隙超容差为真空 —— 00:00 边界既有每天约 2s
-        覆盖损失就此消除。prev_tail = (末槽 ts, obs) 或 None(无上下文/上文件缺链);
-        返回本文件末槽上下文(末槽为 null 观测时 obs = None, 调用方结算侧自然跳过;
-        z 末槽的 obs 为摊配末端值 —— 与在线 z 记录的尾部信用同值; B1 全封口文件只解析
-        末块时本函数照常产出末块 tail, 跨文件接力不受开放段限定影响)。
+        下一块首槽(float(B.start) = 块首记录首槽, 恒等) - 上一块末槽, 连续(<= interval +
+        DRIFT_TOL)则按上一槽速率把 [末槽, 首槽) 结算进覆盖, 崩溃/停机间隙超容差为真空
+        —— 00:00 边界既有每天约 2s 覆盖损失就此消除。prev_tail = (末槽 ts, obs) 或
+        None(无上下文/上文件缺链); 返回本文件末槽上下文(末槽为 null 观测时 obs = None,
+        调用方结算侧自然跳过; B1 全封口文件只解析末块时本函数照常产出末块 tail, 跨文件
+        接力不受开放段限定影响)。
+
+        FP 等价层级(D2 口径, 对拍守阵 tests/traffic_recovery_support.py 随机语料钉死):
+        - 必须逐位: wsum(z 信用每笔 +0.0: x + 0.0 = x 精确; r 信用求和序不变)/ max
+          (z rate 0 不动 max, 桶首笔基线信用两路同一笔)/ totals 末笔(桶末正长度区间
+          ramp 元素与逐槽「桶内最后一笔」同值, 整数)/ 信用区间边界与 tail(槽 ts 同式)/
+          块槽计数(Σ(1 / run_len) 与展开槽数同值);
+        - ULP 免责: fold.cov(桶内 Σdt —— 闭合式 = 端点差一次精确减法 vs 逐槽精确分段
+          差的 FP 累加, 差 = 参照累加舍入 <= ~1.6e-9, 见 _agg_credit_z_run)—— 只经
+          round() 进 cov_s(整型吸收)与 avg 分母(z 桶 rate = 0 分子恒 0; 精确栅格语料
+          两路全程精确, cov 逐位相等由守阵单钉);
+        - 结构豁免: fold.credits(merge 笔数, 桶级合并后变少)—— 仅 ==0 判空消费, 不进
+          任何聚合输出(D2「样本列表粒度允许不同」同款口径)。
 
         slot_counter 非 None(恢复埋点 §4.3, plan 26-10-12-2010)时按块追加各块槽数;
         B1(plan 26-11-21-1546 S1)起口径 = **实际解析/记账走过的块**(开放段 + 上下文
-        块; 封口块在 read_day_open_segment 已不进 blocks, 不再计), INFO 完成行同步改名
-        处理槽。skip_through_hour 非 None = B1 水位前移过滤(hour <= 该值的桶在
-        _agg_credit_hours 记账入口即时跳过, hour_samples 不再出现封口桶 —— 旧「全量
-        入账后尾部丢弃」退役; 上下文块的封口信用由此过滤, 骑水位块的保留信用照常入账);
-        不传 = 零过滤(在线/兜底路径不变)。"""
+        块; 封口块在 read_day_open_segment 已不进 blocks, 不再计), B2 起按记录元数据
+        O(行数) 直算 Σ(1 for r / run_len for 游程), 数值与展开槽数逐块同值, 不再物化
+        槽序(v4_block_slots 本体保留: 在线活尾/读侧分组仍在用, 仅恢复路径摘除调用)。
+        skip_through_hour 非 None = B1 水位前移过滤(hour <= 该值的桶在 _agg_credit_hours
+        记账入口即时跳过, hour_samples 不再出现封口桶; 上下文块的封口信用由此过滤,
+        骑水位块的保留信用照常入账); 不传 = 零过滤(在线/兜底路径不变)。"""
         tail = prev_tail
         for block in parsed_day.blocks:
-            slots = v4_block_slots(block)
-            agg_totals = v4_block_agg_totals(block)  # 形态 D: z 槽摊配值(与 slots 等长同序)
+            records = block.records
             if slot_counter is not None:
-                slot_counter.append(len(slots))
-            if not slots:
-                continue
-            first = slots[0]
+                slot_counter.append(sum(1 if isinstance(r, V4Sample) else r.run_len for r in records))
+            if not records:
+                continue  # 空块(解析层不产出, 防御支): 零槽零 tail 推进
+            interval = float(block.interval_s)
+            first_ts = float(block.start_epoch)  # 块首记录首槽恒在 B.start(块首 advance/base = 0)
             if tail is not None and tail[1] is not None:
-                if v4_block_gap_continuous(tail[0], first.ts, block.interval_s):
+                if v4_block_gap_continuous(tail[0], first_ts, block.interval_s):
                     dl, up, dlt, upt = tail[1]
                     _SampleAggMixin._agg_credit_hours(
-                        hour_samples, tail[0], first.ts, dl, up, dlt, upt, skip_through_hour
+                        hour_samples, tail[0], first_ts, dl, up, dlt, upt, skip_through_hour
                     )
-            for k in range(len(slots) - 1):
-                cur, nxt = slots[k], slots[k + 1]
-                obs = _SampleAggMixin._slot_agg_obs(cur, agg_totals[k])
-                if obs is None:
-                    continue  # n 槽: null 期不贡献
-                _SampleAggMixin._agg_credit_hours(hour_samples, cur.ts, nxt.ts, *obs, skip_through_hour)
-            tail = (slots[-1].ts, _SampleAggMixin._slot_agg_obs(slots[-1], agg_totals[-1]))
+            t = first_ts  # 游标 = 上一已消费记录的槽位锚点(v4_block_slots 同名变量同值)
+            pending = None  # (末槽 ts, obs): 上一已消费槽的待结算信用(「末槽信用归下一记录」)
+            for idx, rec in enumerate(records):
+                first = idx == 0
+                if isinstance(rec, V4Sample):
+                    advance = 0.0 if first else ((rec.dt_ms / 1000.0) if rec.dt_ms is not None else interval)
+                    ts = t + advance  # 槽位(v4_block_slots 同式); 其后 t += advance 同值
+                    if pending is not None and pending[1] is not None:
+                        _SampleAggMixin._agg_credit_hours(hour_samples, pending[0], ts, *pending[1], skip_through_hour)
+                    pending = (ts, (rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total))
+                    t = ts
+                    continue
+                if isinstance(rec, (V4ZeroRun, V4NullRun)):
+                    spacing, base = v4_run_geometry(rec, interval, first)  # 推导单点(与展开同源)
+                    slot_first = t + base  # 首槽 ts_0 = fl((t + base) + fl(spacing*0)) = fl(t + base)
+                    if pending is not None and pending[1] is not None:
+                        _SampleAggMixin._agg_credit_hours(
+                            hour_samples, pending[0], slot_first, *pending[1], skip_through_hour
+                        )
+                    if isinstance(rec, V4ZeroRun):
+                        _agg_credit_z_run(hour_samples, slot_first, spacing, rec, skip_through_hour)
+                        end_dl, end_up = v4_z_ramp_element(
+                            rec.dl_total, rec.up_total, rec.dl_total_end, rec.up_total_end, rec.run_len, rec.run_len - 1
+                        )
+                        pending = (slot_first + spacing * (rec.run_len - 1), (0, 0, end_dl, end_up))
+                    else:
+                        # n 游程: null 期不贡献, 末槽 obs = None(其后区间结算侧自然跳过)
+                        pending = (slot_first + spacing * (rec.run_len - 1), None)
+                    t = t + (base + spacing * (rec.run_len - 1))  # 游标(v4_block_slots 游标行同式)
+                    continue
+                raise TypeError(f"未知块记录型: {type(rec).__name__}")
+            tail = pending  # 末槽上下文 = (末槽 ts, 末槽 obs) —— 与逐槽路径 slots[-1] 同值
         return tail

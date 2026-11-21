@@ -193,6 +193,8 @@ from .traffic_store_codec import (  # noqa: F401
     v4_day_block_starts,
     v4_day_open_segment_offset,
     v4_live_tail_slots,
+    v4_run_geometry,
+    v4_z_ramp_element,
     v4_z_totals_ramp,
 )
 from .traffic_store_agg import (  # noqa: F401

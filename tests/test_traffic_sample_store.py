@@ -37,7 +37,9 @@
 - test_agg_z_end_anchor_interpolates_via_online: 形态 D 在线 —— z 行带末端对时游程内小时间隔
   摊配「开启快照 -> 末端快照」, 右端小时 = 末端快照、无单桶台阶; rate lane 不受影响
 - test_agg_z_end_anchor_two_paths_same_hours: 形态 D 两路同源 —— 同一 z 行分别走在线 _agg_feed
-  与离线 _agg_credit_day_file, 小时桶折叠态逐字段一致(摊配共用 v4_z_totals_ramp)
+  (逐槽, D6 零变化)与离线 _agg_credit_day_file(B2 桶级闭合式): wsum/max/totals/cov 逐位
+  (摊配共用 v4_z_totals_ramp/v4_z_ramp_element), credits 结构豁免(桶级合并笔数变少),
+  seal 行 bitwise(D2 输出层)
 - test_agg_day_month_rollup_and_month_boundary: 逐级派生(hour→day→month)数值 = v4_rollup_agg;
   翻本地日产 day 行 / 翻自然月产 month 行; 跨月后累计器开新
 - test_flush_seals_completed_hours_only_and_no_duplicate: 水位封口(§4.2) —— 30s 连续采样跨小时界
@@ -242,6 +244,7 @@ from traffic_sample_support import (
     _w5_ts,
     _write_day_file,
 )
+from traffic_recovery_support import assert_folds_field_equivalent
 from clock import FakeClock
 
 
@@ -712,9 +715,15 @@ def test_agg_z_end_anchor_interpolates_via_online(tmp_path):
 
 
 def test_agg_z_end_anchor_two_paths_same_hours(tmp_path):
-    """形态 D 两路同源(plan §05 判据 4): 同一 z 行(带末端对)分别走在线 _agg_feed 与离线
-    _agg_credit_day_file, hour 桶折叠态逐字段一致(D12: wsum/cov 浮点逐位 + max/totals/
-    笔数 —— 两路同序入账, 槽位同源 + 摊配共用 v4_z_totals_ramp)"""
+    """形态 D 两路同源(plan §05 判据 4): 同一 z 行(带末端对)分别走在线 _agg_feed(逐槽,
+    D6 零变化)与离线 _agg_credit_day_file(B2 游程级闭合式, plan 26-11-21-1546 S1)。
+    断言层级(B2 FP 纪律, 逐条说明):
+    - wsum/max/totals 末笔逐位(两路同序入账: 在线 120 笔逐槽 vs 离线桶级合并 —— z 信用
+      每笔 +0.0 精确, r 信用求和序不变; 桶末笔 ramp 元素同值, 整数);
+    - cov 逐位(本块 spacing = 30.0 精确、槽位链全程精确: 闭合式端点差 == 逐槽累加和);
+    - credits 结构豁免(离线 h0 桶 = 结算 1 笔 + 桶级合并 1 笔 = 2 笔 vs 在线逐槽 120 笔
+      —— 仅 ==0 判空消费, 不进聚合输出; D2「样本列表粒度允许不同」同款口径);
+    - seal 行 bitwise(聚合输出层, D2 字面口径)。"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30))
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
@@ -742,15 +751,22 @@ def test_agg_z_end_anchor_two_paths_same_hours(tmp_path):
     TrafficSampleModule._agg_credit_day_file(
         pending_off, parse_v4_day_text(format_v4_day_text("global", (blk, ))), None
     )
-    # 在线/离线同序入账 -> 折叠态逐字段相等(D12: wsum/cov 浮点逐位 + max/totals/笔数)
-    assert mod._agg_states[key].pending == pending_off
+    # 在线/离线折叠态字段分级相等(wsum/max/totals/cov 逐位; credits 结构豁免)
+    pend_on = mod._agg_states[key].pending
+    assert set(pend_on) == set(pending_off)
+    for h in sorted(pending_off):
+        assert_folds_field_equivalent(pending_off[h], pend_on[h], ctx=f"h={h}", cov_bitwise=True)
     ramp = v4_z_totals_ramp(s0[0], s0[1], s1[0], s1[1], 120)
-    # h0 桶: 结算 1 笔(30s) + 游程内部 119 笔(各 30s) = 120 笔, 末笔 totals = 末槽摊配值
-    assert pending_off[h0].credits == 120 and round(pending_off[h0].cov, 6) == 3600.0
+    # h0 桶: 离线 = 结算 1 笔(30s) + 游程内部桶级合并 1 笔(3570s) = 2 笔(B2 桶级;
+    # 在线逐槽为 120 笔); 末笔 totals = 末槽摊配值(两路同值), cov = 3600.0 逐位
+    assert pending_off[h0].credits == 2 and pending_off[h0].cov == 3600.0
     assert (pending_off[h0].dl_total, pending_off[h0].up_total) == ramp[118]
     # 次小时桶: 游程结束所落小时只有末端结算 1 笔(30s, totals = 末端快照)
     off2 = pending_off[h0 + HOUR_SECONDS]
     assert off2.credits == 1 and off2.cov == 30.0 and (off2.dl_total, off2.up_total) == s1
+    # 聚合输出层(D2): 两路 seal 行 bitwise 相等
+    assert pending_off[h0].seal(h0) == pend_on[h0].seal(h0)
+    assert pending_off[h0 + HOUR_SECONDS].seal(h0 + HOUR_SECONDS) == pend_on[h0 + HOUR_SECONDS].seal(h0 + HOUR_SECONDS)
 
 
 def test_agg_day_month_rollup_and_month_boundary(tmp_path):

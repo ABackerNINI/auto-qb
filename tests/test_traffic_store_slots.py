@@ -48,6 +48,10 @@ D2/T1c-2: 尾组恒真值无克隆, v4_live_tail_slots 的 now/max_gap_s 形参�
 - test_block_slots_from_full_equivalence: (自桶缓存电池迁入, T1c-2)v4_block_slots_from 与
   v4_block_slots 双形态等价 —— 随机混排块全量展开逐槽相等/游标分段链式拼接 == 全量/游程
   中段截停续展 == 全量(唯一 dt 链实现的两入口不漂移)
+- test_v4_z_ramp_element_matches_ramp_and_run_geometry: B2 闭合式单点守阵(plan
+  26-11-21-1546 S1)—— v4_z_ramp_element 与 v4_z_totals_ramp 逐元素相等(随机入参全域:
+  端点/退化末端/单槽/奇偶 n), v4_run_geometry 与 v4_block_slots 的 spacing/base 推导逐位
+  一致(块首/非块首 x 显式/标称 dt)—— 闭合式入账与逐槽展开公式同源不漂移
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -127,6 +131,8 @@ from auto_qb.core.traffic_store import (
     v4_rel_dir_to_key,
     v4_rollup_agg,
     v4_root_dir,
+    v4_run_geometry,
+    v4_z_ramp_element,
     v4_series_dir,
     v4_window_dates,
     v4_z_totals_ramp,
@@ -425,3 +431,54 @@ def test_block_slots_from_full_equivalence():
         chunks.extend(part)
         assert tuple(chunks) == full, trial
         assert exhausted
+
+
+def test_v4_z_ramp_element_matches_ramp_and_run_geometry():
+    """B2 闭合式单点守阵(plan 26-11-21-1546 S1): v4_z_ramp_element 与 v4_z_totals_ramp
+    逐元素相等(随机入参全域: 端点/退化末端/单槽/奇偶 n), v4_run_geometry 与
+    v4_block_slots 的 spacing/base 推导逐位一致(块首/非块首 x 显式/标称 dt)——
+    闭合式入账与逐槽展开的公式同源不漂移"""
+    rng = random.Random("b2-element-geometry")
+    for _ in range(300):
+        dl_open, up_open = rng.randrange(0, 10**12), rng.randrange(0, 10**12)
+        n = rng.choice([1, 2, 3, 4, 5, 7, 8, 120, 240, 86400])
+        dl_end = rng.choice([None, dl_open, dl_open + rng.randrange(0, 10**9), dl_open - 1])
+        up_end = rng.choice([None, up_open, up_open + rng.randrange(0, 10**9), up_open - 1])
+        ramp = v4_z_totals_ramp(dl_open, up_open, dl_end, up_end, n)
+        assert len(ramp) == max(n, 0)
+        for k in range(len(ramp)):
+            assert v4_z_ramp_element(dl_open, up_open, dl_end, up_end, n, k) == ramp[k], (n, k)
+        # 端点精确(v4_z_totals_ramp 契约): v_0 = S0, v_{n-1} = 逐向解析的 S1(退化取 S0)
+        if n >= 2:
+            dl1 = dl_open if (dl_end is None or dl_end < dl_open) else dl_end
+            up1 = up_open if (up_end is None or up_end < up_open) else up_end
+            assert ramp[0] == (dl_open, up_open) and ramp[-1] == (dl1, up1)
+    for _ in range(200):
+        interval = rng.choice([1.0, 1.5, 2.0, 30.0])
+        n = rng.choice([1, 2, 3, 5, 40, 240])
+        dt = rng.choice([None, rng.randrange(1000, 86400000)])
+        rec = V4ZeroRun(n, 1000, 2000, dt) if rng.random() < 0.5 else V4NullRun(n, dt)
+        for head in (True, False):
+            spacing, base = v4_run_geometry(rec, interval, head)
+            if head:
+                # 单记录块 = 块首规则: 首槽恰在 B.start, base = 0
+                blk = V4Block(
+                    1_780_000_000, interval, None if isinstance(rec, V4NullRun) else 1000,
+                    None if isinstance(rec, V4NullRun) else 2000, (rec, )
+                )
+                slots = v4_block_slots(blk)
+                assert base == 0.0 and slots[0].ts == 1_780_000_000
+                for k, slot in enumerate(slots):
+                    assert slot.ts == 1_780_000_000 + base + spacing * k, (n, dt, head, k)
+                    assert slot.dt_s == spacing, (n, dt, head)
+            else:
+                # 非块首规则: 前置一条块首 r(零推进锚点 = B.start), 游程槽 = fl(B.start + spacing*k)
+                r = V4Sample(100, 50, 1000, 2000)
+                blk = V4Block(1_780_000_000, interval, 1000, 2000, (r, rec))
+                slots = v4_block_slots(blk)
+                assert base == spacing
+                run_slots = slots[1:]
+                assert slots[0].ts == 1_780_000_000  # 块首 r 槽位恰在 B.start(零推进)
+                for k, slot in enumerate(run_slots):
+                    assert slot.ts == 1_780_000_000 + base + spacing * k, (n, dt, head, k)
+                    assert slot.dt_s == spacing, (n, dt, head)

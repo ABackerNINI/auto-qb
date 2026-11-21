@@ -114,7 +114,8 @@ qbmanager 的 finally 与 state.save 顺序不改。
   pending 可含多日, 翻日/翻月由入账时点级联封口兜底(先封前一日/月再开新累计器)。
 - 重启恢复与 catch-up(§4.3, 硬序: catch-up 必须先于裁剪): start() 逐系列扫 agg 文件尾
   一次 -> 恢复水位 + 从文件内行重建当日/当月累计器 -> catch-up 逐级补算 append:
-  hour <- 读集内天文件 raw 逐槽前向记账(与在线记账同一口径)、day <- agg 内 hour 行、
+  hour <- 读集内天文件 raw 游程级闭合式前向记账(B2, plan 26-11-21-1546: 成本 ∝ 行数, 与在线
+  记账同一口径)、day <- agg 内 hour 行、
   month <- day 行。恢复读集按需(plan 26-10-12-2010 D1, 与流量图数据方案同一契约):
   读集下界 = agg 水位所在日(v4_day_epoch(wm_hour)), 水位封口小时不读不重算 —— 常态
   1 个天文件、跨日界至多 2 个, 与 24h 流量图读侧同阶; rollup_window(默认 30d)只决定

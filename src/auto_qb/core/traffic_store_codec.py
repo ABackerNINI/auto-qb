@@ -107,18 +107,10 @@ def v4_block_slots(block: "V4Block") -> tuple:
             continue
         if isinstance(rec, (V4ZeroRun, V4NullRun)):
             run_len = rec.run_len
-            if first:
-                # 块首游程: 首槽 = B.start, 端点含均摊(§09.2 实施期定约, 见区头注释);
-                # 游标终点 = 末槽 = B.start + spacing x (run_len-1)
-                spacing = (rec.dt_ms / 1000.0) / (run_len - 1) if (rec.dt_ms is not None and run_len > 1) else interval
-                base = 0.0
-            else:
-                # 非块首游程: advance = 显式 dt(链上锚点 -> 末槽)或标称 run_len x interval;
-                # 槽 k = t + k x advance/run_len(k=1..len), 均摊 span/run_len(§02.3);
-                # 引导一次采样间隔(链上锚点 -> 首槽)并入 dt_ms, 游标终点 = 末槽
-                advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else run_len * interval
-                spacing = advance / run_len
-                base = spacing
+            # 块首游程: 首槽 = B.start, 端点含均摊(§09.2 实施期定约, 见区头注释);
+            # 非块首游程: 均摊 span/run_len(§02.3), 引导间隔并入 dt_ms —— 推导单点
+            # v4_run_geometry(与恢复闭合式入账同源, B2 plan 26-11-21-1546)
+            spacing, base = v4_run_geometry(rec, interval, first)
             for k in range(run_len):
                 if isinstance(rec, V4ZeroRun):
                     obs = (0, 0, rec.dl_total, rec.up_total)
@@ -210,13 +202,7 @@ def v4_block_slots_from(block: "V4Block", cursor: tuple, t1: Optional[float] = N
             continue
         if isinstance(rec, (V4ZeroRun, V4NullRun)):
             run_len = rec.run_len
-            if first:
-                spacing = (rec.dt_ms / 1000.0) / (run_len - 1) if (rec.dt_ms is not None and run_len > 1) else interval
-                base = 0.0
-            else:
-                advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else run_len * interval
-                spacing = advance / run_len
-                base = spacing
+            spacing, base = v4_run_geometry(rec, interval, first)  # 推导单点(同 v4_block_slots)
             is_z = isinstance(rec, V4ZeroRun)
             obs = (0, 0, rec.dl_total, rec.up_total) if is_z else None
             for k in range(run_len):
@@ -242,7 +228,8 @@ def v4_z_totals_ramp(dl_open: int, up_open: int, dl_end: Optional[int], up_end: 
     增长)时按开启快照退化(恒快照 = 旧语义)。逐向独立(dl/up 各摊各的)。
 
     返回 Tuple[(dl_total, up_total), ...](长度 = n, 与 v4_block_slots 同段槽序一一对应)。
-    raw 面不消费本函数(raw 差分链仍用冻结列)。"""
+    raw 面不消费本函数(raw 差分链仍用冻结列)。单元素 O(1) 形见 v4_z_ramp_element(B2
+    闭合式入账消费, 公式逐字同源, 逐元素相等由守阵随机钉死)。"""
     dl1 = dl_open if dl_end is None or dl_end < dl_open else dl_end
     up1 = up_open if up_end is None or up_end < up_open else up_end
     if n <= 1:
@@ -250,6 +237,43 @@ def v4_z_totals_ramp(dl_open: int, up_open: int, dl_end: Optional[int], up_end: 
     gd, gu = dl1 - dl_open, up1 - up_open
     half = (n - 1) // 2
     return tuple((dl_open + (gd * k + half) // (n - 1), up_open + (gu * k + half) // (n - 1)) for k in range(n))
+
+
+def v4_z_ramp_element(
+    dl_open: int, up_open: int, dl_end: Optional[int], up_end: Optional[int], n: int, k: int
+) -> tuple:
+    """v4_z_totals_ramp 第 k 元素的 O(1) 单点形(plan 26-11-21-1546 S1-B2 闭合式入账消费:
+    逐槽展开退役后, 恢复侧只按需取「桶末 ramp 元素」与「游程末元素」, 不再物化全长摊配
+    序列)。公式与 v4_z_totals_ramp 逐字同源(整数运算逐位一致): n <= 1 或退化末端
+    (None / 低于开启)= 开启快照, 否则 S0 + (gd*k + half)//(n-1), half = (n-1)//2。
+    前置 0 <= k <= n-1(调用方保证); element(k) == v4_z_totals_ramp(...)[k] 对随机入参
+    逐元素相等由守阵钉死(test_traffic_store_slots)。"""
+    dl1 = dl_open if dl_end is None or dl_end < dl_open else dl_end
+    up1 = up_open if up_end is None or up_end < up_open else up_end
+    if n <= 1:
+        return (dl_open, up_open)
+    gd, gu = dl1 - dl_open, up1 - up_open
+    half = (n - 1) // 2
+    return (dl_open + (gd * k + half) // (n - 1), up_open + (gu * k + half) // (n - 1))
+
+
+def v4_run_geometry(rec: "V4ZeroRun | V4NullRun", interval_s: float, block_head: bool) -> tuple:
+    """游程(z/n)槽距 spacing 与基偏移 base 的推导单点(v4_block_slots / v4_block_slots_from
+    / 恢复闭合式入账 _agg_credit_day_file 三处同源, plan 26-11-21-1546 S1-B2 抽出):
+    - 块首游程: 端点含均摊(§09.2 定约), spacing = dt_ms/(n-1)(显式且 n > 1)或标称
+      interval; base = 0.0 -> 首槽恰在 B.start, 末槽 = B.start + spacing x (n-1)。
+    - 非块首游程: advance = 显式 dt(链上锚点 -> 末槽实测毫秒)或标称 n x interval;
+      spacing = advance / n, base = spacing -> 槽 k = 锚点 + spacing x (k+1), 末槽恰在
+      游程实测终点(引导间隔并入 dt_ms)。
+    返回 (spacing, base); 槽位表达式恒为 ts_k = (t + base) + spacing x k(t = 游标锚点,
+    与全量展开逐位同式 —— 浮点零漂移由守阵钉住)。"""
+    run_len = rec.run_len
+    if block_head:
+        spacing = (rec.dt_ms / 1000.0) / (run_len - 1) if (rec.dt_ms is not None and run_len > 1) else interval_s
+        return spacing, 0.0
+    advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else run_len * interval_s
+    spacing = advance / run_len
+    return spacing, spacing
 
 
 def v4_block_agg_totals(block: "V4Block") -> tuple:
