@@ -1,7 +1,7 @@
 # HR 合规与辅种分组
 
-> 摘要: HR 达标判定状态机(判定单点在 TorrentRecord)与打标分流、HR 在线核实运行时、跳检对 HR 的代价边界、辅种分组归组不变量与缺文件/冲突处置、整组迁移边界。
-> 触发: HR, H&R, 达标, 放行, 管束, 考察中, 在线核实, hr_check, 打标, 跳检保护, 辅种分组, 分组, 缺文件, MISSING, 下载冲突, 迁移, relocate
+> 摘要: HR 达标判定状态机(判定单点在 TorrentRecord)与打标分流、HR 在线核实运行时、跳检对 HR 的代价边界、辅种分组归组不变量与缺文件/冲突处置、整组迁移边界、外部旧路径种子处置(foreign 面)。
+> 触发: HR, H&R, 达标, 放行, 管束, 考察中, 在线核实, hr_check, 打标, 跳检保护, 辅种分组, 分组, 缺文件, MISSING, 下载冲突, 迁移, relocate, 外部旧路径种子, foreign, IYUU, 辅种冲突
 
 ## HR 判定状态机 (单点 `torrents/record.py`)
 
@@ -55,3 +55,15 @@
 - **建链幂等**: `_build_links` 对盘上已存在且恰指向目标的别名/链接跳过入账(崩溃窗口孤儿可续建), 失败回滚 `_rollback_links` 按 plan 全量清单清理孤儿; 真冲突(指向别处)保守报错不删。
 - **裂组口径**: 终态(failed/done/cancelled)job 退出 `resolve_physical` 登记表(TERMINAL_PHASES)→ 组键物理解析第 1 层断供; file_links 形态不改目录 realpath(第 2/3 层不并组)→ 真失败期间组视图可能按 save_path 分行(设计内, 现场保留语义的一部分; 「qB 列目录不解析文件级 symlink」类假阴性已修, 见 plans/26-11-10-0230-plan-relocate-listing-false-negative.html)。运行时F自检对「qB 列目录返回链接对象元数据」判 skipped(2026-11-10, `relocate_proof._link_object_hit`), file_links+symlink 假阴性消除。
 - **失败账对账重推**: 上条的「终态退出登记表」对 failed 账不是永久静止 —— 每次启动按物理现状对账重推一次(armed_at==0(重入配额未用)且 mover 已到 dst 且 dst 数据全量在位 → 翻案重入既有收尾链, 组随重入经第 1 层活跃 job 登记表归一; 真失败/配额已用保守保留), 见 plans/26-11-10-0721-plan-relocate-startup-reconcile.html。
+
+### 外部旧路径种子处置 (core/modules/relocate_foreign.py ForeignMixin, 计划 plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html)
+
+IYUU 等外部工具按旧路径加种的两类坏法各一条处置线(场景 A 收尾窗内到达 = 零破坏纳入收尾; 场景 B 收尾后到达 = 只通知), 底线全程零破坏(不删种/不重加/不跳检/绝不静默全量校验 D8/D9), 文件清单不一致只告警不处置(D4)。配置键 `relocate.foreign_torrent`(bool 默认 true, D5; 权威在 config schema 代码单点)与 relocate.enabled 共同构成侦测闸门, 挂点 on_task_line 在 enabled 早退**之前**(关闸也观测跳变)。
+
+- **侦测(D12)**: 每拍消费 store.last_added_diff(同步层原始 first-seen 差集, 在 qbmanager tracker 匹配门**之前**现算 —— 与 IYUU 具体添加形态无关 D6), 成本 O(本拍新增)与库容无关; 启动基线轮豁免, 断连重连只计断连期真新到, 每拍覆盖只读不排空。全量兜底扫只挂**四时机**: 启动首轮与 foreign_torrent 翻 true 共用「闸门激活」假→真跳变 / 收尾窗 job 集合比对触发 arm / store.sync_epoch 重连锚; 无周期兜底(D13, 漏消费等下次时机自愈)。
+- **分类与预算**: save_path 归一恰等活跃 job 旧根(含 inherited)= 场景 A, 恰等终态账 done 的 src = 场景 B, failed/cancelled/superseded 不产自身边(接管旧根经后继 inherited 移交边仍可达, 语义不变), 子目录落点不在射程; 清单比对复用 _file_map/_plan_files 单点, 不一致只告警 + mismatch 账。单拍至多 10 次文件表比对 + 候选池上限 1000 有界 FIFO, 先处理后出队、逐候选异常隔离; 队列只存内存(丢失走 D13 边界)。
+- **场景 A 纳入**: 追加 job.hashes + 读-改-写 spec["members"](hash_v1/v2 双查重、arm_members_of 同形追加、原子落盘; journal 零写 —— 改写账唯一写者是 daemon, 清单每窗现算); pre-armed 到达 torrents_pause + 并入 resume_hashes(dict.fromkeys 去重, 不覆盖原按住账), armed/收尾窗到达不暂停、纳入照做(D10); pending_tag 增量补打(was_add 门控)。核验覆盖/删链门豁免/缺文件扫描让路/跳检让路/删种拦截/absence_shrink 全部真自动(实时派生自 job.hashes, 零额外接线)。
+- **收尾守卫**: `_rewrite_cover_of` 四分流 —— journal.rewrites 有账走既有语义零变更 / 无账在 spec = 改写在途 WAIT / 无账不在 spec = orphan WAIT + `_warn_orphan_rewrites` 告警带人工出路(接线 _step_reconcile, 只读视图不 materialize state) / spec 不可读保守 WAIT; `_verify_hang` 同加 WAIT 支(纳入成员改写未回流不再触发重放与永久悬挂)。
+- **闭包解析** `_foreign_resolve_old_root`: done 直连边 + plan.inherited 移交边的传递闭包, 同根多条按 owner (updated_at, job_id, 自身边优先) 取新; visited 环保护 + 深度上限 20(= DONE_HISTORY_KEEP); 首跳无边 = None = R7「映射已过期」语义, 继承条目 job_id 悬空回落 owner。
+- **场景 B 通知(D8/D14)**: WARNING 含旧路径/闭包解析现位置/产出 job/手动处置指引, 零自动动作。notified 账 state `relocate.foreign.notified`(hash → {root, kind, job_id, phase, location, first_seen}), 种子消失清条目; 重解析失败且账有 kind=B 条目 → 降级「映射已过期」(`_foreign_notify_expired`, 带重加路径守卫防误报), location 置空兼任呈现 expired 位与持久去重位, 新边重建 `_foreign_restore_location` 静默回填。
+- **呈现**: 只读发布视图 foreign_notified_view(仿 jobs_snapshot: 整表重建/不变不换代/mark_dirty(full)), Web 线程不碰活账; WebUI relocate 面板 foreign 行标注(恒单排自成档, 筛选档「旧路径外部种子 (N)」空态不显示)+ 浮窗专属块 + 抽屉迁移段 + popovers 强调; 降级文案单点 decorate.RELOCATE_FOREIGN_EXPIRED; views_relocate foreign_member 投影与 member_relocate 同形, 组级豁免放宽 {foreign, superseded}(通知态不套「多任务」混态)。

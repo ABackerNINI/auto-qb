@@ -86,6 +86,8 @@ R4 成员收缩接线追加(计划 26-11-13-0448 §03 R4, D5; 补 0808 丢失的
 - test_step_reconcile_orphan_gate_never_materializes_state: 零写面(评审 minor 修)—— 空
   notified 账跑孤儿步, state.data 不得被 materialize 出 relocate.foreign.notified 持久键
   (只读视图三段 get, 黄金法则 2)
+- test_warn_orphan_rewrites_all_at_dst_zero_cost: 孤儿告警预门 —— 全员到位(missing 空)
+  零成本返回, 不告警不落 rt 去重位(直调守卫钉零写面契约)
 """
 
 import os
@@ -1016,7 +1018,7 @@ def _orphan_env(tmp_path, *, in_spec=True):
     mod.register_job(mod._jobs["j1"])
     mod._ctx.state.data.setdefault("relocate", {}).setdefault("foreign", {}).setdefault("notified", {})["HF"] = {
         "root": ru._norm("R:/src"),
-        "kind": "A",
+        "kind": ru.FOREIGN_KIND_A,
         "job_id": "j1",
         "phase": "armed",
         "location": "R:/dst",
@@ -1073,6 +1075,18 @@ def test_step_reconcile_orphan_gate_never_materializes_state(tmp_path):
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
         mod._step_reconcile(mod.get_job("j1"), rt)
     assert mod._ctx.state.data == {}, f"state.data 不得被 materialize: {mod._ctx.state.data}"
+    assert "未含" not in " ".join(cap.messages) and "未落账" not in " ".join(cap.messages), cap.messages
+
+
+def test_warn_orphan_rewrites_all_at_dst_zero_cost(tmp_path):
+    """孤儿告警预门: 全员到位(missing 空)零成本返回 —— 不告警不落 rt 去重位(直调守卫钉
+    「missing 空即收口」的零写面契约; 生产面由 at_dst 门挡住, 本形只可能来自守卫直调/未来路径)"""
+    mod = _orphan_env(tmp_path, in_spec=True)
+    mod._ctx.store.by_hash["HF"] = types.SimpleNamespace(hash="HF", save_path="R:/dst", state="pausedUP")
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._warn_orphan_rewrites(mod.get_job("j1"), rt, {})
+    assert rt == {}, "预门零成本: 不落去重位"
     assert "未含" not in " ".join(cap.messages) and "未落账" not in " ".join(cap.messages), cap.messages
 
 

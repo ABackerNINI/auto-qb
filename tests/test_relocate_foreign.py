@@ -134,6 +134,43 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   连续 ABSENCE_SHRINK_ROUNDS 拍权威缺席后从 job.hashes 收缩, 不计失败, 让路面随收缩撤出
 - test_include_pending_tag_restart_single_full_add: 重启后镜像缓存空(nit 3)—— _set_job
   内联补写面对全成员统一 add 恰一次, 接缝(was_add 门控)不再单发, 同拍零双写
+
+覆盖率缺口清偿(26-11-21 接缝终审 + test.full 闸门收敛):
+
+- test_foreign_scan_bad_record_skipped: 全量兜底扫逐记录护栏 —— 单记录分类炸 DEBUG 跳过,
+  不炸不拖垮同扫其它候选(好候选照常入池)
+- test_foreign_classify_empty_save_path_is_no_hit: 分类预门 —— save_path 为空(快照退化
+  形态)不判定不炸, 按 None 出
+- test_foreign_resolve_empty_query_root_is_none: 反查预门 —— 空查询根无边可走返回 None
+  (不出假边)
+- test_foreign_resolve_self_loop_first_hop_rejected_single_edge: 脏数据自环(done job
+  src == dst)—— 首跳被拒不挂死, 单边尽力而为仍回报该边位置
+- test_foreign_inherited_entries_non_matching_skipped_in_classify: 多继承条目分类 ——
+  不命中条目跳过继续走, 命中条目照常产出场景 A
+- test_foreign_closure_skips_inherited_entry_without_dst: 边集构建 —— dst 为空的移交
+  条目不产边, 自身直连边不受影响
+- test_foreign_drain_candidate_joined_active_job_pops: 排队期间成为活跃 job 成员 ——
+  出队不记账(去重面在分类之后仍生效)
+- test_foreign_drain_undecidable_file_table_pops_without_account: 文件表读空而账面非空
+  = 不可判定 —— 出队不记账不误报, DEBUG 记「文件表不可判定」
+- test_foreign_files_match_undecidable_guards: 文件表比对预门 —— qB API 缺席与账面 job
+  已不在均按不可判定 None 出(事实缺失不误报成清单不一致)
+- test_include_hold_member_api_missing_no_account: pre-armed 纳入按住步 —— qB API 缺席
+  不暂停不挂账不炸(纳入覆盖面不依赖暂停位)
+- test_include_prearm_pause_failure_still_incorporates: pre-armed 纳入暂停失败 —— 不堵
+  纳入照常转正, 只少一条恢复账
+- test_include_extend_spec_member_already_listed_is_noop: spec 已含该成员(job 账竞态
+  落后形态)—— 幂等返回, 不产生重复 members 条目
+- test_include_extend_spec_write_failure_warns_and_keeps_disk: spec 落盘失败 —— 告警不炸
+  不堵纳入, 盘面 spec 保持原形
+- test_include_tag_member_api_missing_skips_incremental: 增量补打预门 —— qB API 缺席不
+  单发不炸, 镜像态不翻动(全量补写面接管)
+- test_foreign_restore_location_only_b_entries: 空位回填只认 kind=B 条目 —— 场景 A hit
+  不回填, 异物条目不炸
+- test_foreign_publish_view_skips_non_dict_entries: 发布视图投影 —— notified 账异物条目
+  (非 dict)跳过不炸, dict 条目照常投影
+- test_state_foreign_readers_tolerate_missing_state: state 上下文缺失(data 非 dict)——
+  notified 读写两 reader 都回空 dict 不炸, 零 materialize
 """
 import logging
 from dataclasses import replace
@@ -1327,3 +1364,247 @@ def test_include_pending_tag_restart_single_full_add(tmp_path):
     mod._foreign_on_scenario_a(_hit())  # was_add=False: 接缝不再单点补打
     assert client.calls == [("add_tags", "aqb-finalize")]  # 恰一次(全成员统一 add, 无第二笔单发)
     assert mod.get_job("ja").tag_on is True  # 补写面已把镜像落 add(tag_on 挂账)
+
+
+# ---------- 覆盖率缺口清偿(26-11-21 接缝终审 + test.full 闸门收敛): 防御分支与退化形态的真语义面 ----------
+
+
+def test_foreign_scan_bad_record_skipped(monkeypatch):
+    """全量兜底扫逐记录护栏: 单记录分类炸(DEBUG 跳过)不得拖垮整次扫描, 同扫其它候选照常入池
+    (store 层已把快照记录归一, 护栏防的是判定管线内部的脏账形态)"""
+    mod, store, client = _env()
+    _done_job(mod)
+    orig = mod._foreign_classify
+
+    def _classify(rec):
+        if rec.hash == "BAD":
+            raise RuntimeError("dirty account shape")
+        return orig(rec)
+
+    monkeypatch.setattr(mod, "_foreign_classify", _classify)
+    client.files_map["G1"] = _seed()
+    store.refresh(
+        [FakeTorrent(hash="BAD", name="bad", save_path=OLD),
+         FakeTorrent(hash="G1", name="good", save_path=OLD)]
+    )
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        n = mod._foreign_full_scan("test")
+    assert n == 1 and list(mod._foreign_pending) == ["G1"], "坏记录不得拦好候选入池"
+    assert any("扫描跳过坏记录" in m and "BAD" in m for m in cap.messages), cap.messages
+
+
+def test_foreign_classify_empty_save_path_is_no_hit():
+    """分类预门: save_path 为空(快照退化形态)不判定不炸, 按 None(未命中)出"""
+    mod, _store, _client = _env()
+    assert mod._foreign_classify(FakeTorrent(hash="E1", name="empty", save_path="")) is None
+
+
+def test_foreign_resolve_empty_query_root_is_none():
+    """反查预门: 空查询根无边可走返回 None(与「非旧根」同 None 出队口径, 空串不出假边)"""
+    mod, _store, _client = _env()
+    _done_job(mod)
+    assert mod._foreign_resolve_old_root("") is None
+
+
+def test_foreign_resolve_self_loop_first_hop_rejected_single_edge():
+    """脏数据自环(done job src == dst): 首跳即被拒(dst 已在 visited)不挂死,
+    单边尽力而为 —— 仍回报该边自身位置, 不得 None"""
+    mod, _store, _client = _env()
+    mod._jobs = {"j1": _job("j1", phase=ru.PHASE_DONE, src="R:/loop", dst="R:/loop", updated_at=100.0)}
+    edge = mod._foreign_resolve_old_root("R:/loop")
+    assert edge is not None, "首跳被拒仍回报单边(尽力而为)"
+    assert (edge.src, edge.dst, edge.job_id, edge.phase) == ("R:/loop", "R:/loop", "j1", "done")
+
+
+def test_foreign_inherited_entries_non_matching_skipped_in_classify():
+    """多继承条目分类: 不命中条目跳过继续走, 命中条目照常产出场景 A(old_root 记命中条目 src)"""
+    mod, store, client = _env()
+    plan = {
+        "files":
+            list(PLAN_FILES),
+        "inherited":
+            [
+                {
+                    "job_id": "jp1",
+                    "src": "R:/zzz",
+                    "dst": "R:/mid",
+                    "scope": "R:/zzz",
+                    "alias_kind": "dir"
+                },
+                {
+                    "job_id": "jp2",
+                    "src": "R:/old2",
+                    "dst": "R:/mid2",
+                    "scope": "R:/old2",
+                    "alias_kind": "dir"
+                },
+            ],
+    }
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_MOVED, src="R:/main", dst=NEW, plan=plan)
+    client.files_map["IN2"] = _seed()
+    store.refresh([FakeTorrent(hash="IN2", name="inh", save_path="R:/old2")])
+    mod.on_task_line()
+    notified = mod._state_foreign_notified()
+    assert notified["IN2"]["kind"] == "A"
+    assert notified["IN2"]["root"] == ru._norm("R:/old2") and notified["IN2"]["job_id"] == "ja"
+
+
+def test_foreign_closure_skips_inherited_entry_without_dst():
+    """边集构建: dst 为空的移交条目(坏形记录)不产边, 自身直连边不受影响"""
+    mod, _store, _client = _env()
+    plan = {
+        "files": list(PLAN_FILES),
+        "inherited": [{
+            "job_id": "jp",
+            "src": "R:/ghost",
+            "dst": "",
+            "scope": "R:/ghost",
+            "alias_kind": "dir"
+        }],
+    }
+    mod._jobs["jd"] = _job("jd", phase=ru.PHASE_DONE, src=OLD, dst=NEW, plan=plan, updated_at=100.0)
+    assert mod._foreign_resolve_old_root("R:/ghost") is None, "空 dst 条目不进边集"
+    edge = mod._foreign_resolve_old_root(OLD)
+    assert edge is not None and edge.dst == NEW, "自身直连边不受坏条目影响"
+
+
+def test_foreign_drain_candidate_joined_active_job_pops():
+    """排队期间成为活跃 job 成员(相位机接管): 出队不记账 —— 去重面在分类之后仍生效"""
+    mod, store, client = _env()
+    _done_job(mod)  # 旧根边在场: 分类命中场景 B, 计账被成员门拦下
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src="R:/elsewhere", dst="R:/elsewhere2", hashes=("QX", ))
+    client.files_map["QX"] = _seed()
+    store.refresh([FakeTorrent(hash="QX", name="late", save_path=OLD)])
+    mod._foreign_enqueue("QX")  # 直接入池(模拟「入池后才被纳入」的竞态窗)
+    mod._foreign_drain()
+    assert "QX" not in mod._state_foreign_notified(), "相位机在管的成员不入外部账"
+    assert "QX" not in mod._foreign_pending, "候选出队"
+
+
+def test_foreign_drain_undecidable_file_table_pops_without_account():
+    """文件表读空而账面非空 = 不可判定(D4): 出队不记账不误报, 重试靠时机兜底扫(不占池位)"""
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["UD"] = []  # 种子侧文件表空, 账面 plan.files 非空
+    store.refresh([FakeTorrent(hash="UD", name="undecidable", save_path=OLD)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod.on_task_line()
+    assert "UD" not in mod._state_foreign_notified() and "UD" not in mod._foreign_pending
+    assert any("文件表不可判定" in m for m in cap.messages), cap.messages
+
+
+def test_foreign_files_match_undecidable_guards():
+    """文件表比对预门: qB API 缺席(断连窗)与账面 job 已不在(撤销竞态)均按不可判定 None 出
+    —— 不把事实缺失误报成清单不一致"""
+    mod, _store, client = _env()
+    _done_job(mod)
+    rec = FakeTorrent(hash="M1", name="m", save_path=OLD)
+    hit = rf.ForeignHit(hash="M1", save_path=OLD, scenario="B", job_id="jd", phase="done", old_root=OLD, location=NEW)
+    api = mod._ctx.api
+    mod._ctx.api = None
+    assert mod._foreign_files_match(rec, hit) is None, "client 缺: 不可判定"
+    mod._ctx.api = api
+    assert mod._foreign_files_match(rec, replace(hit, job_id="nope")) is None, "job 账不在: 不可判定"
+
+
+def test_include_hold_member_api_missing_no_account(tmp_path):
+    """pre-armed 纳入按住步: qB API 缺席(重连窗)不暂停不挂账不炸 —— 纳入的收尾覆盖面不依赖暂停位"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(phase=ru.PHASE_MOVED)
+    store.refresh([_foreign_rec(client, state="stalledUP")])
+    mod._ctx.api = None
+    assert mod._foreign_hold_member("EXT") == ()
+    assert ("pause", ["EXT"]) not in client.calls
+
+
+def test_include_prearm_pause_failure_still_incorporates(tmp_path, monkeypatch):
+    """pre-armed 纳入暂停失败(qB 拒/断): 不堵纳入照常转正, 只少一条恢复账(种子保持原态)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job(phase=ru.PHASE_MOVED)
+
+    def _boom(**kw):
+        raise RuntimeError("qb rejected")
+
+    monkeypatch.setattr(mod._ctx.api, "torrents_pause", _boom)
+    store.refresh([_foreign_rec(client, state="stalledUP")])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_on_scenario_a(_hit(phase=ru.PHASE_MOVED))
+    job = mod.get_job("ja")
+    assert job.hashes == ("MEM", "EXT"), "纳入不受暂停失败影响"
+    assert job.resume_hashes == (), "暂停失败不挂恢复账"
+    assert any("纳入暂停失败" in m.getMessage() for m in cap.records if m.levelno == logging.WARNING)
+
+
+def test_include_extend_spec_member_already_listed_is_noop(tmp_path):
+    """spec 已含该成员(job 账竞态落后形态): 幂等返回, 不产生重复 members 条目"""
+    mod, _store, _client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    relocate_journal.write_spec(str(tmp_path), "ja", {"members": [{"hash_v1": "EXT", "hash_v2": ""}]})
+    mod._foreign_extend_spec(_hit())
+    spec = relocate_journal.read_spec(str(tmp_path), "ja")
+    assert [m["hash_v1"] for m in spec["members"]] == ["EXT"], "重放面幂等: 不重复追加"
+
+
+def test_include_extend_spec_write_failure_warns_and_keeps_disk(tmp_path, monkeypatch):
+    """spec 落盘失败(磁盘/IO): 告警不炸不堵纳入, 盘面 spec 保持原形(改写未回流面交 T4 守卫)"""
+    mod, _store, _client = _env(data_dir=str(tmp_path))
+    mod._jobs["ja"] = _armed_job()
+    assert mod._write_arm_spec(mod.get_job("ja"))
+
+    def _boom(*a, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(relocate_journal, "write_spec", _boom)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_extend_spec(_hit())
+    assert any("spec 追加成员失败" in m.getMessage() for m in cap.records if m.levelno == logging.WARNING)
+    assert [m["hash_v1"] for m in relocate_journal.read_spec(str(tmp_path), "ja")["members"]] == ["MEM"]
+
+
+def test_include_tag_member_api_missing_skips_incremental(tmp_path):
+    """增量补打预门: qB API 缺席不单发不炸, 镜像态不翻动(全量补写面按退避接管)"""
+    mod, _store, client = _env(data_dir=str(tmp_path))
+    mod._ctx.config.relocate = RelocateConfig(enabled=True, foreign_torrent=True, pending_tag="aqb-finalize")
+    mod._jobs["ja"] = _armed_job()
+    mod._tag_applied["ja"] = "add"
+    mod._ctx.api = None
+    mod._foreign_tag_member("ja", "EXT", was_add=True)
+    assert mod._tag_applied["ja"] == "add", "镜像态不翻动(交补写面自愈)"
+    assert not [c for c in client.calls if c[0].startswith("add_tags")]
+
+
+def test_foreign_restore_location_only_b_entries():
+    """空位回填只认 kind=B 条目: 场景 A hit 不回填(B 面板不遮蔽), 异物条目不炸"""
+    mod, _store, _client = _env()
+    hit = _hit(job_id="ja", phase=ru.PHASE_ARMED)
+    entry_a = {"root": ru._norm(OLD), "kind": "A", "job_id": "ja", "phase": "armed", "location": "", "first_seen": 1.0}
+    mod._foreign_restore_location(entry_a, hit)
+    assert entry_a["location"] == "", "非场景 B 条目不回填"
+    mod._foreign_restore_location("garbage", hit)  # 账面异物: 不炸
+
+
+def test_foreign_publish_view_skips_non_dict_entries():
+    """发布视图投影: notified 账异物条目(非 dict)跳过不炸, dict 条目照常投影"""
+    mod, _store, _client = _env()
+    notified = mod._state_foreign_notified()
+    notified["VX"] = {
+        "root": ru._norm(OLD),
+        "kind": "B",
+        "job_id": "jd",
+        "phase": "done",
+        "location": NEW,
+        "first_seen": 1.0,
+    }
+    notified["W"] = "garbage"
+    mod._foreign_publish_view()
+    view = mod.foreign_notified_view()
+    assert set(view.keys()) == {"VX"}, "异物不投影"
+    assert view["VX"]["kind"] == "B" and view["VX"]["location"] == NEW
+
+
+def test_state_foreign_readers_tolerate_missing_state():
+    """state 上下文缺失(data 非 dict): notified 读写两 reader 都回空 dict 不炸, 零 materialize"""
+    mod, _store, _client = _env()
+    mod._ctx.state = SimpleNamespace(data=None)
+    assert mod._state_foreign_notified() == {}
+    assert mod._state_foreign_notified_view() == {}

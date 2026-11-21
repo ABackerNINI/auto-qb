@@ -19,5 +19,5 @@
 | [5](_index-5.md) | `manager-builder-single-point.md` … `parallel-run.md` | 16 |
 | [6](_index-6.md) | `patching.md` … `redverify-pycache-stale-verdict.md` | 16 |
 | [7](_index-7.md) | `relocate-window-machine-roster.md` … `single-file-coverage-gate.md` | 16 |
-| [8](_index-8.md) | `single-file-xdist-hang.md` … `tool-mode-coverage.md` | 16 |
-| [9](_index-9.md) | `ui-preview-harness.md` … `xdist-worker-global-snapshot.md` | 9 |
+| [8](_index-8.md) | `single-file-xdist-hang.md` … `tmpdir.md` | 16 |
+| [9](_index-9.md) | `tool-mode-coverage.md` … `xdist-worker-global-snapshot.md` | 10 |

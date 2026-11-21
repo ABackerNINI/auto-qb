@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 9/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `ui-preview-harness.md` … `xdist-worker-global-snapshot.md`(共 9 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `tool-mode-coverage.md` … `xdist-worker-global-snapshot.md`(共 10 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [tool-mode-coverage.md](tool-mode-coverage.md) | 一次性工具/校验器若支持**多种运行模式**(全量 vs 分批、dry-run vs apply、演练 vs 生产), 而演练只覆盖了其中一种, 另一种模式的代码路径就**从未被任何用例或红验碰过** —— 它要么静默放过(假绿), 要么在真实使用时才报一堆假红。判别: 工具的每种模式都应有独立的演练 + 红验, 且红验注入的失败形态要与该模式**同构**; 只看「工具跑通了一次」不等于「工具的所有模式都验过」。 | 一次性工具, 迁移脚本, 分批模式, 批模式, --files 子集, dry-run, 演练, 校验器, 红验, 模式覆盖, 假绿, 假红, 只演练了一种模式, 末批, 删除源文件, 收尾批, split_test_web |
 | [ui-preview-harness.md](ui-preview-harness.md) | 前端视觉改动的真浏览器冒烟: Vue 生产版拿不到 `app._instance`、无头 Edge 的 virtual-time 与 SSE 坑 —— 都有固定解法。 | UI 冒烟, 截图, 无头浏览器, 弹窗驱动, Vue 实例, createApp, 截图工装 |
 | [unreached-branch-guard.md](unreached-branch-guard.md) | 一个测试名字/断言都对, 但**夹具数据让被测分支根本进不去**, 于是它测的是另一条路; | 红验, 守阵, 假绿灯, 假绿, 分支不可达, 未导入, NameError, 未执行行, 覆盖率盲区, 夹具, 注入 bug, 原地改配置, 热重载短路 |
 | [uplot-axes-splits-generator.md](uplot-axes-splits-generator.md) | 读 uPlot x 轴刻位(tick 位置)时 `u.axes[0].splits` **不是数组**, 是生成刻位的函数(vendor 1.6.32: 绘制时 `t._splits = t.splits(...)` 回填); 拿它当数组用得到的是函数对象本身(长度/下标全错或 typeof 直接炸), 真·刻位数组在 `u.axes[0]._splits`(每次绘制回填的网格/轴标同源真值)。读 `._splits` 只读运行态回填值, 不碰生产内部, e2e 可用。 | uPlot axes, splits, _splits, 刻位真值, tick 位置, split 集, 网格刻度, 生成器函数, vendor 1.6.32, 轴标断言, split 数恒定 |

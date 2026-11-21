@@ -89,6 +89,12 @@
   cmd_id 静默回执(拦截不依赖结果页)
 - test_verify_hang_unchanged_state_is_debug_only: 悬挂同参重放只落 DEBUG(不重复清账/刷警告)
 - test_qb_side_check_self_failure_is_skipped: qB 侧自检自身炸 => skipped 不挡武装
+
+覆盖率缺口清偿(26-11-21 接缝终审 + test.full 闸门收敛):
+- test_rewrite_cover_skips_empty_hash_entries: 覆盖面分流键归一防御 —— 空/None hash 条目
+  跳过不炸不产出假键, 好成员照常分流
+- test_verify_hang_wait_branch_without_rt_still_warns: WAIT 支 rt 缺省(None)形态 —— 告警
+  照发不炸且不写去重位(rt 可选参数的 API 契约)
 """
 
 import types
@@ -1068,3 +1074,31 @@ def test_webui_delete_blocked_receipt_bulk_and_no_cmd_id(tmp_path):
     mgr.web.commands.put(("delete_group", {"key": key, "delete_files": True}))
     mgr.web.consume_commands()
     assert not any(c[0] == "delete" for c in client.calls), "无 cmd_id 组发同样拦"
+
+
+# ---------------------------------------------------------------- 覆盖率缺口清偿(26-11-21 接缝终审 + test.full 闸门收敛)
+
+
+def test_rewrite_cover_skips_empty_hash_entries(tmp_path):
+    """覆盖面分流键归一防御: 空/None hash 条目跳过 —— 账面脏数据(hash 列混入空值)不产出
+    假键不炸, 好成员照常分流(spec 支)"""
+    by_hash = {"HA": _rec("HA", "R:/src")}
+    mod = _bare_mod(store=types.SimpleNamespace(by_hash=by_hash), data_dir=str(tmp_path))
+    rj.write_spec(str(tmp_path), "j1", {"members": [{"hash_v1": "HA", "hash_v2": ""}]})
+    cover = mod._rewrite_cover_of("j1", ["HA", "", None])
+    assert set(cover) == {"HA"}, f"空键不产出假键: {cover}"
+    assert cover["HA"] == "spec"
+
+
+def test_verify_hang_wait_branch_without_rt_still_warns(tmp_path):
+    """WAIT 支 rt 缺省(None)形态: 告警照发不炸且不写去重位(API 契约: rt 是可选参数,
+    无 rt 调用方也能安全走 WAIT 挂起支)"""
+    mod, job, _rt, _removed = _included_env(tmp_path, in_spec=None)  # spec 文件不给 = 不可读形态
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._verify_hang(job, [("HF", "save_path 仍在 R:/src")])
+    warn = [m for m in cap.messages if "核验未过" in m]
+    assert any("spec 暂不可读" in m for m in warn), cap.messages
+    assert rj.verify_replays_of(str(tmp_path), "j1") == 0, "WAIT 支零写面: 不触发重放"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_REWRITTEN and saved.reason == "" and saved.last_error == "", \
+        (saved.phase, saved.reason, saved.last_error)

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>外部种子收尾孤儿成员缺机械自愈, 现靠告警+人工删种出路 · feat · 计划外问题</title>
+<meta name="issue-slug" content="relocate-foreign-orphan-self-heal">
+<meta name="issue-stamp" content="26-11-21-1326">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="relocate-foreign-torrent">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="外部种子收尾孤儿成员缺机械自愈, 现靠告警+人工删种出路">
+<meta name="issue-summary" content="纳入成员 spec 追加失败改写不回流, WAIT 挂起仅告警带人工出路; WAIT 拍幂等重试 _foreign_extend_spec 是天然机械自愈延伸">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· feat</div>
+<h1>外部种子收尾孤儿成员缺机械自愈, 现靠告警+人工删种出路</h1>
+<p class="lede">纳入成员 spec 追加失败改写不回流, WAIT 挂起仅告警带人工出路; WAIT 拍幂等重试 _foreign_extend_spec 是天然机械自愈延伸</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-21-1326-feat-relocate-foreign-orphan-self-heal</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 13:26</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">core/modules/relocate</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">计划 26-11-20-0434 实施批 (T4/S4 遗留)</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>来源: 计划 26-11-20-0434（整组移动外部旧路径种子零破坏处置）T4/S4 收尾守卫实施遗留，2026-11-21 收口批经用户拍板入池（基线 b3c4c3b7）。现状: 收尾窗纳入的成员若 <code>spec["members"]</code> 读-改-写失败（spec 不在 / 落盘失败），该成员的改写永不回流 —— job 停在对账 WAIT（at_dst=False），<code>_warn_orphan_rewrites</code> 按文本去重 WARNING 一次并给人工出路（删除该种子 → R9 组账收缩自愈），此后收尾永久停在收尾窗，无任何机械自愈，只能靠人工删种或等该种子自然消失。</p>
+  <p>现状零 blocker: WAIT 是良性挂起语义（不判失败不触处置），告警可见、notified 账在案，属<strong>增强候选</strong>而非缺陷修复。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">取证 2026-11-21 13:26，基线 HEAD <code>b3c4c3b7</code> 工作树；代码原文摘录。</p>
+<pre><code># spec 追加失败分支（只告警不造账, 改写未回流面交收尾守卫）
+src/auto_qb/core/modules/relocate_foreign.py:599-600 (_foreign_extend_spec docstring):
+  "spec 不在(arm 落盘失败/账面竞态) 只告警不造账 —— job 账已纳入, 改写未回流面交 T4 收尾守卫(S4)。"
+src/auto_qb/core/modules/relocate_foreign.py:604-609:
+  if not isinstance(spec, dict) or not spec:
+      logger.warning(f"relocate | foreign | job {hit.job_id} 收尾 spec 不在(arm 落盘失败/账面竞态), "
+                     f"{hit.hash[:8]} 只入 job 账, 改写清单未扩(核验未回流面交 T4 收尾守卫)")
+      return
+
+# 孤儿告警 + 人工出路（守卫面现状 = 纯可见性, 零写面零自愈）
+src/auto_qb/core/modules/relocate_exec.py:1607-1611 (_warn_orphan_rewrites):
+  text = (
+      f"成员 {names}{more} 未到位且改写清单未含(收尾窗纳入落账时 spec 追加失败的遗留)"
+      " —— 改写不会自发回流, 收尾按 WAIT 挂起(不判失败不触处置); "
+      "人工出路: 删除该种子(组账收缩自愈后收尾自动续推)"
+  )</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>收尾窗（armed/rewritten）场景 A 纳入时 spec 读-改-写失败（spec 不在 / 写盘失败）；概率低（写入面单点 + 原子落盘），但一旦发生即永久 WAIT。</td></tr>
+    <tr><td>影响范围</td><td>单 job 收尾收口: 该 job 停 WAIT 挂起（别名保持、收尾窗资源面持续占用）；不阻塞其它 job 与主循环；有 WARNING + notified 账可见。</td></tr>
+    <tr><td>严重度</td><td>低: 零破坏底线未破（不判失败不触处置），人工出路存在；机械自愈属自动化/体验增强。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">符号名 + grep 关键词 + 取证当时行号（2026-11-21 13:26，HEAD <code>b3c4c3b7</code> 工作树）。</p>
+  <ul>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:1560/1607-1611</code>（取证 2026-11-21 13:26）· <code>ExecMixin._warn_orphan_rewrites</code>（孤儿判定 + 告警 + 人工出路文案）· grep <code>_warn_orphan_rewrites</code></li>
+    <li><code>src/auto_qb/core/modules/relocate_foreign.py:592/599-609</code> · <code>ExecMixin._foreign_extend_spec</code>（spec 追加失败分支）· grep <code>收尾 spec 不在</code></li>
+    <li><code>src/auto_qb/core/modules/relocate_foreign.py:546-548/612-613</code> · 幂等收口依据（hash 已在 job.hashes / 已在 spec.members 即 return）· grep <code>幂等收口</code></li>
+    <li>测试面: <code>tests/test_relocate_exec_reconcile.py::test_step_reconcile_orphan_rewrite_warns_once</code>（:1030）、<code>::test_warn_orphan_rewrites_all_at_dst_zero_cost</code>（:1081）、<code>tests/test_relocate_exec_verify.py::test_verify_hang_included_orphan_waits_without_replay</code>（:335）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">已定位 —— 设计边界而非缺陷: T4 守卫的定位是可见性步（docstring 明言「只告警零写面」「不触发任何处置动作(零破坏底线)」），机械自愈在实施时刻意不在范围，留作天然延伸。已排除: 收尾机器自身卡死（WAIT 分流四支各有着落, 仅孤儿支无出路）。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向: WAIT 拍（对账发现孤儿候选时）由主循环对孤儿成员重试 <code>_foreign_extend_spec</code> —— 幂等（hash 已在 members 即 return）、journal 零写（改写清单现算）、主循环单写者（R8）、非破坏（不删种/不重加/不跳检）；孤儿候选天然带 notified 账 kind=A 条目（root/job_id 字段足以重建最小 hit 入参）。落点: <code>relocate_foreign.py</code> 的 spec 写失败分支与 <code>relocate_exec.py</code> 守卫面（_warn_orphan_rewrites 邻位）。</p>
+  <p>代价: 守卫面从「纯告警零写面」扩一小步写面（spec 文件），需补幂等/重复重试/失败退避测试；保守替代 = 维持人工出路，只把告警文案升级为「下拍自动重试」语义并保留删种出路兜底。任一形态都保持「不判失败不触处置」底线。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-21 13:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>2026-11-21 13:26 已按 HEAD <code>b3c4c3b7</code> 工作树逐条核对 §04 锚点（行号与 grep 词均实测）；认领后重跑同款 grep 确认锚点仍有效。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-21-1326-feat-relocate-foreign-orphan-self-heal.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

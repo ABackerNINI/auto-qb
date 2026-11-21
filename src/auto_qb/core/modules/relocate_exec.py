@@ -1586,7 +1586,7 @@ class ExecMixin:
             if h in rewrites:
                 continue
             entry = notified.get(h)
-            if isinstance(entry, dict) and entry.get("kind") == "A" and entry.get("job_id") == job.job_id:
+            if isinstance(entry, dict) and entry.get("kind") == ru.FOREIGN_KIND_A and entry.get("job_id") == job.job_id:
                 candidates.append(h)
         if not candidates:
             return

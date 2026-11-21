@@ -7,10 +7,10 @@
 <title>整组移动外部旧路径种子零破坏处置 (IYUU 辅种冲突)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="backend-relocate-foreign-torrent">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-20-0434">
-<meta name="doc-updated" content="26-11-20-0434">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md">
+<meta name="doc-updated" content="26-11-21-1209">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md, memory-bank/issues/26-11-21-1326-feat-relocate-foreign-orphan-self-heal.html, memory-bank/issues/26-11-21-1326-docs-relocate-replay-note-drift.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-21-1326-feat-relocate-foreign-view-stale-gate-off.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>整组移动外部旧路径种子零破坏处置 (IYUU 辅种冲突)</h1>
 <p class="lede">本篇只回答: 整组移动收尾窗前后, IYUU 等外部工具经 qB WEBUI 按旧路径添加的辅种种子如何被识别与处置——收尾窗内零破坏纳入收尾、收尾后只通知; 全程不删种、不重加、不跳检、不静默全量校验。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-20-0434 · <b>doc-updated</b> 26-11-20-0434 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-20-0434 · <b>doc-updated</b> 26-11-21-1209 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-20 会话: 三轮只读子代理取证 (relocate 机制 / 种子发现与跳检 / 纳入可行性核查) + grilling 四轮 14 问拍板 (D1-D14) + 用户三次改判 (默认开启 / 场景 B 只通知 / 无周期兜底)
 </div>
 
@@ -138,7 +138,7 @@
 <table>
   <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
   <tr><td>S1</td><td>配置面: <code>relocate.foreign_torrent</code> (bool, 默认 true; 名可实施时微调) 进 schema/ + validate_config 聚合校验 + 文案</td><td>配置校验测试红绿; 缺键报错清晰</td></tr>
-  <tr><td>S2</td><td>侦测面 <code>relocate_foreign.py</code>: 每拍消费同步层原始 added 差集 (store 暴露最近一拍 added, 不过 tracker 门); 四时机全量兜底; 候选 = 路径命中 (活跃 job scope 单点 / 终态账旧根闭包) → 文件清单比对 (rec.files vs job.plan.files, 同归一口径含大小); 去重 (在 job.hashes 幂等跳过; 已通知 hash 记 state <code>relocate.foreign.notified</code>, 种子消失清理); 单拍处理有界 FIFO</td><td>单测: 未匹配 tracker / skip 与非 skip / stopped / 带分类各形态全兜住; 清单不一致只告警; 差集消费 O(新增)</td></tr>
+  <tr><td>S2</td><td>侦测面 <code>relocate_foreign.py</code>: 每拍消费同步层原始 added 差集 (store 暴露最近一拍 added, 不过 tracker 门); 四时机全量兜底 (实施注记 T2: 启动首轮与 foreign_torrent 开关翻转共用「闸门激活」假→真跳变信号); 候选 = 路径命中 (活跃 job scope 单点 / 终态账旧根闭包) → 文件清单比对 (rec.files vs job.plan.files, 同归一口径含大小); 去重 (在 job.hashes 幂等跳过; 已通知 hash 记 state <code>relocate.foreign.notified</code>, 种子消失清理); 单拍处理有界 FIFO</td><td>单测: 未匹配 tracker / skip 与非 skip / stopped / 带分类各形态全兜住; 清单不一致只告警; 差集消费 O(新增)</td></tr>
   <tr><td>S3</td><td>场景 A 纳入: 追加 job.hashes + 读-改-写 <code>spec["members"]</code> (hash_v1/v2 双 hash, 复用 <code>_torrent_v2_of</code>), journal 零写; pre-armed 到达 <code>torrents_pause</code> + 入 resume_hashes (arm 走既有恢复确认账); pending_tag 增量补打</td><td>单测: 改写清单含新成员 / 删链门豁免 / 标签补打; spec 双写幂等</td></tr>
   <tr><td>S4</td><td>收尾守卫 + 链式映射: 纳入成员改写未回流时核验按 WAIT, 不触发 reset_rewrites 重放与永久悬挂; 终态账 src→dst 边 + plan.inherited 闭包解析器 (同根多条按 job_rank 取新)</td><td>红绿: 收尾不再被纳入种子卡死; 悬挂不再被纳入种子触发; 链式 A→C 映射单测</td></tr>
   <tr><td>S5</td><td>场景 B 通知面: WARNING 日志 + WebUI relocate 面板「旧路径外部种子」列表/计数, 文案含数据现位置或「映射已过期」; 通知去重随种子消失清理</td><td>e2e/桩: 通知呈现与去重</td></tr>
@@ -186,6 +186,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-20-0434</span> 初版。来源: 2026-11-20 会话三轮取证 + grilling 四轮 14 问 (D1-D14, 含三次改判)。主线: 场景 A 零破坏纳入收尾 + 场景 B 只通知; 侦测走同步层 added 差集 + 时机兜底, 无周期兜底。</li>
+  <li><span class="tag">R1 · 26-11-21-1209</span> 实施落地 (S1-S5 五批 T1-T5): 配置键 relocate.foreign_torrent + 侦测面 relocate_foreign.py (added 差集 + 四时机全量兜底) + 场景 A 零破坏纳入 (job.hashes 与 spec.members 双写, journal 零写) + 收尾守卫 WAIT 分流与终态账闭包解析 + 场景 B 只通知 (WARNING + WebUI relocate 面板 foreign 呈现)。评审台账: 五批双评审 23 发现 (1 blocker / 3 major / 10 minor / 9 nit) 全部修复收口; 收口批: 接缝终审 1 minor (词表单点) + 文档批评审 2 (坑档类名/枚举补) 已修, 合计 26 (23+3)。设计事实: 四时机中启动首轮与开关翻转共用闸门激活跳变信号 (已注 §04 S2)。全量测试递进绿; 收口批另覆盖率闸门收敛 20 新测 (99.48%→99.60%), 数字见基线切片。</li>
 </ul>
 
 </div>
