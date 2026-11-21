@@ -31,8 +31,11 @@ IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种
   ``relocate.foreign.notified``(hash -> 简要信息: 来源旧根/类别/首见时刻/相位/现位置,
   T5 WebUI 面板直接消费本结构), 种子不在当前快照即清条目(重现 = 重新 first-seen 重处理);
   job 翻终态时该 job 的 kind=A 与 kind=mismatch 条目随终态单点清理(B2, 计划
-  26-11-21-1600: 挂在终态落账处, 幂等; kind=B 通知主体保留到种子消失, 被清的真同根种子
-  交时机扫自然重判为场景 B)。
+  26-11-21-1600: 挂在终态落账处, 幂等; kind=B 通知主体保留到种子消失)。被清种子交时机
+  扫自然重判: A 真成员内容 => 场景 B/重新纳入; mismatch(同根异内容)在 done 收官(自身边
+  在)/superseded(承接方条目边)且种子仍在旧根 => 重落 mismatch 条目并恰重发一次 WARNING
+  (用户拍板接受现状 + 钉档, 不抑制重发); failed/cancelled 终态无自身边 => 旧根 classify
+  不再命中, 条目清理后种子呈现静默消失(零重落零重发)。
 - 单拍有界 FIFO(R4): 一拍差集可能数十条(IYUU 批量辅种), 候选池内存队列 + 每拍处理
   预算(_FOREIGN_TICK_BUDGET)分拍消化; 预算只扣「文件表比对」这类真 qB API 成本, 纯路径
   判定的候选出队不受预算限。队列只存内存(重启丢失 = D13 接受的漏消费边界, 下次时机
@@ -909,8 +912,22 @@ class ForeignMixin:
         语义(D4 拍板): kind=A(活跃 job 命中纳入)与 kind=mismatch(清单不一致告警)都依附
         「job 在途」这一前提 —— job 收官/失败/撤销/被接管后条目失准, 滞留即 issue
         26-11-21-1326 的 A 类滞留面; kind=B 一律保留(通知主体, 留到种子消失清理)。被清的
-        真同根种子交时机扫自然重判: 收尾完成后其旧根命中终态账 => 场景 B(正确语义), 仍属
-        收尾窗内活跃 job => 场景 A 重新纳入。
+        真同根种子交时机扫/差集消费面自然重判, 按条目原 kind 分三形态:
+        - kind=A 真成员内容: 收尾完成后其旧根命中终态账 => 场景 B(正确语义); 仍属收尾窗内
+          活跃 job => 场景 A 重新纳入 —— 「自然重判为场景 B」只对本形态成立;
+        - kind=mismatch(同根异内容形态): 前提 = 旧根在终态后仍可被 classify 命中 —— done
+          收官(自身边在: PHASE_DONE 且 dst)/superseded(承接方条目边, edge_job_id 回落前任)
+          且种子仍在旧根 => 重判穿过 S1 内容根预筛(同内容根恒放行)进 D4 判异, 经
+          _foreign_record_mismatch 重新落 mismatch 条目(同 job_id, phase/first_seen 按命中
+          现值刷新)并**恰重发一次 WARNING** —— 本清理对此形态的净效果 = 告警重发一次 +
+          字段刷新, 条目随后滞留到种子消失(既有清理口)。这是用户拍板的预期行为(接缝终审
+          minor, 处置 = 接受现状 + 钉档, 不抑制重发): 重发是「收官后旧根仍挂着异内容种子」
+          这一事实的如实提醒, 且去重位仍在 notified 账 —— 重判入账后重复拍/重入池零再发;
+          failed/cancelled 终态无自身边、旧根不在任何条目边源 => classify 返回 None, 全量
+          扫连池不入, 条目已被清理 => 「从来不是旧根」静默口径(D2): 零重落零重发, 种子
+          呈现从此静默消失(两形态守阵对照: 重落面见
+          test_foreign_terminal_cleanup_mismatch_rescan_rerecords_and_rewarns, 失败面见
+          test_foreign_terminal_cleanup_failed_no_edge_silent_dismissal)。
 
         幂等(黄金法则 1): 边沿判据使重复翻终态/终态重放不再触发; 清理自身对「无本 job
         条目」零动作, 重放零副作用。终态清理与纳入的竞态由黄金法则 5 兜住: 单写线程内

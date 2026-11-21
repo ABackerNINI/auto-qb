@@ -203,6 +203,15 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
 - test_foreign_terminal_cleanup_then_rescan_rejudges_scenario_b: 端到面(收尾后正确语义)——
   收尾窗纳入(kind=A) -> 翻 done(A 条目随终态清理) -> 同根种子重现重扫命中 done 终态账边
   自然重判场景 B
+- test_foreign_terminal_cleanup_mismatch_rescan_rerecords_and_rewarns: B2 第三形态钉档
+  (接缝终审 minor, 用户拍板 a = 接受现状不抑制重发)—— mismatch 条目随终态清理后种子仍在
+  旧根: 重连时机扫重判穿过 S1 内容根预筛进 D4 判异, 重落 mismatch 条目(同 job_id,
+  phase/first_seen 按命中现值刷新)并恰重发一次 WARNING(总两条: 收官前 + 重判);
+  notified 去重位仍在 —— 条目重入池的重复拍零再发
+- test_foreign_terminal_cleanup_failed_no_edge_silent_dismissal: B2 钉档补面(failed/
+  cancelled 无边形态, 与重落形态对照)—— mismatch 落账 -> _fail 翻 failed(条目随终态
+  清理)-> 种子仍挂旧根: 时机扫 classify 无边可走, 「从来不是旧根」静默口径(零账零告警
+  零重落, 候选出队不重试)
 """
 import logging
 from dataclasses import replace
@@ -844,6 +853,76 @@ def test_foreign_terminal_cleanup_then_rescan_rejudges_scenario_b():
     notified = mod._state_foreign_notified()
     assert notified["EX"]["kind"] == "B" and notified["EX"]["job_id"] == "ja"
     assert notified["EX"]["location"] == NEW
+
+
+def test_foreign_terminal_cleanup_mismatch_rescan_rerecords_and_rewarns():
+    """B2 第三形态钉档(接缝终审 minor, 用户拍板 a = 接受现状不抑制重发): mismatch 条目随
+    终态清理后种子仍在旧根 -> 下个时机扫重判穿过 S1 内容根预筛(同内容根恒放行)进 D4 判异,
+    重新落 mismatch 条目(同 job_id, phase/first_seen 按命中现值刷新)并恰重发一次 WARNING
+    (总两条同内容告警: 收官前一次 + 重判一次); 去重位仍在 notified 账 —— 条目重入池的
+    重复拍零再发, 条目随后滞留到种子消失"""
+    mod, store, client = _env()
+    _hold_phase_machine(mod)  # 裸环境同拍推进会把 armed job 快路径收官(边沿即清), 本测显式翻终态
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW, hashes=(), plan={"files": list(PLAN_FILES)})
+    client.files_map["MX"] = _seed(match=False)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap1:
+        mod.on_task_line()  # 收官前: D4 判异 -> mismatch 条目 + WARNING 恰一次
+    notified = mod._state_foreign_notified()
+    assert notified["MX"]["kind"] == "mismatch" and notified["MX"]["job_id"] == "ja"
+    assert notified["MX"]["phase"] == "armed"  # 命中现值(armed 活跃 job)
+    old_first_seen = notified["MX"]["first_seen"]
+    assert len([m for m in cap1.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()]) == 1
+    mod._set_job(replace(mod._jobs["ja"], phase=ru.PHASE_DONE))  # 收官: mismatch 条目随终态清理
+    assert "MX" not in mod._state_foreign_notified_view()
+    mod._clock.advance(30.0)
+    # 种子仍在旧根: 重连时机扫重判(同内容根恒过预筛) -> D4 判异 -> 重落 mismatch + 重发一次
+    store.reset_sync()
+    mod.on_task_line()  # 观测 epoch 变化, 记重连锚(尚无应用轮不扫)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])  # 重连后首轮(全量)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod.on_task_line()  # rounds 越锚: reconnect 时机扫 -> 重判
+    notified = mod._state_foreign_notified()
+    assert notified["MX"]["kind"] == "mismatch" and notified["MX"]["job_id"] == "ja"
+    assert notified["MX"]["phase"] == "done"  # 字段按命中现值刷新(收官后 B 命中相位)
+    assert notified["MX"]["first_seen"] > old_first_seen  # first_seen 刷新(假钟推进过)
+    assert len([m for m in cap2.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()]) == 1, \
+        "恰重发一次(拍板 a: 不抑制重发)"
+    # 去重位仍在 notified 账: 条目重入池(消失重现形态)的重复拍零再发
+    store.refresh([])  # 移除 + 重加不打 tick: 差集 = {MX}(重现 = 重入池, 既有机制)
+    client.files_map["MX"] = _seed(match=False)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap3:
+        mod.on_task_line()
+    assert notified["MX"]["kind"] == "mismatch"  # 在账去重: 条目不被重判覆盖(零新告警零新首见)
+    assert len([m for m in cap3.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()]) == 0
+
+
+def test_foreign_terminal_cleanup_failed_no_edge_silent_dismissal():
+    """B2 钉档补面(failed/cancelled 无边形态, 与 mismatch 重落形态对照): mismatch 落账 ->
+    _fail 翻 failed(条目随终态清理)-> 种子仍挂旧根 -> 时机扫 classify 无边可走(failed/
+    cancelled 不产自身边, 旧根也不在任何条目边源)-> 「从来不是旧根」静默口径(D2):
+    零账零告警零重落, 候选出队不重试 —— 呈现静默消失"""
+    mod, store, client = _env()
+    _hold_phase_machine(mod)  # 相位机让位: 终态翻转走显式 _fail(本测主体), 收官前条目不被同拍清掉
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW, hashes=(), plan={"files": list(PLAN_FILES)})
+    client.files_map["MX"] = _seed(match=False)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])
+    mod.on_task_line()  # D4 判异 -> mismatch 条目(armed 活跃 job 命中)
+    notified = mod._state_foreign_notified()
+    assert notified["MX"]["kind"] == "mismatch" and notified["MX"]["job_id"] == "ja"
+    mod._fail(mod._jobs["ja"], "verify_mismatch", "目标侧文件数/大小不符")  # 翻 failed: 条目随终态清理
+    assert mod.get_job("ja").phase == ru.PHASE_FAILED
+    assert "MX" not in mod._state_foreign_notified_view()
+    # 种子仍挂旧根: 重连时机扫 classify 无边可走 -> 连池不入, 出队静默(零账零告警零重落)
+    store.reset_sync()
+    mod.on_task_line()  # 观测 epoch 变化, 记重连锚(尚无应用轮不扫)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])  # 重连后首轮(全量)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap_scan:
+        mod.on_task_line()  # rounds 越锚: reconnect 时机扫 -> classify None -> 静默出队
+    assert "MX" not in mod._state_foreign_notified_view(), "failed 无自身边: 不重落不误报"
+    assert not mod._foreign_pending, "classify None 候选出队不重试(不占池位不空转)"
+    assert not [m for m in cap_scan.records if m.levelno >= logging.WARNING], "静默口径: 零告警"
 
 
 # ---------- 场景 B 通知面(T5/S5: 只通知 D8, R7 映射已过期, 发布视图) ----------
