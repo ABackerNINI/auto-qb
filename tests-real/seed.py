@@ -12,6 +12,9 @@
   - clean 有证据保护闸(issue 26-11-12-2345): `.work` 顶层凡不是 seeds/ 与 rmNN 用例目录的
     内容一律拒跑 —— 测量证据(results/、复用脚本、review-findings 之类)也常落 .work,
     gitignored 直删不可恢复, 要清哪个子树用 --dir 显式指名。
+    rmNN 内层有文件同样整单拒跑(issue 26-11-21-0638): rmNN 是用例工作区与取证的混合沉积层,
+    RM11 实证整扫递归全删把 rm04 内层 38 份取证连锅端(rm04/async/ 27 份 + rm04 顶层 11 份
+    tee 日志) —— 零文件的空壳除外(没有文件就没有可丢的证据), 整扫顺带收掉。
 
 用法示例:
   uv run python tests-real/seed.py add --yes                             # 默认 256K 伪随机, 加到 副实例 并做种(零外连)
@@ -50,7 +53,7 @@ BIG_SIZE = 32 * 1024 * 1024  # ≥ 32M 才算"大种子", 默认落内存盘
 HUGE_SIZE = 2 * 1024**3  # > 2G 原则上不许造: 要 --allow-huge + --reason 显式授权
 DEFAULT_SIZE = "256K"  # 默认 KB 级: 造种子是为了看状态, 不是为了塞满盘
 ALLOWED_ROOTS = (WORK_ROOT, RAM_ROOT)
-TAG = "real-fake"
+TAG = guard.REAL_FAKE_TAG  # 自造种子标签单点在 guard(issue 26-11-21-0639), 工具族只留短别名
 DEFAULT_PORT = instances.SECONDARY  # 副实例: 空库, 拿它当草稿本
 
 
@@ -120,8 +123,8 @@ def _connect(port: int, pause_real: bool):
 
 
 def _fakes(qb) -> list[dict]:
-    # 成员判断走 guard.tag_set(strip 版): qB 多标签是「, 」连接, 裸 split(",") 会漏(issue 26-10-31-1215)
-    return [t for t in qb.torrents() if TAG in guard.tag_set(t)]
+    # 「按标签认领自造种子」的单点在 guard.fakes; 成员判断的 strip 口径在 guard.tag_set(issue 26-10-31-1215)
+    return guard.fakes(qb)
 
 
 SETTLED = {"stalledUP", "stalledDL", "pausedUP", "pausedDL", "missingFiles", "error", "uploading", "downloading"}
@@ -328,12 +331,31 @@ def _clean_root(root: Path, yes: bool) -> int:
 # 复用脚本连锅端, gitignored 直删不可恢复), 有未知项即拒跑, 不提供一键全清的逃生门。
 CLEAN_KNOWN_WORK = re.compile(r"^(?:seeds|rm\d+)$")
 
+# rmNN 用例目录(issue 26-11-21-0638): .work 顶层的 rmNN 是「用例工作区 + 取证沉积」的混合层
+# —— RM11 实证顶层白名单放行后 _clean_root 对整树 rglob 全删, 把 rm04 内层 38 份取证
+# (rm04/async/ 27 份 + rm04 顶层 11 份 tee)连锅端且不可恢复。整扫只在 rmNN 内层一个文件都没有
+# (纯空壳)时放行; 有文件即整单拒跑, 逐处 --dir 指名 —— 闸面必须跟着证据落点演化, 不做证据形态清单。
+CASE_DIR_RE = re.compile(r"^rm\d+$")
+
 
 def _work_strays(work: Path) -> list[Path]:
     """`.work` 顶层不属于「认得的落点」的子项 —— 那里可能躺着测量证据, clean 不许碰。"""
     if not work.exists():
         return []
     return sorted(p for p in work.iterdir() if not CLEAN_KNOWN_WORK.fullmatch(p.name))
+
+
+def _dirty_case_dirs(work: Path) -> list[tuple[Path, list[Path]]]:
+    """整扫要拒跑的 rmNN 目录及其内层文件清单(零文件空壳不返回 —— 没有文件就没有可丢的证据)。"""
+    if not work.exists():
+        return []
+    out = []
+    for d in sorted(work.iterdir()):
+        if d.is_dir() and CASE_DIR_RE.fullmatch(d.name):
+            files = [p for p in d.rglob("*") if p.is_file()]
+            if files:
+                out.append((d, files))
+    return out
 
 
 def cmd_clean(args) -> int:
@@ -347,6 +369,17 @@ def cmd_clean(args) -> int:
             for p in strays:
                 print(f"  - {p.name}{'/' if p.is_dir() else ''}")
             print("[hint] 要留的先挪走/归档; 确认可清的子树用 --dir <该子树> --yes 显式指名再清(每次一处)。")
+            return 1
+        case_dirs = _dirty_case_dirs(work)
+        if case_dirs:
+            print(f"[guard] {work} 下 rmNN 用例目录内层有文件 —— 那里常躺着测量取证, 整扫不碰(issue 26-11-21-0638):")
+            for d, files in case_dirs:
+                print(f"  - {d.name}/ {len(files)} 个文件")
+                for p in files[:5]:
+                    print(f"      {p.relative_to(d)}")
+                if len(files) > 5:
+                    print(f"      ... 还有 {len(files) - 5} 个")
+            print("[hint] 逐处确认后用 --dir tests-real/.work/<rmNN> --yes 指名清(每次一处); 零文件的空壳整扫会顺带收掉。")
             return 1
     roots = [_allowed(Path(args.dir))] if args.dir else [r for r in (work, RAM_ROOT) if r.exists()]
     for root in roots:
@@ -417,8 +450,9 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_rm)
 
     p = sub.add_parser(
-        "clean", help="清掉 tests-real/.work 与 R:/qbt-fake 下的数据与 .torrent(不碰 qB); "
-        ".work 顶层有 seeds/rmNN 之外的内容即拒跑(证据保护)"
+        "clean",
+        help="清掉 tests-real/.work 与 R:/qbt-fake 下的数据与 .torrent(不碰 qB); "
+        ".work 顶层有 seeds/rmNN 之外的内容、或 rmNN 内层有文件, 都拒跑(证据保护)"
     )
     p.add_argument("--dir", default="", help="只清这一处(必须在允许的落点之下); 不给则两处都扫。指 .work 本体同样要过证据闸")
     p.add_argument("--yes", action="store_true")

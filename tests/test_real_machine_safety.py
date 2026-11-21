@@ -29,12 +29,26 @@
 - test_seed_clean_refuses_unknown_work_top_level: .work 顶层出现 seeds/rmNN 之外的内容
   (results 目录/散装 json)即拒跑 rc=1, dry-run 与 --yes 同拒且一个文件都不删;
   拒跑信息逐项列出未知内容并带 issue 指称。
-- test_seed_clean_sweeps_known_namespaces_when_no_strays: 只有认得的名字(seeds/rmNN)时
-  契约不变 —— --yes 清文件与空目录壳(含 R: 内存盘根), dry-run 零删除。
 - test_seed_clean_explicit_dir_named_subtree_bypasses_guard: --dir 指名子树不过闸、只清
   指名处不波及证据; --dir 指 .work 本体与默认同闸。
 - test_seed_allowed_rejects_prefix_sibling_dir(评审轮1发现): 白名单按路径分量判严格包含,
   .work 同前缀兄弟目录拒收(SystemExit), 落点内的路径照常放行。
+
+2026-11-21 issue 26-11-21-0638 修复(clean 整扫对 rmNN 内层不设防, RM11 实损 38 份取证):
+- test_seed_clean_refuses_rmnn_case_dirs_with_files: rmNN 内层有文件即整单拒跑
+  (dry-run/--yes 同拒, seeds/ 也不清), 拒跑信息列出各 rmNN 的内层文件清单与 issue 指称;
+  --dir 指名 rmNN 子树仍是显式豁免口, 且指名清不波及 seeds/。
+- test_seed_clean_sweeps_seeds_and_ram_when_no_case_files(原
+  test_seed_clean_sweeps_known_namespaces_when_no_strays 收紧后重写): rmNN 零文件空壳
+  (含空子目录)照旧整扫收掉, seeds/ 与 R: 内存盘根清扫契约不变; dry-run 零删除。
+
+2026-11-21 issue 26-11-21-0639 修复(guard「真实种子」计数把 real-fake 假种子计入):
+- test_guard_snapshot_skips_tagged_seeds: snapshot 的 skip_tags 语义 —— 带标签的不暂停
+  不计入保护面, 缺省裸调才会把假种子计入(即 0639 的误标源)。
+- test_real_guard_snapshot_callers_pass_skip_tags: 静态守阵 —— tests-real 里所有
+  snapshot 调用必须显式传 skip_tags; 自带已知违规活性探针, 防守阵死分支。
+- test_cmd_guard_reports_real_and_fake_counts / test_cmd_pause_all_skips_fakes:
+  两条命令把豁免标签传给 snapshot, 且计数双口径(真实 N / 自造 M)分开报。
 """
 from __future__ import annotations
 
@@ -175,6 +189,7 @@ def _load_runner(monkeypatch, ports=(36596, )):
     fake_guard = types.SimpleNamespace(
         WHITELIST_PORTS=tuple(ports),
         EXE=exe,
+        REAL_FAKE_TAG="real-fake",
         GuardError=type("GuardError", (RuntimeError, ), {}),
         check_port=lambda port: {
             "port": port,
@@ -312,6 +327,148 @@ def test_qb_default_calls_stay_get(monkeypatch):
     assert seen["data"] is None
 
 
+# ---- guard 豁免语义与计数口径 (issue 26-11-21-0639) ----
+# snapshot 的 skip_tags 定义了「自造种子既不暂停也不计入保护面」的豁免语义, 但三处调用
+# (runner guard/pause-all、conftest env)全走缺省空元组 —— 假种子被计入「真实种子 N 个」,
+# 环境/计划誊写跟着误标。守阵钉两头: snapshot 语义本身 + 所有调用方必须显式传豁免。
+
+
+def _load_guard(monkeypatch):
+    """隔离加载 tests-real/lib/guard.py: 假 lib 包承接相对导入, 环境注册表给桩值。"""
+    fake_env_registry = types.ModuleType("lib.env_registry")
+    fake_env_registry.active = lambda: {
+        "primary": 36595,
+        "secondary": 36596,
+        "image_prefix": "C:/qb-testing",
+        "exe": {
+            36595: "C:/qb-testing/36595/qbittorrent.exe",
+            36596: "C:/qb-testing/36596/qbittorrent.exe"
+        },
+        "bt_listen": {
+            36595: 10001,
+            36596: 10002
+        },
+        "machine": "stub",
+    }
+    fake_lib = types.ModuleType("lib")
+    fake_lib.env_registry = fake_env_registry
+    monkeypatch.setitem(sys.modules, "lib", fake_lib)
+    monkeypatch.setitem(sys.modules, "lib.env_registry", fake_env_registry)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    spec = importlib.util.spec_from_file_location("lib.guard", TESTS_REAL / "lib" / "guard.py")
+    mod = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, mod)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_guard_snapshot_skips_tagged_seeds(monkeypatch):
+    mod = _load_guard(monkeypatch)
+    real_hash, fake_hash = "a" * 40, "b" * 40
+
+    class _FakeQb:
+        port = 36595
+
+        def __init__(self):
+            self.real_paused = False
+            self.pause_calls = []
+
+        def torrents(self):
+            out = [
+                {
+                    "hash": real_hash,
+                    "name": "ubuntu-24.04.iso",
+                    "tags": "",
+                    "state": "pausedUP" if self.real_paused else "uploading"
+                },
+                {
+                    "hash": fake_hash,
+                    "name": "fake-256K.bin",
+                    "tags": mod.REAL_FAKE_TAG,
+                    "state": "stalledUP"
+                },
+            ]
+            return out
+
+        def pause(self, joined):
+            self.real_paused = True
+            self.pause_calls.append(joined)
+
+    qb = _FakeQb()
+    hashes = mod.snapshot(qb, skip_tags=(mod.REAL_FAKE_TAG, ))
+    assert set(hashes) == {real_hash}, "带豁免标签的自造种子不计入真实种子保护面"
+    assert qb.pause_calls == [real_hash], "被暂停的只有真实种子"
+    assert [t["state"] for t in qb.torrents() if t["hash"] == real_hash] == ["pausedUP"]
+
+    qb_bare = _FakeQb()
+    hashes_bare = mod.snapshot(qb_bare)
+    assert fake_hash in hashes_bare, "缺省裸调不豁免 —— 这正是 0639 误标的来源(守阵钉住契约两端)"
+
+
+def _snapshot_call_violations(text: str) -> list[str]:
+    """找出裸调 snapshot 的行(出现 snapshot 调用但该行没传 skip_tags)。独立成函数便于活性探针红验。"""
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        s = line.strip()
+        if s.startswith("#"):
+            continue
+        if "guard.snapshot(" in s and "skip_tags" not in s:
+            out.append(f"{i}: {s}")
+    return out
+
+
+def test_real_guard_snapshot_callers_pass_skip_tags():
+    """tests-real 里所有 snapshot 调用必须显式传 skip_tags(issue 26-11-21-0639)。
+
+    活性探针先行: 注入已知违规必须命中、合规样本与注释行必须放行, 防守阵死分支
+    (pitfalls/testing/guard-dead-branch.md)。
+    """
+    assert _snapshot_call_violations("hashes = guard.snapshot(qb)\n") == ["1: hashes = guard.snapshot(qb)"]
+    assert _snapshot_call_violations("hashes = guard.snapshot(qb, skip_tags=(guard.REAL_FAKE_TAG, ))\n") == []
+    assert _snapshot_call_violations("# 用法见 guard.snapshot(qb) 的 docstring\n") == [], "注释行不算调用"
+    hits = []
+    for f in sorted(TESTS_REAL.rglob("*.py")):
+        rel = f.relative_to(ROOT)
+        for v in _snapshot_call_violations(f.read_text(encoding="utf-8", errors="ignore")):
+            hits.append(f"{rel}:{v}")
+    assert not hits, "tests-real 出现不带 skip_tags 的 snapshot 调用(假种子会被计入真实种子计数):\n" + "\n".join(hits)
+
+
+def test_cmd_guard_reports_real_and_fake_counts(monkeypatch, capsys):
+    mod, fake_guard = _load_runner(monkeypatch)
+    seen = {}
+
+    def fake_snapshot(qb, skip_tags=()):
+        seen["skip_tags"] = skip_tags
+        return {"a" * 40: "ubuntu-24.04.iso"}
+
+    monkeypatch.setattr(fake_guard, "snapshot", fake_snapshot, raising=False)
+    monkeypatch.setattr(fake_guard, "fakes", lambda qb: [{"hash": "b" * 40}, {"hash": "c" * 40}], raising=False)
+    monkeypatch.setattr(fake_guard, "check_online", lambda qb: "connected", raising=False)
+    monkeypatch.setattr(mod, "_qb", lambda port: types.SimpleNamespace(version=lambda: "v5.0.0"))
+    assert mod.cmd_guard(_down_args()) == 0
+    assert seen["skip_tags"] == (fake_guard.REAL_FAKE_TAG, ), "豁免标签必须传给 snapshot"
+    out = capsys.readouterr().out
+    assert "真实种子 1 个" in out and "自造(real-fake) 2 个" in out, "计数必须双口径分开报(环境指纹誊写面)"
+
+
+def test_cmd_pause_all_skips_fakes(monkeypatch, capsys):
+    mod, fake_guard = _load_runner(monkeypatch)
+    seen = {}
+
+    def fake_snapshot(qb, skip_tags=()):
+        seen["skip_tags"] = skip_tags
+        return {"a" * 40: "ubuntu-24.04.iso"}
+
+    monkeypatch.setattr(fake_guard, "snapshot", fake_snapshot, raising=False)
+    monkeypatch.setattr(fake_guard, "fakes", lambda qb: [{"hash": "b" * 40}], raising=False)
+    monkeypatch.setattr(mod, "_qb", lambda port: types.SimpleNamespace())
+    assert mod.cmd_pause_all(_down_args()) == 0
+    assert seen["skip_tags"] == (fake_guard.REAL_FAKE_TAG, ), "豁免标签必须传给 snapshot"
+    out = capsys.readouterr().out
+    assert "真实种子 1 个" in out and "自造(real-fake) 1 个未动" in out
+
+
 # ---- real.seed.clean 证据保护闸 (issue 26-11-12-2345) ----
 # clean 的旧契约是整目录清空 tests-real/.work —— 2026-11-12 S5 收尾一跑把整树测量证据
 # (results/、复用脚本)清掉且 git 不可恢复。守阵钉死: .work 顶层出现 seeds/rmNN 之外的
@@ -325,7 +482,9 @@ def _load_seed(monkeypatch, work: Path, ram: Path):
     真实 tests-real/.work 正是闸门要守的证据面(本 clone 里就躺着 review-findings/
     reconcile-e2e 等), 守阵一律在 tmp 搭景, 不给真实证据面任何被误清的机会。
     """
-    fake_guard = types.SimpleNamespace(WHITELIST_PORTS=(36595, 36596), check_port=lambda port: {})
+    fake_guard = types.SimpleNamespace(
+        WHITELIST_PORTS=(36595, 36596), REAL_FAKE_TAG="real-fake", check_port=lambda port: {}
+    )
     fake_lib = types.ModuleType("lib")
     fake_lib.guard = fake_guard
     fake_lib.instances = types.SimpleNamespace(PRIMARY=36595, SECONDARY=36596)
@@ -361,22 +520,49 @@ def test_seed_clean_refuses_unknown_work_top_level(tmp_path, monkeypatch, capsys
     assert "26-11-12-2345" in out, "守卫信息要带 issue 指称, 便于回溯事故档案"
 
 
-def test_seed_clean_sweeps_known_namespaces_when_no_strays(tmp_path, monkeypatch, capsys):
+def test_seed_clean_refuses_rmnn_case_dirs_with_files(tmp_path, monkeypatch, capsys):
+    """rmNN 内层有文件即整单拒跑(issue 26-11-21-0638): 顶层白名单放行 rmNN 后整树 rglob 全删,
+    RM11 实证把 rm04/async/ 取证连锅端 —— rmNN 是用例工作区与取证的混合沉积层, 整扫不许碰。"""
+    mod = _load_seed(monkeypatch, tmp_path / "work", tmp_path / "ram")
+    work, ram = tmp_path / "work", tmp_path / "ram"
+    (work / "seeds").mkdir(parents=True)
+    (work / "seeds" / "fake.bin").write_bytes(b"x")
+    (work / "rm04").mkdir()
+    (work / "rm04" / "rm04_10_evidence.json").write_text("{}", encoding="utf-8")
+    (work / "rm04" / "async").mkdir()
+    (work / "rm04" / "async" / "probe.json").write_text("{}", encoding="utf-8")
+    ram.mkdir()
+    (ram / "big.bin").write_bytes(b"x")
+    for yes in (False, True):
+        assert mod.cmd_clean(types.SimpleNamespace(dir="", yes=yes)) == 1, "rmNN 内层有文件必须整单拒跑"
+        assert (work / "seeds" / "fake.bin").exists(), "拒跑连认得的 seeds/ 都一个文件不删"
+        assert (work / "rm04" / "async" / "probe.json").exists() and (ram / "big.bin").exists()
+    out = capsys.readouterr().out
+    assert "rm04" in out and "2 个文件" in out, "拒跑信息要带各 rmNN 的内层文件数(免费盘点)"
+    assert ("async/probe.json" in out) or ("async\\probe.json" in out), "内层清单要落到具体文件"
+    assert "26-11-21-0638" in out, "守卫信息要带 issue 指称, 便于回溯事故档案"
+    assert mod.cmd_clean(types.SimpleNamespace(dir=str(work / "rm04"), yes=True)) == 0, "--dir 指名 rmNN 是显式豁免口"
+    assert not (work / "rm04" / "async" / "probe.json").exists(), "指名清 rm04 照常执行"
+    assert (work / "seeds" / "fake.bin").exists(), "指名清 rm04 不波及 seeds"
+
+
+def test_seed_clean_sweeps_seeds_and_ram_when_no_case_files(tmp_path, monkeypatch, capsys):
+    """rmNN 零文件空壳(含空子目录)照旧整扫收掉, seeds/ 与 R: 内存盘根的清扫契约不变
+    (26-11-12-2345 原契约; 26-11-21-0638 收紧只针对有文件的 rmNN)。"""
     mod = _load_seed(monkeypatch, tmp_path / "work", tmp_path / "ram")
     work, ram = tmp_path / "work", tmp_path / "ram"
     (work / "seeds" / "fake-256k").mkdir(parents=True)
     (work / "seeds" / "fake-256k" / "fake.bin").write_bytes(b"x")
     (work / "seeds" / "fake.torrent").write_bytes(b"x")
     (work / "rm04").mkdir()
-    (work / "rm04" / "rm04_10_evidence.json").write_text("{}", encoding="utf-8")
+    (work / "rm04" / "async").mkdir()  # 零文件空壳: 没有文件就没有可丢的证据
     (ram / "big").mkdir(parents=True)
     (ram / "big" / "big.bin").write_bytes(b"x")
     assert mod.cmd_clean(types.SimpleNamespace(dir="", yes=False)) == 0
-    assert (work / "seeds" / "fake-256k" / "fake.bin").exists()
-    assert (ram / "big" / "big.bin").exists(), "dry-run 零删除"
+    assert (work / "seeds" / "fake-256k" / "fake.bin").exists() and (ram / "big" / "big.bin").exists(), "dry-run 零删除"
     assert mod.cmd_clean(types.SimpleNamespace(dir="", yes=True)) == 0
-    assert not (work / "seeds" / "fake-256k").exists(), "认得的名字照旧清(含空目录壳子)"
-    assert not (work / "rm04").exists()
+    assert not (work / "seeds" / "fake-256k").exists(), "seeds 照旧清(含空目录壳子)"
+    assert not (work / "rm04").exists(), "零文件空壳整扫顺带收掉"
     assert not (ram / "big").exists(), "R: 内存盘根照旧整清"
 
 

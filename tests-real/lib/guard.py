@@ -103,11 +103,25 @@ def tag_set(t: dict) -> set[str]:
     return {x.strip() for x in (t.get("tags") or "").split(",") if x.strip()}
 
 
+# 自造种子的统一标签: seed 工具族(list/rm/clean)与守卫豁免按它认领「这不是真实种子」。
+# 收敛到 lib 单点(issue 26-11-21-0639): 三处调用没传 skip_tags 把假种子计入「真实种子」
+# 计数、环境指纹跟着误标 —— 真机轨里所有 snapshot 调用方一律显式传
+# skip_tags=(REAL_FAKE_TAG, ), 静态守阵(tests/test_real_machine_safety.py)会查。
+REAL_FAKE_TAG = "real-fake"
+
+
+def fakes(qb) -> list[dict]:
+    """实例里带 REAL_FAKE_TAG 标签的自造种子 —— 与真实种子的保护面彻底分开。"""
+    return [t for t in qb.torrents() if REAL_FAKE_TAG in tag_set(t)]
+
+
 def snapshot(qb, skip_tags: tuple[str, ...] = ()) -> dict:
     """第二层: 记录真实种子(哈希 → 名称)并全部暂停。
 
-    `skip_tags`: 带这些标签的种子**既不暂停也不计入保护面** —— 自造种子(real-fake)本来就该由
+    `skip_tags`: 带这些标签的种子**既不暂停也不计入保护面** —— 自造种子(REAL_FAKE_TAG)本来就该由
     用例/命令自己管, 把它们一起暂停会让"我刚加的假种子怎么变成 stoppedUP 了"变成日常困惑。
+    真机轨里调用方一律显式传 skip_tags=(REAL_FAKE_TAG, ): 裸调会把假种子计入「真实种子」计数,
+    环境指纹跟着误标(issue 26-11-21-0639, 静态守阵会查)。
     """
     def ours(t: dict) -> bool:
         return bool(tag_set(t) & set(skip_tags))

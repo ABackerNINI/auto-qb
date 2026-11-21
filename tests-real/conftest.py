@@ -30,7 +30,8 @@ def env():
             qb.version()  # 探活: 起不来就别往下走
             # disconnected ⇒ 本轮所有"零流量/零 announce"结论都是假的, 直接拦在门口
             reports[port]["connection"] = guard.check_online(qb)
-            protected[port] = set(guard.snapshot(qb))
+            # 自造种子不在保护面也不由守卫暂停 —— 它们由用例自己管(issue 26-11-21-0639)
+            protected[port] = set(guard.snapshot(qb, skip_tags=(guard.REAL_FAKE_TAG, )))
             qbs[port] = qb
         except Exception as exc:
             pytest.skip(f"实例 {port} 不可用或守卫不通过: {exc}")

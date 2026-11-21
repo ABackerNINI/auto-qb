@@ -71,8 +71,12 @@ def cmd_guard(args) -> int:
             qb = _qb(port)
             version = qb.version()
             status = guard.check_online(qb)
-            hashes = guard.snapshot(qb)
-            print(f"[ok] {port} pid={rep['pid']} v{version} {status} 真实种子 {len(hashes)} 个, 已全部暂停")
+            hashes = guard.snapshot(qb, skip_tags=(guard.REAL_FAKE_TAG, ))
+            n_fake = len(guard.fakes(qb))
+            print(
+                f"[ok] {port} pid={rep['pid']} v{version} {status} 真实种子 {len(hashes)} 个已全部暂停, "
+                f"自造({guard.REAL_FAKE_TAG}) {n_fake} 个不计入"
+            )
         except Exception as exc:
             rc = 1
             print(f"[FAIL] {port}: {exc}")
@@ -84,8 +88,8 @@ def cmd_pause_all(args) -> int:
     for port in _ports(args.port):
         try:
             qb = _qb(port)
-            hashes = guard.snapshot(qb)
-            print(f"[ok] {port} 暂停 {len(hashes)} 个种子")
+            hashes = guard.snapshot(qb, skip_tags=(guard.REAL_FAKE_TAG, ))
+            print(f"[ok] {port} 真实种子 {len(hashes)} 个已暂停, 自造({guard.REAL_FAKE_TAG}) {len(guard.fakes(qb))} 个未动")
         except Exception as exc:
             rc = 1
             print(f"[FAIL] {port}: {exc}")
@@ -224,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", default="all")
     p.set_defaults(fn=cmd_guard)
 
-    p = sub.add_parser("pause-all", help="暂停目标实例全部种子")
+    p = sub.add_parser("pause-all", help="暂停目标实例全部真实种子(自造种子不动)")
     p.add_argument("--port", default="all")
     p.set_defaults(fn=cmd_pause_all)
 

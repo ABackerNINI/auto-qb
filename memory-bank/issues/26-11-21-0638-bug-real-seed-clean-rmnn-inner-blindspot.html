@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-21-0638">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="real-seed-clean-rmnn-inner-blindspot">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-21-test-real-guard-skip-tags-clean-rmnn-gate.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="real.seed.clean 证据保护闸只查 .work 顶层名, rmNN 目录内层证据不设防(整树 rglob 全删)">
 <meta name="issue-summary" content="clean --yes 整扫时 .work 顶层 seeds/rmNN 之外才拦, rm04 命中 rmNN 白名单放行后 _clean_root 对整树 rglob 全删 —— rmNN 内层新落点(如 rm04/async/ 取证)不设防, RM11 轮实损 38 份文件不可恢复">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-21-0638-bug-real-seed-clean-rmnn-inner-blindspot</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:38</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">real</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -159,11 +159,13 @@ def _work_strays(work: Path) -&gt; list[Path]:
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-21 06:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-21 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-21 09:42 仍复现 —— 开工快照 a1823f7d 上闸面仍只查 .work 顶层名（CLEAN_KNOWN_WORK 放行 seeds/rmNN 后 _clean_root 整树 rglob 全删），rmNN 内层零设防；同批修复。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法（改道说明）</b>：§06 两案标注「方向待裁决」，经用户拍板取方案 B 并收紧为更严格变体（记「B-严格」）：整扫与 --dir 指 .work 本体先过两层闸 —— 第一层为原顶层 strays 闸（26-11-12-2345，不变）；第二层新增 <code>seed.py</code> 的 <code>CASE_DIR_RE</code> + <code>_dirty_case_dirs()</code>：<b>rmNN 内层只要有文件即整单拒跑</b>（连认得的 seeds/ 也不清），rc=1 并逐个列出 rmNN 的内层文件数与前 5 个相对路径（把「clean 前先 ls 盘点」纪律机械化成免费盘点）；<b>零文件空壳</b>（含只剩空子目录）不返回 —— 没有文件就没有可丢的证据，整扫照旧顺带收壳；<code>--dir</code> 指名 rmNN 子树仍是显式豁免口（语义不变，指名清不波及 seeds/）。<b>改道原因</b>：建议原文 B 的「整扫对 rmNN 只删 .torrent/.bin 自建形态」仍是形态过滤 —— 证据同样可能落成 .bin 形态（RM11 假种子恰为 .bin 名），形态清单会随证据落点演化失守（A 案同病，只是清单更短）；「有文件即拒」零维护、fail-closed，与黄金法则「保守默认」同构，代价只是 rmNN 有残留时收尾多一步显式 --dir 指名。</p>
+  <p><b>验证方式与数字</b>：新守阵两条进 <code>tests/test_real_machine_safety.py</code> —— test_seed_clean_refuses_rmnn_case_dirs_with_files（dry-run/--yes 同拒且一个文件不删、拒跑信息带内层清单与 issue 指称、--dir 指名 rmNN 照清且不波及 seeds/）+ test_seed_clean_sweeps_seeds_and_ram_when_no_case_files（零文件空壳照收、seeds/ 与 R: 原契约不变、dry-run 零删除）；原 26-11-12-2345 守阵三条全数保持绿。test.full 6665P / 6S、覆盖 99%（187s）。坑档 pitfalls/ops/seed-clean-vs-evidence.md 处置行已同步升级为「clean 前先 ls 盘点」（整扫拒跑信息自带内层清单）。</p>
 </section>
 
 <footer>
