@@ -17,16 +17,21 @@ from ..core.modules import relocate_units as ru
 # (MOVING_PHASES/PENDING_PHASES)与判定体单点在 units.display_state_of_phase, 本文件
 # 只保留 state_of_phase 这个 webui 消费面旧入口作薄委托 —— 不再各自维护第二份归并逻辑。
 _ACTIVE_STATES = frozenset({ru.DISPLAY_MOVING, ru.DISPLAY_PENDING_FINALIZE})
-# 组级优先序: failed > moving > pending_finalize > done > superseded。cancelled 不进组级标注
-# (已撤销 = 无迁移在进行, 不挂徽标); superseded 只读历史不进活跃集, 但组级聚合仍给它
-# 最低优先序(前任专属成员的标注不被当作未知相位误判成 moving)。
+# 组级优先序: failed > moving > pending_finalize > done > superseded = foreign。cancelled 不进
+# 组级标注(已撤销 = 无迁移在进行, 不挂徽标); superseded 只读历史不进活跃集, 但组级聚合仍给它
+# 最低优先序(前任专属成员的标注不被当作未知相位误判成 moving); foreign(T5 通知态)与 superseded
+# 同垫底 —— 它是「零破坏通知」信息面, 组内有真迁移态时永远让位。
 _PRIORITY = {
     ru.DISPLAY_FAILED: 4,
     ru.DISPLAY_MOVING: 3,
     ru.DISPLAY_PENDING_FINALIZE: 2,
     ru.DISPLAY_DONE: 1,
     ru.DISPLAY_SUPERSEDED: 0,
+    ru.DISPLAY_FOREIGN: 0,
 }
+# T5 呈现分流面(notified 账 kind 字段): 面板只列 B/mismatch(A = 已纳入收尾的成员, 由 job
+# 标注面接管, 不走外部种子投影)。词值单点在 units FOREIGN_KIND_*, 与侦测落账共用。
+_FOREIGN_PANEL_KINDS = frozenset({ru.FOREIGN_KIND_B, ru.FOREIGN_KIND_MISMATCH})
 
 
 def state_of_phase(phase: str) -> str:
@@ -92,7 +97,15 @@ def group_relocate(members: Sequence[dict]) -> Optional[dict]:
         return None
     top_priority = max(_PRIORITY.get(a.get("state"), 0) for a in annotations)
     top = [a for a in annotations if _PRIORITY.get(a.get("state"), 0) == top_priority]
-    state = str(top[0]["state"]) if len({a.get("job_id") for a in top}) == 1 else "mixed"
+    top_states = {a.get("state") for a in top}
+    if ru.DISPLAY_FOREIGN in top_states and top_states <= {ru.DISPLAY_FOREIGN, ru.DISPLAY_SUPERSEDED}:
+        # foreign(T5)通知组不套「多任务」混态: 产出 job 可以有多个(多代迁移各自的旧根命中),
+        # 但通知态只表达「这些种子落在外部旧路径上」一件事, job_id 只是元数据不是在途任务。
+        # 豁免放宽到 {foreign, superseded} 混合(评审 minor 4): 两者同垫底序, 在时通知面压过
+        # 历史态 —— 组里有真实在时迁移(moving 等)时 top 优先序已把它们顶上, 本支不进。
+        state = ru.DISPLAY_FOREIGN
+    else:
+        state = str(top[0]["state"]) if len({a.get("job_id") for a in top}) == 1 else "mixed"
     srcs = {str(a.get("src") or "") for a in annotations}
     srcs.discard("")
     return {
@@ -105,4 +118,49 @@ def group_relocate(members: Sequence[dict]) -> Optional[dict]:
                        for a in annotations if a.get("dst")}),
         "src": next(iter(srcs)) if len(srcs) == 1 else "",
         "updated_at": max(float(a.get("updated_at") or 0.0) for a in annotations),
+    }
+
+
+def foreign_member(entry: Optional[dict]) -> Optional[dict]:
+    """外部旧路径种子(T5/S5 通知态)的迁移标注; 无条目/非呈现类别返回 None
+
+    数据源 = relocate.foreign.notified 账的**只读发布视图**(模块侧 foreign_notified_view,
+    主循环单写线程整表发布; Web 构建期 O(1) 按hash 取, 与 jobs_snapshot.by_hash 同纪律)。
+    分流单点 _FOREIGN_PANEL_KINDS: 只投影 B(终态账旧根命中)/mismatch(清单不一致)两类 ——
+    A(已纳入收尾)由 job 标注面接管(该 hash 已是成员, job_for 命中, 本投影不参与)。
+
+    字段契约与 member_relocate 同形(decorate/relocate_pop/drawer_rows 消费面零分支成本,
+    只认 state 分流出 foreign 专属块), 另带两个通知态专属字段:
+    - first_seen: 账面首见时刻(浮窗「首见」kv / 抽屉「首见」行; 同时占 updated_at 槽 ——
+      标注签名 _relocateSig 覆盖 updated_at, 首见变化自然进指纹);
+    - expired: R7「映射已过期」位 = location 已被侦测面置空(终态账滚动后重解析失败,
+      relocate_foreign._foreign_notify_expired)—— 浮窗/抽屉按它显示降级文案, 前端不重算。
+    """
+    if not entry:
+        return None
+    kind = str(entry.get("kind") or "")
+    if kind not in _FOREIGN_PANEL_KINDS:
+        return None
+    location = str(entry.get("location") or "")
+    first_seen = float(entry.get("first_seen") or 0.0)
+    return {
+        "state": ru.DISPLAY_FOREIGN,
+        "phase": str(entry.get("phase") or ""),
+        "job_id": str(entry.get("job_id") or ""),
+        "mover": False,
+        "src": str(entry.get("root") or ""),
+        "dst": location,
+        "alias_kind": "",
+        "alias_count": 0,
+        "created_at": 0.0,
+        "armed_at": 0.0,
+        "updated_at": first_seen,
+        "origin": "",
+        "reason": "",
+        "resume_pending_count": 0,
+        "resume_pending_hashes": [],
+        "resume_retries": 0,
+        "resume_exhausted": False,
+        "first_seen": first_seen,
+        "expired": not location,
     }

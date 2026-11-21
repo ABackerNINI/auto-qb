@@ -40,17 +40,24 @@ function _relocateSig(r) {
 }
 
 /* 迁移状态展示词表(plan 26-11-04-1042 P1): 筛选 / 详情段 / 单排回落语义共用一份, 禁止在模板里
- * 另写字面量三元。done / cancelled 不长期挂行内展示, 但仍算「有过迁移」。 */
+ * 另写字面量三元。done / cancelled 不长期挂行内展示, 但仍算「有过迁移」。
+ * foreign(T5, 计划 26-11-20-0434): 外部旧路径种子通知态 —— 词值单点在 units.DISPLAY_FOREIGN,
+ * 改值须两端同步(跨端同值断言见 test_webui_relocate_pop)。 */
 const RELOCATE_STATE_TEXT = {
   moving: "迁移中", pending_finalize: "待收尾", failed: "迁移失败",
   mixed: "迁移多任务", done: "已完成", cancelled: "已撤销",
   superseded: "被接管(历史)",
+  foreign: "旧路径外部种子",
 };
 /* 状态 -> 色调映射(plan 26-11-07-2344 S2, 取代旧 RELOCATE_STATE_CLASS): 状态唯一载体 = 颜色
  * (.rel-tone-<tone>, row_lang.css 单点定义), 无底形无边框无药丸。done / cancelled 不在表内 ——
- * relocateView 对它们恒 null, 行内回落单排正常色。 */
-const RELOCATE_TONE = { moving: "moving", pending_finalize: "pending", failed: "failed", mixed: "mixed" };
+ * relocateView 对它们恒 null, 行内回落单排正常色。foreign = 通知/警示档(warn 色, 静态无动画)。 */
+const RELOCATE_TONE = { moving: "moving", pending_finalize: "pending", failed: "failed", mixed: "mixed", foreign: "foreign" };
 const RELOCATE_FILTER_ANY = "有过迁移";
+/* foreign 已过期降级文案(T5 R7, 评审 nit 9 单点): 浮窗(relocate_pop)与抽屉(drawer_rows)
+ * 的「数据现位置」降级替代文本共用这一份 —— 改文案只动这里, 两处消费经 foreignExpiredText()
+ * 方法(跨文件单点走 decorate methods 的既有先例, 同 relocateResumeText)。 */
+const RELOCATE_FOREIGN_EXPIRED = "映射已过期(旧路径映射已随终态账滚动移出)";
 const RELOCATE_ORIGIN_TEXT = { web: "WebUI", rule: "规则", unknown: "未知来源" };
 /* 进行中三态(plan 26-11-07-2344 R3 D17): 位置集匹配(_pathPositions)与行内两排展示
  * (relocateView pair)共用同一 active 边界 —— 行内显示 B 排的行, 其 dst 才参与路径匹配。 */
@@ -131,6 +138,11 @@ window.AQB_DECORATE = {
     relocateOriginText(origin) {
       return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");
     },
+    /* foreign 已过期降级文案单点(T5 R7, 评审 nit 9): relocate_pop / drawer_rows 两处共用,
+     * 判据位 = 后端投影 expired(评审 minor 6: 区分位只认后端, 前端不按 dst 空实重推)。 */
+    foreignExpiredText() {
+      return RELOCATE_FOREIGN_EXPIRED;
+    },
     /* 待恢复余量展示词(issue 26-11-14-1744 (3); 26-11-15-0441 改口径): 悬停浮窗 kv(relocate_pop)与
      * 抽屉迁移段(drawer_rows)共用的唯一文案单点 —— 计数 + 态(恢复确认中/不再补发)。穷尽判定由
      * 后端投影给出(resume_exhausted, 上界单点在机制侧), 前端不重算; 已删成员在账如实计数,
@@ -162,6 +174,13 @@ window.AQB_DECORATE = {
       if (!rel) return null;
       const tone = RELOCATE_TONE[rel.state];
       if (!tone) return null;
+      /* foreign(T5)恒单排: 旧根/现位置不是「迁移进行中」的 A->B 边 —— 双排会让该行进
+       * 路径筛选位置集(_pathPositions 的 active 边界, R3 D17 钉扎矩阵不动), 且视觉语义
+       * (旧值删除线+新位置)暗示在途迁移。详情(旧路径/数据现位置或已过期/首见)走悬停
+       * 浮窗的 foreign 专属块(relocate_pop.assembleRelPop), 行内只给警示色单排。 */
+      if (rel.state === "foreign") {
+        return { mode: "one", tone, a: null, b: null, label: RELOCATE_STATE_TEXT[rel.state] || null };
+      }
       const isGroup = !!row.members;
       let pair;
       if (isGroup) {
@@ -174,7 +193,9 @@ window.AQB_DECORATE = {
       }
       return { mode: "pair", tone, a: rel.src, b: isGroup ? rel.dst[0] : rel.dst, label: null };
     },
-    /* 迁移筛选桶(成员级): 进行中三态 + 「有过迁移」(done/cancelled 也计入历史, 行内不着色) */
+    /* 迁移筛选桶(成员级): 进行中三态 + 「有过迁移」(done/cancelled 也计入历史, 行内不着色)。
+     * foreign(T5)自成「旧路径外部种子」档(计数即面板计数徽标), 不进「有过迁移」——
+     * 外部工具按旧路径加种不是本程序执行过的迁移。 */
     _relocatePick(r) {
       const rel = r && r.relocate;
       if (!rel) return [];
@@ -183,7 +204,7 @@ window.AQB_DECORATE = {
         const label = RELOCATE_STATE_TEXT[rel.state];
         if (label) out.push(label);
       }
-      out.push(RELOCATE_FILTER_ANY);
+      if (rel.state !== "foreign") out.push(RELOCATE_FILTER_ANY);
       return out;
     },
     /* 组级筛选桶: 组内任一成员落某档即保留整组(与 _hrBuckets 同语义) */

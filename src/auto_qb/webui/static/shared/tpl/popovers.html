@@ -399,7 +399,7 @@
           <div class="rp-paths" :class="'rel-tone-' + relPop.data.tone">
             <div v-for="(p, i) in relPop.data.paths" :key="i" class="rp-pr">
               <span class="rp-pl">{{ p[0] }}</span>
-              <span class="rp-pv" :class="{ 'rp-em': p[0] === '目标位置' }">{{ p[1] }}</span>
+              <span class="rp-pv" :class="{ 'rp-em': p[0] === '目标位置' || p[0] === '数据现位置' }">{{ p[1] }}</span>
             </div>
           </div>
           <div v-for="(kv, i) in relPop.data.kv" :key="'k'+i" class="rp-kv"><span class="rp-k">{{ kv[0] }}</span><span class="rp-v">{{ kv[1] }}</span></div>

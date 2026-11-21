@@ -94,9 +94,14 @@ __all__ = [
     "DISPLAY_FAILED",
     "DISPLAY_CANCELLED",
     "DISPLAY_SUPERSEDED",
+    "DISPLAY_FOREIGN",
     "MOVING_PHASES",
     "PENDING_PHASES",
     "display_state_of_phase",
+    # 外部旧路径种子(计划 26-11-20-0434; kind 词表单点 —— 侦测面与 WebUI 投影层共用)
+    "FOREIGN_KIND_A",
+    "FOREIGN_KIND_B",
+    "FOREIGN_KIND_MISMATCH",
     # 状态/探测判定谓词
     "is_complete_state",
     "TAG_PROBE",
@@ -270,6 +275,15 @@ DISPLAY_DONE = "done"
 DISPLAY_FAILED = "failed"
 DISPLAY_CANCELLED = "cancelled"
 DISPLAY_SUPERSEDED = "superseded"  # 被接管(只读历史)
+# 外部旧路径种子通知态(T5/S5, 计划 26-11-20-0434): **非相位派生** —— display_state_of_phase
+# 不产出本值, ForeignMixin 呈现投影(views_relocate.foreign_member)直接置值; 词值随前端消费
+# (decorate.js RELOCATE_STATE_TEXT.foreign), 改值须两端同步。
+DISPLAY_FOREIGN = "foreign"
+# 外部旧路径种子的类别词表(relocate.foreign.notified 账 kind 字段; 侦测面落账与 WebUI 面板
+# 分流共用本单点 —— T5 呈现层只取 B/mismatch, A 已被纳入收尾由 job 标注面接管)
+FOREIGN_KIND_A = "A"  # 活跃 job 作用域命中(收尾窗内到达; 零破坏纳入收尾)
+FOREIGN_KIND_B = "B"  # 终态账旧根命中(收尾完成后到达; 只通知)
+FOREIGN_KIND_MISMATCH = "mismatch"  # 清单不一致(D4: 只告警不处置)
 # 前段相位/收尾窗相位两个派生中间集(展示归并的输入; 相位机判定面不消费 —— 判窗一律
 # 走 FINALIZE_WINDOW_PHASES 单点, 本集只服务「展示状态」这一个派生)。
 MOVING_PHASES = frozenset({PHASE_MOVING, PHASE_WATCHING})

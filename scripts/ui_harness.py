@@ -66,6 +66,7 @@ import queue
 import socket
 import sys
 import tempfile
+from types import MappingProxyType
 import threading
 import time
 
@@ -118,12 +119,18 @@ def _inject_add_options(mgr, torrents) -> None:
 
 class _FakeRelocateJobs:
     """relocate 模块句柄的最小替身: 只暴露 WebUI 构建期消费的 jobs_snapshot()
-    (views.py::_relocate_snapshot 只 getattr 这一个方法; 命令面方法桩上不可达, 不造)"""
-    def __init__(self, snap):
+    (views.py::_relocate_snapshot 只 getattr 这一个方法; 命令面方法桩上不可达, 不造)。
+    T5 追加 foreign_notified_view()(views.py::_foreign_entry 的外部旧路径种子发布视图;
+    不暴露时呈现面按替身缺位回落 None, 不炸)。"""
+    def __init__(self, snap, foreign=None):
         self._snap = snap
+        self._foreign = foreign if foreign is not None else MappingProxyType({})
 
     def jobs_snapshot(self):
         return self._snap
+
+    def foreign_notified_view(self):
+        return self._foreign
 
 
 def _inject_relocate_jobs(mgr, torrents) -> None:
@@ -182,9 +189,39 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
         torrents[4].hash:
             _job(torrents[4].hash, PHASE_CANCELLED, "job-harness-4"),
     }
+    # 外部旧路径种子通知态(T5, 计划 26-11-20-0434): torrents[5] 不在 job 账 -> 行标注走
+    # foreign 回落(views.py::_foreign_entry)—— 旧路径 Set002(IYUU 按组旧根加种的语义与
+    # job 注入的 src 同根自洽)/ 数据现位置 Relocated; 「迁移状态」筛选档由此出现
+    # 「旧路径外部种子」选项(计数 = 1, 空态不显示的对照面)。
+    # !torrents[6] 必须保持**无标注**(恒真无 foreign/job 条目): relocate-pop-terminal.spec
+    #   的「无标注行不弹」负向对照自 T5 起从 torrents[5] 让位到 torrents[6](评审 major 2
+    #   —— i=5 现在弹 foreign 浮窗, 正向面在 relocate-foreign-notification.spec)。本注入
+    #   守卫 >=7 即为钉住这一耦合: 数据面不足 7 条时整体跳过(索引面不足, 与上方 <5 守卫
+    #   同纪律), 不给「i=6 意外带标注」留缝隙。
+    foreign = MappingProxyType({})
+    if len(torrents) >= 7:
+        foreign = MappingProxyType(
+            {
+                torrents[5].hash:
+                    MappingProxyType(
+                        {
+                            "root": "R:\\Downloads\\Set002",
+                            "kind": "B",
+                            "job_id": "job-harness-0",
+                            "phase": "done",
+                            "location": "R:\\Downloads\\Relocated",
+                            "first_seen": now - 120.0,
+                        }
+                    )
+            }
+        )
     mgr.config.relocate.enabled = True
-    mgr.ctx.relocate = _FakeRelocateJobs(RelocateSnapshot(generation=1, by_hash=by_hash))
-    print(f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done+穷尽账/cancelled)", flush=True)
+    mgr.ctx.relocate = _FakeRelocateJobs(RelocateSnapshot(generation=1, by_hash=by_hash), foreign)
+    print(
+        f"[harness] 迁移状态已注入: job={len(by_hash)} (moving/armed/failed/done+穷尽账/cancelled)"
+        f" foreign={len(foreign)}(对照行 i=6 保持无标注)",
+        flush=True
+    )
 
 
 def _install_search_refresh_probe(app, mgr, site_conf, groups_cap: int | None = None) -> None:

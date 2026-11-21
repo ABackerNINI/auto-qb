@@ -26,6 +26,24 @@
 - test_resume_pending_endpoint_projection: 真实 /api/torrents/{hash} 端点透传恢复账四字段(空账字段恒在)
 - test_resume_pending_display_wiring: 待恢复文案单点 decorate.relocateResumeText 定义恰一次, 消费面
   (drawer_rows 两行 / relocate_pop kv)走同一单点; 空账零噪音与穷尽/在途区分文案钉扎
+
+外部旧路径种子通知态(T5, 计划 26-11-20-0434):
+
+- test_foreign_member_projection: foreign_member 投影 —— kind B/mismatch 进面板(A 不进);
+  state=DISPLAY_FOREIGN + 契约形状与 member_relocate 同形(mover False/alias 0/resume 全零/
+  origin 空) + first_seen 占 updated_at 槽 + expired 位(location 空位); 空条目 None
+- test_foreign_row_fallback_and_job_priority: 行构建回落 —— notified 账条目经
+  foreign_notified_view 发布视图落到 _member_view 标注; job 成员先行命中不落外部回落;
+  relocate 关恒 None; 缺 getter 替身面零异常
+- test_group_relocate_foreign_priority: 组级 foreign 垫底(0, 与 superseded 同级)—— 全外部
+  组 state=foreign/src=旧根/dst 列表/pending=0; 外部成员遇在途迁移让位; superseded+foreign
+  混合组 state=foreign 不进 mixed(评审 minor 4: 豁免放宽为 top state 集 ⊆ {foreign,
+  superseded}, 纯 superseded 组口径不动)
+- test_p1_pair_state_mapping_node 扩 foreign 支: relocateView foreign 恒 one(警示 tone)+
+  _relocatePick foreign 自成档不进「有过迁移」
+- test_foreign_display_wiring: 通知面接线守阵 —— 词表/色调(两作用域)/筛选档/浮窗专属块/
+  模板强调条件/抽屉专属行集 六处同轮在场; 降级判据读后端 expired 位 + 文案单点
+  foreignExpiredText 定义恰一次且浮窗/抽屉共用(评审 minor 6 + nit 9)
 """
 from __future__ import annotations
 
@@ -152,6 +170,126 @@ def test_member_relocate_resume_pending_projection(tmp_path):
     mod.register_job(_job("j5", resume_pending=("HA", "HDELETED")))
     gone = env.mgr._member_view(env.mgr.store.by_hash["HB"])["relocate"]
     assert gone["resume_pending_hashes"] == ["HA", "HDELETED"], "已删成员必须如实进展示面"
+
+
+# ---------- 外部旧路径种子通知态(T5, 计划 26-11-20-0434) ----------
+
+
+def test_foreign_member_projection():
+    """foreign_member 投影: kind 分流(B/mismatch 进面板, A 不进)+ 契约形状 + expired 位"""
+    from auto_qb.webui.views_relocate import foreign_member
+
+    entry = {
+        "root": "r:/old",
+        "kind": "B",
+        "job_id": "jd",
+        "phase": "done",
+        "location": "R:/new",
+        "first_seen": 1234.5,
+    }
+    a = foreign_member(entry)
+    assert a["state"] == ru.DISPLAY_FOREIGN
+    assert a["src"] == "r:/old" and a["dst"] == "R:/new"
+    assert a["job_id"] == "jd" and a["phase"] == "done"
+    assert a["mover"] is False and a["origin"] == "" and a["reason"] == ""
+    assert a["alias_count"] == 0 and a["alias_kind"] == ""
+    assert a["resume_pending_count"] == 0 and a["resume_pending_hashes"] == []
+    assert a["resume_retries"] == 0 and a["resume_exhausted"] is False
+    assert a["first_seen"] == 1234.5 and a["updated_at"] == 1234.5  # 首见占 updated_at 槽
+    assert a["expired"] is False
+    # R7 已过期(location 空位): expired True + dst 空(浮窗/抽屉按它给降级文案)
+    expired = foreign_member({**entry, "location": ""})
+    assert expired["expired"] is True and expired["dst"] == ""
+    # mismatch(清单不一致)同进面板; kind A(已纳入收尾, job 标注面接管)不进
+    assert foreign_member({**entry, "kind": "mismatch"})["state"] == ru.DISPLAY_FOREIGN
+    assert foreign_member({**entry, "kind": "A"}) is None
+    assert foreign_member(None) is None and foreign_member({}) is None
+    assert foreign_member({"kind": "B", "root": "", "location": "", "first_seen": 0})["job_id"] == ""
+
+
+def test_foreign_row_fallback_and_job_priority(tmp_path):
+    """行构建回落: notified 账 -> foreign_notified_view 发布视图 -> _member_view 标注"""
+    from helpers import FakeTorrent, seed_store
+
+    env = relocate_env(tmp_path)
+    mgr = env.mgr
+    mod = mgr.ctx.relocate
+    t = FakeTorrent(hash="HFOREIGN", name="foreign-seed", save_path="R:/old", state="pausedUP")
+    env.client.torrents["HFOREIGN"] = t
+    seed_store(mgr, [t])
+    rec = mgr.store.by_hash["HFOREIGN"]
+    notified = mod._state_foreign_notified()
+    notified["HFOREIGN"] = {
+        "root": "r:/old",
+        "kind": "B",
+        "job_id": "jd",
+        "phase": "done",
+        "location": "R:/new",
+        "first_seen": 99.0
+    }
+    mod._foreign_publish_view()
+    assert mgr._member_view(rec)["relocate"]["state"] == ru.DISPLAY_FOREIGN
+    # job 成员先行命中(该 hash 已被纳入收尾): job 标注接管, 不落外部回落
+    mod.register_job(_job("jf", hashes=("HFOREIGN", )))
+    assert mgr._member_view(rec)["relocate"]["state"] == ru.DISPLAY_MOVING
+    # relocate 关: 即使发布视图仍在, 恒 None(呈现面由 relocate.enabled 收口)
+    mgr.config.relocate.enabled = False
+    assert mgr._member_view(rec)["relocate"] is None
+    mgr.config.relocate.enabled = True
+    # 替身面: 模块缺 getter / 视图形状异常 -> 零异常恒 None(呈现面兜底)
+    from types import SimpleNamespace as NS
+
+    old_mod = mgr.ctx.relocate
+    mgr.ctx.relocate = NS()  # 无 foreign_notified_view 属性
+    assert mgr._member_view(rec)["relocate"] is None
+    mgr.ctx.relocate = NS(foreign_notified_view=lambda: "junk")  # 形状异常
+    assert mgr._member_view(rec)["relocate"] is None
+    mgr.ctx.relocate = old_mod
+
+
+def test_group_relocate_foreign_priority():
+    """组级 foreign 垫底(0, 与 superseded 同级): 全外部组可表达, 遇在途迁移让位"""
+    from auto_qb.webui.views_relocate import foreign_member, group_relocate, member_relocate
+
+    foreign = foreign_member(
+        {
+            "root": "r:/old",
+            "kind": "B",
+            "job_id": "jd",
+            "phase": "done",
+            "location": "R:/new",
+            "first_seen": 1.0
+        }
+    )
+    foreign2 = foreign_member(
+        {
+            "root": "r:/old",
+            "kind": "mismatch",
+            "job_id": "jd2",
+            "phase": "done",
+            "location": "",
+            "first_seen": 2.0
+        }
+    )
+    g = group_relocate([{"relocate": foreign}, {"relocate": foreign2}])
+    assert g["state"] == ru.DISPLAY_FOREIGN  # 全外部组: 组级也表达通知态
+    assert g["src"] == "r:/old" and g["dst"] == ["R:/new"]  # dst 空值不入列(与既有口径一致)
+    assert g["pending"] == 0 and g["total"] == 2  # foreign 不算在途(pending 语义不动)
+    assert g["job_ids"] == ["jd", "jd2"]
+    # 外部成员遇在途迁移让位(优先序垫底): 组级标注 = 在途迁移, 不被通知态覆盖
+    moving = member_relocate(ru.job_to_dict(_job("jm")), "HA")
+    g2 = group_relocate([{"relocate": foreign}, {"relocate": moving}])
+    assert g2["state"] == ru.DISPLAY_MOVING
+    # superseded + foreign 混合(评审 minor 4): 两者同垫底序, 在时通知面压过历史态
+    # -> state=foreign 不落 mixed(豁免条件放宽为 top state 集 ⊆ {foreign, superseded})
+    superseded = member_relocate(ru.job_to_dict(_job("js", phase=ru.PHASE_SUPERSEDED)), "HA")
+    g3 = group_relocate([{"relocate": foreign}, {"relocate": superseded}])
+    assert g3["state"] == ru.DISPLAY_FOREIGN
+    # 纯 superseded 组(无 foreign): 豁免不进 —— 走既有 mixed/job_diversity 口径不被改写
+    g4 = group_relocate([{"relocate": superseded}])
+    assert g4["state"] == ru.DISPLAY_SUPERSEDED
+    # 空组标注组(全 None)与既有行为一致: None
+    assert group_relocate([{"relocate": None}]) is None
 
 
 def test_origin_roundtrip_and_legacy_unknown():
@@ -434,12 +572,17 @@ const out={
   grpNoSrc:v({members:[{}],relocate:{state:'moving',src:'',dst:['R:/dst']}}),
   done:v({relocate:{state:'done',src:'R:/src',dst:'R:/dst'}}),
   cancelled:v({relocate:{state:'cancelled',src:'R:/src',dst:'R:/dst'}}),
+  foreignOne:v({relocate:{state:'foreign',src:'R:/old',dst:'R:/new'}}),
+  foreignExpired:v({relocate:{state:'foreign',src:'R:/old',dst:''}}),
+  foreignGrp:v({members:[{}],relocate:{state:'foreign',src:'R:/old',dst:['R:/new']}}),
   none:v({relocate:null}),
   buckets:call('_relocateBuckets',{members:[
     {relocate:{state:'moving'}},{relocate:{state:'pending_finalize'}},{relocate:{state:'done'}},{}
   ]}),
+  foreignBuckets:call('_relocateBuckets',{members:[{relocate:{state:'foreign'}}]}),
   sigSrcChg:sandbox._relocateSig({state:'moving',src:'R:/a'})!==sandbox._relocateSig({state:'moving',src:'R:/b'}),
   grpSigSrcChg:sandbox._groupRelocateSig({state:'moving',src:'R:/a',dst:['R:/d']})!==sandbox._groupRelocateSig({state:'moving',src:'R:/b',dst:['R:/d']}),
+  foreignSigLocChg:sandbox._relocateSig({state:'foreign',src:'R:/old',dst:'R:/a'})!==sandbox._relocateSig({state:'foreign',src:'R:/old',dst:'R:/b'}),
 };
 process.stdout.write(JSON.stringify(out));
 """
@@ -479,11 +622,22 @@ def test_p1_pair_state_mapping_node():
     assert out["grpNoSrc"]["mode"] == "one"
     # 终态/无标注 -> null(模板回落纯单排正常色, 不出现「已完成」结论)
     assert out["done"] is None and out["cancelled"] is None and out["none"] is None
+    # foreign(T5): 恒单排 one(警示 tone + 状态词 label, src/dst 不进 A/B 排 —— 不进路径筛选
+    # 位置集, R3 D17 钉扎矩阵不动); 已过期(dst 空)同形
+    assert out["foreignOne"]["mode"] == "one" and out["foreignOne"]["tone"] == "foreign"
+    assert out["foreignOne"]["a"] is None and out["foreignOne"]["b"] is None
+    assert out["foreignOne"]["label"] == "旧路径外部种子"
+    assert out["foreignExpired"]["mode"] == "one" and out["foreignExpired"]["tone"] == "foreign"
+    assert out["foreignGrp"]["mode"] == "one", "组行 foreign 也恒单排(不做 A->B 双排)"
     # 组级筛选桶口径不变(P1 既有行为): 组内任一成员落档即保留; done 只贡献「有过迁移」
     assert "迁移中" in out["buckets"] and "待收尾" in out["buckets"] and "有过迁移" in out["buckets"]
+    # foreign 自成档(计数即面板计数徽标), 不进「有过迁移」(外部工具加种不是本程序迁移)
+    assert out["foreignBuckets"] == ["旧路径外部种子"]
     # 指纹敏感性(plan §07 风险第一行): src 值变化必须让成员/组两份签名都变, 否则两排停旧值
     assert out["sigSrcChg"] is True, "改 src 值 _relocateSig 签名必须变"
     assert out["grpSigSrcChg"] is True, "改 src 值 _groupRelocateSig 签名必须变(S2 新增槽位)"
+    # foreign 标注的现位置变化(location 置空/恢复)必须进签名, 否则行内警示色停在旧态
+    assert out["foreignSigLocChg"] is True, "改 foreign dst 值 _relocateSig 签名必须变"
 
 
 def test_p1_filter_semantics_and_path_filter_untouched():
@@ -715,3 +869,36 @@ def test_resume_pending_display_wiring():
     assert 'if (n <= 0) return "";' in deco, "空账必须返回空串(调用方按空串不出行)"
     assert "不再补发" in deco and "恢复确认中" in deco, \
         "在途/穷尽两态文案必须在场(区分由后端 resume_exhausted 给, 前端不重算上界)"
+
+
+def test_foreign_display_wiring():
+    """外部旧路径种子通知面接线守阵(T5): 词表/色调/筛选档/浮窗专属块/模板强调条件/抽屉专属行集 六处同轮在场"""
+    deco = _static("shared/decorate.js")
+    rows = _static("shared/drawer_rows.js")
+    pop = _static("shared/relocate_pop.js")
+    css = _static("shared/row_lang.css")
+    tpl = _static("shared/tpl/popovers.html")
+    # 词表跨端同源: decorate 词值 == units.DISPLAY_FOREIGN(改值须两端同步)
+    assert "foreign: \"旧路径外部种子\"" in deco, "状态词必须在 decorate 词表(筛选档/浮窗 verdict 共用)"
+    assert "foreign: \"foreign\"" in deco, "foreign 必须挂 tone 色调映射(否则 relocateView 判 null 不弹)"
+    # 行内恒单排(不做 A->B 双排 —— 不进路径筛选位置集, R3 D17 钉扎矩阵不动)
+    assert 'rel.state === "foreign"' in deco, "relocateView 的 foreign 恒 one 分支必须在场"
+    assert 'rel.state !== "foreign") out.push(RELOCATE_FILTER_ANY)' in deco, \
+        "foreign 不得进「有过迁移」筛选档(外部加种不是本程序迁移)"
+    # 色调令牌: 两个作用域都定义(行内 .rl-scope + 浮窗 .relpop)
+    assert css.count(".rel-tone-foreign") == 2, "foreign 色调必须在 rl-scope 与 relpop 两域各一条"
+    # 浮窗 foreign 专属块: 旧路径/数据现位置 + 首见 + 模板强调条件扩展
+    assert '["旧路径", rel.src]' in pop and '["数据现位置"' in pop, "浮窗 foreign 路径块必须在场"
+    assert 'kv.push(["首见"' in pop, "foreign 首见 kv 必须在场"
+    assert "p[0] === '数据现位置'" in tpl, "浮窗 rp-em 强调条件必须覆盖「数据现位置」"
+    # 降级判据与文案单点(评审 minor 6 + nit 9): expired 位只认后端, 文案 decorate 定义恰一次
+    assert "rel.expired" in pop and "rel.expired" in rows, \
+        "浮窗/抽屉降级判据必须读后端 expired 位(不按 dst 空实重推, resume_exhausted 同口径)"
+    assert deco.count("foreignExpiredText() {") == 1, "降级文案单点必须在 decorate 定义恰一次"
+    assert "this.foreignExpiredText()" in pop and "this.foreignExpiredText()" in rows, \
+        "浮窗/抽屉必须消费同一文案单点(不另写第二份字面)"
+    assert "映射已过期" in deco and "映射已过期" not in pop and "映射已过期" not in rows, \
+        "降级文案字面只允许落 decorate 单点(漂移 = 两处文案各走各的)"
+    # 抽屉 foreign 专属行集(通知事实面, 不出 job 机械面)
+    assert 'rel.state === "foreign"' in rows, "抽屉迁移段必须有 foreign 分支"
+    assert 'label: "旧路径"' in rows and 'label: "数据现位置"' in rows and 'label: "首见"' in rows

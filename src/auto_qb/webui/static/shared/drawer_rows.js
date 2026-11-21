@@ -118,8 +118,26 @@ Object.assign(window.AQB_DRAWER.methods, {
         },
       ];
       /* P1 迁移段(plan 26-11-04-1042): 数据源 = /api/torrents/{hash} 新增的 relocate 投影。
-       * 无 job 时**整段不渲染** —— 旧 state / 未迁移种子不得出现「已完成」之类误导结论。 */
+       * 无 job 时**整段不渲染** —— 旧 state / 未迁移种子不得出现「已完成」之类误导结论。
+       * foreign(T5, 计划 26-11-20-0434): 外部旧路径种子通知态 —— 专属行集(通知事实面:
+       * 旧路径/数据现位置或已过期/首见), 不出 job 机械面(设置来源/auto-qb 设置/别名/
+       * 武装都是收尾机器的行, 外部种子没有); 降级判据读后端投影 expired 位(评审 minor 6:
+       * 区分位只认后端, 不按 dst 空实重推), 文案走 foreignExpiredText() 单点(nit 9)。 */
       const rel = d.relocate;
+      if (rel && rel.state === "foreign") {
+        out.push({
+          title: "迁移",
+          sum: this.relocateStateText(rel.state),
+          rows: [
+            { icon: "#i-refresh", label: "迁移状态", text: this.relocateStateText(rel.state) },
+            { icon: "#i-folder", label: "旧路径", text: rel.src || "—", wide: true, act: "copy" },
+            { icon: "#i-folder-open", label: "数据现位置", text: rel.expired ? this.foreignExpiredText() : (rel.dst || "—"), wide: true, act: "copy" },
+            { icon: "#i-hash", label: "产出任务", text: rel.job_id || "—", mono: true, wide: true, act: "copy" },
+            { icon: "#i-clock", label: "首见", text: rel.first_seen ? ts(rel.first_seen) : "—" },
+          ],
+        });
+        return out;
+      }
       if (rel) {
         out.push({
           title: "迁移",

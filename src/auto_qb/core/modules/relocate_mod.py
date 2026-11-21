@@ -120,6 +120,11 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, ForeignMixin, BaseMod
         self._foreign_sync_epoch: Optional[int] = None
         self._foreign_reconnect_round: Optional[int] = None
         self._foreign_window: Optional[frozenset] = None
+        # 已通知账的只读发布视图(T5/S5, 计划 26-11-20-0434): WebUI「旧路径外部种子」呈现面的
+        # 数据出口(foreign_notified_view; 仿 _snapshot 的发布模式 —— 主循环单写线程在每拍
+        # 侦测面尾部整表重建, 内容不变不换代, 变化时 mark_dirty(full) 让 Web 视图重建;
+        # Web 线程只读本引用不碰 state.data 活账)。初值空映射 = 正常「无条目」态。
+        self._foreign_view: Any = MappingProxyType({})
 
     def sections(self) -> tuple:
         # relocate 整段(bt_backup 已收编为 relocate.bt_backup, 计划 26-11-11-0259 S1)由本模块

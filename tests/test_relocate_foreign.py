@@ -1,12 +1,17 @@
-"""外部旧路径种子侦测与场景 A 纳入面(ForeignMixin, 计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入)
+"""外部旧路径种子侦测与处置面(ForeignMixin, 计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入, T5/S5 场景 B 通知)
 
 侦测 = 每拍消费同步层原始 added 差集(store.last_added_diff, T1 批地基: 未过 tracker 匹配门)
 + 四时机全量兜底(启动首轮 / job arm / foreign_torrent 翻 true / qB 重连首轮), 无周期兜底(D13)。
 候选 = save_path 归一恰等活跃 job 旧根(场景 A)或终态账 done 直连边旧根(场景 B); 命中后
 比对文件清单(D4, 单点复用 _file_map/_plan_files 口径), **一致才记账分类, 不一致只告警**。
 场景 A 接缝(T3)= 零破坏纳入收尾: job.hashes 追加 + 收尾窗读-改-写 spec.members(journal
-零写)+ pre-armed 暂停挂恢复账(D10)+ pending_tag 增量补打; 场景 B 接缝仍空操作(T5 落点)。
-已通知账记 state relocate.foreign.notified(种子消失清理), 单拍处理有界 FIFO(R4)。
+零写)+ pre-armed 暂停挂恢复账(D10)+ pending_tag 增量补打。
+场景 B 接缝(T5)= 只通知(D8): 清单一致命中即 WARNING(D14, 文案钉 旧路径/数据现位置/种子名
+/hash 短形/手动处置指引), 重复命中零重复告警(notified 账去重); R7「映射已过期」= 重解析
+失败 + kind=B 条目在账 -> 降级文案 + 条目 location 置空(去重位 + 呈现层「已过期」信号面),
+首次命中即解析失败按「从来不是旧根」口径静默。
+已通知账记 state relocate.foreign.notified(种子消失清理), 单拍处理有界 FIFO(R4);
+WebUI 呈现出口 = foreign_notified_view 只读发布视图(内容不变不换代, 变化 mark_dirty(full))。
 
 环境口径: 裸 RelocateModule(仿 relocate_exec_support._bare_mod)+ 真 TorrentStore —— 差集
 语义(基线轮不算/first-seen/零变化轮清空)由 test_sync.py 的 S2a 五测承重, 本文件只消费。
@@ -36,6 +41,26 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
 - test_foreign_scenario_b_location_and_state_shape: 场景 B 分类正确(直连边现位置入账);
   notified 条目形状 = root/kind/job_id/phase/location/first_seen(容器 relocate.foreign.notified,
   T5 面板直接消费不改结构)
+
+场景 B 通知面(T5/S5):
+
+- test_scenario_b_notification_warning_and_dedup: 清单一致命中即 WARNING(D14)—— 文案钉
+  种子名/hash 短形/旧路径/数据现位置/手动处置指引(D8 零自动动作); 重复拍 + 全量兜底扫
+  不产生第二条场景 B WARNING(notified 账去重), 账条目不重复
+- test_scenario_b_expired_mapping_warning_and_dedup: R7 —— kind=B 条目在账 + 终态账滚动
+  (del done job)后重加(差集重入) -> WARNING 含「映射已过期」+ 条目 location 置空;
+  同 hash 再次重加不重复告警(空 location = 去重位); 结构不变(键集钉扎)
+- test_scenario_b_readd_other_path_no_expired_false_alarm: 重加路径守卫(评审 major 1)——
+  同 hash 落非旧根位置重加(按文案指引照现位置重加) -> 静默出队, 不误报已过期,
+  location 不被置空
+- test_scenario_b_expired_location_restored_on_new_edge: 空位回填(评审 minor 3)—— 置空后
+  新 done job 重建同根边, 重加解析成功 -> 静默回填新现位置且零重复告警
+- test_scenario_b_first_hit_resolve_fail_silent: 首次命中即解析失败(条目已随种子消失清理)
+  -> 静默出队, 无告警无记账(「从来不是旧根」口径, D2 判据面不可区分)
+- test_foreign_view_published_and_dirty: foreign_notified_view 发布视图 —— 条目形状/字段与
+  账一致; 内容变化才 mark_dirty(full=True, reason=relocate_foreign), 无变化拍零调用;
+  种子消失清理 -> 视图同步; R7 置空 -> 视图同步(location ""); 闸关时视图冻结不炸
+  (foreign_torrent 翻 false 后 on_task_line 视图引用恒稳, 评审 nit 7 关断步)
 - test_foreign_resolve_old_root_picks_newest_done_edge: 旧根反查单点 —— 同根多条 done 按
   updated_at 新->旧取最新; failed 不产边(失败不搬回, 旧根落种合法); 未命中返回 None
 - test_foreign_resolve_closure_chain_two_done_hops: 链式闭包(T4/S4)—— A->B->C 两代 done
@@ -334,7 +359,8 @@ def test_foreign_forms_all_detected():
 
 
 def test_foreign_forms_consistent_list_required():
-    """清单一致才记账; 不一致只 WARNING 恰一次 + mismatch 账; 重复拍不重告; 消失清理; 重现重处理"""
+    """清单一致才记账; 不一致只告警(D4)恰一次 + mismatch 账; 重复拍不重告; 消失清理; 重现重处理
+    (T5: 一致命中自带通知 WARNING, 与 D4 判定面告警分面计数)"""
     mod, store, client = _env()
     _done_job(mod)
     client.files_map["OK"] = _seed(match=True)
@@ -346,20 +372,29 @@ def test_foreign_forms_consistent_list_required():
         ]
     )
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
-        mod.on_task_line()  # 命中: OK 一致记账; MX 不一致只告警
+
+        def _mismatch_n():
+            # D4 判定面文案单点(_foreign_record_mismatch): 只数不一致告警
+            return len([m for m in cap.records if m.levelno == logging.WARNING and "文件清单与 job" in m.getMessage()])
+
+        def _notice_n():
+            # T5 场景 B 通知文案单点(_foreign_on_scenario_b): 只数通知告警
+            return len([m for m in cap.records if m.levelno == logging.WARNING and "旧路径外部种子" in m.getMessage()])
+
+        mod.on_task_line()  # 命中: OK 一致记账 + 通知一次(T5); MX 不一致只告警一次
         notified = mod._state_foreign_notified()
         assert notified["OK"]["kind"] == "B"
         assert notified["MX"]["kind"] == "mismatch"
-        assert _warn_count(cap) == 1
+        assert _mismatch_n() == 1 and _notice_n() == 1
         mod.on_task_line()  # 差集残值重入池: notified 去重, 不重告
-        assert _warn_count(cap) == 1
+        assert _mismatch_n() == 1 and _notice_n() == 1
         old_first_seen = notified["OK"]["first_seen"]
         store.refresh([])  # 种子全部消失
         mod.on_task_line()
         assert "OK" not in notified
         assert "MX" not in notified
         # 重现 = 重新 first-seen 重处理重告警: 原种子带回 -> 条目重现(新 first_seen),
-        # mismatch 再告一次(WARNING +1), 一致种子重记账不重告
+        # mismatch 再告一次(WARNING +1), 一致种子重记账 + 重通知(重现 = 重新 first-seen)
         mod._clock.advance(30.0)
         store.refresh(
             [
@@ -372,7 +407,8 @@ def test_foreign_forms_consistent_list_required():
         assert notified["OK"]["kind"] == "B"
         assert notified["MX"]["kind"] == "mismatch"
         assert notified["OK"]["first_seen"] > old_first_seen  # 新首见时刻(假钟推进过)
-        assert _warn_count(cap) == 2  # 恰再告一次(仅 mismatch; OK 一致面不告警)
+        assert _mismatch_n() == 2  # 恰再告一次(仅 mismatch)
+        assert _notice_n() == 2  # 通知随重现重新首发(消失清理 -> 重新 first-seen 重处理)
 
 
 # ---------- 分类(A/B/继承/成员幂等/反查单点) ----------
@@ -461,6 +497,192 @@ def test_foreign_scenario_b_location_and_state_shape():
     assert isinstance(notified["BX"]["first_seen"], float)  # 挂钟首见时刻(展示用)
     # 容器路径钉扎: state.data["relocate"]["foreign"]["notified"](T5 面板数据源)
     assert mod._ctx.state.data["relocate"]["foreign"]["notified"] is notified
+
+
+# ---------- 场景 B 通知面(T5/S5: 只通知 D8, R7 映射已过期, 发布视图) ----------
+
+
+def _warn_texts(cap):
+    return [m.getMessage() for m in cap.records if m.levelno == logging.WARNING]
+
+
+def test_scenario_b_notification_warning_and_dedup():
+    """场景 B 命中即 WARNING(D14); 重复拍 + 全量兜底扫不重复告警(notified 账去重)"""
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    t = FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)
+    store.refresh([t])
+    with capture_logs() as cap:
+        mod.on_task_line()
+    warns = _warn_texts(cap)
+    # 文案钉扎(D14 面向用户): 种子名 + hash 短形 + 旧路径 + 数据现位置 + 手动处置(D8)
+    assert any("旧路径外部种子" in w and "IYUU-辅种" in w for w in warns), warns
+    assert any("BX" in w and OLD in w and NEW in w for w in warns), warns
+    assert any("手动处置" in w for w in warns), warns
+    n_first = len([w for w in warns if "旧路径外部种子" in w])
+    assert n_first == 1
+    assert mod._state_foreign_notified()["BX"]["kind"] == "B"
+    # 重复拍(种子仍在库, 差集清空): 零新告警零重复记账
+    with capture_logs() as cap2:
+        mod.on_task_line()
+    assert not [w for w in _warn_texts(cap2) if "旧路径外部种子" in w]
+    assert len(mod._state_foreign_notified()) == 1
+    # 全量兜底扫(时机拍同款路径): 在账 hash 幂等跳过, 零新告警
+    with capture_logs() as cap3:
+        mod._foreign_full_scan("test")
+    assert not [w for w in _warn_texts(cap3) if "旧路径外部种子" in w]
+    assert len(mod._state_foreign_notified()) == 1
+
+
+def test_scenario_b_expired_mapping_warning_and_dedup():
+    """R7: kind=B 条目在账 + 映射滚出终态账后重加 -> 「映射已过期」+ location 置空; 去重"""
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    t = FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)
+    store.refresh([t])
+    mod.on_task_line()  # 首次命中: 记账 + WARNING(数据现位置 NEW)
+    assert mod._state_foreign_notified()["BX"]["location"] == NEW
+    del mod._jobs["jd"]  # 终态账滚动(R7): 旧根映射移出
+    # 同拍窗内重加(外部工具删后重加; 不给 cleanup 机会删条目): 差集重入
+    store.refresh([])
+    store.refresh([t])
+    with capture_logs() as cap:
+        mod.on_task_line()
+    warns = _warn_texts(cap)
+    expired = [w for w in warns if "映射已过期" in w]
+    assert len(expired) == 1, warns
+    # root 记的是账面条目值(归一形): 与判定口径一致(通知首告的 hit.old_root 才是原形)
+    assert ru._norm(OLD) in expired[0] and "IYUU-辅种" in expired[0], expired
+    entry = mod._state_foreign_notified()["BX"]
+    assert entry["location"] == ""  # 已过期信号面(呈现层) + 告警去重位
+    assert set(entry) == {"root", "kind", "job_id", "phase", "location", "first_seen"}  # 结构不变
+    assert entry["kind"] == "B" and entry["root"] == ru._norm(OLD)
+    # 再次重加(映射仍不在): 空 location = 去重位, 零重复告警
+    store.refresh([])
+    store.refresh([t])
+    with capture_logs() as cap2:
+        mod.on_task_line()
+    assert not [w for w in _warn_texts(cap2) if "映射已过期" in w]
+
+
+def test_scenario_b_readd_other_path_no_expired_false_alarm():
+    """重加路径守卫(评审 major 1): 同 hash 落非旧根位置重加 -> 静默, 不误报不置空
+
+    用户照首告文案指引「按现位置重新添加」(同 hash 落新位置): 重解析对新路径必然失败
+    (新位置不是任何旧根), 守卫按 save_path 归一 != 账面 root 判定非「映射过期」语义,
+    静默出队 —— 误报会把 location 永久锁空, 面板永远显示已过期。
+    """
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    store.refresh([FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)])
+    mod.on_task_line()  # 首告(location=NEW)
+    entry = mod._state_foreign_notified()["BX"]
+    assert entry["location"] == NEW
+    del mod._jobs["jd"]  # 映射滚出(对旧根已解析不出)
+    t2 = FakeTorrent(hash="BX", name="IYUU-辅种", save_path="R:/elsewhere")  # 照新位置重加
+    client.files_map["BX"] = _seed()
+    store.refresh([])
+    store.refresh([t2])
+    with capture_logs() as cap:
+        mod.on_task_line()
+    assert not [w for w in _warn_texts(cap) if "映射已过期" in w or "旧路径外部种子" in w]
+    assert mod._state_foreign_notified()["BX"]["location"] == NEW  # 不被置空
+
+
+def test_scenario_b_expired_location_restored_on_new_edge():
+    """空位回填(评审 minor 3): 置空后新 done job 重建同根边 -> 静默回填不重告警"""
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    t = FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)
+    store.refresh([t])
+    mod.on_task_line()  # 首告(location=NEW)
+    del mod._jobs["jd"]
+    store.refresh([])
+    store.refresh([t])
+    mod.on_task_line()  # 过期告警 + 置空
+    assert mod._state_foreign_notified()["BX"]["location"] == ""
+    # 新 done job 重建同根边(终态账重新收录映射): 重加解析成功
+    mod._jobs["jd2"] = _job(
+        "jd2", phase=ru.PHASE_DONE, src=OLD, dst="R:/new2", plan={"files": list(PLAN_FILES)}, updated_at=200.0
+    )
+    store.refresh([])
+    store.refresh([t])
+    with capture_logs() as cap:
+        mod.on_task_line()
+    assert not [w for w in _warn_texts(cap) if "映射已过期" in w or "旧路径外部种子" in w], \
+        "回填是数据恢复不是重新告警(同一 hash 不重复告警纪律不变)"
+    assert mod._state_foreign_notified()["BX"]["location"] == "R:/new2"  # 按当前 hit 回填
+
+
+def test_scenario_b_first_hit_resolve_fail_silent():
+    """首次命中即解析失败(条目已随消失清理) -> 静默: 无告警无记账(「从来不是旧根」口径)"""
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    t = FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)
+    store.refresh([t])
+    mod.on_task_line()
+    assert "BX" in mod._state_foreign_notified()
+    del mod._jobs["jd"]  # 映射滚出
+    store.refresh([])  # 种子先消失: cleanup 删条目(重现后无「此前已通知过」信号面)
+    mod.on_task_line()
+    assert "BX" not in mod._state_foreign_notified()
+    store.refresh([t])  # 重加: 差集重入, 解析失败且无条目
+    with capture_logs() as cap:
+        mod.on_task_line()
+    assert not [w for w in _warn_texts(cap) if "映射已过期" in w or "旧路径外部种子" in w]
+    assert "BX" not in mod._state_foreign_notified()  # 不记账(非旧根口径)
+
+
+def test_foreign_view_published_and_dirty():
+    """foreign_notified_view 发布视图: 形状/换代/mark_dirty 单点; 清理与 R7 置空同步"""
+    mod, store, client = _env()
+    dirty = []
+    mod._ctx.web = SimpleNamespace(mark_dirty=lambda full=False, reason="": dirty.append((full, reason)))
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    t = FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)
+    store.refresh([t])
+    mod.on_task_line()
+    view = mod.foreign_notified_view()
+    assert set(view) == {"BX"}
+    entry = view["BX"]
+    assert entry["kind"] == "B" and entry["root"] == ru._norm(OLD) and entry["location"] == NEW
+    assert entry["job_id"] == "jd" and entry["phase"] == "done"
+    assert entry["first_seen"] == mod._state_foreign_notified()["BX"]["first_seen"]
+    assert dirty == [(True, "relocate_foreign")]  # 首次发布: 换代 + 通知 Web 刷视图
+    # 无变化拍: 引用恒稳(不换代), 零 mark_dirty
+    mod.on_task_line()
+    assert mod.foreign_notified_view() is view
+    assert dirty == [(True, "relocate_foreign")]
+    # 种子消失清理 -> 视图同步换代
+    store.refresh([])
+    mod.on_task_line()
+    assert set(mod.foreign_notified_view()) == set()
+    assert dirty == [(True, "relocate_foreign"), (True, "relocate_foreign")]
+    # R7 置空 -> 视图同步(呈现层按空 location 显示已过期)
+    mod._jobs["jd"] = _job(
+        "jd", phase=ru.PHASE_DONE, src=OLD, dst=NEW, plan={"files": list(PLAN_FILES)}, updated_at=100.0
+    )
+    client.files_map["BX"] = _seed()
+    store.refresh([t])
+    mod.on_task_line()  # 重新记账(location=NEW)
+    del mod._jobs["jd"]
+    store.refresh([])
+    store.refresh([t])
+    mod.on_task_line()  # 重解析失败 -> 置空
+    assert mod.foreign_notified_view()["BX"]["location"] == ""
+    assert len(dirty) == 4
+    # 闸关冻结(nit 7): foreign_torrent 翻 false -> 侦测面早退, 发布视图引用恒稳不炸
+    mod._ctx.config.relocate.foreign_torrent = False
+    frozen = mod.foreign_notified_view()
+    mod.on_task_line()
+    assert mod.foreign_notified_view() is frozen
+    assert len(dirty) == 4  # 关断拍零换代零 mark_dirty
 
 
 def test_foreign_resolve_old_root_picks_newest_done_edge():
@@ -775,10 +997,13 @@ def test_foreign_bad_candidate_isolated_and_retained():
         assert set(notified) == {"GOOD"}  # 同拍其它候选不受拖累
         assert notified["GOOD"]["kind"] == "B" and notified["GOOD"]["job_id"] == "jg"
         assert list(mod._foreign_pending) == ["BAD"]  # 坏候选原位留池
-        assert _warn_count(cap) == 1
-        assert any("BAD" in m.getMessage() for m in cap.records if m.levelno == logging.WARNING)
+        # 计数按文案分面(T5 起 GOOD 命中自带通知 WARNING): 护栏告警恰一次 + 通知告警恰一次
+        guard = [m.getMessage() for m in cap.records if m.levelno == logging.WARNING and "处理异常" in m.getMessage()]
+        notice = [m.getMessage() for m in cap.records if m.levelno == logging.WARNING and "旧路径外部种子" in m.getMessage()]
+        assert len(guard) == 1 and any("BAD" in w for w in guard), guard
+        assert len(notice) == 1 and any("GOOD" in w for w in notice), notice
         mod.on_task_line()  # tick3: 留池候选重试, 重复异常转 DEBUG 不重告
-        assert _warn_count(cap) == 1
+        assert _warn_count(cap) == 2  # 零新增(BAD 重复异常转 DEBUG; GOOD 通知不重复)
         assert list(mod._foreign_pending) == ["BAD"]  # 仍留池(账面没修, 每拍重试一次)
 
 

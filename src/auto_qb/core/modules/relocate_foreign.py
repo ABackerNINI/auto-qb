@@ -1,4 +1,4 @@
-"""ForeignMixin: 外部旧路径种子侦测与场景 A 零破坏纳入面(计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入)
+"""ForeignMixin: 外部旧路径种子侦测与处置面(计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入, T5/S5 场景 B 通知)
 
 IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种种子 —— 整组迁移改过路径后,
 这些种子落在旧路径上但不是任何 job 的成员(§02 两类坏法)。本面只做**侦测与分类**:
@@ -35,9 +35,23 @@ IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种
 **场景 A 接缝(T3/S3)= 零破坏纳入收尾**: 追加 job.hashes(_set_job 单点落账)+ 收尾窗
 读-改-写 spec["members"](hash_v1/v2 双 hash, arm_members_of 单点口径; journal 零写 ——
 改写清单 = pending_members(spec, rewrites) 现算, daemon 每窗口现读)+ pre-armed 到达暂停
-挂恢复账(D10: arm 随成员恢复走既有确认账)+ pending_tag 增量补打。纳入后的自动覆盖面
+挂恢复账(D10: arm 随成员恢复走既有 _resume_members/确认账)+ pending_tag 增量补打。纳入后的自动覆盖面
 (核验覆盖/删链门成员豁免/缺文件扫描让路/跳检让路/D16 拦截成员面)实时派生自 job.hashes,
-零额外接线。场景 B 接缝仍为空操作(T5 落点); 清单不一致只告警是判定面动作(D4)。
+零额外接线。
+
+**场景 B 接缝(T5/S5)= 只通知(D8)**: 清单一致命中终态账旧根即 WARNING(D14 呈现面之一,
+经既有 errlog 环进 WebUI 通知面板), 文案含种子名/hash 短形/旧路径(命中根)/数据现位置
+(闭包解析 dst)/处置指引(交用户手动, 本程序零自动动作)。R7「映射已过期」: 重解析失败
+(_foreign_resolve_old_root 返回 None)且该 hash 此前已有 kind=B 条目在账 => WARNING 降级
+「映射已过期」+ 该条目 location 置空(结构不变, 只降值: 呈现层按空 location 显示「已过期」,
+空值同时是本告警的去重位 —— 同 hash 不重复告警); 首次命中即解析失败按「从来不是旧根」
+口径静默出队(判据面与真非旧根不可区分, D2 禁持久账)。
+
+**WebUI 呈现出口(T5)**: 已通知账的只读发布视图 foreign_notified_view()(仿 jobs_snapshot
+的发布模式: 主循环单写线程整表重建, 内容不变不换代; 变化时 mark_dirty(full) 让 Web 视图
+重建), Web 线程只读该发布引用, 不碰 _jobs/state.data 活账。投影单点在 views_relocate.
+foreign_member(kind B/mismatch -> DISPLAY_FOREIGN 标注), 呈现面 = 行标注 + 悬停浮窗 +
+迁移状态筛选档(计数) + 抽屉迁移段, 四处共用同一投影。
 
 线程模型: 全部方法只在主循环线程执行(on_task_line hook, 黄金法则 5), 无新线程、无锁。
 写面: relocate.foreign.notified 容器(仿 _state_jobs 的 setdefault 先例)+ job 账
@@ -47,6 +61,7 @@ dry-run 全关(相位机同口径: state 容器虽是内存账, 侦测面按「�
 on_task_line 的 dry 早退一致)。
 """
 from dataclasses import dataclass, replace
+from types import MappingProxyType
 from typing import Any, Optional
 
 from ...config.models import bt_backup_path_of
@@ -71,10 +86,11 @@ _FOREIGN_PENDING_MAX = 1000
 # 只是把最坏行走成本钉死)。非配置键(解析器内部防线, 与 _FOREIGN_TICK_BUDGET 同形态)。
 _FOREIGN_CLOSURE_MAX_HOPS = 20
 
-# 已通知账的类别取值(kind 字段; T5 WebUI 面板按此分流呈现)
-_KIND_SCENARIO_A = "A"  # 活跃 job 作用域命中(收尾窗内到达; T3 纳入)
-_KIND_SCENARIO_B = "B"  # 终态账旧根命中(收尾完成后到达; T5 通知)
-_KIND_MISMATCH = "mismatch"  # 清单不一致(D4: 只告警不处置)
+# 已通知账的类别取值(kind 字段): 词表单点在 units(FOREIGN_KIND_*, T5 呈现层按同一单点
+# 分流), 本面只留判定用别名 —— 改词值只动 units 一处。
+_KIND_SCENARIO_A = ru.FOREIGN_KIND_A  # 活跃 job 作用域命中(收尾窗内到达; T3 纳入)
+_KIND_SCENARIO_B = ru.FOREIGN_KIND_B  # 终态账旧根命中(收尾完成后到达; T5 通知)
+_KIND_MISMATCH = ru.FOREIGN_KIND_MISMATCH  # 清单不一致(D4: 只告警不处置)
 
 
 @dataclass(frozen=True)
@@ -171,6 +187,7 @@ class ForeignMixin:
             self._foreign_enqueue(h)
         self._foreign_drain()
         self._foreign_cleanup_notified()
+        self._foreign_publish_view()  # T5: 已通知账 -> 只读发布视图(WebUI 呈现出口, 见下)
 
     # ---------- 四时机全量兜底(D12) ----------
 
@@ -393,6 +410,9 @@ class ForeignMixin:
             try:
                 hit = self._foreign_classify(rec)
                 if hit is None:
+                    # R7(T5): 账上有 kind=B 条目 + 重解析失败 = 「映射已过期」告警面; 无条目
+                    # (首次命中即解析失败)按「从来不是旧根」口径静默 —— 判据面不可区分(D2)
+                    self._foreign_notify_expired(rec)
                     self._foreign_pop(h)  # 未命中(入池后旧根已被摘/账面变化): 出队
                     continue
                 if rec.hash in self.relocating_hashes():
@@ -400,6 +420,7 @@ class ForeignMixin:
                     continue
                 notified = self._state_foreign_notified()
                 if rec.hash in notified:
+                    self._foreign_restore_location(notified[rec.hash], hit)  # R7 回填(见方法注)
                     self._foreign_pop(h)  # 已记录: 去重出队
                     continue
                 budget -= 1
@@ -631,14 +652,129 @@ class ForeignMixin:
         logger.info(f"relocate | foreign | job {job_id} 新成员 {h[:8]} 已补打待收尾标签(增量)")
 
     def _foreign_on_scenario_b(self, hit: ForeignHit) -> None:
-        """**场景 B 接缝**(收尾完成后到达的旧路径种子): T5 批落「只通知」
+        """**场景 B 接缝**(收尾完成后到达的旧路径种子): 只通知(计划 S5/D8)
 
-        T5 在此实现(计划 S5): WARNING 日志(含数据现位置或「映射已过期」, R7) + WebUI
-        relocate 面板「旧路径外部种子」列表/计数(数据源 = relocate.foreign.notified 账,
-        结构见 _foreign_record_hit, T5 不要改结构)。**本批(T2)空操作** —— 不得提前实现
-        任何通知动作(清单不一致的 WARNING 属 D4 判定面, 在 _foreign_record_mismatch)。
+        处置 = 全部动作就是一条 WARNING(D8 改判: 无删种/无重加/无跳检/无自动迁移, 处置
+        留给用户), 经既有 errlog 环进 WebUI 通知面板(D14 呈现面之一); 面板的列表/计数走
+        foreign_notified_view 发布视图(见本模块 docstring「WebUI 呈现出口」)。
+
+        文案(D14, 面向用户): 发生了什么(外部工具按旧路径添加、收尾已完成旧路径无数据)+
+        数据在哪(闭包解析现位置)+ 为什么能判定(文件清单一致)+ 怎么办(手动重加/删除,
+        本程序零自动动作)。清单不一致的告警是 D4 判定面动作, 单点在 _foreign_record_mismatch,
+        本接缝只服务清单一致的场景 B; 调用方(_foreign_record_hit)已记 notified 账, 去重与
+        种子消失清理沿用 T2 机制 —— 本方法无账面写, 重复命中不可能二次进入(入账即被
+        _foreign_drain 去重出队), 幂等性由账面单点保证。
         """
-        logger.debug(f"relocate | foreign | 场景 B 接缝(T5 落点): {hit.hash[:8]} 待通知")
+        name = self._foreign_seed_name(hit.hash)
+        logger.warning(
+            f"relocate | foreign | 旧路径外部种子: {name} ({hit.hash[:8]}) —— 外部辅种工具在整组迁移"
+            f"收尾完成后按旧路径添加了这颗种子(文件清单与原任务一致, 场景 B): 旧路径 {hit.old_root} 上"
+            f"已无数据, 数据现位于 {hit.location}(产出 job {hit.job_id}), 该种子因此缺文件不可用。"
+            f"请手动处置: 按现位置重新添加或直接删除; 本程序不做任何自动动作(D8)。"
+        )
+
+    def _foreign_seed_name(self, h: str) -> str:
+        """种子展示名(store 快照 O(1) 读; 缺位回落 hash 短形 —— 通知文案不因快照竞态缺名)"""
+        store = getattr(self._ctx, "store", None) if self._ctx is not None else None
+        rec = store.get(h) if store is not None else None
+        return str(getattr(rec, "name", "") or "") or h[:8]
+
+    def _foreign_notify_expired(self, rec: Any) -> None:
+        """R7「映射已过期」告警面(T5): 重解析失败 + 账上有 kind=B 条目 => 降级文案
+
+        触发面 = 已通知 hash 经 added 差集重入候选池(外部工具删后重加), 此时终态账滚动已把
+        当年的 src->dst 边移出(_FOREIGN_CLOSURE_MAX_HOPS/DONE_HISTORY_KEEP 之外的 R7 形态),
+        _foreign_classify 解析不出 -> None —— 本方法在出队前拦截: 有 kind=B 条目即告警,
+        无条目(首次命中即解析失败/条目已随种子消失清理)按「从来不是旧根」口径静默(判据面
+        与真非旧根不可区分, D2 禁持久账; 全量兜底扫对在账 hash 天然跳过, 时机扫不重入,
+        本面结构上只可能由真实重加事件触发)。
+
+        **重加路径守卫**(评审 major 1): 只认 save_path 归一恰等账面 root(记录旧根)的重加
+        —— 用户照文案指引「按现位置重新添加」(同 hash 落新位置)不落旧根, 与「映射过期」
+        语义无关, 保持 T5 前的静默出队, 绝不误报更不置空 location(置空是一次性锁存, 误锁
+        面板永远显示已过期)。守卫在去重位判定之前: 非旧根重加连「已告警过」的短路都不进。
+
+        告警去重(黄金法则 1): 告警同时把该条目 location 置空(结构不变, 只降值) —— 空值
+        双重身份: (a) 呈现层「已过期」信号面(views_relocate.foreign_member 的 expired 位,
+        浮窗/抽屉显示「映射已过期」); (b) 本告警的去重位 —— location 已空的条目不再重复
+        告警, 同 hash 恒只告警一次(与「同一 hash 不重复告警」的 notified 账去重同纪律);
+        空位可逆 —— 映射重新可解析时经 _foreign_restore_location 回填(minor 3)。
+        不新增任何持久账(R7/D2 拍板): 降级信息只落既有条目的既有字段。
+        """
+        notified = self._state_foreign_notified()
+        entry = notified.get(rec.hash)
+        if not isinstance(entry, dict) or entry.get("kind") != _KIND_SCENARIO_B:
+            return
+        if ru._norm(getattr(rec, "save_path", "") or "") != str(entry.get("root") or ""):
+            return  # 重加不在记录旧根上(按现位置重加等): 非「映射过期」语义, 静默不置空
+        if not str(entry.get("location") or ""):
+            return  # 已置空(告警过): 去重, 同 hash 不重复告警
+        old_root = str(entry.get("root") or "")
+        logger.warning(
+            f"relocate | foreign | 旧路径外部种子映射已过期: {self._foreign_seed_name(rec.hash)} "
+            f"({rec.hash[:8]}) —— 此前已通知过数据现位置(旧路径 {old_root}), 该映射已随终态账滚动移出, "
+            f"现位置无法再解析。种子按旧路径添加仍缺文件, 请按记忆中的新位置手动重加或删除; "
+            f"本程序不做任何自动动作(D8)。"
+        )
+        entry["location"] = ""
+
+    def _foreign_restore_location(self, entry: Any, hit: ForeignHit) -> None:
+        """R7 空位回填(minor 3): location 已锁空的 kind=B 条目, 重解析成功即静默回填
+
+        去重分支的消费面(重加事件唯一入口; 种子在库期间无差集不重处理, 回填天然只在
+        重加拍发生): 置空是一次性锁存但**可逆** —— 新 done job 重建同根边后(终态账重新
+        收录映射), 同 hash 重加解析成功, 按当前 hit 恢复数据(不重告警: 「同一 hash 不重复
+        告警」纪律不变, 呈现层换代经发布视图自然带出)。只在 kind=B 自家 hit 上回填:
+        场景 A hit(活跃 job 旧根)不回填 —— 去重分支「已记录即出队」, 该种子不进纳入
+        (不会经 _foreign_record_hit 转正为成员, 在账 hash 也天然不进四时机全量兜底重扫),
+        B 条目保持可见不遮蔽; 不回填只因活跃 job 的 dst 未核验(核验过了才有 done 边),
+        提前写入即谎报数据位置。
+        """
+        if not isinstance(entry, dict) or entry.get("kind") != _KIND_SCENARIO_B:
+            return
+        if str(entry.get("location") or "") or hit.scenario != _KIND_SCENARIO_B or not hit.location:
+            return  # 有位置无需回填 / 非场景 B hit / hit 无位置: 静默
+        entry["location"] = hit.location
+
+    # ---------- WebUI 呈现出口(T5/S5: 已通知账的只读发布视图) ----------
+
+    def foreign_notified_view(self) -> Any:
+        """已通知账的**只读发布视图**(WebUI 消费; 形状 hash -> 条目只读映射)
+
+        仿 jobs_snapshot 的发布模式(D14 数据出口 = relocate 面板既有模式): 主循环单写线程
+        在每拍侦测面尾部整表重建(_foreign_publish_view), 内容不变不换代(引用恒稳, Web 线程
+        任意时刻读到的都是完整一致的快照); Web 线程只读本 getter, 不碰 state.data 活账
+        (视图重建可能发生在 Web 线程, 与 jobs_snapshot 同一纪律)。relocate 模块缺位/
+        闸门关时返回上次发布值(呈现面由 relocate.enabled 门控收口)。
+        """
+        return self._foreign_view
+
+    def _foreign_publish_view(self) -> None:
+        """发布视图整表重建(每拍调用; 内容相等零动作, 变化才换代 + 通知 Web 刷视图)"""
+        notified = self._state_foreign_notified()
+        store = getattr(self._ctx, "store", None)
+        published: dict = {}
+        for h, e in notified.items():
+            if not isinstance(e, dict):
+                continue  # 账面异物防御: 只投影 dict 条目(与 _state_foreign_notified_view 同口径)
+            published[h] = MappingProxyType(
+                {
+                    "root": str(e.get("root") or ""),
+                    "kind": str(e.get("kind") or ""),
+                    "job_id": str(e.get("job_id") or ""),
+                    "phase": str(e.get("phase") or ""),
+                    "location": str(e.get("location") or ""),
+                    "first_seen": float(e.get("first_seen") or 0.0),
+                }
+            )
+        view = MappingProxyType(published)
+        if view == self._foreign_view:
+            return  # 内容相等不换代: 同拍重复发布/无变化拍不让 Web 重建(_publish_snapshot 同判)
+        self._foreign_view = view
+        web = getattr(self._ctx, "web", None) if self._ctx is not None else None
+        mark_dirty = getattr(web, "mark_dirty", None)
+        if callable(mark_dirty):
+            mark_dirty(full=True, reason="relocate_foreign")
 
     # ---------- state 账面 ----------
 

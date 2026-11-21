@@ -11,11 +11,13 @@
  *   relocateView(row)(decorate.js 单点), 组装/渲染**不发任何请求** —— /api/relocate_chain 深探测
  *   仍只在链浮窗按需触发(relChain), 渲染期零触盘零请求(P0 纪律)。唯一例外是 relPopClearHistory
  *   (S3 D3/D5 清空迁移历史): 显式点击才发的用户动作, 不破渲染期零请求(见方法注)。
- * !触发判据: relocateView(row) 非 null(即 state ∈ {moving, pending_finalize, failed, mixed}),
- *   或终态窄放行谓词 _relPopTerminalGate(row) 通过(done / cancelled 且 relocateResumeText 非空
- *   —— 终态残留的恢复账余量行给浮窗入口, 判据与抽屉迁移段同一单点; issue 26-11-15-0345,
- *   plan 26-11-15-0914 S3 D5/D11)。无标注行悬停无响应; 行内「不出已完成结论」的展示边界一条
- *   不动(RELOCATE_TONE / 行内着色零触碰, done/cancelled 行内仍单排正常色)。
+ * !触发判据: relocateView(row) 非 null(即 state ∈ {moving, pending_finalize, failed, mixed,
+ *   foreign} —— foreign 是 T5 外部旧路径种子通知态, 专属块见 assembleRelPop; 计划
+ *   26-11-20-0434), 或终态窄放行谓词 _relPopTerminalGate(row) 通过(done / cancelled 且
+ *   relocateResumeText 非空 —— 终态残留的恢复账余量行给浮窗入口, 判据与抽屉迁移段同一
+ *   单点; issue 26-11-15-0345, plan 26-11-15-0914 S3 D5/D11)。无标注行悬停无响应;
+ *   行内「不出已完成结论」的展示边界一条不动(RELOCATE_TONE / 行内着色零触碰,
+ *   done/cancelled 行内仍单排正常色)。
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_RELOCATE_POP);
  *   消费的 relocateView / relocateStateText / relocateOriginText / fmtRelTime 都经 this 调
@@ -156,9 +158,29 @@ window.AQB_RELOCATE_POP = {
       }
       const rel = row.relocate;
       const isGroup = !!row.members;
+      /* foreign(T5, 计划 26-11-20-0434): 外部旧路径种子通知态 —— 专属路径块(旧路径 +
+       * 数据现位置)与「首见」kv, 不出 job 机械面(相位/别名/待恢复/来源/更新都是收尾机器
+       * 的行, 外部种子没有)。组行 dst 是数组(组级聚合): 非 null 成员逐项给「数据现位置」,
+       * 与紧邻 one 回落分支同构 —— 全空/空数组才落已过期文案(评审 minor 5: [] || fallback
+       * 恒真会把全过期组渲染成空值)。降级判据读后端投影 expired 位(评审 minor 6: 区分位
+       * 只认后端, 不按 dst 空实重推, 与 resume_exhausted 先例同口径), 文案走
+       * foreignExpiredText() 单点(评审 nit 9)。 */
+      const isForeign = rel.state === "foreign";
       /* 路径块: pair = 当前位置/目标位置各一行; one = 按数据在就给(组行 dst 是数组) */
       const paths = [];
-      if (view.mode === "pair") {
+      if (isForeign) {
+        if (rel.src) paths.push(["旧路径", rel.src]);
+        const locs = (isGroup ? (rel.dst || []) : [rel.dst]).filter((d) => d);
+        /* 降级判据(minor 6): 种子行只认后端 expired 位(真读该位, dst 空实不参与判定 ——
+         * expired=false 且无现位置按「数据在就给」不出行, 不谎报已过期); 组行聚合无该位,
+         * 按评审 minor 5 口径以空数组表达全员过期。文案单点 foreignExpiredText(nit 9)。 */
+        const showExpired = !!rel.expired || (isGroup && !locs.length);
+        if (showExpired) {
+          paths.push(["数据现位置", this.foreignExpiredText()]);
+        } else {
+          for (const d of locs) paths.push(["数据现位置", d]);
+        }
+      } else if (view.mode === "pair") {
         paths.push(["当前位置", rel.src]);
         paths.push(["目标位置", isGroup ? rel.dst[0] : rel.dst]);
       } else if (rel.state === "mixed") {
@@ -168,29 +190,34 @@ window.AQB_RELOCATE_POP = {
         const dsts = isGroup ? (rel.dst || []) : [rel.dst];
         for (const d of dsts) if (d) paths.push(["目标位置", d]);
       }
-      /* kv 行(次序: 成员 -> 别名 -> 待恢复 -> 来源 -> 更新; 值全部行载荷) */
+      /* kv 行(次序: 成员 -> 别名 -> 待恢复 -> 来源 -> 更新; 值全部行载荷; foreign 只给首见) */
       const kv = [];
-      if (isGroup) {
-        if (rel.total > 0) kv.push(["成员", `${rel.pending}/${rel.total} 个成员待收尾`]);
+      if (isForeign) {
+        kv.push(["首见", rel.first_seen ? this.fmtTs(rel.first_seen) : "—"]);
       } else {
-        if (typeof rel.alias_count === "number") {
-          kv.push(["别名", rel.alias_count > 0 ? `链接位 ×${rel.alias_count}` : "—"]);
+        if (isGroup) {
+          if (rel.total > 0) kv.push(["成员", `${rel.pending}/${rel.total} 个成员待收尾`]);
+        } else {
+          if (typeof rel.alias_count === "number") {
+            kv.push(["别名", rel.alias_count > 0 ? `链接位 ×${rel.alias_count}` : "—"]);
+          }
+          const resume = this.relocateResumeText(rel);
+          if (resume) kv.push(["待恢复成员", resume]);
         }
-        const resume = this.relocateResumeText(rel);
-        if (resume) kv.push(["待恢复成员", resume]);
+        if (rel.origin) kv.push(["来源", this.relocateOriginText(rel.origin)]);
+        kv.push(["更新", rel.updated_at ? this.fmtRelTime(rel.updated_at) : "—"]);
       }
-      if (rel.origin) kv.push(["来源", this.relocateOriginText(rel.origin)]);
-      kv.push(["更新", rel.updated_at ? this.fmtRelTime(rel.updated_at) : "—"]);
       const reason = rel.state === "failed" && rel.reason ? `原因: ${rel.reason}` : "";
       return {
         verdict: this.relocateStateText(rel.state),
-        phase: rel.phase || "",
+        phase: isForeign ? "" : (rel.phase || ""),
         tone: view.tone,
         paths,
         kv,
         reason,
         /* 清空历史入口(S3 D3/D5): 终态行才给 —— 失败记录永不自动清, 手动清空是唯一出口;
-         * 在途态不亮(在途账没有清空面, 撤销走行内菜单/抽屉的撤销语义)。 */
+         * 在途态不亮(在途账没有清空面, 撤销走行内菜单/抽屉的撤销语义); foreign 是通知态
+         * 非终态, 不亮。 */
         clearable: REL_TERMINAL_STATES.has(rel.state),
       };
     },

@@ -47,7 +47,7 @@ from .views_common import (
 )
 from .views_episodes import EpisodesMixin
 from .views_group import GroupMixin
-from .views_relocate import member_relocate
+from .views_relocate import foreign_member, member_relocate
 from .views_row import RowMixin
 from .views_search import SearchMixin
 
@@ -115,10 +115,33 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         return getter() if callable(getter) else None
 
     def _relocate_member(self, torrent_hash: str) -> Optional[dict]:
-        """成员/种子页条目的迁移标注(快照 O(1) 查找; 无 job => None)"""
+        """成员/种子页条目的迁移标注(快照 O(1) 查找; 无 job 时回落外部旧路径种子标注)
+
+        外部回落(T5/S5, 计划 26-11-20-0434): 该 hash 不是任何 job 成员但已进外部旧路径
+        通知账(notified, kind B/mismatch)时, 投影出 DISPLAY_FOREIGN 标注 —— 数据出口与
+        job 快照同一模式(relocate 模块 foreign_notified_view 发布视图, 主循环单写线程整表
+        重建, Web 构建期零活账访问)。A 类条目(已纳入收尾)必是 job 成员, job 分支先行命中,
+        不落本回落。
+        """
         snap = self._relocate_snapshot()
         job = snap.job_for(torrent_hash) if snap is not None else None
-        return member_relocate(job, torrent_hash)
+        if job is not None:
+            return member_relocate(job, torrent_hash)
+        return foreign_member(self._foreign_entry(torrent_hash))
+
+    def _foreign_entry(self, torrent_hash: str) -> Optional[dict]:
+        """外部旧路径种子通知账条目(模块发布的只读视图 O(1) 查找; 关/缺位 => None)"""
+        ctx = getattr(self, "ctx", None)
+        conf = getattr(getattr(ctx, "config", None), "relocate", None)
+        if not getattr(conf, "enabled", False):
+            return None
+        mod = getattr(ctx, "relocate", None)
+        getter = getattr(mod, "foreign_notified_view", None)
+        view = getter() if callable(getter) else None
+        # 视图容器/条目 = MappingProxyType(非 dict 子类, isinstance(dict) 判不中): 按鸭子
+        # 取值面读, 替身/缺位一律 None 兜底(呈现面零异常); 条目字段防御在 foreign_member。
+        get = getattr(view, "get", None)
+        return get(torrent_hash) if callable(get) else None
 
     @staticmethod
     def _fetch_tracker_error(rec: TorrentRecord, client) -> Optional[str]:

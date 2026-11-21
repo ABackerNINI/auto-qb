@@ -13,7 +13,9 @@ import { withVm } from './lib/vm.mjs';
  *      verdict = 已完成(词表复用) + 「待恢复成员」kv 在场(穷尽文案「不再补发」, 与抽屉
  *      入口一致) + 中性 tone 替身生效;
  *   2. cancelled 终态无账行(桩 torrents[4]): 门谓词 false -> 不弹(窄放行要求账非空);
- *   3. 无标注行(桩 torrents[5]): 门谓词 false -> 不弹(照旧)。
+ *   3. 无标注行(桩 torrents[6]): 门谓词 false -> 不弹(照旧)。T5 起 torrents[5] 携带
+ *      foreign 通知标注(负向对照已让位 —— 该行现在「弹且 verdict=旧路径外部种子」,
+ *      正向面由 relocate-foreign-notification.spec 承接; 计划 26-11-20-0434)。
  * 负向面 = 即时 DOM 断言(pop 未出现)+ 门谓词 vm 探针(pair-filter.spec 同款 withVm 内部
  * 读数; 谓词无 DOM 之外的取径, 而调度矩阵已由 pytest node 探针 timers 钉死)。
  * 行内边界不动(D11): done/cancelled 行内仍单排正常色 —— done+账行的 save_path 单元格
@@ -62,12 +64,14 @@ for (const skin of SKINS) {
       const pop = page.locator('.relpop');
 
       // 门谓词判别面(vm 内部读数, 无 DOM 取径): done+账 true / cancelled 无账与无标注 false
+      // (m6 = 真无标注对照行 —— m5 自 T5 起携带 foreign 通知标注, 窄放行谓词对它恒 false
+      // 属 foreign 不在终态词集, 但悬停会走 foreign 正向分支弹出, 不再是「不弹」对照)
       await expect.poll(() => withVm(page, `return (() => {
         const m3 = (vm.visibleTorrents || []).find(x => x.hash === '${hashOf(3)}');
         const m4 = (vm.visibleTorrents || []).find(x => x.hash === '${hashOf(4)}');
-        const m5 = (vm.visibleTorrents || []).find(x => x.hash === '${hashOf(5)}');
-        return m3 && m4 && m5
-          ? vm._relPopTerminalGate(m3) && !vm._relPopTerminalGate(m4) && !vm._relPopTerminalGate(m5)
+        const m6 = (vm.visibleTorrents || []).find(x => x.hash === '${hashOf(6)}');
+        return m3 && m4 && m6
+          ? vm._relPopTerminalGate(m3) && !vm._relPopTerminalGate(m4) && !vm._relPopTerminalGate(m6)
           : false;
       })()`)).toBe(true);
 
@@ -97,8 +101,9 @@ for (const skin of SKINS) {
       await cellOf(cancelRow).hover();
       await expect(pop).not.toBeVisible();
 
-      // 3. 无标注行(i=5): 照旧不弹
-      const plainRow = rowOf(page, 5);
+      // 3. 无标注行(i=6): 照旧不弹(T5 起 i=5 携带 foreign 通知标注, 正向面移交
+      //    relocate-foreign-notification.spec)
+      const plainRow = rowOf(page, 6);
       await expect(plainRow).toBeVisible({ timeout: 15_000 });
       await scrollSettle(page, cellOf(plainRow));
       await cellOf(plainRow).hover();

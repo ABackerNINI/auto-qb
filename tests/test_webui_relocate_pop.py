@@ -26,7 +26,11 @@
   (不带「已补发」); 终态窄放行(26-11-15-0345): done/cancelled + 账非空 -> 中性 tone 替身
   组装(verdict 走词表「已完成/已撤销」, 待恢复 kv 走单点, 历史 src/dst 按数据在就给);
   调度面: done+账 调 120ms, done 无账 / 无标注行 relPopEnter 不调度(闸短路), moving 行调
-  120ms、leave 调 160ms 宽限。
+  120ms、leave 调 160ms 宽限; foreign 通知态(T5, 计划 26-11-20-0434): 专属路径块
+  (旧路径/数据现位置, 已过期走降级文案 foreignExpiredText 单点)+ 只给首见 kv(不出相位/
+  别名/来源/更新等 job 机械面), clearable 不亮(通知态非终态); expired 位钉扎(minor 6:
+  dst 空而 expired=false 的谎言行不落降级文案 —— 判据只认后端位); 组行 dst 数组(minor 5:
+  多现位置逐项展开, 全空数组才落降级文案)。
 """
 from __future__ import annotations
 
@@ -204,6 +208,22 @@ const seedDoneResume=assemble({relocate:{state:'done',src:'R:/s',dst:'R:/d',alia
 const seedCancelResume=assemble({relocate:{state:'cancelled',src:'R:/s',dst:'R:/d',alias_count:0,
   resume_pending_count:2,resume_pending_hashes:['HA','HB'],resume_retries:1,resume_exhausted:false,updated_at:999880}});
 const seedNoMark=assemble({relocate:null});
+// foreign(T5, 计划 26-11-20-0434): 外部旧路径种子通知态 —— 旧路径/数据现位置路径块 + 首见
+// kv; 已过期(dst 空位)走降级文案; job 机械面(相位/别名/待恢复/来源/更新)不出
+const foreignHit=assemble({relocate:{state:'foreign',src:'R:/old',dst:'R:/new',phase:'done',
+  job_id:'jd',alias_count:0,origin:'',updated_at:999880,first_seen:999500,expired:false}});
+const foreignExpired=assemble({relocate:{state:'foreign',src:'R:/old',dst:'',phase:'done',
+  job_id:'jd',alias_count:0,origin:'',updated_at:999880,first_seen:999500,expired:true}});
+// expired 位钉扎(评审 minor 6): 判据只认后端位 —— dst 空而 expired=false 的「谎言行」
+// 必须不落降级文案(证明前端真读 expired, 不按 dst 空实重推)
+const foreignLyingNotExpired=assemble({relocate:{state:'foreign',src:'R:/old',dst:'',phase:'done',
+  job_id:'jd',alias_count:0,origin:'',updated_at:999880,first_seen:999500,expired:false}});
+// 组行 dst 数组形态(评审 minor 5): 多现位置逐项展开; 全空数组落降级文案([] || fallback
+// 恒真的旧形态会把全过期组渲染成空值)
+const foreignGrpMulti=assemble({members:[{relocate:null}],
+  relocate:{state:'foreign',src:'R:/old',dst:['R:/a','R:/b'],pending:0,total:2,updated_at:999880}});
+const foreignGrpAllExpired=assemble({members:[{relocate:null}],
+  relocate:{state:'foreign',src:'R:/old',dst:[],pending:0,total:2,updated_at:999880}});
 // 调度面: done+账(终态窄放行)-> 120; done 无账 / 无标注 -> 闸短路不调度; moving -> 120; leave -> 160
 M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'done',src:'R:/s',dst:'R:/d',
   resume_pending_count:1,resume_pending_hashes:['HA'],resume_retries:3,resume_exhausted:true}});
@@ -213,7 +233,8 @@ M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'moving',src:'R:/s',dst
 M.relPopLeave.call(M);
 process.stdout.write(JSON.stringify({grpPair,grpMixed,seedFail,seedAlias0,seedNoUpd,
   seedResume,seedExhausted,seedMaxRetriesInflight,seedRetries0,seedResumeEmpty,grpResume,
-  seedDoneResume,seedCancelResume,seedNoMark,timers}));
+  seedDoneResume,seedCancelResume,seedNoMark,foreignHit,foreignExpired,foreignLyingNotExpired,
+  foreignGrpMulti,foreignGrpAllExpired,timers}));
 """
 
 
@@ -294,6 +315,32 @@ def test_relocate_pop_assemble_node():
     assert ["待恢复成员", "2 个 · 恢复确认中(已补发 1 次)"] in sc["kv"], \
         "cancelled 在途账同样出待恢复行(单点文案)"
     assert out["seedNoMark"] is None, "无标注行 assembleRelPop 恒 null(双保险不放宽)"
+
+    # foreign(T5, 计划 26-11-20-0434): 通知态专属路径块 + 首见 kv, 不出 job 机械面
+    fh = out["foreignHit"]
+    assert fh["verdict"] == "旧路径外部种子" and fh["tone"] == "foreign"
+    assert fh["phase"] == "", "foreign 不出相位小字(产出 job 相位对用户是噪音)"
+    assert fh["paths"] == [["旧路径", "R:/old"], ["数据现位置", "R:/new"]], \
+        "foreign 路径块 = 旧路径/数据现位置(通知文案的两组关键事实)"
+    assert len(fh["kv"]) == 1 and fh["kv"][0][0] == "首见" and fh["kv"][0][1], \
+        "foreign 只给首见 kv(别名/来源/更新都是收尾机器的行)"
+    assert fh["clearable"] is False, "foreign 是通知态非终态, 清空历史入口不亮"
+    fe = out["foreignExpired"]
+    assert fe["paths"][1] == ["数据现位置", "映射已过期(旧路径映射已随终态账滚动移出)"], \
+        "R7 已过期: 数据现位置行给降级文案(单点 foreignExpiredText, 判据只认后端 expired 位)"
+    assert fe["kv"] == fh["kv"], "已过期首见 kv 同形"
+    # expired 位钉扎(minor 6): dst 空而 expired=false 的谎言行不出降级文案也不出行 ——
+    # 判据只认后端位(数据在就给, 不谎报已过期)
+    fl = out["foreignLyingNotExpired"]
+    assert fl["paths"] == [["旧路径", "R:/old"]], \
+        "判据必须读 expired 位而非 dst 空实重推: expired=false 且无现位置 = 不出行(零噪音)"
+    # 组行 dst 数组(minor 5): 多现位置逐项展开成多行; 全空数组才落降级文案
+    fg = out["foreignGrpMulti"]
+    assert fg["paths"] == [["旧路径", "R:/old"], ["数据现位置", "R:/a"], ["数据现位置", "R:/b"]], \
+        "foreign 组行多现位置必须逐项展开(与 mixed 的目标位置多行同构, 不逗号直拼不渲染空值)"
+    fga = out["foreignGrpAllExpired"]
+    assert fga["paths"][1] == ["数据现位置", "映射已过期(旧路径映射已随终态账滚动移出)"], \
+        "全过期 foreign 组(dst 空数组)必须落降级文案, 不渲染空值"
 
     # 调度面: done+账(窄放行)调 120ms; done 无账/无标注不调度(闸短路); moving 调 120ms, leave 调 160ms
     assert out["timers"] == [120, 120, 160], \
