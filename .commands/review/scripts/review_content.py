@@ -56,10 +56,13 @@ from pathlib import Path
 # 它们的内容不进评审面(否则每笔收尾都会被自己的记账逼出一轮评审)。
 # legacy-review4/ 整目录是 R4 存量评审的 findings/manifest/路线小结 = 被评代码的产物(0441 落点 3/D3),
 # 与 review.lane.verify 的「树净仅该目录内允许落盘」同源; reports/attachments/ 其余件仍是事实性文档, 照旧计行。
+# real-baselines/ 真机复验切片与 baselines/ 同款记账(数字誊写 + 三态记账), 照旧计行只会给评审面加噪声
+# (26-11-21-0639); 增补后同步 commit.py 同源抄本 —— 改一处要改两处(26-11-07-0826 基线 D3/0201 R2 契约)。
 BOOKKEEPING_PREFIXES = (
     "memory-bank/tasks/",
     "memory-bank/active-context/",
     "memory-bank/testing/baselines/",
+    "memory-bank/testing/real-baselines/",
     "memory-bank/reports/attachments/legacy-review4/",
 )
 

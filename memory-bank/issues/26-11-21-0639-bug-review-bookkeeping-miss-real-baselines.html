@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-21-0639">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="review-bookkeeping-miss-real-baselines">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-21-test-review-real-baselines-exclusion.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="review 记账排除面缺 memory-bank/testing/real-baselines/(真机切片被计评审行, 含未跟踪新切片)">
 <meta name="issue-summary" content="review_content.py BOOKKEEPING_PREFIXES 只排除 tasks/active-context/baselines/legacy-review4 四前缀, 真机切片 real-baselines/*.md 照旧计行进评审面 —— 按 code-review skill 口径记账类应机械排除, 每轮真机收尾派评徒增噪声">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· bug</div>
+<div class="kicker">计划外问题（已修）· bug</div>
 <h1>review 记账排除面缺 memory-bank/testing/real-baselines/(真机切片被计评审行, 含未跟踪新切片)</h1>
 <p class="lede">review_content.py BOOKKEEPING_PREFIXES 只排除 tasks/active-context/baselines/legacy-review4 四前缀, 真机切片 real-baselines/*.md 照旧计行进评审面 —— 按 code-review skill 口径记账类应机械排除, 每轮真机收尾派评徒增噪声</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-21-0639-bug-review-bookkeeping-miss-real-baselines</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">review</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -148,11 +148,14 @@ BOOKKEEPING_PREFIXES = (
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-21 06:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-21 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-21 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-21 09:26 仍复现 —— <code>review_content.py</code> 正本与 <code>commit.py</code> 同源抄本两处清单均无 <code>real-baselines</code> 前缀（与取证一致）；<code>memory-bank/testing/real-baselines/</code> 实存 44 份切片。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：照建议修法执行，未改道 —— <code>BOOKKEEPING_PREFIXES</code> 正本（<code>review_content.py</code>）与同源抄本（<code>commit.py</code>）各增一行 <code>"memory-bank/testing/real-baselines/"</code>（「改一处要改两处」契约，26-11-07-0826 基线 D3/0201 R2）；并同步 <code>check_review_trace.py</code> 计数面文档字符串与 <code>test_review_pkg.py</code> 头部测试计划。</p>
+  <p><strong>验证方式与测试数字</strong>：<code>commands run test.pkg</code> 实测 562 passed / 36 subtests（179.0s），其中 <code>test_generated_and_bookkeeping_are_not_counted</code> 新增真机切片排除断言；另直驱共享实现复核：真机切片与全量基线不计行（False）、issues 记录件与真实代码照旧计行（True）、正本==抄本（True）。</p>
 </section>
 
 <footer>

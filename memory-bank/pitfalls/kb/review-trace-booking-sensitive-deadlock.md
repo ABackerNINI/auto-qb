@@ -16,4 +16,6 @@
 
 **现口径(D9, 2026-11-08 大重构)**: 50 行下限退役 —— **可评行数 >0 即须 `Review:` trailer**(实算恒 0 的纯记账/生成物批才静默), 敏感词不再前置短路, 小批带合规 trailer 即可过; trailer 新增必填 `· 基 <12hex>`(review.pack 输出的批基哈希, 评审后有新改动会判红重评)与可选 `· 轮 R`。遗留警觉: 敏感词命中仍会把批次推进分面档/打敏感预警, issue/文档起名仍宜避开六词子串。
 
+**记账类排除面现状(2026-11-21 09:35 补记, issue 26-11-21-0639)**: 清单单点已随判据收编迁到 `.commands/review/scripts/review_content.py`(`commit.py` 存同源抄本, 改一处要改两处), 现含 `tasks/` `active-context/` `testing/baselines/` `testing/real-baselines/`(真机切片, 2026-11-21 增补)与 `reports/attachments/legacy-review4/`; 上方旧机制节的 `activeContext/` 是取证当时的代码原串(b8895a77 抽共享模块时 tuple 里就是它), 后已改 `active-context/` —— 历史快照不回写。
+
 **实例**: 2026-11-08 issues-26-11-08-batch-fix 收尾, `ship.commit --no-push` 连续被旧闸门同一失败行拦三次; 用户指认「code review 技能已更新, 先拉远端」→ rebase 大重构(4cc002a2..42692a37)后按新口径带 `· 基` trailer 过闸。同日两坑复发登记见 `commit-hash-refs.md` / `review-pack-count-vs-gate-count.md` 复发行。

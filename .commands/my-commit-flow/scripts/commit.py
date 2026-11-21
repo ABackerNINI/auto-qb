@@ -87,13 +87,15 @@ from msg_check import check_message_file  # noqa: E402  (提交消息机检, 计
 
 BULK = {"-A", "--all", ".", "*", "-u", "--update"}
 DEFAULT_MESSAGE_REL = Path(".git") / "COMMIT_MSG_AI.txt"
-# 记账类前缀 —— 同源抄自 .commands/review/scripts/check_review_trace.py(跨包不 import, 双处抄用 +
-# 注释互指是既有先例: check_review_trace 的 SENSITIVE_PATH_MARKERS 也与 review_pack.py 同源双抄;
-# 统一 import 单点超出本轮范围, 计划 26-11-07-0201 R2)。漂移后果: 评审边界提示行多打或少打一行, 不判红。
+# 记账类前缀 —— 同源抄自 .commands/review/scripts/review_content.py(排除面实现单点; 初版曾抄自
+# check_review_trace.py, 判据收编进 review_content 后随迁。跨包不 import, 双处抄用 + 注释互指是
+# 既有先例: check_review_trace 的 SENSITIVE_PATH_MARKERS 也与 review_pack.py 同源双抄; 统一 import
+# 单点超出本轮范围, 计划 26-11-07-0201 R2)。漂移后果: 评审边界提示行多打或少打一行, 不判红。
 BOOKKEEPING_PREFIXES = (
     "memory-bank/tasks/",
     "memory-bank/active-context/",
     "memory-bank/testing/baselines/",
+    "memory-bank/testing/real-baselines/",
     "memory-bank/reports/attachments/legacy-review4/",
 )
 
