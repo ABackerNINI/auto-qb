@@ -47,6 +47,60 @@ from ..infra import relocate_journal as rj
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------- daemon 日志落盘(B3-1, 计划 26-11-21-1600, 拍板 D7)
+# 分文件 logs/recycle_daemon.log(与主日志 auto-qb.log 同目录不同文件), INFO, append 无轮转,
+# 路径硬编码非配置键(零新配置键)。风险对策(计划 §07): logging 失败静默降级(best-effort,
+# 与主循环同纪律); 每实例一进程一文件 append 单写; 心跳/退位机制保证至多一个 watcher
+# (pid 抢占机制已排除同实例两 daemon)。
+
+DAEMON_LOG_DIRNAME = "logs"  # 与主日志 auto-qb.log 同目录(<data_dir>/logs/), 分文件
+DAEMON_LOG_FILENAME = "recycle_daemon.log"  # 拍板 D7: 文件名单点, 与 auto-qb.log 分文件
+_LOG_HANDLER_MARK = "_recycle_daemon_log"  # 已挂 handler 标记(只挂一次, 重复调用不叠加)
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
+
+
+def daemon_log_path(data_dir: str) -> str:
+    """daemon 日志路径单点(硬编码派生, 非配置键): <data_dir>/logs/recycle_daemon.log"""
+    return os.path.join(data_dir, DAEMON_LOG_DIRNAME, DAEMON_LOG_FILENAME)
+
+
+def setup_daemon_logging(data_dir: str = "", path: Optional[str] = None) -> Optional[str]:
+    """daemon 进程日志落盘接线(B3-1): FileHandler(INFO, append 无轮转)挂在本模块 logger 上。
+
+    - 只在 daemon 进程入口调用(main())—— 主进程/import 面零影响: 不碰 root logger,
+      只挂本模块 logger(daemon 全部留痕都走本 logger, fastresume/journal 两个依赖模块
+      零 logger 调用), 与主程序日志面(infra.logging.setup_logging)无交集;
+    - handler 只挂一次(_LOG_HANDLER_MARK 哨兵, 重复进 run/重复调用不叠加); 本 logger
+      无级别或缺省有效级别(WARNING)会拦 INFO 时抬到 INFO —— daemon 进程无人 basicConfig,
+      不抬则 INFO 记录到不了 handler;
+    - logs 目录不存在则自建; 建目录/开文件任何失败 => 静默降级返回 None(daemon 节拍
+      不因日志失败中断, best-effort, 计划 §07 风险对策);
+    - path 形参 = 单测替换路径探针(生产走 daemon_log_path(data_dir) 硬编码派生);
+    - 返回挂上的日志文件路径; 已挂过/未给路径/失败 => None。
+    """
+    if path is None:
+        path = daemon_log_path(data_dir) if data_dir else ""
+    for h in logger.handlers:
+        if getattr(h, _LOG_HANDLER_MARK, False):
+            return None  # 只挂一次: 本面 handler 已在位, 不叠加
+    if not path:
+        return None
+    try:
+        log_dir = os.path.dirname(path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        handler = logging.FileHandler(path, mode="a", encoding="utf-8")
+    except Exception:  # noqa: BLE001 - 日志失败静默降级(best-effort, 计划 §07)
+        return None
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    setattr(handler, _LOG_HANDLER_MARK, True)
+    logger.addHandler(handler)
+    if logger.level == logging.NOTSET or logger.level > logging.INFO:
+        logger.setLevel(logging.INFO)
+    return path
+
+
 HEARTBEAT_INTERVAL = 10.0  # daemon.json 心跳周期(D12: 每 10s touch)
 HEARTBEAT_MAX_AGE = 60.0  # 心跳过期线(对账判挂死/重拉的口径, 与旧 guardian 判过期同量级)
 POLL_INTERVAL = 5.0  # 主循环节拍(也是窗口内失败重试的节拍, D8)
@@ -1280,6 +1334,18 @@ def _process_window(
             if obs is not None else _window_open(host, port)
         )
 
+    # 进窗留痕(B3-1 流程行, S4 验收-4「daemon 日志实证进窗路径」): 每个下线窗口会话恰
+    # 一条 —— 事件驱动(调用即一窗, D8 每窗口限一轮会话), 不靠循环频率(黄金法则 1);
+    # 判据来源按开启层变量 obs 标注(非 None = L1 实例级证据即时进窗; None = L2/L3 全机
+    # 口径稳定窗兜底), 成员计数取调用方本拍 scan 现读的 pending 集。
+    _gate = "L1 实例级证据即时" if obs is not None else "L2/L3 全机口径稳定窗"
+    _entry_pending = sum(len(j.get("pending") or ()) for j in jobs)
+    logger.info(
+        f"recycle_daemon | instance {host}:{port}: 进入下线改写窗({_gate})"
+        f"—— 待改写成员 {_entry_pending} 个/{len(jobs)} 个 job"
+    )
+    seen_results: Dict[tuple, str] = {}  # 窗内逐成员结果边沿账(见下: 结果不变的重复拍零输出)
+
     while True:
         now = clock()
         if not owner.beat(now):
@@ -1336,6 +1402,25 @@ def _process_window(
                         "(主源: qB 删种即删; 缺失源不可分辨) —— 跳过改写, 已记 member_gone 收口;"
                         "组账收缩由主循环判定"
                     )
+                elif recorded:
+                    # 逐成员改写结果留痕(B3-1 流程行, S4 验收-4「逐成员改写结果」): 一成员
+                    # 一结果一行(短 hash + 成败/跳过原因)。member_gone 由上方 WARNING 承担
+                    # 不双行; 结果不变的重复拍(失败成员的窗口内重试, D8)零输出 —— 边沿
+                    # 账 seen_results 窗会话级((job_id, mkey) -> status), 新窗口重开自然
+                    # 重置(新会话再改写是新事件, 重报一次); 拒写(recorded=False)路径
+                    # 对账刚收口, 零改写不记行。
+                    _status = str(rec.get("status") or "")
+                    if _status == "rewritten":
+                        _detail = f"改写落盘(双键 {len(rec.get('keys') or [])} 个)—— 等回连核验"
+                    elif _status == "already":
+                        _detail = "已在目标值(幂等收口)"
+                    elif _status == "unmatched":
+                        _detail = "改写无操作(路径键全部未命中旧根, 确定性收口)"
+                    else:
+                        _detail = f"改写失败({rec.get('error')})—— 窗口内随拍重试"
+                    if seen_results.get((job_id, mkey)) != _status:
+                        seen_results[(job_id, mkey)] = _status
+                        logger.info(f"recycle_daemon | job {job_id}: 成员 {mkey[:8]} {_detail}")
                 if not recorded:
                     break  # 拒写 = 对账刚收口: 放弃本 job(下拍 scan 剔除)
         sleep(poll)
@@ -1474,6 +1559,7 @@ def main(argv=None) -> int:
     ap.add_argument("--heartbeat", type=float, default=HEARTBEAT_INTERVAL)
     ap.add_argument("--max-wait", type=float, default=0.0, help="最长运行秒数(0 = 不限)")
     args = ap.parse_args(argv)
+    setup_daemon_logging(args.data_dir)  # B3-1 日志落盘(只在本进程生效, 失败静默降级)
     result = run(
         args.data_dir,
         args.host,

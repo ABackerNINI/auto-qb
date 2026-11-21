@@ -16,6 +16,15 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
 ### journal 镜像合并(_step_reconcile)
 - test_step_reconcile_merges_rewritten_forward: armed + journal rewritten -> 跟进 rewritten; rewritten + 旧 journal 相位 -> 不回退
 - test_step_reconcile_same_journal_phase_no_remerge: 相位一致 -> 不重复落账, 对账照常走完
+### B3 可观测性(计划 26-11-21-1600: B3-2 WAIT 等待提示 / B3-3 rewritten 合并日志)
+- test_step_reconcile_merge_logs_armed_to_rewritten_once: 合并发生 INFO 一条(from->to 相位
+  + 改写账计数)+ journal 透传等待提示步; 合并不发生零合并日志(合并自去重)
+- test_apply_reconcile_wait_hints_info_flip_dedup: 首拍 INFO(qB 态 + pending 数 + 在等什么),
+  状态未变重复拍 DEBUG, 翻转(qB 上下线/pending 收口)再 INFO; WAIT 行为零变化(job/盘账零触碰)
+- test_apply_reconcile_wait_hint_rewritten_phase_variant: rewritten 相位文案变体
+  「改写已落账(pending N) —— 等成员回连后核验收尾」
+- test_apply_reconcile_wait_hint_without_spec_approximates_from_job: spec 不可读降级 ——
+  pending 按 job 账成员对改写账近似(判据同 pending_members), journal 缺省直调自读
 ### journal failed 相位消费(issue 26-11-07-0527 #3: 对账表消费 failed 相位)
 - test_step_reconcile_consumes_failed_journal_to_failed_terminal: 对账读到 journal failed
   (证据可信) => job 转 failed 终态 + 证据原文保留 reason/last_error + journal 终相位不被
@@ -29,6 +38,8 @@ verify 三动作, 判据面 ru.reconcile 纯函数层在 test_relocate_units)与
   常规对账与 daemon 重拉判据(残留不清则再迁移死锁在 armed)
 - test_stale_failed_journal_clear_failure_parks_tick_and_gates_warning: 清账失败
   (r2-finding 2)—— WARNING 限频一次 + 失败拍直接收口(不重评常规表不重拉), 下拍原样重试
+- test_stale_journal_clear_wait_hint_counts_empty_account: 清账成功后同拍重评 ACT_WAIT
+  的等待提示按无账真值计数(内存快照随删除作废, 评审面1 #1)
 - test_reinitiation_after_consumed_failure_reclaims_daemon: 消费支再发起路径 —— 消费转
   终态后重发起同 id 迁移, 新生命周期把上一世失败账判陈旧清掉, daemon 重拉恢复
 ### S3 接线(计划 26-11-05-0808 §3.2/S3: spec 双字段 + ACT_ENSURE_DAEMON, 全替身不起真进程)
@@ -270,6 +281,191 @@ def test_step_reconcile_same_journal_phase_no_remerge(tmp_path):
     assert mod._jobs == {}, "同相位不得重复落账"
 
 
+# ---------------------------------------------------------------- B3 可观测性(计划 26-11-21-1600: B3-2 WAIT 等待提示 / B3-3 合并日志)
+
+
+def test_step_reconcile_merge_logs_armed_to_rewritten_once(tmp_path):
+    """B3-3 rewritten 相位合并日志: 合并发生 => INFO 一条(from->to 相位 + 改写账计数),
+    journal 透传给等待提示步(不重复落盘 I/O); 合并不发生(job 已 rewritten, 旧相位不
+    回退)零合并日志 —— 合并自去重(合并后条件不成立), 不设 rt 门也不刷屏"""
+    rec = types.SimpleNamespace(hash="HA", save_path="R:/src", state="pausedUP")
+    store = types.SimpleNamespace(by_hash={"HA": rec})
+    mod = _bare_mod(store=store, api=types.SimpleNamespace(client=None), data_dir=str(tmp_path))
+    relocate_journal.write_journal(
+        str(tmp_path), "j1", {
+            "phase": ru.PHASE_REWRITTEN,
+            "ts": 1.0,
+            "rewrites": {
+                "HA": {
+                    "status": "rewritten",
+                    "ts": 1.0
+                }
+            }
+        }
+    )
+    note_journal = {}
+    mod._note_finalize_wait = lambda job_, rt_, journal=None: note_journal.setdefault("j", journal)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(_job("j1", phase=ru.PHASE_ARMED), {})
+    assert mod.get_job("j1").phase == ru.PHASE_REWRITTEN, "rewritten 必须合并进 job 镜像"
+    merges = [m for m in cap.messages if "journal 相位合并 armed -> rewritten" in m]
+    assert len(merges) == 1, cap.messages
+    assert "改写账 1 个成员" in merges[0], merges[0]
+    assert isinstance(note_journal.get("j"), dict), "对账已读 journal 必须透传等待提示步"
+
+    # 不发生: job 已 rewritten(journal 旧相位)不回退也不出合并日志
+    mod2 = _bare_mod(store=store, api=types.SimpleNamespace(client=None), data_dir=str(tmp_path))
+    mod2.register_job(_job("j2", phase=ru.PHASE_REWRITTEN))
+    relocate_journal.write_journal(str(tmp_path), "j2", {"phase": ru.PHASE_ARMED, "ts": 2.0})
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod2._step_reconcile(mod2.get_job("j2"), {})
+    assert mod2.get_job("j2").phase == ru.PHASE_REWRITTEN
+    assert not [m for m in cap2.messages if "相位合并" in m], cap2.messages
+
+
+def _wait_hint_env(tmp_path):
+    """B3-2 等待提示用环境: 3 成员 spec + journal 1 个已收口(pending=2)与 armed job"""
+    data_dir = str(tmp_path / "data")
+    mod = _bare_mod(data_dir=data_dir)
+    hashes = ("a" * 40, "b" * 40, "c" * 40)
+    relocate_journal.write_spec(
+        data_dir, "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": list(hashes),
+            "host": "h1",
+            "port": 1234,
+            "bt_backup": "R:/BT_backup",
+            "members": [{
+                "hash_v1": h,
+                "hash_v2": ""
+            } for h in hashes],
+        }
+    )
+    journal = {
+        "phase": ru.PHASE_ARMED,
+        "ts": 1.0,
+        "rewrites": {
+            hashes[0]: {
+                "status": "rewritten",
+                "ts": 1.0
+            }
+        },
+    }
+    relocate_journal.write_journal(data_dir, "j1", dict(journal))
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=hashes)
+    return mod, job, journal, hashes
+
+
+def test_apply_reconcile_wait_hints_info_flip_dedup(tmp_path, monkeypatch):
+    """B3-2 WAIT 等待提示: 首拍 INFO 一条(qB 态 + pending 数 + 在等什么), 状态未变的重复
+    拍只 DEBUG(已提示过); 状态翻转(qB 上下线 / pending 收口)再出一条 INFO; WAIT 行为
+    零变化 —— job/盘账零触碰, 不接 errlog 环/推送(INFO 口径)"""
+    mod, job, journal, hashes = _wait_hint_env(tmp_path)
+    up = {"v": True}
+    monkeypatch.setattr(mod, "_qb_up", lambda: up["v"])
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._apply_reconcile(job, rt, ru.ACT_WAIT, journal=journal)
+        mod._apply_reconcile(job, rt, ru.ACT_WAIT, journal=journal)
+    infos = [r for r in cap.records if r.levelname == "INFO" and "收尾窗等待" in r.getMessage()]
+    assert len(infos) == 1, cap.messages
+    assert "qB 在线" in infos[0].getMessage() and "待改写成员 2 个" in infos[0].getMessage(), infos[0].getMessage()
+    assert "等 qB 下线窗由回收 daemon 改写" in infos[0].getMessage(), infos[0].getMessage()
+    assert infos[0].getMessage().endswith(rt["finalize_wait_hint"]), "去重键 = 完整提示文本"
+    assert any(r.levelname == "DEBUG" and "已提示过" in r.getMessage() for r in cap.records), cap.messages
+
+    # 状态翻转其一: qB 下线 => 新文案再 INFO 一条
+    up["v"] = False
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod._apply_reconcile(job, rt, ru.ACT_WAIT, journal=journal)
+    infos2 = [r for r in cap2.records if r.levelname == "INFO" and "收尾窗等待" in r.getMessage()]
+    assert len(infos2) == 1 and "qB 不在线" in infos2[0].getMessage(), cap2.messages
+
+    # 状态翻转其二: pending 收口(改写账 b 也 settled) => 计数变化再 INFO 一条
+    journal2 = dict(journal)
+    journal2["rewrites"] = {
+        hashes[0]: {
+            "status": "rewritten",
+            "ts": 1.0
+        },
+        hashes[1]: {
+            "status": "rewritten",
+            "ts": 2.0
+        },
+    }
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap3:
+        mod._apply_reconcile(job, rt, ru.ACT_WAIT, journal=journal2)
+    infos3 = [r for r in cap3.records if r.levelname == "INFO" and "收尾窗等待" in r.getMessage()]
+    assert len(infos3) == 1 and "待改写成员 1 个" in infos3[0].getMessage(), cap3.messages
+
+    # WAIT 行为零变化: job 账不动, 盘上 journal 原样
+    assert job.phase == ru.PHASE_ARMED and job.reason == "" and job.last_error == ""
+    on_disk = relocate_journal.read_journal(str(tmp_path / "data"), "j1")
+    assert on_disk["phase"] == ru.PHASE_ARMED
+    assert on_disk["rewrites"][hashes[0]]["status"] == "rewritten"
+    assert set(on_disk["rewrites"]) == {hashes[0]}, "盘账零触碰"
+
+
+def test_apply_reconcile_wait_hint_rewritten_phase_variant(tmp_path, monkeypatch):
+    """B3-2 rewritten 相位文案变体: 「改写已落账(pending N) —— 等成员回连后核验收尾」,
+    与 armed 的「等 qB 下线窗改写」文案区分(与 B3-4 WEBUI 行状态区分面同源, 本步只做日志面)"""
+    data_dir = str(tmp_path / "data")
+    mod = _bare_mod(data_dir=data_dir)
+    hashes = ("a" * 40, "b" * 40)
+    relocate_journal.write_spec(
+        data_dir, "j1", {
+            "job_id": "j1",
+            "src": "R:/src",
+            "dst": "R:/dst",
+            "hashes": list(hashes),
+            "host": "h1",
+            "port": 1234,
+            "bt_backup": "R:/BT_backup",
+            "members": [{
+                "hash_v1": h,
+                "hash_v2": ""
+            } for h in hashes],
+        }
+    )
+    journal = {
+        "phase": ru.PHASE_REWRITTEN,
+        "ts": 2.0,
+        "rewrites": {
+            h: {
+                "status": "rewritten",
+                "ts": 2.0
+            }
+            for h in hashes
+        },
+    }
+    job = _job("j1", phase=ru.PHASE_REWRITTEN, hashes=hashes)
+    monkeypatch.setattr(mod, "_qb_up", lambda: True)
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._apply_reconcile(job, rt, ru.ACT_WAIT, journal=journal)
+    infos = [r for r in cap.records if r.levelname == "INFO" and "收尾窗等待" in r.getMessage()]
+    assert len(infos) == 1, cap.messages
+    assert "qB 在线" in infos[0].getMessage(), infos[0].getMessage()
+    assert "改写已落账(pending 0)" in infos[0].getMessage(), infos[0].getMessage()
+    assert "等成员回连后核验收尾" in infos[0].getMessage(), infos[0].getMessage()
+
+
+def test_apply_reconcile_wait_hint_without_spec_approximates_from_job(tmp_path):
+    """B3-2 spec 不可读(旧链无 spec/撕态)降级口径: pending 按 job 账成员对改写账近似
+    (判据同 pending_members: status 不在 REWRITE_SETTLED 即未收口), 不阻塞提示;
+    journal 形参缺省直调自读(兼容面, 生产路径走透传)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))  # api 替身无 client => qB 判不在线
+    job = _job("j1", phase=ru.PHASE_ARMED, hashes=("a" * 40, "b" * 40))
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._apply_reconcile(job, {}, ru.ACT_WAIT)
+    infos = [r for r in cap.records if r.levelname == "INFO" and "收尾窗等待" in r.getMessage()]
+    assert len(infos) == 1, cap.messages
+    assert "qB 不在线" in infos[0].getMessage(), infos[0].getMessage()
+    assert "待改写成员 2 个" in infos[0].getMessage(), infos[0].getMessage()
+
+
 # ---------------------------------------------------------------- journal failed 相位消费(issue 26-11-07-0527 #3)
 # 收尾校验失败写下的 journal 相位 failed 必须被对账收敛: 消费转 failed 终态(证据保留)/
 # 可疑保守搁置/陈旧残留落回常规表; 三态都不再判 daemon 重拉(STOP_PHASES 扩展后 failed
@@ -386,6 +582,47 @@ def test_stale_failed_journal_cleared_and_daemon_reclaimed(tmp_path):
     # 下一拍: 账已不在, 常规对账照走; 重拉退避生效不重复拉
     mod._step_reconcile(mod.get_job("j1"), rt)
     assert len(spawned) == 1, spawned
+
+
+def test_stale_journal_clear_wait_hint_counts_empty_account(tmp_path):
+    """清账后同拍等待提示按无账真值计数(评审面1 #1): 陈旧 failed 账清掉后重评 ACT_WAIT,
+    提示步拿空账(内存快照随删除作废)—— pending 数 = 全体成员; 透传已删旧账的内存
+    快照会把该拍 pending 按 settled 旧账少算成 0(下一拍才自愈)"""
+    mod, job, _spawned = _failed_journal_env(
+        tmp_path,
+        {
+            "phase": "failed",
+            "reason": "verify_mismatch",
+            "ts": 10.0,
+        },
+        created_at=1000.0,
+        armed_at=0.0,
+    )
+    v1 = job.hashes[0]
+    data_dir = str(tmp_path / "data")
+    # 旧账带 settled 改写账(上一世残留形态): 不置空账则该拍 pending 被少算成 0
+    relocate_journal.write_journal(
+        data_dir, "j1", {
+            "phase": "failed",
+            "reason": "verify_mismatch",
+            "ts": 10.0,
+            "rewrites": {
+                v1: {
+                    "status": "rewritten",
+                    "ts": 9.0
+                }
+            },
+        }
+    )
+    rt = {}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_reconcile(job, rt)
+    assert relocate_journal.read_journal(data_dir, "j1") is None, "陈旧账已删(清账成功支)"
+    saved = mod.get_job("j1")
+    assert saved.phase == ru.PHASE_ARMED and not saved.is_terminal, "清账后按无账现场重评: qB 离线 => WAIT 挂起"
+    hints = [m for m in cap.messages if "收尾窗等待" in m]
+    assert len(hints) == 1, cap.messages
+    assert "待改写成员 1 个" in hints[0], f"空账真值计数(旧账快照会少算成 0): {hints[0]}"
 
 
 def test_stale_failed_journal_clear_failure_parks_tick_and_gates_warning(tmp_path, monkeypatch):

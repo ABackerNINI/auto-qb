@@ -77,7 +77,8 @@ daemon 主体:
 - test_run_preempts_dead_pid_record: 记录 pid 已死 => pid 抢占接管, 后续正常空载 idle
 - test_run_timeout_keeps_pending: max_wait 到点 => timeout, pending 原样(账面零 records),
   daemon.json 按归属释放
-- test_cli_main_timeout_exit_one: CLI timeout 档退出码 1
+- test_cli_main_timeout_exit_one: CLI timeout 档退出码 1 + main() 真装本用例日志文件
+  (接 _daemon_log_probe 清理, 排序无关)
 - test_module_main_entry_exits_with_result_code: python -m 入口结论码经 sys.exit 上抛 + 零 sys.modules 抢先加载告警
 
 覆盖率缺口清偿(26-11-07, test.full 99.31% -> 99.5% 闸):
@@ -309,6 +310,27 @@ sink 类键 obs_listen/obs_roster/obs_owner + 接线点处置类 listen 补齐, 
   跳过, 分隔符/大小写/尾斜杠变体折叠为单根(只 retarget 一次)
 - test_process_window_missing_fastresume_warns_member_gone: 窗口改写 —— fastresume 缺失按
   member_gone 收口且 WARNING 落日志(不失败不重试)
+
+daemon 日志落盘(B3-1, 计划 26-11-21-1600 D7):
+- test_daemon_log_path_is_hardcoded_sibling_file: 路径单点硬编码派生 <data_dir>/logs/
+  recycle_daemon.log(与主日志 auto-qb.log 同目录分文件, 零配置键)
+- test_setup_daemon_logging_creates_dir_attaches_info_handler: 注入路径探针 —— logs 目录
+  自建 + FileHandler 形制(非 Rotating/mode=a/级别 INFO/本面标记/logger 抬 INFO)+
+  INFO 落盘 DEBUG 被档
+- test_setup_daemon_logging_appends_preserving_content: append 行为面(预置内容不截断,
+  新记录追加其后)
+- test_setup_daemon_logging_attaches_only_once: 只挂一次(哨兵标记, 二次调用换路径不叠加)
+- test_setup_daemon_logging_failure_degrades_silently: 失败静默降级(建目录炸/开文件炸
+  => None 不抛, 零 handler/级别残留)
+- test_cli_main_installs_daemon_log_file: main() 入口真装(空载 idle 退出后日志文件已在)
+
+daemon 流程 INFO 行(B3-1 补齐, S4 验收-4: 进窗路径 + 逐成员改写结果, 事件驱动):
+- test_process_window_entry_logs_gate_and_pending: 进窗留痕 —— 一个窗口会话恰一条 INFO
+  (判据来源按开启层 obs 标注 L1 即时/L2-L3 稳定窗 + pending 计数), 窗内多拍不重复出线
+- test_process_window_member_result_logs_edge_dedup: 逐成员改写结果 INFO(短 hash + 成败
+  原因), rewritten/already/unmatched 三态文案各钉一条; 窗内结果不变的重复拍(失败 D8
+  重试)零输出边沿去重; member_gone 走既有 WARNING 恰一条且零结果 INFO 行(不双行);
+  进窗行全程恰一条
 """
 import builtins
 import io
@@ -324,6 +346,8 @@ from auto_qb.core import fastresume as frmod
 from auto_qb.hr.bencode import compute_infohashes
 from auto_qb.infra import relocate_journal as rj
 from auto_qb.tools import recycle_daemon as rd
+
+from helpers import capture_logs
 
 HOST = "127.0.0.1"
 PORT = 36596
@@ -828,7 +852,9 @@ def test_run_grace_exit_after_idle_period(tmp_path, monkeypatch):
     assert rj.read_daemon_state(data_dir, rj.instance_key(HOST, PORT)) is None
 
 
-def test_cli_main_idle_exit_zero(tmp_path, capsys):
+def test_cli_main_idle_exit_zero(tmp_path, capsys, _daemon_log_probe):
+    """CLI 入口空载 idle 退出码 0; main() 真装接 _daemon_log_probe 清理(评审面2 #3:
+    不给共享 logger 留进程级 handler/级别泄漏, 且保证哨兵不在位真装)"""
     data_dir = str(tmp_path / "data")
     code = rd.main(["--data-dir", data_dir, "--host", HOST, "--port", str(PORT), "--grace", "0", "--poll", "0"])
     assert code == 0
@@ -836,7 +862,9 @@ def test_cli_main_idle_exit_zero(tmp_path, capsys):
     assert "idle" in out and HOST in out
 
 
-def test_cli_main_timeout_exit_one(tmp_path, monkeypatch, capsys):
+def test_cli_main_timeout_exit_one(tmp_path, monkeypatch, capsys, _daemon_log_probe):
+    """CLI timeout 档退出码 1; 接 _daemon_log_probe 清理(评审面2 #3)—— 哨兵先摘,
+    本用例的 main() 真装自己的 data_dir 日志文件(排序无关), 并断言文件已在"""
     tmp_path.joinpath("src").mkdir()
     tmp_path.joinpath("dst").mkdir()
     backup = tmp_path / "BT_backup"
@@ -849,9 +877,130 @@ def test_cli_main_timeout_exit_one(tmp_path, monkeypatch, capsys):
     code = rd.main(["--data-dir", data_dir, "--host", HOST, "--port", str(PORT), "--poll", "0", "--max-wait", "20"])
     assert code == 1, "timeout 档退出码 1"
     assert "timeout" in capsys.readouterr().out
+    assert Path(data_dir, "logs", "recycle_daemon.log").exists(), "main() 真装本用例的日志文件(非被哨兵静默跳装)"
 
 
-def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch, recwarn):
+# ---------------------------------------------------------------------------
+# daemon 日志落盘(B3-1, 计划 26-11-21-1600 D7: 分文件 logs/recycle_daemon.log, INFO,
+# append 无轮转, 路径硬编码非配置键; 失败静默降级)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _daemon_log_probe():
+    """setup_daemon_logging 守阵的 logger 面隔离: 先摘既有本面 handler 并把 logger 级别
+    复位 NOTSET(main() 用例会在 session 内先行真装并抬级别), 用毕移除本用例挂上的
+    handler 并还原进场合的级别 —— 对 root handlers/级别与邻居用例零依赖
+    (坑档 testing/log-capture.md 纪律)。"""
+    lg = logging.getLogger("auto_qb.tools.recycle_daemon")
+    for h in [h for h in lg.handlers if getattr(h, rd._LOG_HANDLER_MARK, False)]:
+        lg.removeHandler(h)
+    old_level = lg.level
+    lg.setLevel(logging.NOTSET)
+    yield lg
+    for h in [h for h in lg.handlers if getattr(h, rd._LOG_HANDLER_MARK, False)]:
+        h.close()
+        lg.removeHandler(h)
+    lg.setLevel(old_level)
+
+
+def test_daemon_log_path_is_hardcoded_sibling_file():
+    """路径单点硬编码派生(拍板 D7): <data_dir>/logs/recycle_daemon.log —— 与主日志
+    auto-qb.log 同目录分文件, 无任何参数化/配置口(零新配置键)"""
+    assert rd.daemon_log_path("D:/x/data") == os.path.join("D:/x/data", "logs", "recycle_daemon.log")
+    assert rd.DAEMON_LOG_FILENAME == "recycle_daemon.log"
+    assert rd.DAEMON_LOG_FILENAME != "auto-qb.log", "必须与主日志分文件"
+
+
+def test_setup_daemon_logging_creates_dir_attaches_info_handler(tmp_path, _daemon_log_probe):
+    """注入路径探针: logs 目录自建(父级全缺也不成障碍)+ FileHandler 形制(非 Rotating,
+    append 模式, 级别 INFO, 本面标记)+ logger 抬 INFO; INFO 记录落盘、DEBUG 被档"""
+    probe = str(tmp_path / "fresh" / "logs" / "recycle_daemon.log")
+    probe_path = Path(probe)
+    lg = _daemon_log_probe
+
+    ret = rd.setup_daemon_logging(path=probe)
+    assert ret == probe, "返回挂上的日志路径"
+    assert probe_path.parent.is_dir() and probe_path.exists(), "logs 目录自建 + 文件就位"
+    marked = [h for h in lg.handlers if getattr(h, rd._LOG_HANDLER_MARK, False)]
+    assert len(marked) == 1, marked
+    h = marked[0]
+    assert type(h) is logging.FileHandler, "无轮转(普通 FileHandler, 非 RotatingFileHandler 子类)"
+    assert h.mode == "a", "append 模式"
+    assert Path(h.baseFilename) == probe_path, "探针路径"
+    assert h.level == logging.INFO, "handler 级别 INFO"
+    assert lg.level == logging.INFO, "logger 级别抬到 INFO(daemon 进程无人 basicConfig, 不抬 INFO 到不了 handler)"
+
+    with capture_logs("auto_qb.tools.recycle_daemon", level=logging.DEBUG) as cap:
+        lg.info("b3-info-lands-in-file")
+        lg.debug("b3-debug-filtered")
+    assert any(r.levelname == "INFO" and "b3-info-lands-in-file" in r.getMessage() for r in cap.records), cap.records
+    body = probe_path.read_text(encoding="utf-8")
+    assert "b3-info-lands-in-file" in body, "INFO 记录落盘"
+    assert "b3-debug-filtered" not in body, "DEBUG 被 handler 级别档住"
+
+
+def test_setup_daemon_logging_appends_preserving_content(tmp_path, _daemon_log_probe):
+    """append 模式行为面: 预置内容的既有日志文件再挂载 => 不截断, 新 INFO 追加其后"""
+    probe_path = tmp_path / "logs" / "recycle_daemon.log"
+    probe_path.parent.mkdir(parents=True)
+    probe_path.write_text("pre-existing line\n", encoding="utf-8")
+    probe = str(probe_path)
+
+    assert rd.setup_daemon_logging(path=probe) == probe
+    _daemon_log_probe.info("b3-appended-line")
+    body = probe_path.read_text(encoding="utf-8")
+    assert "pre-existing line" in body, "append 不截断预置内容"
+    assert "b3-appended-line" in body, "新记录追加其后"
+
+
+def test_setup_daemon_logging_attaches_only_once(tmp_path, _daemon_log_probe):
+    """只挂一次(_LOG_HANDLER_MARK 哨兵): 二次调用(换路径)不叠加 —— 首个 handler 原样,
+    返回 None(重复进 run/重复调用都零叠加)"""
+    lg = _daemon_log_probe
+    first = str(tmp_path / "one" / "recycle_daemon.log")
+    second = str(tmp_path / "two" / "recycle_daemon.log")
+    assert rd.setup_daemon_logging(path=first) == first
+    assert rd.setup_daemon_logging(path=second) is None, "已挂过 => None 不叠加"
+    marked = [h for h in lg.handlers if getattr(h, rd._LOG_HANDLER_MARK, False)]
+    assert len(marked) == 1
+    assert Path(marked[0].baseFilename) == Path(first), "保持首个挂载"
+
+
+def test_setup_daemon_logging_failure_degrades_silently(tmp_path, _daemon_log_probe, monkeypatch):
+    """失败静默降级(计划 §07 best-effort): 建目录炸 / 开文件炸 => 返回 None 不抛,
+    daemon 节拍不因日志失败中断, logger 上零 handler 残留"""
+    lg = _daemon_log_probe
+
+    def _boom_makedirs(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(rd.os, "makedirs", _boom_makedirs)
+    assert rd.setup_daemon_logging(path=str(tmp_path / "x" / "recycle_daemon.log")) is None
+    monkeypatch.undo()
+
+    def _boom_filehandler(*a, **k):
+        raise OSError("handle held")
+
+    monkeypatch.setattr(rd.logging, "FileHandler", _boom_filehandler)
+    assert rd.setup_daemon_logging(path=str(tmp_path / "y" / "recycle_daemon.log")) is None
+    monkeypatch.undo()
+    assert [h for h in lg.handlers if getattr(h, rd._LOG_HANDLER_MARK, False)] == [], "失败零 handler 残留"
+    assert lg.level == logging.NOTSET, "失败不抬级别(降级面零残留)"
+
+
+def test_cli_main_installs_daemon_log_file(tmp_path, capsys, _daemon_log_probe):
+    """main() 入口真装(B3-1 接线): CLI 跑完空载 idle 退出, <data_dir>/logs/recycle_daemon.log
+    已生成(本进程内生效; 失败静默降级不阻退出)"""
+    data_dir = str(tmp_path / "data")
+    code = rd.main(["--data-dir", data_dir, "--host", HOST, "--port", str(PORT), "--grace", "0", "--poll", "0"])
+    assert code == 0
+    assert Path(data_dir, "logs", "recycle_daemon.log").exists(), "main() 入口装上日志文件"
+    out = capsys.readouterr().out
+    assert "idle" in out
+
+
+def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch, recwarn, _daemon_log_probe):
     """python -m 入口: main() 结论码经 sys.exit 上抛(空载 idle 档退出码 0)
 
     文件级 `from auto_qb.tools import recycle_daemon as rd` 已让目标模块先入 sys.modules,
@@ -859,6 +1008,7 @@ def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch, recwarn
     behaviour')。按 `python -m` 的首次执行语义, 运行前摘掉该条目(monkeypatch 在 teardown
     自动还原), warning 根因消除且入口仍真跑一遍; 包属性仍指向原模块, 其余用例的 rd 不受影响。
     recwarn 断言把「零告警」钉成守阵 —— 删掉 delitem 即回归判红(红验已验)。
+    接 _daemon_log_probe 清理(评审面2 #3): main() 真装的进程级 handler/级别不泄给邻居。
     """
     import runpy
     import sys
@@ -3798,3 +3948,160 @@ def test_process_window_missing_fastresume_warns_member_gone(tmp_path, monkeypat
     assert rj.read_rewrites(data_dir, "j1")["0" * 40]["status"] == rj.REWRITE_MEMBER_GONE
     # R4 留痕: member_gone 收口伴随 WARNING(recycle_daemon.py 窗口段文案钉扎)
     assert any("fastresume 已缺失" in r.message for r in caplog.records), caplog.text
+
+
+# ---------------------------------------------------------------------------
+# daemon 流程 INFO 行(B3-1 补齐, S4 验收-4: 进窗路径标注判据来源 + 逐成员改写结果;
+# 事件驱动, 状态无变化的重复拍零输出)
+# ---------------------------------------------------------------------------
+
+
+def _window_env(tmp_path, members, journal_phase="armed"):
+    """流程行守阵用窗口环境: 1 job + N 成员(journal 非终态保持 pending)+ 已认领 owner。
+    返回 (data_dir, jobs, member 首键清单); 改写函数由用例自行替身。"""
+    data_dir = str(tmp_path / "data")
+    os.makedirs(os.path.join(data_dir, "relocate"), exist_ok=True)
+    spec = {
+        "job_id": "j1",
+        "src": str(tmp_path / "src"),
+        "dst": str(tmp_path / "dst"),
+        "scope": str(tmp_path / "dst"),
+        "hashes": list(members),
+        "host": HOST,
+        "port": PORT,
+        "alias_paths": [],
+        "files": [],
+        "members": [{
+            "hash_v1": h,
+            "hash_v2": ""
+        } for h in members],
+        "bt_backup": str(tmp_path / "BT_backup"),
+    }
+    rj.write_spec(data_dir, "j1", spec)
+    rj.write_journal(data_dir, "j1", {"phase": journal_phase, "ts": 1.0})
+    member_dicts = [{"hash_v1": h, "hash_v2": ""} for h in members]
+    jobs = [{"job_id": "j1", "spec": spec, "pending": member_dicts, "flip": False}]
+    owner = rd._Owner(data_dir, "k", 12345)
+    assert owner.claim(1000.0, max_age=60.0) == "claimed"
+    return data_dir, jobs, members
+
+
+def _ticker_clock(step=1.0, start=1000.0):
+    state = {"t": start}
+
+    def _clock():
+        state["t"] += step
+        return state["t"]
+
+    return _clock
+
+
+def test_process_window_entry_logs_gate_and_pending(tmp_path, monkeypatch):
+    """进窗留痕: 一个窗口会话恰一条 INFO(判据来源按开启层 obs 标注 + pending 计数)——
+    L2/L3 窗(obs=None)与 L1 窗(obs 在场)两档标签各钉一条; 窗内多拍不重复出线
+    (事件驱动不靠循环频率, 黄金法则 1)"""
+    data_dir, jobs, _members = _window_env(tmp_path, ["1" * 40])
+    monkeypatch.setattr(rd, "_window_open", lambda *a, **k: True)  # L2 复验保持开
+    monkeypatch.setattr(rd, "_rewrite_member", lambda spec, member, prev: {"status": "rewritten", "keys": ["k1", "k2"]})
+    with capture_logs(LOG_RD, level=logging.DEBUG) as cap:
+        ret = rd._process_window(
+            data_dir,
+            jobs,
+            rd._Owner(data_dir, "k", 12345),
+            HOST,
+            PORT,
+            started=1000.0,
+            max_wait=60.0,
+            poll=0.0,
+            clock=_ticker_clock(),
+            sleep=lambda *_: None,
+        )
+    assert ret == "settled"
+    entries = [m for m in cap.messages if "进入下线改写窗" in m]
+    assert len(entries) == 1, cap.messages
+    assert "L2/L3 全机口径稳定窗" in entries[0], entries[0]
+    assert "待改写成员 1 个/1 个 job" in entries[0], entries[0]
+
+    # L1 窗(obs 在场): 标签换档; 复验桩 False => qb_back, 但进窗行已出(进窗即事件)
+    data_dir2, jobs2, _m2 = _window_env(tmp_path / "l1", ["2" * 40])
+    monkeypatch.setattr(rd, "_l1_window_open", lambda *a, **k: False)
+    with capture_logs(LOG_RD, level=logging.DEBUG) as cap2:
+        ret2 = rd._process_window(
+            data_dir2,
+            jobs2,
+            rd._Owner(data_dir2, "k2", 12346),
+            HOST,
+            PORT,
+            started=1000.0,
+            max_wait=60.0,
+            poll=0.0,
+            clock=_ticker_clock(),
+            sleep=lambda *_: None,
+            obs=rd._Observation(HOST, PORT),
+        )
+    assert ret2 == "qb_back", "L1 复验不过按现状中止语义"
+    entries2 = [m for m in cap2.messages if "进入下线改写窗" in m]
+    assert len(entries2) == 1, cap2.messages
+    assert "L1 实例级证据即时" in entries2[0], entries2[0]
+
+
+def test_process_window_member_result_logs_edge_dedup(tmp_path, monkeypatch):
+    """逐成员改写结果留痕: 每成员每结果一 INFO(短 hash + 成败/跳过原因), rewritten/
+    already/unmatched 三态文案各钉一条; 窗内结果不变的重复拍(失败成员 D8 随拍重试)
+    零输出 —— 边沿账窗会话级; member_gone 走既有 WARNING 恰一条且零结果 INFO 行
+    (不双行); 进窗行全程恰一条(不随拍数增长)"""
+    a, b, c, d, e = "a" * 40, "b" * 40, "c" * 40, "d" * 40, "e" * 40
+    data_dir, jobs, _members = _window_env(tmp_path, [a, b, c, d, e])
+    monkeypatch.setattr(rd, "_window_open", lambda *a, **k: True)
+
+    def _fake_rewrite(spec, member, prev):
+        h = str(member.get("hash_v1") or "")
+        if h.startswith("a"):
+            return {"status": "failed", "error": "boom", rj.REWRITE_FAILS_KEY: 1}
+        if h.startswith("b"):
+            return {"status": "rewritten", "keys": ["k1", "k2"], rj.REWRITE_FAILS_KEY: 0}
+        if h.startswith("c"):
+            return {"status": "already", "keys": ["k3"], rj.REWRITE_FAILS_KEY: 0}
+        if h.startswith("d"):
+            return {"status": "unmatched", "keys": [], rj.REWRITE_FAILS_KEY: 0}
+        return {"status": rj.REWRITE_MEMBER_GONE, rj.REWRITE_FAILS_KEY: 0}
+
+    monkeypatch.setattr(rd, "_rewrite_member", _fake_rewrite)
+    with capture_logs(LOG_RD, level=logging.DEBUG) as cap:
+        ret = rd._process_window(
+            data_dir,
+            jobs,
+            rd._Owner(data_dir, "k", 12345),
+            HOST,
+            PORT,
+            started=1000.0,
+            max_wait=10.0,
+            poll=0.0,
+            clock=_ticker_clock(),
+            sleep=lambda *_: None,
+        )
+    assert ret == "timeout", "失败成员随拍重试至窗口超时(D8)"
+    fails = [m for m in cap.messages if "改写失败" in m]
+    assert len(fails) == 1, f"结果不变的重复拍零输出(边沿去重): {cap.messages}"
+    assert f"成员 {a[:8]} 改写失败" in fails[0] and "boom" in fails[0], fails[0]
+    dones = [m for m in cap.messages if "改写落盘" in m]
+    assert len(dones) == 1, cap.messages
+    assert f"成员 {b[:8]} 改写落盘(双键 2 个)" in dones[0], dones[0]
+    already = [m for m in cap.messages if "已在目标值(幂等收口)" in m]
+    assert len(already) == 1 and f"成员 {c[:8]}" in already[0], cap.messages
+    unmatch = [m for m in cap.messages if "改写无操作" in m]
+    assert len(unmatch) == 1 and f"成员 {d[:8]}" in unmatch[0], cap.messages
+    # member_gone 面(评审面2 #1): WARNING 恰一条, 该成员零 INFO 结果行 —— 实现把
+    # 「elif recorded:」改回「if recorded:」即在此判红(双行)
+    gone_warn = [r for r in cap.records if r.levelname == "WARNING" and "fastresume 已缺失" in r.getMessage()]
+    assert len(gone_warn) == 1 and f"成员 {e[:8]}" in gone_warn[0].getMessage(), cap.messages
+    assert not [r for r in cap.records if r.levelname == "INFO" and f"成员 {e[:8]}" in r.getMessage()], cap.messages
+    assert all(m.startswith("recycle_daemon | job j1: 成员 ") for m in fails + dones + already + unmatch), cap.messages
+    assert len([m for m in cap.messages if "进入下线改写窗" in m]) == 1, cap.messages
+    # 账面: 失败计数进账承前(failed 不出账, 重试继续), 四个 settled 态各自出账
+    rewrites = rj.read_rewrites(data_dir, "j1")
+    assert rewrites[b]["status"] == "rewritten"
+    assert rewrites[a]["status"] == "failed"
+    assert rewrites[c]["status"] == "already"
+    assert rewrites[d]["status"] == "unmatched"
+    assert rewrites[e]["status"] == rj.REWRITE_MEMBER_GONE

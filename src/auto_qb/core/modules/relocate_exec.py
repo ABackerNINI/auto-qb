@@ -1269,7 +1269,15 @@ class ExecMixin:
         journal = relocate_journal.read_journal(self._data_dir(), job.job_id) or {}
         j_phase = str(journal.get("phase") or "")
         if j_phase == ru.PHASE_REWRITTEN and job.phase == ru.PHASE_ARMED:
+            # 相位向前合并加日志(B3-3 可观测性): 合并自去重 —— 合并后 job.phase=rewritten,
+            # 下拍条件不成立零输出; 计数 = journal 改写账成员数(全员收口后 daemon 翻相)
+            _rewrites = journal.get("rewrites")
+            _n_rewrites = len(_rewrites) if isinstance(_rewrites, dict) else 0
             job = self._set_job(replace(job, phase=ru.PHASE_REWRITTEN))
+            logger.info(
+                f"relocate | job {job.job_id}: journal 相位合并 armed -> rewritten"
+                f"(改写账 {_n_rewrites} 个成员) —— 收尾窗等成员回连后核验收尾"
+            )
         alias_present = bool(job.alias_paths) and any(self._alias_live(p) for p in job.alias_paths)
         qb_up = self._qb_up()
         if j_phase != ru.PHASE_FAILED:
@@ -1302,13 +1310,17 @@ class ExecMixin:
             # (盘/权限)本拍直接收口: journal 仍 failed, 重评常规表/重拉只会空转, 下拍重试
             if not self._clear_stale_failed_journal(job, rt):
                 return
+            # 盘上旧账已删: 内存快照随之作废, 置空账再重评 —— 同拍重评出 ACT_WAIT 时,
+            # B3-2 等待提示按无账真值计数(透传旧快照会把该拍 pending 数按已删账少算,
+            # 下一拍才自愈; 分面评审面1 #1)
+            journal = {}
             action = ru.reconcile(job, alias_present=alias_present, qb_up=qb_up, all_at_dst=at_dst)
         elif j_phase == ru.PHASE_FAILED:
             # 消费/搁置: 收口即提前返回, 本拍起不再判重拉 —— 证据消费先于任何重拉动作
             self._apply_reconcile(job, rt, action)
             return
         self._ensure_daemon(job, rt)
-        self._apply_reconcile(job, rt, action)
+        self._apply_reconcile(job, rt, action, journal=journal)
 
     @staticmethod
     def _alias_live(path: str) -> bool:
@@ -1328,10 +1340,13 @@ class ExecMixin:
             return False
         return True
 
-    def _apply_reconcile(self, job: RelocateJob, rt: dict, action: str) -> None:
+    def _apply_reconcile(self, job: RelocateJob, rt: dict, action: str, journal: Optional[dict] = None) -> None:
         """对账动作处置(S4 新链三动作; ACT_ENSURE_DAEMON 的处置在 _ensure_daemon 独立走;
-        journal failed 相位的两态在 _consume_failed_journal/_warn_suspect_failed_journal)"""
+        journal failed 相位的两态在 _consume_failed_journal/_warn_suspect_failed_journal;
+        journal 形参 = 调用方已读的对账账(B3-2 WAIT 等待提示取改写账, 不重复落盘 I/O,
+        先例 _warn_orphan_rewrites); 缺省(直调)由提示步自读)"""
         if action == ru.ACT_WAIT:
+            self._note_finalize_wait(job, rt, journal)
             return
         if action == ru.ACT_FAIL_TERMINAL:
             # 收尾校验失败证据消费: 转 failed 终态, 证据原文保留(_fail 单点)
@@ -1379,6 +1394,45 @@ class ExecMixin:
                 rt["stage"] = "penetrate"
             return
         logger.debug(f"relocate | job {job.job_id}: 对账动作 {action} 无处置")
+
+    def _note_finalize_wait(self, job: RelocateJob, rt: dict, journal: Optional[dict] = None) -> None:
+        """收尾窗 ACT_WAIT 的等待提示(B3-2 可观测性; 只加日志, WAIT 行为零变化)
+
+        痛点: 收尾窗在等 qB 下线改写窗/等回连核验时对账静默 —— 完成类 INFO 不过面板/
+        推送门槛(errlog 环 WARNING+ 口径/推送 min_level=ERROR), 用户在 auto-qb.log 里
+        看不到「在等什么/等多少」。本步 INFO 一条落 auto-qb.log(不接 errlog 环/推送,
+        计划 B3-2 口径), 文案带 qB 连接态 + pending 数(改写未收口成员数, 口径单点
+        rj.pending_members); 按 job 相位分两版文案: armed = 等 qB 下线窗改写, rewritten
+        = 改写已落账等回连核验(与计划 B3-4 WEBUI 行状态的区分面同源, 本步只做日志面)。
+        「状态翻转去重」: 文本(qB 态 x 相位 x pending 数)即状态 —— rt 键文本比对先例
+        (_warn_orphan_rewrites/_verify_hang 同款): 状态未变的重复拍只 DEBUG, 任一维度
+        翻转(qB 上下线/相位合并/pending 收口)再出一条 INFO。
+        journal 取调用方已读的对账账(_step_reconcile 每拍已读, 不重复落盘 I/O); 缺省
+        (直调)自读。spec 不可读 => pending 按 job 账成员对改写账近似(判据与
+        pending_members 同: status 不在 REWRITE_SETTLED 即未收口), 不阻塞提示。
+        """
+        qb_up = self._qb_up()  # 10s 缓存单点, 对账拍复用零附加请求
+        if journal is None:
+            journal = relocate_journal.read_journal(self._data_dir(), job.job_id) or {}
+        rewrites = journal.get("rewrites") if isinstance(journal.get("rewrites"), dict) else {}
+        spec = relocate_journal.read_spec(self._data_dir(), job.job_id)
+        if isinstance(spec, dict) and spec:
+            n_pending = len(relocate_journal.pending_members(spec, rewrites))
+        else:
+            n_pending = sum(
+                1 for h in job.hashes
+                if str((rewrites.get(h) or {}).get("status") or "") not in relocate_journal.REWRITE_SETTLED
+            )
+        where = "在线" if qb_up else "不在线"
+        if job.phase == ru.PHASE_REWRITTEN:
+            text = (f"收尾窗等待: qB {where}, 改写已落账(pending {n_pending}) —— 等成员回连后核验收尾")
+        else:
+            text = (f"收尾窗等待: qB {where}, 待改写成员 {n_pending} 个 —— 等 qB 下线窗由回收 daemon 改写")
+        if rt.get("finalize_wait_hint") == text:
+            logger.debug(f"relocate | job {job.job_id}: 收尾窗等待维持(已提示过): {text}")
+            return
+        rt["finalize_wait_hint"] = text
+        logger.info(f"relocate | job {job.job_id}: {text}")
 
     def _consume_failed_journal(self, job: RelocateJob) -> None:
         """对账消费 journal failed 相位 -> job failed 终态(issue 26-11-07-0527 #3 单点)
