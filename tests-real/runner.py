@@ -73,8 +73,9 @@ def cmd_guard(args) -> int:
             status = guard.check_online(qb)
             hashes = guard.snapshot(qb, skip_tags=(guard.REAL_FAKE_TAG, ))
             n_fake = len(guard.fakes(qb))
+            # qb.version() 原样返回 /app/version(自带 v 前缀), 直接打印不拼前缀(双 v 见 issue 26-11-21-0639)
             print(
-                f"[ok] {port} pid={rep['pid']} v{version} {status} 真实种子 {len(hashes)} 个已全部暂停, "
+                f"[ok] {port} pid={rep['pid']} {version} {status} 真实种子 {len(hashes)} 个已全部暂停, "
                 f"自造({guard.REAL_FAKE_TAG}) {n_fake} 个不计入"
             )
         except Exception as exc:

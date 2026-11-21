@@ -450,6 +450,7 @@ def test_cmd_guard_reports_real_and_fake_counts(monkeypatch, capsys):
     assert seen["skip_tags"] == (fake_guard.REAL_FAKE_TAG, ), "豁免标签必须传给 snapshot"
     out = capsys.readouterr().out
     assert "真实种子 1 个" in out and "自造(real-fake) 2 个" in out, "计数必须双口径分开报(环境指纹誊写面)"
+    assert "v5.0.0" in out and "vv" not in out, "版本串必须原样打印(qb.version() 自带 v 前缀, 不得再拼 v)"
 
 
 def test_cmd_pause_all_skips_fakes(monkeypatch, capsys):

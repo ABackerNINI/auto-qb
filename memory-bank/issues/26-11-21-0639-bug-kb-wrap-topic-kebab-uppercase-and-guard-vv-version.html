@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="kb-wrap-topic-kebab-uppercase-and-guard-vv-version">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="kb.wrap --topic kebab 校验拒绝 sliceA 式大写切片命名 + real.guard 输出「vv5.2.3」双 v 拼印(两条 cosmetic 合并)">
 <meta name="issue-summary" content="kb.wrap --topic 校验只收小写 kebab, 与 real-baselines 切片命名惯例(sliceA 大写段)冲突; runner.py cmd_guard f-string 写死 v 前缀与 qb.version() 自带的 v 拼成 vv5.2.3 —— 两条工具面 cosmetic 合并一条记录">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-21-0639-bug-kb-wrap-topic-kebab-uppercase-and-guard-vv-version</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 06:39</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -115,6 +115,7 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>kb.wrap：--topic 是双重角色（wrap_session.py:108 取证：切片文件名后缀 / 档案 <code>**Topics:**</code> 主键），kebab 小写主键是 2026-10-18 拍板口径（doc-forms.md:52「主键形态」；<code>gen_doc_map --check</code> 对非 kebab 判红，机检单点，issue <a href="26-10-18-0858-question-doc-topics-composite-split.html">26-10-18-0858</a>）——放行大写段会撞机检闸，两处规矩并不对等；与既有拍板对齐的一侧是<b>「切片命名惯例统一改小写」</b>（sliceA→slice-a 式），wrap 校验不动，此为定案单点。runner.py：:75 改裸 <code>{version}</code> 或对返回串 <code>lstrip("v")</code> 后再加前缀，二选一；修 :75 时与 <a href="26-11-21-0639-bug-real-guard-seed-count-real-fake-mislabeled.html">26-11-21-0639</a>（guard 计数误标）的文案改法一并落——两者落在同一 f-string 输出行，一次改齐免二次评审同一行。</p>
+  <p><b>实际修法（2026-11-21）</b>：①双 v——runner.py cmd_guard 输出改裸 <code>{version}</code> 原样打印（qb.version() 原样返回 /app/version 自带 v 前缀，行上加注释留痕防拼回），守阵 <code>test_cmd_guard_reports_real_and_fake_counts</code> 增断言 <code>"v5.0.0" in out and "vv" not in out</code> 双向钉回归；guard 计数误标那条 0639 已先由 1b18a05b 修掉，「一并落」已无对象。②命名冲突——按定案 wrap 校验不动，<code>real-machine.md</code> §06 记录行补「片名一律小写 kebab（<code>real-rm04-slice-a</code> 式，禁 sliceA 大写段，kb.wrap --topic 必拒；存量大写文件名不改——冻结计划/坑档/守阵夹具仍按原名引用）」。验证：test.full 6757 passed / 6 skipped / 覆盖 99%；评审 1 轮 0 发现（检 0/0）。</p>
 </section>
 
 <section id="s4">
@@ -122,7 +123,8 @@
   <ul>
     <li>2026-11-21 06:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-21 — 档位显式覆盖留痕：light 非类型默认推导（bug 默认 standard），系主会话派单时拍板「两条 cosmetic 合并记便签档」，不复档。</li>
-  </ul>
+    <li>2026-11-21 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
