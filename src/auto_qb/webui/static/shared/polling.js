@@ -1,5 +1,5 @@
 /* polling.js — 轮询与推送域(startEvents/stopEvents/startPolling/stopPolling/scheduleNext/
- * basePollMs/currentPollMs/refresh): W2b 自 app.js 拆出, 全局 mixin 方法域。 */
+ * basePollMs/currentPollMs/refresh + 在途合流壳/_refreshOnce): W2b 自 app.js 拆出, 全局 mixin 方法域。 */
 /* SSE 断线沿判定(纯函数, 探针真跑, 同 lifecycle.js _errlogReseed 先例): prev 为已持
  * connected 位(undefined=本会话尚未连上过 / true=在连 / false=断线重试期), 返回是否
  * 处于「断线沿」—— 首次断线或 true->false 跳变。重试期内重复 onerror(prev=false)与
@@ -592,7 +592,40 @@ window.AQB_POLL = {
       location.reload();
       return true;
     },
+    /* —— 在途合流守卫(2026-11-21, 真机 F12 取证)————————————————————
+     * /api/state 的触发源相互独立且无互斥: 主轮询骨架(scheduleNext 的 chain 形态只保证骨架
+     * 自身拍间不堆叠)、SSE ver 事件 60ms 去抖后直调(startEvents)、回前台补拉(lifecycle
+     * visibilitychange)、切视图直调(goView)。两个驱动几乎同时触发时各自读到同一个 lastRid
+     * => 同 rid 双发: URL 逐字节相同, 服务端按同一窗口归约/同一全量应答 => 载荷逐字节相同
+     * (真机实测同 rid 一对 44.4kB 同尺寸响应)。代价是一次白跑的请求 + 双份 JSON.parse/应用;
+     * delta upsert 幂等无正确性问题, 纯浪费面。守卫语义: 在途即合流 —— 记 _refreshQueued 后
+     * 直接返回, 不再发请求; 在途轮落定后立即补一拍(ver 驱动的新鲜度语义保留: 在途期间发布的
+     * 版本补拍即取, 不静默丢弃、不等下一个轮询周期; 落定时刻已切后台则不补拍 —— 后台标签
+     * 不拉数(恒等守卫, 与骨架拍 guard / ver 驱动 document.hidden 短路同口径), 新鲜度由回前台
+     * 补拉(visibilitychange)与骨架可见后的下一拍覆盖)。补拍经 refresh() 再入(重查守卫, 幂等),
+     * 触发源持续到达时退化为串行链 —— 与现状等量请求, 只是不再并发堆叠(补拍轮自己的
+     * _refreshOnce 尾部续排, 壳不再排, 一轮恰一排)。_refreshInFlight/_refreshQueued 是 ad-hoc
+     * 非响应式记账位(与 _esBusy 同款, 不进 data()); 早退路径(401/version-reload 的 return 都
+     * 落在 _refreshOnce 内部)壳**仍会**补拍一轮: 补拍再走一次同路径再收口一次(401 再拆一次
+     * 幂等 / reload 防抖窗口内多一次空转), 恰多一发有界无循环 —— 语义钉在电池第 9/11 节。
+     * 真实拉取体在 _refreshOnce; 本壳不做任何数据处理。 */
     async refresh() {
+      if (this._refreshInFlight) { this._refreshQueued = true; return; }
+      this._refreshInFlight = true;
+      try {
+        await this._refreshOnce();
+      } finally {
+        this._refreshInFlight = false;
+      }
+      if (this._refreshQueued) {
+        this._refreshQueued = false;
+        // 后台标签不拉数(恒等守卫): 合流时可见、补拍落定时可能已切后台 —— 此刻不补拍,
+        // 新鲜度由 visibilitychange 回前台补拉与骨架可见后的下一拍覆盖(见顶部守卫注)。
+        if (!document.hidden) await this.refresh();
+        return;
+      }
+    },
+    async _refreshOnce() {
       try {
         // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传数组(响应体趋近于零)。
         // P1-1: 同时带上当前视图名, 服务端只回该视图需要的数组(响应体 ≈1/4)。
@@ -607,6 +640,8 @@ window.AQB_POLL = {
         else qs.push("view=group");
         qs.push("delta=1");
         const query = `?${qs.join("&")}`;
+        // 请求发出时的视图快照: 下方 lastRid 采纳守卫用它识别「在途旧视图轮」(切视图竞态, 见注)。
+        const reqView = this.viewMode;
         const state = await this.api("/api/state" + query);
         // S3 version-reload(计划 26-11-11-0630 §03/§04): 轮询数据处理入口的**单点**变更沿,
         // 放在一切赋值/应用之前 —— 服务端版本与本页基线不一致即 reload 自愈: 本轮载荷**不应用**
@@ -635,7 +670,13 @@ window.AQB_POLL = {
           // 与历史行为逐字节等价) / delta 分支行级 upsert+removed 剔除; 之后的多选交集/
           // 展开态回验/乐观值重贴等保留机制两条路共用, 时序约束不变。
           this.applyStateRows(state);
-          if (typeof state.rid === "number") this.lastRid = state.rid;  // lastRid 恒 = 最后收到的 rid
+          // lastRid 恒 = 最后收到的 rid —— 仅限视图未变的轮: rid 是四视图共享的全局版本,
+          // 在途轮是旧视图时其 rid 仍是最新的, 但 goView 置空 lastRid 的意图是「下一次请求
+          // 必须全量取新视图数组」(本地新视图数组停留在上次离开该视图时的旧版本); 若让在途
+          // 旧视图轮把 rid 写回来, 被合流的补拍轮/下一轮就带 rid==ver 走零回传, 新视图数组
+          // 永远等不到全量(切过去的视图停在离开时的旧数据)。视图未变时 reqView===viewMode
+          // 恒真, 原语义不变。
+          if (typeof state.rid === "number" && this.viewMode === reqView) this.lastRid = state.rid;
           // !必须在 reapplyPending **之前**: 快照要的是服务端原始值(delta 轮 state 的
           // torrents/singles/groups 已被 applyStateRows 换成 delta 桶 —— 快照同样只比
           // 这一轮 payload 真的带来的行, 见 _snapshotTruth 注)。

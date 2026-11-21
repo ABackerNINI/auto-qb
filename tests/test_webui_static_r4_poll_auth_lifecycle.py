@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer + 换票 await 期间登出落票后不开流(issue 26-11-08-0229 #7: authOk 复查拦在 EventSource 之前, _esBusy 不残留)
-- test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏); fail 路(fn 抛异常 reject)不走 onEnd、句柄表归置(issue 26-11-08-1621 契约定案: 清理归调用方, 文件头注释已写明)
+- test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏); fail 路(fn 抛异常 reject)不走 onEnd、句柄表归置(issue 26-11-08-1621 契约定案: 清理归调用方, 文件头注释已写明); 在途合流守卫(2026-11-21): 多触发源并发直调 refresh 只发一次请求(第二拍记 _refreshQueued 返回, 同 rid 双发根除)、在途落定后补拍即取(ver 驱动新鲜度语义保留, 不静默丢弃)、补拍在途期再触发被 refresh() 再入守卫吃住(直调 _refreshOnce 绕守卫即红)、落定时刻已切后台不补拍(hidden 翻转变体钉住, 恒等守卫同口径)、壳不双排(schedN=每轮一次) + 切视图竞态: goView 置空 lastRid 不被在途旧视图轮的 rid 回写(adopt 守卫 reqView===viewMode), 补拍带空 rid+新视图名取全量, 落定后新视图 rid 正常采纳 + 早退xqueued: 401 早退时壳仍补拍(补拍轮同走早退恰拆两次幂等无循环, 不续排)
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
@@ -326,6 +326,147 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   ok("#1621 fail 路: fn 异常原样 reject(不吞不换型)", fnErr === boomFn);
   ok("#1621 fail 路: 不走 onEnd(清理归调用方, 文件头契约注释已写明)", ended9 === 0);
   ok("#1621 fail 路: 句柄表归置", st9._polls.z === null);
+
+  // 9. 在途合流守卫(2026-11-21 真机取证): 多触发源(骨架/SSE ver/visibilitychange/goView)并发
+  // 直调 refresh 时只发一次请求 —— 第二拍记 _refreshQueued 直接返回(同 rid 双发根除); 在途轮
+  // 落定后立即补拍(ver 驱动的新鲜度语义保留: 在途期间的新触发不静默丢弃、不等下一周期);
+  // 第三拍落在补拍轮在途期间 —— 必须被 refresh() 再入守卫吃住(补拍若回归成直调 _refreshOnce
+  // 绕过守卫, 第三拍会并发首发, paths 即刻变 3); 串行链落定守卫位归置, 每轮恰续排一次(壳不双排)。
+  {
+    const paths = []; let schedN = 0;
+    let rel1, rel2;
+    const gate1 = new Promise((res) => { rel1 = res; });
+    const gate2 = new Promise((res) => { rel2 = res; });
+    const cctx = Object.assign({}, P, {
+      status: {}, lastRid: 7, viewMode: "torrents", serviceDown: false, pollFails: 0,
+      api: async (path) => {
+        paths.push(path);
+        if (paths.length === 1) await gate1;  // 拍1 在途
+        if (paths.length === 2) await gate2;  // 补拍在途
+        return { updated: false, status: {} };
+      },
+      _expirePending() {}, reapplyPending() {}, _maybeSearchRefresh() {},
+      scheduleNext() { schedN += 1; },
+    });
+    const f1 = P.refresh.call(cctx);   // 驱动 1: 在途
+    await drain();
+    const f2 = P.refresh.call(cctx);   // 驱动 2: 被守卫合流
+    await drain();
+    ok("在途合流: 并发第二拍不再发请求(同 rid 双发根除)", paths.length === 1 && cctx._refreshQueued === true);
+    rel1();
+    await new Promise((r) => setImmediate(r));
+    ok("在途期间的新触发补拍即取(不静默丢弃、不等下一周期)", paths.length === 2 && cctx._refreshQueued === false);
+    const f3 = P.refresh.call(cctx);   // 驱动 3: 落在补拍轮在途期间
+    await drain();
+    ok("补拍轮经 refresh() 再入: 补拍在途期的新触发同样被合流(直调 _refreshOnce 绕守卫即红)",
+      paths.length === 2 && cctx._refreshQueued === true);
+    rel2();
+    await new Promise((r) => setImmediate(r));
+    await Promise.all([f1, f2, f3]);
+    ok("串行链落定: 第三拍补齐 + 守卫位归置 + 每轮恰续排一次(壳不双排)", paths.length === 3 &&
+      cctx._refreshInFlight === false && cctx._refreshQueued === false && schedN === 3);
+  }
+
+  // 9b. 补拍 hidden 短路变体: 合流时可见、在途落定时刻已切后台 —— 壳不补拍(后台标签不拉数,
+  // 恒等守卫与骨架拍 guard / ver 驱动短路同口径), 新鲜度让位给回前台补拉(visibilitychange)
+  // 与骨架可见后的下一拍; 位归置不残留。删掉壳的 if (!document.hidden) 即红(paths 变 2)。
+  {
+    const paths = [];
+    let rel1;
+    const gate1 = new Promise((res) => { rel1 = res; });
+    const hctx = Object.assign({}, P, {
+      status: {}, lastRid: 7, viewMode: "torrents", serviceDown: false, pollFails: 0,
+      api: async (path) => {
+        paths.push(path);
+        if (paths.length === 1) await gate1;  // 拍1 在途(合流发生在可见期)
+        return { updated: false, status: {} };
+      },
+      _expirePending() {}, reapplyPending() {}, _maybeSearchRefresh() {},
+      scheduleNext() {},
+    });
+    const h1 = P.refresh.call(hctx);
+    await drain();
+    const h2 = P.refresh.call(hctx);   // 合流置位
+    await drain();
+    document.hidden = true;            // 在途落定前切后台
+    rel1();
+    await new Promise((r) => setImmediate(r));
+    await Promise.all([h1, h2]);
+    document.hidden = false;           // 还原(不染后续电池)
+    ok("切后台不补拍: 恒等守卫同口径, 位归置不残留", paths.length === 1 &&
+      hctx._refreshInFlight === false && hctx._refreshQueued === false);
+  }
+
+  // 10. 切视图竞态 × 在途合流: goView 置空 lastRid 的意图是「下一次请求必须全量取新视图数组」
+  // (本地新视图数组停留在上次离开该视图时的旧版本); 在途旧视图轮此刻才回来, 其 rid(四视图
+  // 共享的全局版本, 仍最新)若被采纳, 补拍轮就带 rid==ver 走零回传, 新视图数组永远取不到。
+  // lastRid 采纳守卫(reqView === viewMode)钉住: 旧视图轮不回写、置空保活, 补拍轮带空 rid +
+  // 新视图名取全量; 补拍落定后新视图 rid 正常采纳, 守卫位归置。
+  {
+    const paths = [];
+    let rel1, rel2;
+    const gate1 = new Promise((res) => { rel1 = res; });
+    const gate2 = new Promise((res) => { rel2 = res; });
+    const vctx = Object.assign({}, P, {
+      status: {}, lastRid: 7, viewMode: "torrents", serviceDown: false, pollFails: 0,
+      api: async (path) => {
+        paths.push(path);
+        await (paths.length === 1 ? gate1 : gate2);
+        return { updated: true, rid: 9, status: {} };
+      },
+      applyStateRows() {}, _snapshotTruth() {},
+      _expirePending() {}, reapplyPending() {}, _maybeSearchRefresh() {},
+      scheduleNext() {},
+    });
+    const g1 = P.refresh.call(vctx);                 // 旧视图(torrent)轮在途
+    await drain();
+    vctx.viewMode = "group"; vctx.lastRid = null;    // 模拟 goView 置空(在途期间)
+    const g2 = P.refresh.call(vctx);                 // 被守卫合流
+    await drain();
+    ok("切视图竞态: 第二拍被合流不发请求", paths.length === 1);
+    rel1();
+    await new Promise((r) => setImmediate(r));
+    ok("旧视图在途轮的 rid 不回写(置空保活)", vctx.lastRid === null && paths.length === 2);
+    ok("补拍轮带空 rid + 新视图名取全量", !paths[1].includes("rid=") && paths[1].includes("view=group"));
+    rel2();
+    await new Promise((r) => setImmediate(r));
+    await Promise.all([g1, g2]);
+    ok("补拍落定: 新视图 rid 正常采纳 + 守卫位归置", vctx.lastRid === 9 &&
+      vctx._refreshInFlight === false && vctx._refreshQueued === false);
+  }
+
+  // 11. 早退 × 在途 queued 位(壳注声明语义): 401/version-reload 的 return 都落在 _refreshOnce
+  // 内部, 壳的 queued 检查在其返回后照常执行 —— 早退路径**仍会**补拍一轮, 补拍再走一次同路径
+  // 再收口一次(401 恰拆两次, 幂等无循环、不续排); 壳若回归(早退跳过 queued 检查吞补拍 /
+  // 补拍循环不止一发)即红。
+  {
+    const paths = []; const calls = []; let schedN = 0;
+    let rel1;
+    const gate1 = new Promise((res) => { rel1 = res; });
+    const errAuth = new Error("unauthorized"); errAuth.auth = true;
+    const actx = Object.assign({}, P, {
+      status: {}, lastRid: 7, viewMode: "torrents", serviceDown: false, pollFails: 0,
+      api: async () => {
+        paths.push("/api/state");
+        if (paths.length === 1) await gate1;  // 拍1 在途
+        throw errAuth;                         // 放闸后 401; 补拍轮同 401
+      },
+      _expirePending() {}, reapplyPending() {}, _maybeSearchRefresh() {},
+      scheduleNext() { schedN += 1; },
+      stopPolling() { calls.push("stopPolling"); },
+      stopEvents() { calls.push("stopEvents"); },
+    });
+    const a1 = P.refresh.call(actx);   // 在途
+    await drain();
+    const a2 = P.refresh.call(actx);   // 合流置位(在途期间)
+    await drain();
+    rel1();
+    await new Promise((r) => setImmediate(r));
+    await Promise.all([a1, a2]);
+    ok("401 x queued: 补拍轮同走早退, 恰拆两次不续排(幂等有界, 恰多一发)", calls.join(",") ===
+      "stopPolling,stopEvents,stopPolling,stopEvents" && schedN === 0 && paths.length === 2 &&
+      actx._refreshInFlight === false && actx._refreshQueued === false);
+  }
   console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
     failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 })().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
