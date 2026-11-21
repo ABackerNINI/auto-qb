@@ -27,6 +27,12 @@
 - test_api_traffic_qb_meta_interval_fractional_stride_si: (T1b 新增)meta.interval_s = k x si 组距标称非整值保持浮点(半秒值惯例)
 - test_api_traffic_qb_meta_over_budget_flag: (26-11-18-0037 评审 #1)over_budget 只真值携带 —— 装配超预算(§03 缺口标记数 >= 500 按 k 上限交付)经 _respond 落 meta.over_budget=true, 缺省形无该键(D6 meta 只增不改)
 - test_service_defensive_paths
+
+全局空闲判据双条件(26-11-21 报障端到端钉面, 修法 = z 分类补 totals 持平条件):
+- test_api_traffic_qb_global_chatter_sse_get_consistency: 低速协议流量形态(速率字段 (0,0)
+  而 totals 逐 tick 变化)—— 采样器逐 tick 出 r(差分速率), GET 点列与事件帧逐点同值(同 t
+  同 dl/up), 图面无全 0 段(修前 GET 60/60 全 0 = 「对账落袋整窗翻 0」的直接复现); 磁盘链
+  + 活尾接缝两段覆盖(中途 flush)
 """
 import os
 import time
@@ -1085,3 +1091,62 @@ def test_service_defensive_paths(web_env, monkeypatch):
     assert body["meta"]["stale"] is False
     assert [p["t"] for p in body["points"]] == [month]  # 成员月行并集铺格
     assert body["points"][0]["dl"] == 14  # Σ 成员均值(7 + 7)
+
+
+def test_api_traffic_qb_global_chatter_sse_get_consistency(tmp_path, monkeypatch):
+    """26-11-21 报障端到端钉面(翻面根除): 全局系列低速协议流量形态(速率字段 (0,0) 而
+    totals 逐 tick 变化 —— peers 协议流量推动 all-traffic counter, payload EMA 读 0):
+    采样器逐 tick 出 r(差分速率), GET 点列与事件帧逐点同值(同 t 同 dl/up), 图面无
+    全 0 段 —— 修前 GET 60/60 全 0 = 「对账落袋整窗翻 0」的直接复现。磁盘链 + 活尾
+    接缝两段覆盖(中途 flush, 末段全在活尾 —— 对账/换窗 GET 正是消费这一段的路径)"""
+    from types import SimpleNamespace
+
+    from auto_qb.config import QbTraffic
+
+    from helpers import server_state
+
+    from traffic_sample_support import _mgr_with_traffic
+
+    t0 = 1_760_000_000
+    si = 1.0
+    clock = FakeClock(start=t0)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1, flush_interval=600), clock=clock
+    )
+    events = []
+    mgr.ctx.web = SimpleNamespace(
+        publish_traffic_batch=lambda batch: events.append(dict(batch)),
+        traffic_stream_active=lambda: True,
+    )
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    dl_tot, ul_tot = 10_000_000, 20_000_000
+    for i in range(120):  # 2min 纯协议流量形态: 速率字段恒 (0,0), totals 每 tick +256/+128
+        clock.freeze(t0 + i * si)
+        dl_tot += 256
+        ul_tot += 128
+        mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+        mod.handle_traffic_sample(dry_run=False)
+        if i == 59:
+            mod._flush_all_series()  # 中途落盘: 前段走磁盘链, 末段走活尾(对账 GET 的消费面)
+    end = t0 + 119 * si
+    from auto_qb.webui.server import traffic_qb as tq
+
+    monkeypatch.setattr(tq, "SYSTEM_CLOCK", FakeClock(start=float(end + si / 2)))  # 窗尾含末样本
+    from auto_qb.webui.server.traffic_qb import QbTrafficChartApi
+
+    api = QbTrafficChartApi(mgr)
+    res = api.payload_global("5m")  # 全段窗(无 2m 档, 5m 覆盖全段): 磁盘链(tick0..59)+ 活尾(60..119)都进断言面
+    pts = res["points"]
+    assert len(pts) == 120
+    assert pts[0]["dl"] == 0 and pts[0]["up"] == 0  # 链首 z 槽 0 线(无基准, 读侧链首同判)
+    zeros = [p for p in pts[1:] if p["dl"] == 0 and p["up"] == 0]
+    assert not zeros  # 翻面根除: 链首之外无全 0 段(修前整窗全 0)
+    assert all(p["dl"] == 256 and p["up"] == 128 for p in pts[1:])  # 磁盘链+活尾全段差分速率真值
+    # SSE/GET 同基: 事件帧与 GET 点列逐点同值(同 t 同 dl/up) —— 用户观测的「跳变」两面
+    by_t = {p["t"]: p for p in pts}
+    assert len(events) == 120
+    for batch in events:  # 全量 120 帧逐点比对(含链首 z 帧, 确定性场景无跳变容忍)
+        p = batch["global"]
+        got = by_t.get(p["t"])
+        assert got is not None and got["dl"] == p["dl"] and got["up"] == p["up"]

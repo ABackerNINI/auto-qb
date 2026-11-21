@@ -1,7 +1,7 @@
 # backend — 后端 / qB / 平台 · 卷 2/3
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `gtm-total-baseline.md` … `ruamel-roundtrip-mask-pitfalls.md`(共 19 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `gtm-total-baseline.md` … `relocate-restore-issued-marker.md`(共 19 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -22,8 +22,8 @@
 | [qb-content-path-semantics.md](qb-content-path-semantics.md) | qB Web API 的 `content_path` 报的是**逻辑完成形态**的路径 —— 单文件种子在文件尚未落盘、或启用了「未完成文件加 .!qB 扩展名」时, 该路径在磁盘上**不存在**, qB 不会报空也不会报后缀名。对它做存在性分流时若写「非目录即文件」(`isdir=False` ⇒ 当单文件种子选中该文件), 下载中的种子必走错分支: 文件不存在 → 404「目标文件不存在或不可访问」。用户视角是「路径明明存在(父目录在)却打不开」, 与真实根因(目标尚未落盘)相距甚远。 | content_path, root_path, open-path, open_path, 单文件种子, 下载中, 未落盘, .!qB, 未完成扩展名, 目标文件不存在, 打开目标文件夹失败, 定位选中, select, 解析顺序, 辅种组, 组按单个处理 |
 | [qb-dir-listing-no-symlink-resolve.md](qb-dir-listing-no-symlink-resolve.md) | qB(Windows, 5.2.3 实测)目录列举对文件级 symlink 返回 reparse point 自身元数据(size=0/mtime=建链时刻), 不解析目标 —— 凡拿「列目录元数据」当「qB 能否经链接读数据」代理的判定必假阴性; 修复 = 链接对象判别(qB 条目 == 链接自身 lstat 双字段一致 → 不可判, skipped); 设计教训: 列目录语义 ≠ 打开读语义, 列举跟随行为跨平台/跨形态不一致, 证据通道要按形态分别验证。 | getDirectoryContent, 列目录, symlink, 链接跟随, 运行时F, 假阴性, 链接对象 |
 | [qb-fastresume-edit.md](qb-fastresume-edit.md) | 改 qB 的 BT_backup fastresume 有四条铁律 —— ①qB 在线时写入必被秒级覆盖(pause/start/标签等 ~20 类操作挂 `deferredRequestResumeData`, 实测 0.5s), 只能写 qB 下线窗口; ②save path 是双键(`save_path` lt 实际 + `qBt-savePath` qB 账面), 只改其一 = 半效编辑; ③坏 bencode = qB 静默丢种(仅 INFO 级日志, 非 missingFiles 链); ④指向旧路径的删链/删种各有门。机制单点 = 计划 26-11-05-0808 §2.2。 | fastresume, BT_backup, qBt-savePath, save_path, 改路径, relocate 收尾 |
+| [qb-field-basis-mixing.md](qb-field-basis-mixing.md) | qB sync/maindata 三个流量字段口径不同源 —— `dl_info_speed/up_info_speed` = libtorrent payload 通道 5s EMA(1Hz 整数截断), `alltime_dl/up` = **recvBytes(全部 peer 流量: payload+协议)+IP overhead** 的持久单调累计(qB sessionimpl.cpp:6571-6572/6615+6625-6626), `dl_info_data/up_info_data` = payload 会话累计。把不同口径的字段当同一基使用(分类用一个、差分用另一个)会产生「字段读 0 但 totals 每 tick 都动」的持续形态, 任何「字段==0 即空闲」的单条件判据都会吞字节。 | dl_info_speed, alltime_dl, payload, 全部流量, 字段口径, 空闲判据, z 游程, 采样分类, 差分链, counter 口径, 二手调研笔记, 流量图翻面 |
 | [qbmanager-retired-names.md](qbmanager-retired-names.md) | QbManager 上抽新方法/加新属性时, 命名会撞**别名冻结守阵**(`tests/test_qbmanager_alias_freeze.py`)——退役旧名(分诊清单 `26-10-01-0350-plan-web-state-alias-disposal.triage.json` 里 category=forward 的成员与 alias_layer.fields)禁止在 QbManager 上复活, 守阵红验报「退役旧名在 QbManager 上复活」。这**不是守阵误报**, 是命名撞车: 换一个名字即可, 不要去改分诊清单或删守阵。 | qbmanager, 抽方法, 抽私有方法, 重构命名, _load_state, 退役名, alias_freeze, 复活, 分诊清单, QbManager 新方法 |
 | [recycle-daemon-p7-evidence-chain.md](recycle-daemon-p7-evidence-chain.md) | 同 profile 实例才是 N1 竞争者, 全机口径病根在此; L1 实例级证据链(owner 死证+新面孔无害化+端口拒连)成立即立即进窗, settle 30s 是有界赌注; 已知残余(时钟回拨跨 owner 创建边界/改 WebUI 端口不同步 config/同 profile 异常双开/qb_back 可观测性缺口)与通道解析纪律(None=不可用退 L2, 绝不产假证据)。 | P7, 多实例, 实例级证据链, owner 死证, 新面孔, settle, 零赌注吸收, L1 判据, 立即进窗, 全机口径, recycle daemon, 收尾窗, qb_back 可观测性, WebUI 端口改 |
 | [release-record-baseline.md](release-record-baseline.md) | 一份凭据(放行/授权/豁免记录)若靠「与签发时的状态快照比对」来判断是否失效, 快照就是 | 放行记录, verified, 签发, 锚点, 快照, 漂移, drift, 永续有效, 永久记录, 凭据, 三处写入点, 签发即作废 |
 | [relocate-restore-issued-marker.md](relocate-restore-issued-marker.md) | 「先落账、后下发」的恢复点若按相位一律置 issue=False, 崩溃窗口(外部系统从未收到指令)在两处现场上与「发了没动静」同形 ⇒ 静默等到停滞超时误判失败; 判据必须靠账上「已下发」位分流, 且两条下发路径都要落账 | 重启恢复, 崩溃恢复, 崩溃窗口, setLocation 补发, move_issued, 恢复判据, 账上事实, 下发路径, _load_jobs, recover_exec_phase, 死代码判据 |
-| [ruamel-roundtrip-mask-pitfalls.md](ruamel-roundtrip-mask-pitfalls.md) | ruamel round-trip 掩码/回填三坑: 异常文本泄敏 / 引号形态继承 / alias 爆炸面 | ruamel, CommentedMap, DuplicateKeyError, 掩码, 哨兵, unmask, 回填, 引号, PlainScalarString, alias, 锚点, 共享引用, mask_yaml_text, 异常文本, 泄敏, detail |

@@ -21,6 +21,15 @@ from .traffic_sample_common import (
 logger = logging.getLogger("auto_qb.core.modules.traffic_sample_mod")
 
 
+def _delta_rate(delta: int, elapsed_ms: int) -> int:
+    """差分速率(qB calcRate 同式, sessionimpl.cpp:6580-6588): delta*1000/实测毫秒, round
+    取整; 非正差分(计数器回落/持平)按 0 —— 回落是重置不是速率(读侧重置判据另立
+    None/断链, 该向增量由 sample_series/_delta 判)。elapsed_ms <= 0(同刻病理)不造分母。"""
+    if delta <= 0 or elapsed_ms <= 0:
+        return 0
+    return int(round(delta * 1000 / elapsed_ms))
+
+
 class _SampleBlocksMixin:
     # ---------- C1 生效与热重载联动(§3.5) ----------
 
@@ -61,7 +70,26 @@ class _SampleBlocksMixin:
 
     def _sample_global(self, server_state: Any, ts: float) -> None:
         """全局系列(恒采): server_state 直采; 缺失/空值走 n 游程不写 0(§03.5);
-        零样本(速率 0,0)推进/开启 z 游程(v3 §3.2: 全局恒开, 无数据门)。"""
+        零样本(速率 0,0 **且 totals 与上一观测持平**)推进/开启 z 游程(v3 §3.2: 全局
+        恒开, 无数据门)。
+
+        空闲判据双条件的依据(26-11-21 报障根因, qB 字段口径混杂): dl_info_speed =
+        libtorrent payload 通道 5s EMA(qB sessionimpl.cpp:6656-6669 取 per-torrent
+        速率之和), alltime_dl/up = recvBytes+IP overhead 的持久单调累计(qB
+        sessionimpl.cpp:6571-6572/6615+6625-6626: totalDownload = recvBytes + ipOverhead)。
+        peers 协议流量(piece 请求/HAVE/keepalive/DHT)每 tick 推动 totals 而 payload
+        EMA 读 0 —— 单看速率字段会把「有字节的 tick」误判空闲, z 游程开启快照冻结
+        吞掉其逐 tick 差分(读侧图面 0 / 事件流实差分真值 => 30s 对账与换窗 GET 落袋
+        整窗翻 0, 用户观测「前一刻上上下下, 下一刻全 0」)。totals 与上一观测持平才
+        算空闲: 空闲语义对齐速率基(全部流量), 与 qB 流量图 DOWN/UP 默认曲线「每
+        tick 恒出 calcRate 全部流量差分样本」同构(qB speedwidget.cpp:134-139 推字段
+        + preferences.cpp:2147-2151 默认只启用 UP/DOWN)。totals 变化的零速率字段
+        tick 按非零样本处理, dl_rate/up_rate 存差分速率(_delta_rate, calcRate 同式
+        —— 用户拍板「参考1」); payload EMA 原值不再上图口径消费(agg dl_max 面它
+        本来就只是瞬时直采存证)。
+
+        单种系列不动(torrent.cpp:10909: all_time_download += last_payload_downloaded
+        —— payload-only, 协议流量不推动, 空闲 totals 真冻结, z 游程语义自洽)。"""
         getter = server_state.get if isinstance(server_state, Mapping) else (lambda name: None)
         readings = self._read_fields(_GLOBAL_FIELDS, getter)
         if readings is None:
@@ -75,9 +103,29 @@ class _SampleBlocksMixin:
         # 未知时记录器内部不猜不记(与 null 游程同理念)
         self._limits_rec.observe(server_state, ts, self._persistence_on)
         if dl_rate == 0 and up_rate == 0:
-            self._advance_run(GLOBAL_SERIES_KEY, ts, "z", dl_total, up_total)
+            if self._global_idle_at_totals(GLOBAL_SERIES_KEY, dl_total, up_total):
+                self._advance_run(GLOBAL_SERIES_KEY, ts, "z", dl_total, up_total)
+                return
+            # 零速率字段但 totals 变化(协议流量/低速到达/离线窗口字节): 按非零样本处理
+            # —— 走 sample_series 单点(封口/基线/记录/事件捕获全套既有纪律), 速率字段
+            # 换差分速率(对上一观测; 计数器回落负差分按 0 落列, 重置判据在 _delta)。
+            pre = self._ev_prev_obs.get(GLOBAL_SERIES_KEY)
+            elapsed_ms = int(round((ts - pre[0]) * 1000)) if pre is not None else 0
+            dl_rate = _delta_rate(dl_total - pre[1], elapsed_ms) if pre is not None else 0
+            up_rate = _delta_rate(up_total - pre[2], elapsed_ms) if pre is not None else 0
+            self.sample_series(GLOBAL_SERIES_KEY, ts, dl_rate, up_rate, dl_total, up_total, _dl_session, _up_session)
             return
         self.sample_series(GLOBAL_SERIES_KEY, ts, *readings)
+
+    def _global_idle_at_totals(self, key: str, dl_total: int, up_total: int) -> bool:
+        """空闲双条件的 totals 半边(单点): 与上一观测(r/z)的 totals 持平才空闲。
+        链首(进程首个观测)无基准视为持平(走 z, 读侧链首 0 线同判)。上一观测游标 =
+        _ev_prev_obs(事件差分链同源: r/z 推进 n 不推进, 派发点在采样 handler 收尾
+        推进 —— 本判据在采样体内读到的恒为上一个 r/z 观测(跨 n 缝不推进: 断连期即
+        断连前最后观测, 重连 tick 的差分/速率按含断连窗的实测 elapsed 计), 主循环
+        线程独占无序差)。"""
+        pre = self._ev_prev_obs.get(key)
+        return pre is None or (dl_total == pre[1] and up_total == pre[2])
 
     def _sample_torrents(self, store: TorrentStore, ts: float) -> None:
         """单种系列(活跃过滤): dlspeed>0 or upspeed>0 才产 r; 零速/缺字段进 z/n 游程(§3.2)

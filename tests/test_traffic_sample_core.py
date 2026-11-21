@@ -88,9 +88,19 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_parser_never_emits_zero_slot_block (issue 26-11-01-0050): 解析器 `_close` 仅在
   有记录时产块 —— 零记录 B 块(空块)投产后不可达, 空块支改判防御死码
 - test_stop_early_return_when_disabled_or_no_data_dir: stop() 在 qb_traffic 段缺失/未启用/
+  data_dir 为空时零操作(不封游程不 flush)
 - test_v4_write_io_full_day_2s_interval
 - test_v4_write_io_full_day_30s_interval
-  data_dir 为空时零操作(不封游程不 flush)
+
+全局空闲判据双条件(26-11-21 报障根因: qB 字段口径混杂 —— dl_info_speed=payload EMA,
+alltime_dl/up=recvBytes+IP overhead 全部流量, 协议流量每 tick 推动 totals 而字段读 0):
+- test_global_zero_field_moving_totals_sampled_as_rate: 零速率字段 + totals 逐 tick 变化
+  (协议流量形态)-> 按非零样本出 r(差分速率 calcRate 同式), 不进 z 游程; totals 链逐 tick
+  守恒; 单方向动(dl 动 up 持平)同判出 r 且持平向速率 0
+- test_global_true_silence_still_zrun_chatter_seals: 真静默(totals 持平)仍 z 游程, 静默中的
+  协议 tick 封口出 r —— [z(3), r, z(2), r] 记录序, z 快照冻结/形态 D 末端=封口读数
+- test_global_disconnect_reconnect_moved_totals_reclassified_rate: 断连 n 游程后重连零速率
+  字段且 totals 已动 -> 重分类 r 封 n, 速率 = 差分/断连实测窗毫秒(离线窗口字节归重连 tick)
 
 W5(R29) S5 补测守阵(mutcore 审计 core/modules/traffic_sample_mod.py; 三分类/红验对应单点
 tmp-analysis/mut-core-w5-classify.md, 中危真洞全盖 + 低危按簇代表, bug 面不入此列):
@@ -441,7 +451,9 @@ def test_flush_driver_interval_and_deferred_first_round(tmp_path, monkeypatch):
     flush_interval 才全系列批量落盘; v4 关块谓词(flush ∧ has_r_row)下带 r 行的块随
     flush 关闭, 之后的记录开新块(每块块头恰写一次)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock
+    )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: r 进缓冲; 首轮只记 flush 时点
@@ -495,6 +507,105 @@ def test_global_idle_run_stays_open_across_flush_and_seals_on_resume(tmp_path, m
     assert z.dt_ms is None  # 标称跨度(run_len x interval), 零漂移不写 dt
     assert isinstance(r2, V4Sample)  # 文件序 = 时间序(z 块首 + 恢复 r)
     assert 0 <= r2.dl_total - z.dl_total <= 600 * 1024  # delta <= flush 窗 x 速率(v4 §01 封顶)
+
+
+def test_global_zero_field_moving_totals_sampled_as_rate(tmp_path):
+    """空闲判据双条件(26-11-21 报障根因): 速率字段 (0,0) 但 totals 逐 tick 变化(peers
+    协议流量推动 all-traffic counter 而 payload EMA 读 0)—— 按非零样本处理出 r, 不进
+    z 游程: 逐 tick 差分落盘(V4Sample), dl_rate/up_rate = 差分速率(calcRate 同式),
+    totals 链逐 tick 推进守恒; 链首无基准走 z(读侧链首 0 线同判)"""
+    clock = FakeClock()
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1), clock=clock)
+    dl_tot, ul_tot = 10_000_000, 20_000_000
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # t0: 链首无基准(视持平)-> z 游程 1 槽
+    for _ in range(5):  # t0+1..t0+5: 零速率字段但 totals 每 tick +128/+64(协议流量形态)
+        dl_tot += 128
+        ul_tot += 64
+        mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+        clock.advance(1)
+        _run_sample(mgr)
+    dl_tot += 128  # t0+6: 单方向边界 —— 仅 dl totals 动, up 持平(判据 and 突变 or 的红绿面)
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+    clock.advance(1)
+    _run_sample(mgr)
+    assert GLOBAL_SERIES_KEY not in mod._open_runs  # 协议 tick 全出 r, 无开放游程
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
+    recs = parsed.blocks[0].records
+    assert [type(r) for r in recs] == [V4ZeroRun] + [V4Sample] * 6  # 链首 z(1 槽) + 6 个协议 r
+    assert recs[0].run_len == 1
+    for i, rec in enumerate(recs[1:6], start=1):
+        assert rec.dl_rate == 128 and rec.up_rate == 64  # 差分速率(128*1000/1000ms, calcRate 同式)
+        assert rec.dl_total == 10_000_000 + 128 * i  # totals 链逐 tick 推进(字节守恒)
+    assert recs[6].dl_rate == 128 and recs[6].up_rate == 0  # 单方向动: 持平向速率 0, 仍出 r 不吞字节
+    assert recs[6].dl_total == 10_000_000 + 128 * 6 and recs[6].up_total == 20_000_000 + 64 * 5  # 双向守恒
+
+
+def test_global_true_silence_still_zrun_chatter_seals(tmp_path):
+    """真静默(totals 持平)仍走 z 游程(既有语义不变); 静默中的协议 tick(totals 动)
+    封口出 r —— 混合形态记录序 [z(3), r, z(2), r], z 快照冻结在开启时刻、形态 D 末端
+    列 = 封口触发样本读数(10-16-1509 语义原样)"""
+    clock = FakeClock()
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=1), clock=clock)
+    dl_tot, ul_tot = 10_000_000, 20_000_000
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+    for _ in range(3):  # t0..t0+2: 真静默(totals 持平)-> z 游程 3 槽
+        clock.advance(1)
+        _run_sample(mgr)
+    dl_tot += 256
+    ul_tot += 128
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+    clock.advance(1)
+    _run_sample(mgr)  # t0+3: 协议 tick -> 封 z(3 槽) + r
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+    for _ in range(2):  # t0+4..t0+5: 真静默 -> 新 z 游程 2 槽
+        clock.advance(1)
+        _run_sample(mgr)
+    dl_tot += 256
+    ul_tot += 128
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=dl_tot, alltime_ul=ul_tot)
+    clock.advance(1)
+    _run_sample(mgr)  # t0+6: 协议 tick -> 封 z(2 槽) + r(便于落盘断言)
+    _flush(mod := mgr.host.get("qb_traffic"))
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
+    z1, r1, z2, r2 = parsed.blocks[0].records
+    assert isinstance(z1, V4ZeroRun) and z1.run_len == 3
+    assert (z1.dl_total, z1.up_total) == (10_000_000, 20_000_000)  # 快照 = 开启时刻(冻结)
+    assert (z1.dl_total_end, z1.up_total_end) == (10_000_256, 20_000_128)  # 形态 D 末端 = 封口读数
+    assert isinstance(r1, V4Sample) and r1.dl_rate == 256 and r1.up_rate == 128  # 差分速率
+    assert isinstance(z2, V4ZeroRun) and z2.run_len == 2
+    assert (z2.dl_total, z2.up_total) == (10_000_256, 20_000_128)  # 新游程快照 = 协议 tick 读数
+    assert isinstance(r2, V4Sample) and r2.dl_rate == 256  # 末段协议 tick 照常出 r
+
+
+def test_global_disconnect_reconnect_moved_totals_reclassified_rate(tmp_path):
+    """断连期 totals 推进(qB 在线而采样断连/离线窗口)后重连: 零速率字段 + totals 已动
+    -> 重分类 r 封 n 游程, 速率 = 差分/断连实测窗毫秒(离线窗口字节归重连 tick, 不吞进
+    z 快照); 判据游标跨 n 缝 = 断连前最后观测(n 不推进, docstring 语义钉面)"""
+    clock = FakeClock()
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
+    mgr.store.server_state = server_state()  # 活跃 -> r(基线/判据游标立)
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)
+    mgr.client = None  # 断连 3 轮: n 游程(qB 侧 alltime 对照常推进 —— recvBytes 口径)
+    for _ in range(3):
+        clock.advance(30)
+        _run_sample(mgr)
+    mgr.client = FakeClient()  # 重连: 零速率字段 + totals 已动(+1200/+600, 断连窗 120s)
+    mgr.store.server_state = server_state(
+        dl_info_speed=0, up_info_speed=0, alltime_dl=10_001_200, alltime_ul=20_000_600
+    )
+    clock.advance(30)
+    _run_sample(mgr)
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
+    recs = parsed.blocks[0].records
+    assert [type(r) for r in recs] == [V4Sample, V4NullRun, V4Sample]  # r / n(3 槽) / 重分类 r
+    assert recs[1].run_len == 3
+    assert recs[2].dl_rate == 10 and recs[2].up_rate == 5  # 差分/断连窗: 1200*1000/120000ms(calcRate 同式)
+    assert recs[2].dl_total == 10_001_200 and recs[2].up_total == 20_000_600  # 离线窗口字节守恒入账
 
 
 def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
@@ -700,10 +811,10 @@ def test_zero_samples_do_not_touch_baselines_or_latest(tmp_path, monkeypatch):
     t_point = mod.latest["torrent:HASH123"]
     g_base = dict(mod._baselines[GLOBAL_SERIES_KEY])
     t_base = dict(mod._baselines["torrent:HASH123"])
-    mgr.store.server_state = _idle_state(alltime_dl=10_000_100, alltime_ul=20_000_100)
+    mgr.store.server_state = _idle_state()  # 真静默(totals 持平): 空闲判据双条件下才走 z
     rec.dlspeed = 0
     rec.upspeed = 0
-    rec.downloaded, rec.uploaded = 5_000_500, 3_000_500
+    rec.downloaded, rec.uploaded = 5_000_500, 3_000_500  # 单种 totals 变化不影响(z 分类不动, 开启快照取此对)
     for _ in range(3):
         clock.advance(30)
         _run_sample(mgr)
@@ -715,7 +826,9 @@ def test_zero_samples_do_not_touch_baselines_or_latest(tmp_path, monkeypatch):
 def test_dry_run_no_disk_but_memory_runs_advance(tmp_path, monkeypatch):
     """dry_run: 全程零落盘; 缓冲与游程内存照常推进, flush 触发静默跳过写(记录照常清空)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60), clock=clock
+    )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr, dry_run=True)  # t0: 活跃(仅内存)
@@ -888,7 +1001,9 @@ def test_day_boundary_seals_open_run(tmp_path, monkeypatch):
 def test_stop_flushes_all_and_seals_open_runs(tmp_path, monkeypatch):
     """stop() 钩子(§3.4): 封全部开放游程 + 全量 flush(优雅退出零丢失); 幂等(重复调用零副作用)"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock
+    )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> r 进缓冲
@@ -910,34 +1025,38 @@ def test_stop_flushes_all_and_seals_open_runs(tmp_path, monkeypatch):
 
 def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
     """形态 D 封口路径 3(无样本在手 = stop()): 末端锚点 = 游程内最后一条零样本读数
-    (全局系列每轮现读 totals, 跟踪字段随读刷新); 冻结列不变, 末端列落盘该读数"""
+    (跟踪字段)。空闲判据双条件(26-11-21)下 z 观测 totals 恒持平 -> 跟踪读数 == 开启
+    快照, 两档合流; 末端列与冻结列同值落盘, 封口路径本身(stop 无样本在手)不变"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock
+    )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> r 进缓冲
-    for i in (1, 2, 3):  # 空闲三轮: alltime 逐轮增长(全局系列每轮现读 -> 跟踪字段刷新)
-        mgr.store.server_state = _idle_state(alltime_dl=10_000_000 + i * 400, alltime_ul=20_000_000 + i * 200)
+    for _ in range(3):  # 空闲三轮: 真静默(totals 持平)-> z 游程 3 槽
+        mgr.store.server_state = _idle_state()
         clock.advance(30)
         _run_sample(mgr)
     mod.stop()
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     z = parsed.blocks[0].records[1]
     assert isinstance(z, V4ZeroRun) and z.run_len == 3
-    assert (z.dl_total, z.up_total) == (10_000_400, 20_000_200)  # 冻结列 = 开启快照(首零样本对)
-    assert (z.dl_total_end, z.up_total_end) == (10_001_200, 20_000_600)  # 末端列 = 最后零样本读数
+    assert (z.dl_total, z.up_total) == (10_000_000, 20_000_000)  # 冻结列 = 开启快照(首零样本对)
+    assert (z.dl_total_end, z.up_total_end) == (10_000_000, 20_000_000)  # 末端列 = 跟踪读数(== 开启快照)
 
 
 def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatch):
     """形态 D 封口路径 4(采样间隔热重载关块): 关块前封开放游程, 末端锚点 = 跟踪的最后
-    零样本读数; 旧块以旧 interval 落盘、新数据新块新 interval(A3 口径不变)"""
+    零样本读数; 旧块以旧 interval 落盘、新数据新块新 interval(A3 口径不变)。空闲判据
+    双条件下跟踪读数 == 开启快照(两档合流), 封口路径(改间隔关块)本身不变"""
     clock = FakeClock()
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30), clock=clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: 活跃 -> 开块
-    for i in (1, 2):  # 空闲两轮(alltime 增长 -> 跟踪字段刷新)
-        mgr.store.server_state = _idle_state(alltime_dl=10_000_000 + i * 400, alltime_ul=20_000_000 + i * 200)
+    for _ in range(2):  # 空闲两轮: 真静默(totals 持平)-> z 游程 2 槽
+        mgr.store.server_state = _idle_state()
         clock.advance(30)
         _run_sample(mgr)
     mgr.config.qb_traffic.sample_interval_multiplier = 10  # 热重载: 下一轮关块
@@ -948,8 +1067,8 @@ def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatc
     assert parsed.blocks[0].interval_s == 30
     z = parsed.blocks[0].records[1]
     assert isinstance(z, V4ZeroRun) and z.run_len == 2
-    assert (z.dl_total, z.up_total) == (10_000_400, 20_000_200)  # 冻结列 = 开启快照
-    assert (z.dl_total_end, z.up_total_end) == (10_000_800, 20_000_400)  # 末端列 = 最后零样本读数
+    assert (z.dl_total, z.up_total) == (10_000_000, 20_000_000)  # 冻结列 = 开启快照
+    assert (z.dl_total_end, z.up_total_end) == (10_000_000, 20_000_000)  # 末端列 = 跟踪读数(== 开启快照)
 
 
 def test_stop_dry_run_short_circuit(tmp_path, monkeypatch):
@@ -1056,7 +1175,9 @@ def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, 
     主文件零写入, 封口后天文件恰 1 条 B 行 + 1 条长 z 行; 跨 flush 开放 z 游程的
     LiveTail 复原与落盘重算恒等(块首封口形态); 恢复传输后 r 行 delta <= flush 窗 x 速率"""
     clock = FakeClock()
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock
+    )
     mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=512)  # 全局保持活跃(隔离单种面)
     seed_store(mgr, [active_torrent("HASH123")])
     st = TrafficV4Store(str(tmp_path))  # 数据门: 预置系列目录含 .dat(有过历史数据)
@@ -1102,7 +1223,9 @@ def test_v4_non_z_seal_midnight_materializes_idle_b_z_batch(tmp_path, monkeypatc
     """7. 非 z 事件封口(v4 §04 用例 7): 长空闲段恰 1 条长 z 行, 00:00 物化进当日天文件
     (B + z 一批 append, 空闲期主文件零写入); 次日 LiveTail 开放游程跨天接力与落盘重算恒等"""
     clock = FakeClock(start=_local_epoch(23, 57, 40))
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=10**9), clock=clock
+    )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     t_before = clock.now()
@@ -1253,7 +1376,9 @@ def test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end(tmp_path, monkey
     d0 = v4_day_epoch(_AGG_H0)
     h0 = d0 + 2 * HOUR_SECONDS
     clock = FakeClock(start=h0)
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=600), clock=clock
+    )
     mgr.store.server_state = server_state(dl_info_speed=100, up_info_speed=50, alltime_dl=1000, alltime_ul=2000)
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t=h0: r 记录(立信用, 尚无游程)
@@ -1509,8 +1634,9 @@ def test_w5_n_prefix_split_zero_run_no_crash(tmp_path, monkeypatch):
 
 
 def test_w5_counter_reset_split_zero_run_no_crash(tmp_path, monkeypatch):
-    """计数器重置关块: 拆块实参携带 end_ts —— 重置记录为 run_len>=2 z 游程不崩
-    (_append_record_65; 真实序列: z 开启快照低于块内最近 totals)"""
+    """计数器重置关块: 拆块实参携带 end_ts —— 空闲期计数器回落(零速率字段 + totals
+    回落)经重分类 r 触发强制关块重开不崩(_append_record_65); 新块基线 = 重置后
+    totals, 随后真静默 z 游程与恢复 r 照常(空闲判据双条件下 z 游程不再携带回落)"""
     clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
@@ -1520,40 +1646,45 @@ def test_w5_counter_reset_split_zero_run_no_crash(tmp_path, monkeypatch):
     mgr.store.server_state = server_state(alltime_dl=5_100_000, alltime_ul=3_100_000)
     _run_sample(mgr)  # 块内最近 totals 5.1M/3.1M
     mgr.store.server_state = _idle_state(alltime_dl=100, alltime_ul=50)  # 空闲期计数器回落
-    for _ in range(2):  # z 游程(开启快照 100/50)
+    clock.advance(30)
+    _run_sample(mgr)  # 零速率字段 + totals 回落 -> 重分类 r -> cur(100) < last(5.1M) -> 强制关块重开
+    mgr.store.server_state = _idle_state(alltime_dl=100, alltime_ul=50)
+    for _ in range(2):  # 真静默(totals 持平)-> z 游程 2 槽
         clock.advance(30)
         _run_sample(mgr)
     mgr.store.server_state = server_state(alltime_dl=200, alltime_ul=60)
     clock.advance(30)
-    _run_sample(mgr)  # r 封 z -> z 记录 totals 100 < 5.1M -> 强制关块重开(变异在拆块实参)
+    _run_sample(mgr)  # r 封 z(2 槽) -> 新块尾(200 >= 100 无二次重置)
     _flush(mod)
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.bad_lines == 0 and len(parsed.blocks) == 2
     b2 = parsed.blocks[1]
     assert (b2.dl_base, b2.up_base) == (100, 50)  # 新块基线 = 重置后 totals
-    assert isinstance(b2.records[0], V4ZeroRun) and b2.records[0].run_len == 2
-    assert isinstance(b2.records[1], V4Sample)
+    assert isinstance(b2.records[0], V4Sample)  # 重置记录 = 重分类 r(零速率字段 + 回落)
+    assert b2.records[0].dl_rate == 0 and b2.records[0].up_rate == 0  # 回落差分为负, _delta_rate 钳 0 落列
+    assert isinstance(b2.records[1], V4ZeroRun) and b2.records[1].run_len == 2
+    assert isinstance(b2.records[2], V4Sample)
 
 
 def test_w5_day_boundary_seal_uses_current_readings(tmp_path, monkeypatch):
-    """跨天封口末端锚点用本轮读数(docstring 明文): 增长 totals 的全局 z 游程跨 00:00 封口
-    -> z 行末端列 = 本轮读数 —— _advance_run_10/11/13/14"""
+    """跨天封口末端锚点用本轮读数(docstring 明文): 真静默 z 游程跨 00:00 封口 -> z 行
+    末端列 = 本轮(封口 tick)读数 —— 空闲判据双条件下 z 观测 totals 恒持平, 本轮读数 =
+    跟踪读数 = 开启快照(三档合流, 跨天封口路径本身不变)—— _advance_run_10/11/13/14"""
     clock = FakeClock(start=_w5_ts(2026, 6, 1, 23, 58, 0))
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
     mgr.store.server_state = _idle_state(alltime_dl=1000, alltime_ul=5000)
-    for i in range(1, 6):  # 23:58:00..00:00:00(5 样本, 末样本跨 0 点): totals 逐轮增长(合法形态)
+    for i in range(1, 6):  # 23:58:00..00:00:00(5 样本, 末样本跨 0 点): 真静默(totals 持平)
         if i > 1:
             clock.advance(30)
-        mgr.store.server_state = _idle_state(alltime_dl=1000 + i * 400, alltime_ul=5000 + i * 200)
         _run_sample(mgr)
     _flush(mod)
     parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, _w5_ts(2026, 6, 1, 23, 59, 0))
     assert parsed.bad_lines == 0 and len(parsed.blocks) == 1
     z = parsed.blocks[0].records[0]
     assert isinstance(z, V4ZeroRun) and z.run_len == 4
-    assert z.dl_total_end == 1000 + 5 * 400  # 本轮(00:00:00)读数, 非上一轮跟踪值
-    assert z.up_total_end == 5000 + 5 * 200
+    assert z.dl_total_end == 1000  # 本轮(00:00:00)读数 = 开启快照(真静默 totals 持平)
+    assert z.up_total_end == 5000
 
 
 def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
@@ -1565,7 +1696,9 @@ def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
     # data_dir 先于模块构造注入: _limits_rec 构造期取值(observe 的 persistence_on 面才可达)
     mgr = make_manager(str(tmp_path / "state.json"), data_dir=str(tmp_path), clock=clock)
     mgr.client = FakeClient()
-    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=30, flush_interval=60, rollup_window=60.0)
+    mgr.config.qb_traffic = QbTraffic(
+        enabled=True, sample_interval_multiplier=30, flush_interval=60, rollup_window=60.0
+    )
     st = TrafficV4Store(str(tmp_path))
     st.append_agg_rows(GLOBAL_SERIES_KEY, (AggRow("hour", h0 - 10800, 7, 9, 3, 4, 500, 600, 3600), ))
     day = v4_epoch_date_str(clock.now())
@@ -1697,7 +1830,7 @@ def test_w5_interval_change_closes_idle_block(tmp_path, monkeypatch):
         _run_sample(mgr)
     mod._seal_run(GLOBAL_SERIES_KEY)  # 封 z1 -> 纯空闲块(块首 z, 无 r 行)
     mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval_multiplier=45, flush_interval=10**9)
-    mgr.store.server_state = _idle_state(alltime_dl=5_000_300, alltime_ul=3_000_100)
+    mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)  # 真静默(持平)-> z2
     for _ in range(2):  # 改间隔后空闲(45s 档)
         clock.advance(45)
         _run_sample(mgr)
