@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-21-1326">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="relocate-foreign-torrent">
-<meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="foreign 通知账条目纳入后不清理, 种子在库期间滞留">
 <meta name="issue-summary" content="场景 A 纳入后通知账条目滞留到种子消失才清, 呈现被 job 标注接管无用户可见损失, 通知账管理面可一并处置">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-21-1326-refactor-relocate-foreign-notified-cleanup</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 13:26</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">计划 26-11-20-0434 实施批 (T5/S5 遗留)</div></div>
 </div>
 
@@ -114,11 +114,18 @@
   <p>不急修。若日后做通知账管理面板（盘全账条目）可一并处置: 纳入拍即清（场景 A 接缝落账改随纳收口删条目, 或对账拍对「kind=A 且已是成员」的条目做清理型回收）或面板侧对 A 类条目终态过滤。单独修时注意黄金法则 2（合法关闭配置不得被 materialize 出账键）与主循环单写者纪律。</p>
 </section>
 
+<section id="s3b">
+  <h2><span class="no">§03.5</span>修复后补充<span class="opt">（2026-11-22）</span></h2>
+  <p><strong>实际修法</strong>（计划 26-11-21-1600 S2/B2, 提交 1d4ae8cb）: job「非终态→终态」翻转边沿单点 <code>_foreign_cleanup_job_terminal</code> 清 notified 内该 job 的 kind=A 与 kind=mismatch 条目（kind=B 留到种子消失）, 三接线: <code>_set_job</code> 边沿（覆盖 done×2/failed/cancelled）/ <code>_handover_predecessors</code> superseded 直写点（绕过 _set_job）/ <code>_load_jobs</code> 启动对账采纳支（崩溃窗 journal 先落盘先于 state 刷盘, 恢复终态不经 _set_job —— 分批评审 major 补挂）; 旧账迁移器有意不挂（迁移时刻 foreign 账尚不存在）。黄金法则 2 用只读视图判存在落实, 幂等 = 边沿触发 + 无匹配零动作。</p>
+  <p><strong>验证方式</strong>: 终态清理守阵（重复翻终态零副作用 / kind=B 保留 / 合法关闭配置不 materialize 账键 / 非终态推进零清理）+ 崩溃窗恢复守阵（拔补挂即红）+ mismatch 重判双面守阵（done 重落+恰重发一次 / failed 静默消失, 拍板 a 钉档）; test.full 全绿见 <a href="../testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md">基线切片 26-11-22-0533</a>。mismatch 形态语义与拍板 D4 措辞的出入经用户拍板「接受现状+钉档」收口, 语义单点在 relocate_foreign docstring。</p>
+</section>
+
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-21 13:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-21 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
 </ul>
 </section>
 

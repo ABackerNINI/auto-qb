@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-21-1600">
-<meta name="doc-updated" content="26-11-21-1600">
-<meta name="doc-refs" content="memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html">
+<meta name="doc-updated" content="26-11-22-0521">
+<meta name="doc-refs" content="memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md">
 <style>
   :root {
     --bg: #10151a;
@@ -137,6 +137,7 @@
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
+  <li><span class="tag">R1 · 26-11-22-0521</span> S1-S3 全部落地(5 批本地提交 rebase 进 develop, 档案 26-11-22-backend-relocate-foreign-gate): S1 预筛/终态清理/文案/daemon 日志+流程行/WEBUI 行三态 + 接缝终审 3 轮零 actionable; mismatch 重判语义与 D4 措辞出入经用户拍板 a) 接受现状+钉档(语义单点 relocate_foreign docstring); 评审 5 批 11 轮检 16/16 修 16 零 blocker; 全绿见 kb.baseline; <strong>S4 真机验收仍 Open</strong>(需真机窗口, 验收判据 §04 不变)</li>
   <li><span class="tag">R0 · 26-11-21-1600</span> 初版: 真机报障取证(2026-11-21 14:11 会话, 61 候选 60 误标)+ grilling 两轮 D1-D9 拍板; 主线 = 判定门内容根预筛 + 终态账面清理 + 可观测性/WEBUI 行同步三批, 真机全链验收收口; 认领 issue 26-11-21-1500 与 26-11-21-1326, 关联计划 26-11-20-0434</li>
 </ul>
 

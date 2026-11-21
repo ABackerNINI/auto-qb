@@ -75,6 +75,12 @@
   `commands run ship.gate` 又裸跑**, 闸门内部 test.quick 同 env 再 rc=4 一次(同复发 4/9 的间接调用教训)。
   为什么没命中: AGENTS.md 顶部警告读过, 但没把「跑任何 pytest 前先 `env -u TMPDIR`」和「前缀挂整条
   组合命令开头」当固定动作, 两次都是失败行提示后补的 —— 该动作必须在开工读 AGENTS.md 时就挂上。
+- **复发**: 12(2026-11-22)—— 多子代理委派实施轮: 开工后台基线 `commands run test.full` 直跑 rc=4
+  (失败行提示后全程改挂 `env -u TMPDIR`, 与复发 11 同款「读档后仍以失败行为触发器」); 复评轮
+  `commands run ship.gate` 又一次裸跑 rc=4(与复发 11-② 同点: 闸门内部 test.quick 同 env)。
+  为什么没命中: AGENTS.md 与坑档的「闸门/提交同 env」教训已在档, 但开工第一跑仍默认直跑 task id ——
+  动作化程度不够, 应把「本 shell 每条含 pytest 的命令(含 ship.gate/ship.commit/test.*)一律带
+  `env -u TMPDIR` 前缀」当作开工同步后立即落进会话工作约定的第一步。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

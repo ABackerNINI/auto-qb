@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-21-1500">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="relocate-foreign-gate">
-<meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="foreign 侦测面同保存路径兄弟目录种子误标 mismatch 洪泛呈现">
 <meta name="issue-summary" content="候选判定门按 save_path 恰等 job.src 入门, 同一下载目录下不同内容根的无关种子全部命中, D4 比对落 mismatch 账后进 WEBUI 旧路径外部种子呈现与 WARNING 通知, job 终态后条目滞留不清理">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 15:00</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">backend/relocate</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">真机运行发现(用户报障 + 会话取证)</div></div>
 </div>
@@ -165,11 +165,13 @@
   <ul>
     <li>2026-11-21 15:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-21 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
 </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验: 2026-11-22 认领修时以接线面测试复现（同 save_path 多子目录种子仅内容根匹配 scope 者进后续面, 其余全部预筛丢弃, 零 mismatch 记录）——修复后形态消失。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>（计划 26-11-21-1600 S1/B1, 提交 41d40168）: 候选门 save_path 恰等入门后、D4 清单比对前加内容根预筛——relocate_units 新纯函数 <code>foreign_gate_passes</code>（候选内容根经 <code>content_root_of</code> 现算 × scope 归一恰等）, <code>_foreign_drain</code> 消费面接线, 场景 A/B 两路同修; 文件表复用 _file_map 记录级惰性缓存零附加 API; 预筛不等 = 静默 DEBUG 丢弃（不入 notified 不呈现无持久负缓存）; 平铺/混合退化形态与不可判定形态保守恒过回落 D4; 收尾链与成员面零触碰。</p>
+  <p><strong>验证方式</strong>: 纯函数全形态单测（目录/平铺/混合/空文件表/大小写折叠/None）+ 接线面测试（兄弟目录样例零 mismatch 记录, A/B 两路各钉）; 评审 2 轮（检 2/2 修 2）; test.full 全绿见 <a href="../testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md">基线切片 26-11-22-0533</a>（6789 passed, 6 skipped, 99%）。真机全链复验（计划 S4）待真机窗口另做。</p>
 </section>
 
 <footer>
