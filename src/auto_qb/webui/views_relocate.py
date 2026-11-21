@@ -135,6 +135,8 @@ def foreign_member(entry: Optional[dict]) -> Optional[dict]:
       标注签名 _relocateSig 覆盖 updated_at, 首见变化自然进指纹);
     - expired: R7「映射已过期」位 = location 已被侦测面置空(终态账滚动后重解析失败,
       relocate_foreign._foreign_notify_expired)—— 浮窗/抽屉按它显示降级文案, 前端不重算。
+    - kind: 账条目类别透传(B/mismatch, B2 计划 26-11-21-1600)—— 呈现档位词表不扩面,
+      前端 mismatch 说明行的区分位(判据只认后端, 与 expired 位同纪律)。
     """
     if not entry:
         return None
@@ -163,4 +165,7 @@ def foreign_member(entry: Optional[dict]) -> Optional[dict]:
         "resume_exhausted": False,
         "first_seen": first_seen,
         "expired": not location,
+        # kind 透传(B2, 计划 26-11-21-1600): 前端 mismatch 说明行的区分位(与 expired 位同
+        # 纪律: 区分位只认后端投影, 前端不重推)—— 呈现档位词表不扩面, 只加数据位。
+        "kind": kind,
     }

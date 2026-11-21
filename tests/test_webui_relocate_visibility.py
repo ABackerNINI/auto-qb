@@ -31,7 +31,8 @@
 
 - test_foreign_member_projection: foreign_member 投影 —— kind B/mismatch 进面板(A 不进);
   state=DISPLAY_FOREIGN + 契约形状与 member_relocate 同形(mover False/alias 0/resume 全零/
-  origin 空) + first_seen 占 updated_at 槽 + expired 位(location 空位); 空条目 None
+  origin 空) + first_seen 占 updated_at 槽 + expired 位(location 空位) + kind 透传(B2 前端
+  mismatch 说明行区分位); 空条目 None
 - test_foreign_row_fallback_and_job_priority: 行构建回落 —— notified 账条目经
   foreign_notified_view 发布视图落到 _member_view 标注; job 成员先行命中不落外部回落;
   relocate 关恒 None; 缺 getter 替身面零异常
@@ -43,7 +44,9 @@
   _relocatePick foreign 自成档不进「有过迁移」
 - test_foreign_display_wiring: 通知面接线守阵 —— 词表/色调(两作用域)/筛选档/浮窗专属块/
   模板强调条件/抽屉专属行集 六处同轮在场; 降级判据读后端 expired 位 + 文案单点
-  foreignExpiredText 定义恰一次且浮窗/抽屉共用(评审 minor 6 + nit 9)
+  foreignExpiredText 定义恰一次且浮窗/抽屉共用(评审 minor 6 + nit 9); mismatch 说明文案
+  单点 foreignMismatchText 定义恰一次且浮窗/抽屉共用、判据读后端 kind 位, 字面只落 decorate
+  单点(B2, 计划 26-11-21-1600)
 """
 from __future__ import annotations
 
@@ -197,11 +200,13 @@ def test_foreign_member_projection():
     assert a["resume_retries"] == 0 and a["resume_exhausted"] is False
     assert a["first_seen"] == 1234.5 and a["updated_at"] == 1234.5  # 首见占 updated_at 槽
     assert a["expired"] is False
+    assert a["kind"] == "B"  # kind 透传(B2 前端 mismatch 说明行区分位)
     # R7 已过期(location 空位): expired True + dst 空(浮窗/抽屉按它给降级文案)
     expired = foreign_member({**entry, "location": ""})
-    assert expired["expired"] is True and expired["dst"] == ""
+    assert expired["expired"] is True and expired["dst"] == "" and expired["kind"] == "B"
     # mismatch(清单不一致)同进面板; kind A(已纳入收尾, job 标注面接管)不进
-    assert foreign_member({**entry, "kind": "mismatch"})["state"] == ru.DISPLAY_FOREIGN
+    mx = foreign_member({**entry, "kind": "mismatch"})
+    assert mx["state"] == ru.DISPLAY_FOREIGN and mx["kind"] == "mismatch"
     assert foreign_member({**entry, "kind": "A"}) is None
     assert foreign_member(None) is None and foreign_member({}) is None
     assert foreign_member({"kind": "B", "root": "", "location": "", "first_seen": 0})["job_id"] == ""
@@ -899,6 +904,14 @@ def test_foreign_display_wiring():
         "浮窗/抽屉必须消费同一文案单点(不另写第二份字面)"
     assert "映射已过期" in deco and "映射已过期" not in pop and "映射已过期" not in rows, \
         "降级文案字面只允许落 decorate 单点(漂移 = 两处文案各走各的)"
+    # mismatch 说明文案单点(B2, 计划 26-11-21-1600): decorate 定义恰一次, 浮窗/抽屉共用,
+    # 判据读后端投影 kind 位 —— 呈现档位词表不扩面(状态词/tone/筛选档断言上方原样不动)
+    assert deco.count("foreignMismatchText() {") == 1, "mismatch 说明文案单点必须在 decorate 定义恰一次"
+    assert "this.foreignMismatchText()" in pop and "this.foreignMismatchText()" in rows, \
+        "浮窗/抽屉必须消费同一 mismatch 文案单点(不另写第二份字面)"
+    assert "同内容根目录下内容不一致" in deco and "同内容根目录下内容不一致" not in pop \
+        and "同内容根目录下内容不一致" not in rows, \
+        "mismatch 文案字面只允许落 decorate 单点(漂移 = 两处文案各走各的)"
     # 抽屉 foreign 专属行集(通知事实面, 不出 job 机械面)
     assert 'rel.state === "foreign"' in rows, "抽屉迁移段必须有 foreign 分支"
     assert 'label: "旧路径"' in rows and 'label: "数据现位置"' in rows and 'label: "首见"' in rows

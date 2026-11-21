@@ -132,6 +132,12 @@ Object.assign(window.AQB_DRAWER.methods, {
             { icon: "#i-refresh", label: "迁移状态", text: this.relocateStateText(rel.state) },
             { icon: "#i-folder", label: "旧路径", text: rel.src || "—", wide: true, act: "copy" },
             { icon: "#i-folder-open", label: "数据现位置", text: rel.expired ? this.foreignExpiredText() : (rel.dst || "—"), wide: true, act: "copy" },
+            /* mismatch 说明行(B2, 计划 26-11-21-1600): kind=mismatch 条目给准确语义(同内容根
+             * 异内容), 文案单点 foreignMismatchText(与浮窗共用, 判据读后端投影 kind 位)——
+             * 呈现档位词表不扩面, 差异只在说明行。 */
+            ...(rel.kind === "mismatch"
+              ? [{ icon: "#i-info", label: "内容差异", text: this.foreignMismatchText(), wide: true }]
+              : []),
             { icon: "#i-hash", label: "产出任务", text: rel.job_id || "—", mono: true, wide: true, act: "copy" },
             { icon: "#i-clock", label: "首见", text: rel.first_seen ? ts(rel.first_seen) : "—" },
           ],

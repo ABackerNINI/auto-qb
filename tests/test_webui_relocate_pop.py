@@ -28,7 +28,9 @@
   调度面: done+账 调 120ms, done 无账 / 无标注行 relPopEnter 不调度(闸短路), moving 行调
   120ms、leave 调 160ms 宽限; foreign 通知态(T5, 计划 26-11-20-0434): 专属路径块
   (旧路径/数据现位置, 已过期走降级文案 foreignExpiredText 单点)+ 只给首见 kv(不出相位/
-  别名/来源/更新等 job 机械面), clearable 不亮(通知态非终态); expired 位钉扎(minor 6:
+  别名/来源/更新等 job 机械面), clearable 不亮(通知态非终态); mismatch 条目(B2, 计划
+  26-11-21-1600)同挂 foreign 档(verdict/tone 词表不扩面)且 reason 槽给准确语义说明行
+  (foreignMismatchText 单点, 判据读后端 kind 位, kind=B 不出该行); expired 位钉扎(minor 6:
   dst 空而 expired=false 的谎言行不落降级文案 —— 判据只认后端位); 组行 dst 数组(minor 5:
   多现位置逐项展开, 全空数组才落降级文案)。
 """
@@ -212,6 +214,10 @@ const seedNoMark=assemble({relocate:null});
 // kv; 已过期(dst 空位)走降级文案; job 机械面(相位/别名/待恢复/来源/更新)不出
 const foreignHit=assemble({relocate:{state:'foreign',src:'R:/old',dst:'R:/new',phase:'done',
   job_id:'jd',alias_count:0,origin:'',updated_at:999880,first_seen:999500,expired:false}});
+// foreign mismatch(B2, 计划 26-11-21-1600): kind=mismatch 条目同挂 foreign 档(verdict/tone
+// 词表不扩面), reason 槽给准确语义说明行(文案单点 foreignMismatchText, 判据读后端 kind 位)
+const foreignMismatch=assemble({relocate:{state:'foreign',src:'R:/old',dst:'R:/new',phase:'done',
+  job_id:'jd',alias_count:0,origin:'',updated_at:999880,first_seen:999500,expired:false,kind:'mismatch'}});
 const foreignExpired=assemble({relocate:{state:'foreign',src:'R:/old',dst:'',phase:'done',
   job_id:'jd',alias_count:0,origin:'',updated_at:999880,first_seen:999500,expired:true}});
 // expired 位钉扎(评审 minor 6): 判据只认后端位 —— dst 空而 expired=false 的「谎言行」
@@ -233,7 +239,7 @@ M.relPopEnter.call(M,{currentTarget:{}},{relocate:{state:'moving',src:'R:/s',dst
 M.relPopLeave.call(M);
 process.stdout.write(JSON.stringify({grpPair,grpMixed,seedFail,seedAlias0,seedNoUpd,
   seedResume,seedExhausted,seedMaxRetriesInflight,seedRetries0,seedResumeEmpty,grpResume,
-  seedDoneResume,seedCancelResume,seedNoMark,foreignHit,foreignExpired,foreignLyingNotExpired,
+  seedDoneResume,seedCancelResume,seedNoMark,foreignHit,foreignMismatch,foreignExpired,foreignLyingNotExpired,
   foreignGrpMulti,foreignGrpAllExpired,timers}));
 """
 
@@ -325,6 +331,16 @@ def test_relocate_pop_assemble_node():
     assert len(fh["kv"]) == 1 and fh["kv"][0][0] == "首见" and fh["kv"][0][1], \
         "foreign 只给首见 kv(别名/来源/更新都是收尾机器的行)"
     assert fh["clearable"] is False, "foreign 是通知态非终态, 清空历史入口不亮"
+    assert fh["reason"] == "", "kind=B 条目不出 mismatch 说明行(判据读后端 kind 位)"
+    # foreign mismatch(B2, 计划 26-11-21-1600): 同挂 foreign 档(verdict/tone 词表不扩面),
+    # reason 槽给准确语义说明行 —— 文案单点 foreignMismatchText, 判据读后端 kind 位
+    fm = out["foreignMismatch"]
+    assert fm["verdict"] == "旧路径外部种子" and fm["tone"] == "foreign", \
+        "mismatch 同挂 foreign 档: verdict/tone 走同一词表(呈现档位词表不扩面, D3)"
+    assert fm["reason"] == "同内容根目录下内容不一致, 疑似外部工具重加了不同版本", \
+        "mismatch 条目浮窗说明行必须走 foreignMismatchText 单点(同内容根异内容准确语义, B2)"
+    assert fm["paths"] == fh["paths"] and fm["kv"] == fh["kv"], \
+        "mismatch 路径块/首见 kv 与 kind=B 同形(只在说明行分流)"
     fe = out["foreignExpired"]
     assert fe["paths"][1] == ["数据现位置", "映射已过期(旧路径映射已随终态账滚动移出)"], \
         "R7 已过期: 数据现位置行给降级文案(单点 foreignExpiredText, 判据只认后端 expired 位)"

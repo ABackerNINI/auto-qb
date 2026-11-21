@@ -58,6 +58,11 @@ const RELOCATE_FILTER_ANY = "有过迁移";
  * 的「数据现位置」降级替代文本共用这一份 —— 改文案只动这里, 两处消费经 foreignExpiredText()
  * 方法(跨文件单点走 decorate methods 的既有先例, 同 relocateResumeText)。 */
 const RELOCATE_FOREIGN_EXPIRED = "映射已过期(旧路径映射已随终态账滚动移出)";
+/* foreign mismatch 说明文案(B2, 计划 26-11-21-1600 D3 单点): kind=mismatch 条目在浮窗
+ * (relocate_pop reason 行)与抽屉(drawer_rows 专属行)的说明共用这一份 —— mismatch 与 B 同挂
+ * foreign 档(状态词/tone/筛选档词表不扩面), 差异只在说明行; 判据读后端投影 kind 位(与
+ * expired 位同纪律: 区分位只认后端, 前端不重推)。 */
+const RELOCATE_FOREIGN_MISMATCH = "同内容根目录下内容不一致, 疑似外部工具重加了不同版本";
 const RELOCATE_ORIGIN_TEXT = { web: "WebUI", rule: "规则", unknown: "未知来源" };
 /* 进行中三态(plan 26-11-07-2344 R3 D17): 位置集匹配(_pathPositions)与行内两排展示
  * (relocateView pair)共用同一 active 边界 —— 行内显示 B 排的行, 其 dst 才参与路径匹配。 */
@@ -142,6 +147,11 @@ window.AQB_DECORATE = {
      * 判据位 = 后端投影 expired(评审 minor 6: 区分位只认后端, 前端不按 dst 空实重推)。 */
     foreignExpiredText() {
       return RELOCATE_FOREIGN_EXPIRED;
+    },
+    /* foreign mismatch 说明文案单点(B2, 计划 26-11-21-1600): relocate_pop / drawer_rows 两处
+     * 共用, 判据位 = 后端投影 kind(与 expired 位同口径: 区分位只认后端, 前端不重推)。 */
+    foreignMismatchText() {
+      return RELOCATE_FOREIGN_MISMATCH;
     },
     /* 待恢复余量展示词(issue 26-11-14-1744 (3); 26-11-15-0441 改口径): 悬停浮窗 kv(relocate_pop)与
      * 抽屉迁移段(drawer_rows)共用的唯一文案单点 —— 计数 + 态(恢复确认中/不再补发)。穷尽判定由

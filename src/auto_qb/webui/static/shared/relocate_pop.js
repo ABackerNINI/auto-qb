@@ -207,7 +207,12 @@ window.AQB_RELOCATE_POP = {
         if (rel.origin) kv.push(["来源", this.relocateOriginText(rel.origin)]);
         kv.push(["更新", rel.updated_at ? this.fmtRelTime(rel.updated_at) : "—"]);
       }
-      const reason = rel.state === "failed" && rel.reason ? `原因: ${rel.reason}` : "";
+      /* reason 槽(B2, 计划 26-11-21-1600): failed 给原因; foreign mismatch 条目给准确语义
+       * 说明行(文案单点 foreignMismatchText, 判据读后端投影 kind 位)—— 同挂 foreign 档
+       * (verdict 词/tone 不扩面), 差异只在说明; 两分支互斥不可能同拍。 */
+      const reason = rel.state === "failed" && rel.reason
+        ? `原因: ${rel.reason}`
+        : (isForeign && rel.kind === "mismatch" ? this.foreignMismatchText() : "");
       return {
         verdict: this.relocateStateText(rel.state),
         phase: isForeign ? "" : (rel.phase || ""),

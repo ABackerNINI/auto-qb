@@ -899,6 +899,13 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, ForeignMixin, BaseMod
                         f"relocate | 启动对账: job {jid} state 相位陈旧({d.get('phase')}), "
                         f"按 journal 终相位回写 {j_phase}(journal 即时落盘先于 state 周期刷盘的失窗收敛)"
                     )
+                    # 崩溃失窗的账面收敛(B2, 计划 26-11-21-1600, 评审 major): journal 即时落盘
+                    # 先于 state 周期刷盘 —— 失窗内盘上 state = 非终态 job + 陈旧 kind=A/mismatch
+                    # 通知条目, 本回写不经 _set_job, 清理在此补挂(随本方法尾部单次 _persist 同窗
+                    # 落盘); 不补挂则条目滞留, 且全量兜底扫对在账 hash 跳过重判, 场景 B 通知
+                    # 永不发生(恰是 1326 A 类滞留)。幂等零副作用, 黄金法则 2 由清理面只读视图
+                    # 判存在兜住(不 materialize)。
+                    self._foreign_cleanup_job_terminal(jid)
                 else:
                     logger.debug(
                         f"relocate | 启动对账: job {jid} journal 终相位({j_phase})锚定不上本生命周期"
@@ -954,9 +961,16 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, ForeignMixin, BaseMod
         让路/拦截登记(S5 起)是派生查询(relocating_hashes/resuming_hashes/alias_roots),
         账面换代即最新, 本方法不再有登记重算挂点。
         """
+        prev = self._jobs.get(job.job_id)
         job = replace(job, updated_at=self._clock.now())
         self._jobs[job.job_id] = job
         self._jobs_loaded = True
+        # 非终态->终态翻转边沿(B2, 计划 26-11-21-1600): 单点清理 foreign 通知账里该 job 的
+        # kind=A/mismatch 条目(done direct/_finalize_verified/failed/_cancelled 全部终态写点
+        # 都经本单点; superseded 直写点另行接线)—— 幂等(重复翻终态/终态重放不再触发边沿),
+        # foreign 段不在时清理面零副作用零建键(黄金法则 2, 判存在走只读视图)。
+        if prev is not None and prev.phase not in ru.TERMINAL_PHASES and job.phase in ru.TERMINAL_PHASES:
+            self._foreign_cleanup_job_terminal(job.job_id)
         self._persist()
         self._publish_snapshot()
         self._sync_pending_tag(job)

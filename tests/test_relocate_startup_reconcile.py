@@ -31,6 +31,10 @@
 ### flag 无态推导与消费幂等(§03.4)
 - test_load_jobs_derives_reconcile_flag_for_failed_only: _load_jobs 按 phase==failed
   推导 rt["reconcile"](仿 rt["recover"] 既有模式), moving/done 不推导, recover 键不回归
+- test_load_jobs_reconcile_adopts_terminal_and_cleans_foreign_entries: 启动对账采纳支补挂
+  B2 终态清理(评审 major, journal 失窗恢复面)—— state 非终态 + 盘上 journal 终相位
+  (ts 锚定本世)回写终态后, 陈旧 kind=A/mismatch 通知条目随回写清理、kind=B 保留, 随
+  _load_jobs 尾部单次 _persist 同窗落盘; 无 foreign 段的采纳支零建键(黄金法则 2)
 - test_flag_consumed_once_no_runtime_rejudgment: flag 消费即清 —— 首轮判「保留 failed」
   后, 运行期物理现状变好(qB 现值改到 dst)也不重判(运行期新失败/新现状都不属于本口)
 - test_qb_down_defers_reconcile_until_first_connect: qB 探不活(未连上)=> flag 保持不
@@ -260,6 +264,74 @@ def test_load_jobs_derives_reconcile_flag_for_failed_only(tmp_path, monkeypatch)
         "只对 failed 推导为真(仿 recover 模式: 键恒在, 值按相位)"
     assert mod._rt["jc"]["reconcile"] is False, mod._rt["jc"]  # cancelled 不对账(G5(4))
     assert mod._rt["jm"]["recover"] is True, mod._rt["jm"]  # 既有恢复判据键不回归
+
+
+def test_load_jobs_reconcile_adopts_terminal_and_cleans_foreign_entries(tmp_path):
+    """_load_jobs 启动对账采纳支补挂 B2 终态清理(评审 major, journal 失窗恢复面):
+    journal 即时落盘先于 state 周期刷盘 —— 失窗内盘上 state = 非终态 job + 陈旧
+    kind=A/mismatch 通知条目; 重启按 journal 终相位回写(不经 _set_job), 采纳支清理该 job
+    的 A/mismatch 条目、kind=B 保留, 随 _load_jobs 尾部单次 _persist 同窗落盘;
+    无 foreign 段的采纳支零建键(黄金法则 2)"""
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+    mod._ctx.state.data = {
+        "relocate":
+            {
+                "jobs": {"ja": ru.job_to_dict(_job("ja", phase=ru.PHASE_ARMED, src="R:/old", dst="R:/new", created_at=100.0))},
+                "foreign":
+                    {
+                        "notified":
+                            {
+                                # 形状与 _foreign_record_hit 同构(失窗前已记账)
+                                "EA": {
+                                    "root": "r:/old",
+                                    "kind": "A",
+                                    "job_id": "ja",
+                                    "phase": "armed",
+                                    "location": "R:/new",
+                                    "first_seen": 1.0
+                                },
+                                "EM": {
+                                    "root": "r:/old",
+                                    "kind": "mismatch",
+                                    "job_id": "ja",
+                                    "phase": "armed",
+                                    "location": "R:/new",
+                                    "first_seen": 1.0
+                                },
+                                "EB": {  # 合成形态: 钉 kind 分流(D4: B 一律保留)
+                                    "root": "r:/old",
+                                    "kind": "B",
+                                    "job_id": "ja",
+                                    "phase": "done",
+                                    "location": "R:/new",
+                                    "first_seen": 1.0
+                                },
+                            }
+                    },
+            }
+    }
+    # 盘上 journal 已即时落终相位(ts >= created_at: 本世锚定采纳; state 刷盘前的失窗现场)
+    rj.write_journal(mod._data_dir(), "ja", {"phase": "done", "ts": 200.0})
+    mod._load_jobs()
+    assert mod.get_job("ja").phase == ru.PHASE_DONE, "journal 终相位回写(采纳支)"
+    notified = mod._state_foreign_notified()
+    assert "EA" not in notified and "EM" not in notified, "陈旧 A/mismatch 条目随回写清理(1326 恢复面)"
+    assert notified["EB"]["kind"] == "B", "kind=B 一律保留(D4)"
+    assert mod._ctx.state.data["relocate"]["jobs"]["ja"]["phase"] == ru.PHASE_DONE, \
+        "清理与回写随 _load_jobs 尾部单次 _persist 同窗落盘"
+    # 黄金法则 2: 账不在(无 foreign 段)的采纳支零建键
+    mod2 = _bare_mod(data_dir=str(tmp_path / "data2"))
+    mod2._ctx.state.data = {
+        "relocate": {
+            "jobs": {
+                "jb": ru.job_to_dict(_job("jb", phase=ru.PHASE_ARMED, created_at=50.0))
+            }
+        }
+    }
+    rj.write_journal(mod2._data_dir(), "jb", {"phase": "cancelled", "ts": 60.0})
+    mod2._load_jobs()
+    assert mod2.get_job("jb").phase == ru.PHASE_CANCELLED
+    assert "foreign" not in mod2._ctx.state.data["relocate"], "采纳支不得 materialize relocate.foreign"
 
 
 def test_flag_consumed_once_no_runtime_rejudgment(tmp_path, monkeypatch):

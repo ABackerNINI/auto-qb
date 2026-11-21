@@ -10,7 +10,8 @@
 /hash 短形/手动处置指引), 重复命中零重复告警(notified 账去重); R7「映射已过期」= 重解析
 失败 + kind=B 条目在账 -> 降级文案 + 条目 location 置空(去重位 + 呈现层「已过期」信号面),
 首次命中即解析失败按「从来不是旧根」口径静默。
-已通知账记 state relocate.foreign.notified(种子消失清理), 单拍处理有界 FIFO(R4);
+已通知账记 state relocate.foreign.notified(种子消失清理; job 翻终态时该 job 的 A/mismatch
+条目随终态单点清理, kind=B 保留 —— B2, 计划 26-11-21-1600), 单拍处理有界 FIFO(R4);
 WebUI 呈现出口 = foreign_notified_view 只读发布视图(内容不变不换代, 变化 mark_dirty(full))。
 
 环境口径: 裸 RelocateModule(仿 relocate_exec_support._bare_mod)+ 真 TorrentStore —— 差集
@@ -186,6 +187,22 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
 - test_foreign_gate_helpers_undeterminable_scope_passes: 预筛不可判定面 —— scope 解析不出
   (job 账不在/命中根两面兜不上/条目 scope 缺失恒过不回落 entry.src)与 qB 缺席(api=None)
   一律恒过回落 D4, 不丢候选
+
+终态账面清理(B2, 计划 26-11-21-1600 S2):
+
+- test_foreign_job_terminal_cleans_a_and_mismatch_keeps_b: 终态清理单点(D4)—— armed job
+  经 _set_job 翻 done 边沿, 该 job 的 kind=A 与 kind=mismatch 条目删除(1326 收口); kind=B
+  一律保留(含他 job 条目, job_id 分流); 清理纯 DEBUG 零 WARNING; 非终态推进零清理动作
+- test_foreign_terminal_cleanup_idempotent: 幂等守阵(黄金法则 1)—— 终态重放(_set_job 以
+  终态相位再落账)不触发边沿, 清理单点直呼重复执行零副作用, 账面零变化零重复 DEBUG
+- test_foreign_terminal_transition_off_config_no_materialize: 黄金法则 2 —— foreign 侦测关
+  (账不在)时 job 翻终态零建键, state 不出现 relocate.foreign 空壳键(done/failed 两路同钉)
+- test_foreign_superseded_direct_write_cleans_entries: superseded 直写点接线 —— 前任翻终态
+  不经 _set_job(_handover_predecessors 直写), A/mismatch 随收官清理 kind=B 保留, 重复执行
+  (前任已终态跳过)零副作用
+- test_foreign_terminal_cleanup_then_rescan_rejudges_scenario_b: 端到面(收尾后正确语义)——
+  收尾窗纳入(kind=A) -> 翻 done(A 条目随终态清理) -> 同根种子重现重扫命中 done 终态账边
+  自然重判场景 B
 """
 import logging
 from dataclasses import replace
@@ -289,6 +306,14 @@ def _spy_scan(mod):
     orig = mod._foreign_full_scan
     mod._foreign_full_scan = lambda reason: (seen.append(reason), orig(reason))[0]
     return seen
+
+
+def _hold_phase_machine(mod):
+    """裸环境相位机让位桩(B2 起): 分类/记账面用例只测 foreign 面 —— 裸环境同拍推进
+    (moving 停滞判失败 / moved 核验不符判失败)会把 job 翻终态, 而终态边沿现在会清该 job
+    的 kind=A/mismatch 条目(B2, 计划 26-11-21-1600), 本测主体的记账形状断言需要相位机
+    让位(B2 端到面另有 test_foreign_terminal_cleanup_then_rescan_rejudges_scenario_b)"""
+    mod._advance = lambda job: None
 
 
 def _warn_count(cap):
@@ -426,8 +451,8 @@ def test_foreign_forms_consistent_list_required():
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
 
         def _mismatch_n():
-            # D4 判定面文案单点(_foreign_record_mismatch): 只数不一致告警
-            return len([m for m in cap.records if m.levelno == logging.WARNING and "文件清单与 job" in m.getMessage()])
+            # D4 判定面文案单点(_foreign_record_mismatch): 只数不一致告警(B2 新口径字面)
+            return len([m for m in cap.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()])
 
         def _notice_n():
             # T5 场景 B 通知文案单点(_foreign_on_scenario_b): 只数通知告警
@@ -438,6 +463,12 @@ def test_foreign_forms_consistent_list_required():
         assert notified["OK"]["kind"] == "B"
         assert notified["MX"]["kind"] == "mismatch"
         assert _mismatch_n() == 1 and _notice_n() == 1
+        # B2 新口径钉扎(计划 26-11-21-1600 D3): 文案 = 同内容根异内容准确语义
+        mx_msg = next(
+            m.getMessage() for m in cap.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()
+        )
+        assert "同内容根目录下内容不一致, 疑似外部工具重加了不同版本" in mx_msg
+        assert "同目录异内容" not in mx_msg  # 旧口径字面退役
         mod.on_task_line()  # 差集残值重入池: notified 去重, 不重告
         assert _mismatch_n() == 1 and _notice_n() == 1
         old_first_seen = notified["OK"]["first_seen"]
@@ -469,6 +500,7 @@ def test_foreign_forms_consistent_list_required():
 def test_foreign_scenario_a_with_phase_and_member_skip(tmp_path):
     """场景 A 分类正确且相位随 job 现值; 活跃 job 成员 hash 幂等跳过"""
     mod, store, client = _env(data_dir=str(tmp_path))
+    _hold_phase_machine(mod)  # 裸环境同拍推进判失败会清 A 条目(B2), 本测只钉记账面
     mod._jobs["ja"] = _job(
         "ja", phase=ru.PHASE_MOVING, src=OLD, dst=NEW, hashes=("MEM", ), plan={"files": list(PLAN_FILES)}
     )
@@ -504,6 +536,7 @@ def test_foreign_scenario_a_with_phase_and_member_skip(tmp_path):
 def test_foreign_inherited_root_hits_scenario_a():
     """活跃 job 的 plan.inherited 继承根同算场景 A(old_root 记继承条目 src)"""
     mod, store, client = _env()
+    _hold_phase_machine(mod)  # 裸环境同拍推进判失败会清 A 条目(B2), 本测只钉记账面
     plan = {
         "files":
             list(PLAN_FILES),
@@ -559,6 +592,7 @@ def test_foreign_gate_sibling_dir_seeds_dropped_no_mismatch():
     job.scope 的进后续面; 兄弟目录种子 DEBUG 静默丢弃 —— 不产生 mismatch 记录/告警不入账;
     纳入接缝零改动(匹配种子照常转正)"""
     mod, store, client = _env()
+    _hold_phase_machine(mod)  # 裸环境同拍推进判失败会清 A 条目(B2), 本测只钉记账/预筛面
     plan = {"files": [["Show/f.bin", 10]]}
     mod._jobs["ja"] = _job("ja", phase=ru.PHASE_MOVING, src=OLD, dst=NEW, scope=OLD + "/Show", plan=plan)
     client.files_map["HIT"] = [_fake_file("Show/f.bin", 10)]  # 内容根 = OLD/Show == scope
@@ -692,6 +726,124 @@ def test_foreign_gate_helpers_undeterminable_scope_passes():
     # 评审 nit: qB 缺席守卫(api/client 缺失)恒过 —— 与 D4 同款不可判定口径
     mod._ctx.api = None
     assert mod._foreign_gate_pass(object(), hit_n) is True
+
+
+# ---------- 终态账面清理(B2, 计划 26-11-21-1600 S2) ----------
+
+
+def _plant_entry(notified, h, kind, job_id, phase="armed"):
+    """通知账条目植入(形状与 _foreign_record_hit 同构; 测试钉清理分流用)"""
+    notified[h] = {
+        "root": ru._norm(OLD),
+        "kind": kind,
+        "job_id": job_id,
+        "phase": phase,
+        "location": NEW,
+        "first_seen": 1.0
+    }
+
+
+def test_foreign_job_terminal_cleans_a_and_mismatch_keeps_b():
+    """B2 终态清理单点(D4): armed job 经 _set_job 翻 done 的边沿上, 该 job 的 kind=A 与
+    kind=mismatch 条目删除; kind=B 一律保留(含他 job 的 B 条目, job_id 分流); 清理纯
+    DEBUG(零 WARNING, 不入告警门槛面); 非 B2 涉面的非终态推进零清理动作"""
+    mod, store, _client = _env()
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW)
+    mod._jobs["jd"] = _job("jd", phase=ru.PHASE_DONE, src="R:/o2", dst="R:/n2", updated_at=100.0)
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "EA", "A", "ja")
+    _plant_entry(notified, "EM", "mismatch", "ja")
+    _plant_entry(notified, "EB", "B", "ja", phase="done")  # 合成形态: 钉 kind 分流(D4: B 一律保留)
+    _plant_entry(notified, "EB2", "B", "jd", phase="done")
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._set_job(replace(mod._jobs["ja"], phase=ru.PHASE_DONE))
+    notified = mod._state_foreign_notified()
+    assert "EA" not in notified and "EM" not in notified  # A/mismatch 随终态清理(1326 收口)
+    assert notified["EB"]["kind"] == "B" and notified["EB"]["job_id"] == "ja"  # kind=B 保留
+    assert notified["EB2"]["kind"] == "B" and notified["EB2"]["job_id"] == "jd"  # 他 job 条目不动
+    assert not [m for m in cap.records if m.levelno >= logging.WARNING]  # 清理纯 DEBUG
+    assert any("翻终态" in m.getMessage() for m in cap.records if m.levelno == logging.DEBUG)
+    # 非终态推进零清理动作(真钉): 另植 armed job 走 armed->armed 的 _set_job(armed 内账面
+    # 更新, 相位不动), 边沿判据只认 非终态->终态 —— 零「翻终态」DEBUG 且条目原样
+    mod._jobs["jw"] = _job("jw", phase=ru.PHASE_ARMED, src="R:/o4", dst="R:/n4")
+    _plant_entry(notified, "EW", "A", "jw")
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod._set_job(replace(mod._jobs["jw"], reason="touch"))
+    assert not [m for m in cap2.records if m.levelno == logging.DEBUG and "翻终态" in m.getMessage()]
+    assert notified["EW"]["kind"] == "A"  # 非终态推进不清理: 条目原样
+
+
+def test_foreign_terminal_cleanup_idempotent():
+    """B2 幂等守阵(黄金法则 1): 终态重放(_set_job 以终态相位再落账)不触发边沿、清理单点
+    直呼重复执行零副作用 —— 账面零变化, 无重复 DEBUG"""
+    mod, _store, _client = _env()
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW)
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "EA", "A", "ja")
+    _plant_entry(notified, "EB", "B", "ja", phase="done")
+    mod._set_job(replace(mod._jobs["ja"], phase=ru.PHASE_DONE))  # 边沿: A 清, B 留
+    assert "EA" not in notified and notified["EB"]["kind"] == "B"
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._set_job(replace(mod._jobs["ja"], phase=ru.PHASE_DONE))  # 终态重放: 非边沿, 不触发
+        mod._foreign_cleanup_job_terminal("ja")  # 清理单点直呼(重复执行)
+        mod._foreign_cleanup_job_terminal("ja")
+    assert "EA" not in notified and notified["EB"]["kind"] == "B"  # 账面零变化
+    assert not [m for m in cap.records if "翻终态" in m.getMessage()]  # 重放零动作零日志
+
+
+def test_foreign_terminal_transition_off_config_no_materialize():
+    """B2 黄金法则 2: foreign 侦测关(foreign_torrent=False, 账不在)时 job 翻终态零建键
+    —— state 里不出现 relocate.foreign 空壳键(done/failed 两路终态同钉)"""
+    mod, _store, _client = _env(foreign=False)
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW)
+    mod._jobs["jb"] = _job("jb", phase=ru.PHASE_ARMED, src="R:/o3", dst="R:/n3")
+    mod._set_job(replace(mod._jobs["ja"], phase=ru.PHASE_DONE))
+    mod._set_job(replace(mod._jobs["jb"], phase=ru.PHASE_FAILED, reason="x"))
+    relocate_box = mod._ctx.state.data.get("relocate")
+    assert isinstance(relocate_box, dict) and "jobs" in relocate_box  # job 账照常落(既有机制)
+    assert "foreign" not in relocate_box  # 零 materialize(清理面只读视图判存在)
+
+
+def test_foreign_superseded_direct_write_cleans_entries():
+    """B2 superseded 直写点接线: 前任翻终态不经 _set_job(_handover_predecessors 直写
+    _jobs), 清理在翻相位处同判据触发 —— A/mismatch 条目随收官清理, kind=B 保留; 已终态
+    前任(重复执行)跳过不重复进账"""
+    mod, _store, _client = _env()
+    mod._jobs["jp"] = _job("jp", phase=ru.PHASE_ARMED, src=OLD, dst=NEW)
+    mod._jobs["j2"] = _job("j2", phase=ru.PHASE_MOVED, src=NEW, dst="R:/c")
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "EA", "A", "jp")
+    _plant_entry(notified, "EM", "mismatch", "jp")
+    _plant_entry(notified, "EB", "B", "jp", phase="done")
+    mod._handover_predecessors([mod._jobs["jp"]], mod._jobs["j2"])
+    assert mod._jobs["jp"].phase == ru.PHASE_SUPERSEDED
+    notified = mod._state_foreign_notified()
+    assert "EA" not in notified and "EM" not in notified
+    assert notified["EB"]["kind"] == "B"  # kind=B 一律保留(D4)
+    # 重复执行(前任已终态, 循环顶守卫跳过): 幂等零副作用
+    mod._handover_predecessors([mod._jobs["jp"]], mod._jobs["j2"])
+    assert set(notified) == {"EB"}
+
+
+def test_foreign_terminal_cleanup_then_rescan_rejudges_scenario_b():
+    """B2 端到面(收尾后正确语义): 收尾窗纳入(kind=A) -> job 翻 done(A 条目随终态清理)
+    -> 同根种子重现重扫, 命中 done 终态账边自然重判场景 B(job_id 指向产出 job)"""
+    mod, store, client = _env()
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW, hashes=(), plan={"files": list(PLAN_FILES)})
+    client.files_map["EX"] = _seed()
+    store.refresh([FakeTorrent(hash="EX", name="ext", save_path=OLD)])
+    mod.on_task_line()  # 场景 A: 记账 + 纳入(收尾窗 spec 双写)
+    notified = mod._state_foreign_notified()
+    assert notified["EX"]["kind"] == "A" and "EX" in mod._jobs["ja"].hashes
+    mod._set_job(replace(mod._jobs["ja"], phase=ru.PHASE_DONE))  # 收官: A 条目随终态清理
+    assert "EX" not in mod._state_foreign_notified_view()
+    store.refresh([])  # 种子消失一拍(重现 = 重新 first-seen 重处理的既有机制)
+    client.files_map["EX"] = _seed()
+    store.refresh([FakeTorrent(hash="EX", name="ext", save_path=OLD)])
+    mod.on_task_line()  # 重现: 差集重入 -> done 终态账边命中 -> 场景 B
+    notified = mod._state_foreign_notified()
+    assert notified["EX"]["kind"] == "B" and notified["EX"]["job_id"] == "ja"
+    assert notified["EX"]["location"] == NEW
 
 
 # ---------- 场景 B 通知面(T5/S5: 只通知 D8, R7 映射已过期, 发布视图) ----------
@@ -1577,6 +1729,7 @@ def test_foreign_resolve_self_loop_first_hop_rejected_single_edge():
 def test_foreign_inherited_entries_non_matching_skipped_in_classify():
     """多继承条目分类: 不命中条目跳过继续走, 命中条目照常产出场景 A(old_root 记命中条目 src)"""
     mod, store, client = _env()
+    _hold_phase_machine(mod)  # 裸环境同拍推进判失败会清 A 条目(B2), 本测只钉分类面
     plan = {
         "files":
             list(PLAN_FILES),

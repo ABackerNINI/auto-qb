@@ -1055,6 +1055,11 @@ class ExecMixin:
                 continue  # 已收官(重复执行/竞态): 跳过, 不重复进账
             self._jobs[pred.job_id
                       ] = replace(pred, phase=ru.PHASE_SUPERSEDED, reason="superseded", updated_at=self._clock.now())
+            # 非终态->终态翻转边沿(B2, 计划 26-11-21-1600): 本写点不经 _set_job(前任翻相位
+            # 与承接账同窗单次 _persist, 评审 should1 形态), foreign 通知账的 kind=A/mismatch
+            # 条目清理在此单独接线(判据同 _set_job 边沿: 循环顶守卫只放非终态前任, 每条都是
+            # 真边沿; 幂等零副作用, 黄金法则 2 由清理面只读视图判存在兜住)。
+            self._foreign_cleanup_job_terminal(pred.job_id)
         self._persist()
         data_dir = self._data_dir()
         for pred in preds:

@@ -29,7 +29,10 @@ IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种
 - 去重(黄金法则 3 状态持久化): 活跃 job 成员(job.hashes 并集)幂等跳过 —— pre-arm 成员
   save_path 仍记旧根, 是「相位机在管」不是外部种子; 已通知 hash 记 state
   ``relocate.foreign.notified``(hash -> 简要信息: 来源旧根/类别/首见时刻/相位/现位置,
-  T5 WebUI 面板直接消费本结构), 种子不在当前快照即清条目(重现 = 重新 first-seen 重处理)。
+  T5 WebUI 面板直接消费本结构), 种子不在当前快照即清条目(重现 = 重新 first-seen 重处理);
+  job 翻终态时该 job 的 kind=A 与 kind=mismatch 条目随终态单点清理(B2, 计划
+  26-11-21-1600: 挂在终态落账处, 幂等; kind=B 通知主体保留到种子消失, 被清的真同根种子
+  交时机扫自然重判为场景 B)。
 - 单拍有界 FIFO(R4): 一拍差集可能数十条(IYUU 批量辅种), 候选池内存队列 + 每拍处理
   预算(_FOREIGN_TICK_BUDGET)分拍消化; 预算只扣「文件表比对」这类真 qB API 成本, 纯路径
   判定的候选出队不受预算限。队列只存内存(重启丢失 = D13 接受的漏消费边界, 下次时机
@@ -578,8 +581,8 @@ class ForeignMixin:
             "first_seen": self._clock.now(),
         }
         logger.warning(
-            f"relocate | foreign | 旧路径种子 {rec.hash[:8]} 文件清单与 job {hit.job_id} 计划不符, "
-            f"不处置只告警(D4) —— 旧根 {hit.old_root}, 请人工核对是否同目录异内容(R5)"
+            f"relocate | foreign | 旧路径种子 {rec.hash[:8]} 与 job {hit.job_id} 同内容根目录下内容不一致, "
+            f"疑似外部工具重加了不同版本, 不处置只告警(D4) —— 旧根 {hit.old_root}, 请人工核对(R5)"
         )
 
     def _foreign_on_scenario_a(self, hit: ForeignHit) -> None:
@@ -889,3 +892,50 @@ class ForeignMixin:
             if h not in store:
                 del notified[h]
                 logger.debug(f"relocate | foreign | 种子 {h[:8]} 已消失, 清理已通知账条目")
+
+    def _foreign_cleanup_job_terminal(self, job_id: str) -> None:
+        """job 翻终态的账面清理(B2, 计划 26-11-21-1600): 删该 job 的 kind=A 与 kind=mismatch 条目
+
+        挂点 = 终态落账处(三写点接线, 判据统一 = 非终态->终态翻转边沿):
+        - _set_job 非终态->终态边沿(relocate_mod): done(direct 快路径 + _finalize_verified)/
+          failed(_fail 单点)/cancelled 全部经此单点;
+        - superseded 直写点(_handover_predecessors, relocate_exec): 前任翻终态不经 _set_job,
+          翻相位处单独接线(同判据: 该循环只收非终态前任, 每条都是真边沿);
+        - 启动对账回写(_load_jobs, relocate_mod): journal 即时落盘先于 state 周期刷盘的崩溃
+          失窗内, 盘上 state = 非终态 job + 陈旧条目, 重启按 journal 终相位回写不经 _set_job,
+          采纳支补挂清理(随 _load_jobs 尾部单次 _persist 同窗落盘) —— 不补挂则条目滞留且
+          全量兜底扫对在账 hash 跳过重判, 场景 B 通知永不发生(1326 A 类滞留的恢复面)。
+
+        语义(D4 拍板): kind=A(活跃 job 命中纳入)与 kind=mismatch(清单不一致告警)都依附
+        「job 在途」这一前提 —— job 收官/失败/撤销/被接管后条目失准, 滞留即 issue
+        26-11-21-1326 的 A 类滞留面; kind=B 一律保留(通知主体, 留到种子消失清理)。被清的
+        真同根种子交时机扫自然重判: 收尾完成后其旧根命中终态账 => 场景 B(正确语义), 仍属
+        收尾窗内活跃 job => 场景 A 重新纳入。
+
+        幂等(黄金法则 1): 边沿判据使重复翻终态/终态重放不再触发; 清理自身对「无本 job
+        条目」零动作, 重放零副作用。终态清理与纳入的竞态由黄金法则 5 兜住: 单写线程内
+        on_task_line 先跑本面(纳入落账)后逐 job _advance(终态边沿清理), 同拍顺序化,
+        双面幂等。
+
+        黄金法则 2: 清理面读账先走只读视图(_state_foreign_notified_view)判存在 —— foreign
+        段不存在/配置关闭/条目不涉本 job 时零副作用零建键(foreign_torrent=False 的合法
+        配置翻终态不得 materialize relocate.foreign 账键); 只有确有删除时才经写面取容器
+        (彼时段已在, setdefault 是无操作)。
+        """
+        notified = self._state_foreign_notified_view()
+        if not notified:
+            return  # 账不在/空: 零副作用零建键(黄金法则 2)
+        dropped = [
+            h for h, e in notified.items() if isinstance(e, dict) and str(e.get("job_id") or "") == job_id and
+            str(e.get("kind") or "") in (_KIND_SCENARIO_A, _KIND_MISMATCH)
+        ]
+        if not dropped:
+            return  # 无本 job 的 A/mismatch 条目: 幂等零动作
+        for h in dropped:
+            self._state_foreign_notified().pop(h, None)
+        head = ", ".join(h[:8] for h in dropped[:5])
+        more = "..." if len(dropped) > 5 else ""
+        logger.debug(
+            f"relocate | foreign | job {job_id} 翻终态, 清理通知账 kind=A/mismatch 条目 "
+            f"{len(dropped)} 条({head}{more}; kind=B 条目保留, B2)"
+        )
