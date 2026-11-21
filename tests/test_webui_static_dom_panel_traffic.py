@@ -5,7 +5,7 @@
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏); R8 追加 state.js 数值面板接线静态钉(fx: qbInitialFx() / fxPanel 显式建字段, plan 26-11-12-1139 §05.5), 修复轮追加状态行展示值 computed 落位钉(qbFxPeriodS/qbFxBeatMs 恰 1 次定义且夹在 computed: { 与 mounted() { 之间, fx-panel.html 保持裸插值不带括号 —— 落 methods 即复现 toDisplayString 函数源码渲染 blocker)
 - test_frontend_qb_fx_store_and_sanitize_battery: 数值面板持久化读路径与逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5, §09 脏值探针) —— qbInitialFx 桩 localStorage 钉四脏值场景(坏 JSON/v:0/数组根/空串)整体回落默认且键保留(全程零 removeItem) + _qbFxSanitize 逐字段: 错类型(数字字段 null/布尔/数组不得被 Number() 误收、布尔严格 ===true/false 且类型归位、合法 false 保真)/未知枚举与空串回落/clamp 边界(impact/particles [0,1]、shiftRatio [0.2,1] 双侧, 数字串"0.9"抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 清场)/合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键) + S4-a 轮追加 section 5(§05.9 第 6 项/第 9 项的电池级等价): openFxPanel 经 overlay_fit 单点钳位 + 图宿主右缘钳位(右缘 >=8px)/重开复位 alt/Alt 看穿三路(keydown+keyup 同处理器按 e.altKey 写态 + 面板不可见早退 + blur 失焦复位)/四皮肤 .fx-panel CSS 成对(fixed 本体/max-height 兜底/fx-alt/120ms 仅 opacity/reduce 零动画)/D20 渗色禁令(fx CSS 段剥注释零 --today-up/--today-down)
-- test_frontend_qb_beat_kernel_battery: 节拍内核 S1 电池 + 接缝静态钉(S1, plan 26-11-12-1139 §03 节奏模型/L0/L1, §06 S1 行) —— node 电池真跑(同 _NODE_QB_FX_PROBE 的 new Function 取出口径): 节奏公式四组(multiplier 1/2/8 与 600s 长窗 -> beat 600/夹顶 1000×3, 下限 320 与非法 period 防御) + 每拍时间线(impact 0.12/shift=shiftRatio×beat 防御夹取/converge [0.12,0.6]/tail=min(period-beat,2000) 封顶非常驻, animEnd<=beat<=1000 全域扫 = I1 真值落地可验证面) + easeOut 三次多项式 1000 采样单调无 overshoot(D9) + 0.75px 最小可见位移规则(短窗播 L0/24h 长窗 2880 点瞬时/0.75 边界/量不到宽瞬时) + L1 双轨独立(上传 Δ=0 恒 Lv.1 下限(F1: 值>0, plan 26-11-14-1313) + 下载 Lv.3 各自正确/Δ 分档端点归属 0.005/0.05/0.30(上限语义不变)/真 0(target==0)与缺口轨恒静默/缺参旧 2 参形态向后兼容/缺口轨 live=false 不插值/复活轨直落真值不造斜坡/分母可视下限防爆炸/0->0 守卫) + 以显示值接续不回跳(打断中值作下一拍 prev, 上下行收敛序列单调落在 [prev,target] 终点恰真值 —— I3); 接缝静态钉: :426 逐字行后追加 _qbBeatStart(不改写既有字面量)/L0 判定帧摆回旧位与每帧 dx 归零成对/收敛帧 setData 交还 auto/ticks 冻结挂 pending 与清冻结先于 setData/reduce 短路读 AQB_FX_CFG.on 有效值(仅 reduce 分量短路, enabled=false 不短路)/_qbChartDestroy 先 _qbBeatCancel 再 destroy/面板 beat 展示值复用 _qbBeatMs 单点(内联 clamp 公式退场)/模块级头部零 BOM 触碰(rAF/performance.now/document.hidden 只准方法域)/调度器域零 destroy+new uPlot+零 loading(I3 反向钉)/tooltip 读数面接缝(_qbHoverOf 读 d.points[i] 不读 u.data, 与 L1 插值写面零交集 —— I4); y 钉成对(x 提交必配 setScale("y") 全窗真值档位, 纯数值收敛帧先钉 y 再 redraw, 钉值口径 _qbYRange x _qbYCapOf, 收敛帧不得再钉 —— 评审 #1 I4 纵轴定档)/ticks 冻结等长守卫在位(splits 数变化即解除缓存回落现算 —— 评审 #4)/_qbChartRescale 在途拍收口(落真值 + _qbBeatCancel + 清冻结先于 setData —— 评审 #6); S8 收敛帧补逐帧 ySeen 钉 y 恒 31.5(只记确有绘制的帧 —— S8 不播 L0, impact 窗静默帧零提交; 封 setScaleLog.every 在零钉时空转的盲区, 删纯数值帧 y 钉即红) + S9b roll 恰边界 dx0=2x step 仍播 L0(rAF=1 + 视口摆回旧位 [1000,1120], 判据改 < 即红) + S4-a 轮追加: S7b 零变化滚窗 F1 后口径: anim.fx 恒在场 lv=1(值>0 恒 >=Lv.1, A1 稳态反馈的调度器面)+ 尾点零改写/impact 窗装饰帧保障补 redraw/S12 零变化连拍 10 次累积零 rAF 零提交(plan §03 I6 行验收列「Δ≈0 连拍 10 次叠加层零绘制」电池级等价 —— §10 零变化静默用例双指)/S13 动画中悬停读数面行为化(_qbHoverOf 读 points 真值不读 u.data 插值面 + 索引越界与负值 null(I8 钳制) + 链中洞 gap=true 区段 mid —— 静态钉 i 的运行时等价, §10「动画中悬停 tooltip 取值用例」电池级) + S13b 显式空值点对照(schema=2 洞位 {t, dl:null, up:null}: _qbHoverOf 双 null 分支真执行 —— 变异盲区封堵, 评审 T3-R2; 空值点列真值点照常出速率对照)。F5 轮追加(plan 26-11-15-1104 §03 F5/§07 R5/§06 D2; 变长点列适配 26-11-18-0037 阶段 3): 拍几何判定单点 _qbRollJudge 纯函数面(rewin 判据 = 组距标称 step 变化 或 真窗起点跳出 ±2 组距滚动域, 点数与等距 xs[1]-xs[0] step 假设双退役 —— stepNom = meta.interval_s 显式传入, 缺席回落真窗首间距; 补点拍(+1)/翻动拍一(起点+1格末点不动 dxN=0)/翻动拍二(起点不动末点+1格)都不 rewin, 真换窗(step 变/起点跳位/滚动域外)仍 rewin, 2 组距恰边界 roll 保持; J7 变长点列面: 相位抖动不 rewin(step=组距标称非 xs[1]-xs[0])/尾组推进拍 dx0=0 dxN=si(窗右沿锚末样本)/组距标称变化 rewin) + 补尾格列构造 _qbPadTailColumns(滚动补滚出真值点 1-2 点(真实历史/缺口观测不造数, data 列零改写 —— 悬停锚同引用; 滚出点数按真值现数), 尾组推进拍/换窗/滚动域外不补; J7f 缺口点照实补) + 调度器面五钉(S14 补点拍全生命周期: 摆回锚=上一拍收敛视图 [1000,1120] 补点贴左缘, 收敛帧 slice 摘补点 _qbPad 归零; S15 翻动拍一不 rewin 照播 L0 且 max 锚按 dxN=0 恒驻真窗末点 —— G-B 右缘镜像一并消灭; S16 翻动拍二 L0+L1 同拍(摆回 min 恒驻真窗起点/max 滑一格 —— 评审轮1 finding1 roll 放宽: 任一端正向位移且两端 |位移| 均 <= 2 组距); S18 变长点列补点拍(step 取 meta 组距标称, 摆回锚贴列首真值); S19 尾组推进拍(L0 只滑 max 侧 si + L1 同拍收敛); S20 建图拍底座(真 _qbChartBuild + 桩 uPlot/DOM 全链: 相位抖动列 u._qbBeat.step = meta 组距标称 30 而非 xs[1]-xs[0]=29 —— step 初值行的变异盲区封堵, 评审 T3-R3)) + S17 状态迁移钉(kept-pad 静止态后首个摆回拍 min = 显示列首点真值, t=0 视口与曲线左端双连续, dxMin0 = 显示列实距按比例退役, 收敛帧全部补点摘除零跳变) + S9 场景改写(真换档 = 组距标称 30->60 + 起点跳位, 点数变化只作伴随症状) + 静态钉 k(剥注释后 st.n !== n 与 padPrev 全文件零残留 —— 旧裸点数判据与等距记账面不得旁路回潮/判定帧 _qbRollJudge 单点(stepNom = meta 组距标称)与 step/xN0 记账/悬停索引按 _qbPad 扣回/yMax 扫描真窗口起步) + 既有静态钉 a/b 随变长点列锚形更新(快路补尾格序 jPad 带 stepNom 无 padPrev/摆回 min=xs[pad]-dxMin0 max=按 dxN)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_beat_kernel_battery: 节拍内核 S1 电池 + 接缝静态钉(S1, plan 26-11-12-1139 §03 节奏模型/L0/L1, §06 S1 行) —— node 电池真跑(同 _NODE_QB_FX_PROBE 的 new Function 取出口径): 节奏公式四组(multiplier 1/2/8 与 600s 长窗 -> beat 600/夹顶 1000×3, 下限 320 与非法 period 防御) + 每拍时间线(impact 0.12/shift=shiftRatio×beat 防御夹取/converge [0.12,0.6]/tail=min(period-beat,2000) 封顶非常驻, animEnd<=beat<=1000 全域扫 = I1 真值落地可验证面) + easeOut 三次多项式 1000 采样单调无 overshoot(D9) + 0.75px 最小可见位移规则(短窗播 L0/24h 长窗 2880 点瞬时/0.75 边界/量不到宽瞬时) + L1 双轨独立(上传 Δ=0 恒 Lv.1 下限(F1: 值>0, plan 26-11-14-1313) + 下载 Lv.3 各自正确/Δ 分档端点归属 0.005/0.05/0.30(上限语义不变)/真 0(target==0)与缺口轨恒静默/缺参旧 2 参形态向后兼容/缺口轨 live=false 不插值/复活轨直落真值不造斜坡/分母可视下限防爆炸/0->0 守卫) + 以显示值接续不回跳(打断中值作下一拍 prev, 上下行收敛序列单调落在 [prev,target] 终点恰真值 —— I3); 接缝静态钉: :426 逐字行后追加 _qbBeatStart(不改写既有字面量)/L0 判定帧摆回旧位与每帧 dx 归零成对/收敛帧 setData 交还 auto/ticks 冻结挂 pending 与清冻结先于 setData/reduce 短路读 AQB_FX_CFG.on 有效值(仅 reduce 分量短路, enabled=false 不短路)/_qbChartDestroy 先 _qbBeatCancel 再 destroy/面板 beat 展示值复用 _qbBeatMs 单点(内联 clamp 公式退场)/模块级头部零 BOM 触碰(rAF/performance.now/document.hidden 只准方法域)/调度器域零 destroy+new uPlot+零 loading(I3 反向钉)/tooltip 读数面接缝(_qbHoverOf 读 d.points[i] 不读 u.data, 与 L1 插值写面零交集 —— I4); y 钉成对(x 提交必配 setScale("y") 全窗真值档位, 纯数值收敛帧先钉 y 再 redraw, 钉值口径 _qbYRange x _qbYCapOf, 收敛帧不得再钉 —— 评审 #1 I4 纵轴定档)/ticks 冻结等长守卫在位(splits 数变化即解除缓存回落现算 —— 评审 #4)/_qbChartRescale 在途拍收口(落真值 + _qbBeatCancel + 清冻结先于 setData —— 评审 #6); S8 收敛帧补逐帧 ySeen 钉 y 恒 31.5(只记确有绘制的帧 —— S8 不播 L0, impact 窗静默帧零提交; 封 setScaleLog.every 在零钉时空转的盲区, 删纯数值帧 y 钉即红) + S9b roll 恰边界 dx0=2x step 仍播 L0(rAF=1 + 视口摆回旧位 [1000,1120], 判据改 < 即红) + S4-a 轮追加: S7b 零变化滚窗 F1 后口径: anim.fx 恒在场 lv=1(值>0 恒 >=Lv.1, A1 稳态反馈的调度器面)+ 尾点零改写/impact 窗装饰帧保障补 redraw/S12 零变化连拍 10 次累积零 rAF 零提交(plan §03 I6 行验收列「Δ≈0 连拍 10 次叠加层零绘制」电池级等价 —— §10 零变化静默用例双指)/S13 动画中悬停读数面行为化(_qbHoverOf 读 points 真值不读 u.data 插值面 + 索引越界与负值 null(I8 钳制) + 链中洞 gap=true 区段 mid —— 静态钉 i 的运行时等价, §10「动画中悬停 tooltip 取值用例」电池级) + S13b 显式空值点对照(schema=2 洞位 {t, dl:null, up:null}: _qbHoverOf 双 null 分支真执行 —— 变异盲区封堵, 评审 T3-R2; 空值点列真值点照常出速率对照)。F5 轮追加(plan 26-11-15-1104 §03 F5/§07 R5/§06 D2; 变长点列适配 26-11-18-0037 阶段 3): 拍几何判定单点 _qbRollJudge 纯函数面(rewin 判据 = 组距标称 step 变化 或 真窗起点跳出 ±2 组距滚动域, 点数与等距 xs[1]-xs[0] step 假设双退役 —— stepNom = meta.interval_s 显式传入, 缺席回落真窗首间距; 补点拍(+1)/翻动拍一(起点+1格末点不动 dxN=0)/翻动拍二(起点不动末点+1格)都不 rewin, 真换窗(step 变/起点跳位/滚动域外)仍 rewin, 2 组距恰边界 roll 保持; J7 变长点列面: 相位抖动不 rewin(step=组距标称非 xs[1]-xs[0])/尾组推进拍 dx0=0 dxN=si(窗右沿锚末样本)/组距标称变化 rewin) + 补尾格列构造 _qbPadTailColumns(滚动补滚出真值点 1-2 点(真实历史/缺口观测不造数, data 列零改写 —— 悬停锚同引用; 滚出点数按真值现数), 尾组推进拍/换窗/滚动域外不补; J7f 缺口点照实补) + 调度器面五钉(S14 补点拍全生命周期: 摆回锚=上一拍收敛视图 [1000,1120] 补点贴左缘, 收敛帧 slice 摘补点 _qbPad 归零; S15 翻动拍一不 rewin 照播 L0 且 max 锚按 dxN=0 恒驻真窗末点 —— G-B 右缘镜像一并消灭; S16 翻动拍二 L0+L1 同拍(摆回 min 恒驻真窗起点/max 滑一格 —— 评审轮1 finding1 roll 放宽: 任一端正向位移且两端 |位移| 均 <= 2 组距); S18 变长点列补点拍(step 取 meta 组距标称, 摆回锚贴列首真值); S19 尾组推进拍(L0 只滑 max 侧 si + L1 同拍收敛); S20 建图拍底座(真 _qbChartBuild + 桩 uPlot/DOM 全链: 相位抖动列 u._qbBeat.step = meta 组距标称 30 而非 xs[1]-xs[0]=29 —— step 初值行的变异盲区封堵, 评审 T3-R3)) + S17 状态迁移钉(kept-pad 静止态后首个摆回拍 min = 显示列首点真值, t=0 视口与曲线左端双连续, dxMin0 = 显示列实距按比例退役, 收敛帧全部补点摘除零跳变) + S9 场景改写(真换档 = 组距标称 30->60 + 起点跳位, 点数变化只作伴随症状) + 静态钉 k(剥注释后 st.n !== n 与 padPrev 全文件零残留 —— 旧裸点数判据与等距记账面不得旁路回潮/判定帧 _qbRollJudge 单点(stepNom = meta 组距标称)与 step/xN0 记账/悬停索引按 _qbPad 扣回/yMax 扫描真窗口起步) + 既有静态钉 a/b 随变长点列锚形更新(快路补尾格序 jPad 带 stepNom 无 padPrev/摆回 min=xs[pad]-dxMin0 max=按 dxN) + 方向B打断继承轮追加(2026-11-22, 修 26-11-21-1704 数据面修剪后的视口层残留压缩面「对账 GET 落袋撞上在途摆回拍 -> 零变化判定不纠偏 -> 补点滞留含补点全宽一拍采样周期 = 整列 x 向压缩」): rem 计算单点 _qbBeatVpRem(easeOut + 末帧 ulp 吸附钳, 帧循环与打断继承重建共用 —— 两处公式漂移即打断回潮, 内联 rem 行退役) + 视口重建纯函数 _qbInheritedViewport(t=0 完整摆回锚/clock>=shiftMs 真窗口/中段按 rem 比例滑向真窗口/预览与非摆回拍 null/防御 NaN-Inf 空列/纯函数零 mutate)+ 快路捕获逐字钉(_qbInheritedViewport 先于 setData 读 prev.data[0] 拍 A 显示列 —— setData 会把视口重置成含补点全宽 auto, 之后再读只剩全宽态)+ 判定帧第三参 inherited(摆回锚 dxMin0/dxN 换算剩余位移, 锚恒真窗口四处公式不动 —— 摆回/帧循环/收敛/装饰 tip; 判据面照用 j.dx0/j.dxN roll 信号不随继承变)+ 继承拍 roll 伪真进同一 _qbFxShiftGate 单点(零变化打断照判可见性/instant)+ 调度器四场景 S21(零变化打断继承全链: 摆回中段捕获 -> 判定帧摆回继承位零回跳 -> 剩余位移滑完 -> 收敛摘补点落回真窗口)/S24(真滚动打断: max 侧从打断位续滑不回跳旧末样本, dxN = 剩余 max 位移, 两端独立记账 F5 对偶面)/S25(rewin 换窗打断不继承: 几何不连续瞬时落地零摆回, 继承门 !rewin)/S26(纯 min 侧剩余位移行为化, 评审轮1 nit: 翻动拍一几何被零变化 GET 打断 —— dxN 剩余=0 下 anim.dx0 = dxMin0 替换是帧循环提交守卫唯一驱动臂, 帧循环 x 提交 >= 2 笔且 min 单调滑向真窗起点)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
 - test_frontend_qb_fx_visual_engine_battery: 视觉引擎 V + N 霓虹元素层 S2-a 电池 + 接缝静态钉(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行) —— node 电池真跑(同节拍内核范式): I6 图层顺序常量逐字(geometry/neon 恒在 curve 前、anchor 在后)+ I11 N 层白名单六元素(S2-b 增 bandHalo 数值光带辉光)/黑名单八元素逐字且零交集 + V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6; 四皮肤无 --qb-lv* 令牌已核查, 计划色值常量落 shared 层)+ 三档配色 blur 上限(neon 10/glitch 14/calm 0)+ V2 环边数映射(3/6/8)+ I9 预算常量(粒子 ≤32/每轨半套 ≤16/N 0.33×beat/粒子窗 0.55×beat/y 间距 26px/切片 ≤5/微震 3px/光点 ≤2/末段 6 桶) + D3 lead 仲裁(argmax 优先非缺口非静默轨/双轨静默 null/恰等取 up) + partCap(等级基数 16/24/32 x 密度, clamp 32, 密度 ≤0 零粒子) + D3 三策略分配(both 对半各 ≤16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both) + D4 y 间距缩小(线性 /26 下限 0.4 不合并不取消) + N 回落 0.33×beat + 冲击环(easeOut 扩张/alpha 线性回落/0.55×beat 后 null) + V3 粒子三阶段(爆发 ×4.5 闭式/拖尾 easeOut 减速位移步单调收缩/末态恰 dist/t=0 alpha=1 与判定线闪光同帧/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边非圆点/同种子恒同/左向 270° 弧避开右向扇区/尺寸行程界) + R6 撕裂切片(≤5/|dy0| ≤3/长 10-80/同参数恒同) + 伪随机确定性; 调度器 fx 面(真 mixin 方法 + 桩 uPlot 含 valToPos/bbox 全量): 判定帧 fx 生成门(cfg.on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/双轨真 0 零装饰 —— F1 后值>0 恒 >=Lv.1)+ both/lead/merge 三策略落 fx 清单 + D4 y 间距实测缩小 + 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘 + y 钉 31.5 成对)+ 次区相位(收敛帧衔接/光点 ≤4 alpha ≤0.35 位置在绘图区内/1px 量化节流零提交/窗尽收尾 anim null/拍内关 tail 下一帧收尾)+ merge+缺口轨落位退 lead 末点 y(F7: specs.merge[0].y0 === yOf(lead.shown), 与底边的假中点即红 —— 评审修复2; S2-b 起切片锚带改 R6 撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H, 断言带内且清单无条件生成)+ spawn 满额清单与密度解耦(F8: 密度 0.4 仍 16/16, cap=partCap(lv,1) —— 评审修复3) + R6 撕裂带 spawn 公式逐条紧断言(F9: halfBand=(0.08+0.30×min(1,Δ/0.5))×H + strat×hash01(尾桶,slot) + 带内钳边与梳齿绘图区钳 —— 评审 minor4: 半带系数与归一分母变异即红); 绘制面 ctx 桩电池(G0-G12, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor): blur 预算(非零赋值恰 1 施加点/带 blur stroke = spots 数 ≤2/逐帧扫帧末 shadowBlur 恒 0/palette=calm 恒不赋非零 —— 评审修复7, 变异自证删 blur 清零行必红; 旧场景 shown=prev 光带零长 bandHalo 不参与, S2-b 完整 ≤3 预算在 scan_band 电池)+ neon=false 零白名单元素落笔(fillText/shadowBlur/Lv 色描边, 锚段同验)+ 密度拍内即时(0.4→13/1→32/0.1→3 粒)+ 切片 palette 逐帧门(neon 零切片/拍内切 glitch 下一帧即画 5 条 1px 级 —— 评审修复4; S2-b 计数按 x<绘图右缘滤除束体梳齿)+ draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点四点均值观测, 假中点即红)+ lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25] 对照 —— 评审修复6); 静态钉: I6/I11/V1/I9 常量行逐字 + 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect→drawClear→Pl.forEach[axes→series]→draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后系列前 —— drawClear 斜纹恒最底/drawAxes fx(挂 drawClear 会被网格盖住违 I6)/draw 限速→锚)+ 背景零铺色(fx 域剥注释后 fillRect 恰 1 处且为切片 1px 级、锚/次区域零 fillRect)+ I11 黑名单(fx 域零触碰 legend/cursor/series)+ I3 反向钉(fx 域零 destroy/new uPlot/loading)+ 生效条件门(spawn 与 fx 装饰段逐帧复核 cfg.on、tail 域复核 cfg.tail)+ 收敛帧次区衔接(phase tail/fxTail/cfg.tail 门)+ 装饰帧保障行 + 次区相位分支在 _qbBeatFrame(装饰帧挂调度器循环, 无独立循环) + S4-a 轮 F1e/G9(§10 双轨探针「上传零粒子零环、下载有反馈」两面; F1 后静默面收窄为真 0/缺口轨): F1e 上轨真 0(target==0 -> level 0)时 lead=dl 真零轨不参与仲裁/act.up=false/act.dl=true/次区资格只 dl —— 与 F1d 缺口轨(live=false)互补的「live=true 但真 0」面; B3 追加 F1e2(F1 下限 spawn 消费面: 值>0 delta=0 恒 Lv.1 -> act/次区资格全开 + 装饰清单在场)与 G0(fx/锚段 clip 实参记账: 右缘放宽到画布右缘宽 840, F5)/G11(环心钳制分支: shown 经 yOf 越下界 305->钳 T+H-rMax=281/越上界 24.3->钳 T+rMax=39/区间内恒等不咬合 —— 评审 major: 近底 e2e 墨量探针对钳制删除假阴性, 钳制语义的机检面)/G12(粒子底缘镜像: 90° 单粒子 ps.y=318.6 越底 -> fill 顶点均值 = 折回值 301.4, 删镜像行必红); G9 绘制面计数(spawn 侧 alloc 照发 both 半套, spots 组装被 fx.act 门滤除 —— 真 0 注入态 16 vs 双活性对照 32, act 门删掉即 32/32 翻倍) + 裁决轮追加 F1f/G10 并经评审 major 修正(calm 档零粒子: plan §04 原型 partCap 的 isCalm 口径, §10「克制档零粒子」原文补齐; 生产只采纳 calm 分量 —— 原型另有 leadLevel()<=1->0 门, Lv.1 发粒子系用户拍板维持现状/P9 未采纳; 唯一闸 = 绘制面 eff 逐帧门, spawn 恒满额清单与配色档解耦(F1f 钉, F8 同款 —— spawn 冻 palette 会让拍内切出 calm 余下冲击窗零粒子到下一拍才恢复且切片带 yCenter 漂移) + 拍内切 calm 下一帧零粒/切出恢复(G10 记账 ctx, neon 同参数 32 对照); isCalm 的 reduce 分量由 spawn 顶门 cfg.on !== true 承接)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_scan_band_battery: T6 综合表现层 S2-b 电池 + 接缝静态钉(S2-b, plan 26-11-12-1139 §03 T4/T6 行/R6 节/D17-D19, §02 R5/R6/R7) —— node 电池真跑(同视觉引擎范式): R6 确定性伪随机(_qbFxHash01 同(拍,槽)恒同且恒 [0,1)/分布 45/35/20 ±0.05 —— plan §04 原型带符号 >> 版本实测 90% 落 [0,0.5) 色池失真, 生产改 Math.imul+>>> 雪崩, 分布断言守)/strat 分层采样恒 [0,1) 且第 i 条只在第 i 层内不聚集/tearRnd 三档(fixed 恒 0.5/random 连续调用不恒同/linked=hash01)/撕裂切片(2/3/5 按等级且 ≤5/长 10-80 随 Δ/alpha 0.18/0.26/0.34 按等级/y 在撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H 内且钳绘图区/同参数恒同/fixed 跨拍序号同形/linked 跨拍序号异形)+ 梳齿(3/5/7 按等级/长 4-24 随 Δ/带内/fixed 等距恒长) + 回声数学(D19/R7: span=clamp(0.22×绘图宽,100,200) 且不超绘图宽/full 存储档降格 auto/100-150-200 直取; fall=pow(1−d/span,0.85) 且 d≥span 恒 0 几何硬停/单调不增; echoQ 0.18-0.45beat 匀速且 q=1 即到点) + 束包络 stops(双峰分立/贴近 <0.08 合并单峰/钳 [0.02,0.98]/NaN 退 0.5) + T5 联动单点(lvColor/beamWScale: grade 关恒 Lv.1, 开随等级, 非法等级退 Lv.3) + 束体指令计数(_qbDrawFxScan 记账 ctx: 逐帧扫 t=0..beat 步 30 ≤23 且 Lv.3 色散+回声双开窗恰 23/回声窗止 450ms 恰 21/色散窗止 500ms 恰 19/0.55×beat 后 0/palette=calm 0/layers.scan=false 0/impact=0 0; 相位 A 行程: x0 从判定线+1.2 格 easeOut 单调收敛、0.12beat(冲击窗)内抵达; 除回声外全部竖笔 x ≥ 判定线不横穿数据、回声 x ≥ 判定线−200(I9-R7 探针); 回声 alpha ≤0.20 且 d=span 帧零回声指令而束体仍在)+ T2 光带(_qbDrawFx 记账 ctx: layers.band=true 双轨各一道渐变 stroke 于末点 x/shown=prev 零长不落笔/band=false 零渐变笔/bandHalo 仅 lead 一道 blur 描边 —— 同帧 blur stroke = 环外圈 2 + 光带 1 = 3(I9 辉光预算)/非零 blur 赋值点 ≤2/帧末 shadowBlur 恒清零)+ 横向线条(glitch 门下切片 5 条 1px 级且 x<右缘、束体+切片 5+23=28 合计、横向细线 5+7=12)+ 微震让位(_drawerAnimRaf 非零时切片零落笔, 归零恢复 —— §09)+ T5 grade=false 全域(描边/填充/渐变 stop/阴影色)无 Lv.3 色; 静态钉: 层开关接线点(cfg.layers.band/scan/grade 字面量 + _qbDrawFx 调用 _qbDrawFxScan 行在位)/束体绘制域(_qbDrawFxScan)剥注释后 fillRect 恰 1 处且为梳齿 1px 级、光带块零 fillRect/I3 反向钉扩 scan 域(零 destroy/new uPlot/loading)/切片微震让位门(!this._drawerAnimRaf 在切片条件内)/_qbFxLvColor(fx.lv, cfg.layers.grade === true) 恰 3 处(fx/锚/束)/束体常量行逐字(六层晕表/强度 0.78/条数表/alpha 表/回声七常量)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
@@ -898,10 +898,10 @@ const src = fs.readFileSync(process.argv[1], "utf8");
 const {
   _qbBeatMs, _qbBeatTimeline, _qbFxEaseOut, _qbFxCellPx, _qbFxShouldShift,
   _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbRollJudge, _qbPadTailColumns, _qbFxShiftGate,
-  _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS,
+  _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS, _qbBeatVpRem, _qbInheritedViewport,
 } = new Function(src + "\nreturn { _qbBeatMs, _qbBeatTimeline, _qbFxEaseOut, _qbFxCellPx,"
   + " _qbFxShouldShift, _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbRollJudge, _qbPadTailColumns,"
-  + " _qbFxShiftGate, _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS };")();
+  + " _qbFxShiftGate, _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS, _qbBeatVpRem, _qbInheritedViewport };")();
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 const close = (a, b, eps) => Math.abs(a - b) <= (eps === undefined ? 1e-9 : eps);
@@ -1179,6 +1179,57 @@ ok("收敛终点恒为真值(shown(p=1) === target)", close(seq(0.7, 1.0, 1), 1.
     Array.isArray(_qbDropRightEdgeSplits(() => null)(null, 0, 0, max, [], 0, false))
     && _qbDropRightEdgeSplits(() => null)(null, 0, 0, max, [], 0, false).length === 0);
 }
+// —— L. 方向B打断继承纯函数面(2026-11-22; rem 单点 _qbBeatVpRem + 视口重建 _qbInheritedViewport)
+//       —— 打断继承的语义锚: t=0 = 完整摆回锚 / clock=shiftMs = 真窗口(ulp 吸附钳) / 单调滑向
+//       真窗口 / 预览与非摆回拍 null(无可继承) / 防御(null/列空/非有限) / 纯函数零 mutate ——
+{
+  const mkAnim = (over) => Object.assign({ needsShift: true, clock: 0, preview: undefined,
+    tl: { shiftMs: 600 }, pad: 1, dx0: 30, dxMin0: 30, dxN: 30 }, over || {});
+  const XS = [1000, 1030, 1060, 1090, 1120, 1150];  // 显示列: 头 1 补点(t=1000) + 真窗口 5 点
+  ok("L1 rem 单点: clock=0 恒 1(完整摆回), clock>=shiftMs 钳零(真窗口), [0,1] 单调递减",
+    _qbBeatVpRem(mkAnim({ clock: 0 })) === 1
+    && _qbBeatVpRem(mkAnim({ clock: 600 })) === 0
+    && _qbBeatVpRem(mkAnim({ clock: 5000 })) === 0
+    && (() => { let prev = 1.1; for (let c = 0; c <= 600; c += 25) {
+      const r = _qbBeatVpRem(mkAnim({ clock: c }));
+      if (!(r <= prev && r >= 0 && r <= 1)) return false; prev = r; } return true; })());
+  ok("L2 rem 单点: 末帧吸附(rem=4.6e-9 < 1e-3 阈值精确归零 —— issue 26-11-17-0936 口径)",
+    _qbBeatVpRem(mkAnim({ clock: 599 })) === 0);
+  ok("L3 重建 t=0: min = xs[pad]-dxMin0 / max = 末点-dxN(完整摆回锚 —— 与判定帧摆回同位)",
+    (() => { const a = mkAnim(); const v = _qbInheritedViewport(a, XS);
+      return !!v && v.min === 1030 - 30 && v.max === 1150 - 30
+        && !("0" in a) && a.clock === 0 && XS[0] === 1000; })());
+  ok("L4 重建中段: 位移按 rem 比例收缩(min/max 严格滑向真窗口), rem 单点驱动(公式同源)",
+    (() => { const v0 = _qbInheritedViewport(mkAnim({ clock: 150 }), XS);
+      const v1 = _qbInheritedViewport(mkAnim({ clock: 300 }), XS);
+      const r150 = _qbBeatVpRem(mkAnim({ clock: 150 }));
+      return !!v0 && !!v1 && v1.min > v0.min && v1.max > v0.max
+        && v0.min === 1030 - r150 * 30 && v0.max === 1150 - r150 * 30
+        && Math.abs(v0.min - (1030 - 30 * Math.pow(0.75, 3))) < 1e-9; })());
+  ok("L5 重建终态: clock>=shiftMs 视口恰真窗口(min=xs[pad]=1030, max=末点=1150)——零剩余位移",
+    (() => { const v = _qbInheritedViewport(mkAnim({ clock: 600 }), XS);
+      return !!v && v.min === 1030 && v.max === 1150; })());
+  ok("L6 门与防御: 非摆回拍/预览拍/null anim/空列/非有限位移回落 null(调用方走原生锚形)",
+    _qbInheritedViewport(mkAnim({ needsShift: false }), XS) === null
+    && _qbInheritedViewport(mkAnim({ preview: 3 }), XS) === null
+    && _qbInheritedViewport(null, XS) === null
+    && _qbInheritedViewport(mkAnim(), []) === null
+    && _qbInheritedViewport(mkAnim(), null) === null
+    && _qbInheritedViewport(mkAnim({ dxMin0: NaN }), XS) === null
+    && _qbInheritedViewport(mkAnim({ dxN: Infinity }), XS) === null);
+  ok("L7 缺参回落: 无 pad 记账(anim.pad=0)按 xs[0] 锚 / dxMin0 缺参回落 dx0 / dxN 缺参回落 dx0"
+    + "(旧 anim 形态)",
+    (() => { const a0 = mkAnim({ pad: 0 });
+      const v0 = _qbInheritedViewport(a0, XS);
+      const a1 = mkAnim({ dxMin0: null, dxN: null });
+      const v1 = _qbInheritedViewport(a1, XS);
+      return !!v0 && v0.min === XS[0] - 30 && !!v1 && v1.min === 1030 - 30 && v1.max === 1150 - 30; })());
+  ok("L8 纯函数: anim 与 xs 列零 mutate(打断捕获不得污染上一拍状态面)",
+    (() => { const a = mkAnim({ clock: 200 }); const xs = XS.slice();
+      const aSnap = JSON.stringify(a); const xsSnap = JSON.stringify(xs);
+      _qbInheritedViewport(a, xs);
+      return JSON.stringify(a) === aSnap && JSON.stringify(xs) === xsSnap; })());
+}
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -1190,7 +1241,8 @@ _NODE_QB_BEAT_SCHED_PROBE = r"""
 const fs = require("fs");
 global.window = {};
 const src = fs.readFileSync(process.argv[1], "utf8");
-const { methods } = new Function(src + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods };")();
+const { methods, _qbInheritedViewport } = new Function(src
+  + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods, _qbInheritedViewport };")();
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 // —— 桩环境: 假 rAF 队列 + 可拨动的毫秒时钟 + 可开关的页面可见性 ——
@@ -1824,6 +1876,160 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   self.qbHistData = undefined;
   self.$refs = undefined;
 }
+// —— S21: 方向B打断继承(2026-11-22 修「偶发整列 x 向压缩」残留面)主面: 在途摆回拍被
+//          零变化对账拍打断(GET 落袋撞摆回窗, 采样间隔内无新样本 -> dx0=dxN=0)—— 继承
+//          取消瞬间视口(剩余位移继续滑完), 打断重建零回跳, 补点不再滞留含补点全宽 ——
+{
+  global.window.AQB_FX_CFG = CFG_ON;
+  self.qbHistData = { meta: { interval_s: 30 } };
+  // 拍 A(补点拍, S14 几何): 显示列 = 补点 t=1000 + 真窗口 [1030..1150], _qbPad=1
+  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
+  u._qbPad = 1;
+  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);   // 摆回锚 [1000,1120](S14 同)
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }   // clock 150: 摆回中段(rem=(0.75)^3)
+  // 快路捕获面等价(setData 前): 用拍 A 显示列重建取消瞬间视口
+  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
+  ok("S21 捕获: 在途摆回拍取消瞬间视口可重建(rem 中段: min/max 严格介于摆回锚与真窗口之间)",
+    !!inh && inh.min > 1000 && inh.min < 1030 && inh.max > 1120 && inh.max < 1150);
+  const midMin = inh.min;
+  // 对账 GET 落袋(快路模拟): 列零变化(同几何同值), 补点携带(_qbPad 保持 1)
+  u.data = [[1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]];
+  u._qbPad = 1;
+  const logLenA = u.setScaleLog.length;
+  self._qbBeatStart("global", u, inh);
+  const jx = u.setScaleLog[logLenA];
+  const jy = u.setScaleLog[logLenA + 1];
+  ok("S21 判定帧: 零变化打断强制进摆回门(roll 伪真), 视口摆回继承位 = 打断瞬间视口(零回跳,"
+    + " 旧形态此处会落到含补点全宽 [1000,1150])+ anim 位移 = 剩余位移 + dx0 字段随 dxMin0"
+    + "(纯 min 侧剩余也逐帧提交)+ x/y 钉成对",
+    rafMap.size === 1 && !!jx && jx[0] === "x"
+    && Math.abs(jx[1] - midMin) < 1e-9 && Math.abs(jx[2] - inh.max) < 1e-9
+    && !!jy && jy[0] === "y"
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === true
+    && u._qbBeat.anim.pad === 1
+    && Math.abs(u._qbBeat.anim.dxMin0 - (1030 - midMin)) < 1e-9
+    && Math.abs(u._qbBeat.anim.dxN - (1150 - inh.max)) < 1e-9
+    && Math.abs(u._qbBeat.anim.dx0 - u._qbBeat.anim.dxMin0) < 1e-9);
+  const logLenB = u.setScaleLog.length;
+  drain();
+  const xsLog21 = u.setScaleLog.slice(logLenB).filter((r) => r[0] === "x");
+  ok("S21 收敛: 剩余位移滑完(min 从继承位单调滑向真窗起点 1030, 全程无回跳低于继承位)"
+    + " + 补点摘除 _qbPad 归零 + 落回真窗口 5 列",
+    u._qbBeat.anim === null && u._qbPad === 0 && u.setDataCount === 1
+    && xsLog21.length > 2
+    && xsLog21.every((r, i) => i === 0 || r[1] >= xsLog21[i - 1][1] - 1e-9)
+    && xsLog21[0][1] >= midMin - 1e-9 && xsLog21[xsLog21.length - 1][1] > 1020
+    && u.data[0].length === 5 && u.data[0][0] === 1030);
+  self.qbHistData = undefined;
+}
+// —— S24: 方向B真滚动打断(新样本拍打断在途摆回拍: dxN=si 真推进)—— 摆回 max 从打断位
+//          续滑(不回跳旧末样本), min 从继承位续滑, 两端位移各自独立记账(F5 对偶面) ——
+{
+  global.window.AQB_FX_CFG = CFG_ON;
+  self.qbHistData = { meta: { interval_s: 30 } };
+  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
+  u._qbPad = 1;
+  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  u._qbBeat.xN0 = 1120;   // 上一拍真窗末点 1120 -> 拍 A dxN = 30
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);   // 摆回 [1000,1120]
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
+  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
+  // 新样本拍打断(尾点 t 1180 推进一格 + 尾值真变化; 窗起点不动 dx0=0)
+  u.data = [[1000, 1030, 1060, 1090, 1120, 1180], [7, 0, 0, 0, 0, 80], [9, 0, 0, 0, 0, 60]];
+  u._qbPad = 1;
+  const logLenC = u.setScaleLog.length;
+  self._qbBeatStart("global", u, inh);
+  const jx24 = u.setScaleLog[logLenC];
+  ok("S24 真滚动打断: 摆回 = 继承视口(min/max 都从打断位续滑 —— max 不回跳旧末样本 1120)"
+    + " + dxN = 剩余 max 位移(1180 - 继承 max)+ 尾值真变化 needsTail 同拍",
+    rafMap.size === 1 && !!jx24 && jx24[0] === "x"
+    && Math.abs(jx24[1] - inh.min) < 1e-9 && Math.abs(jx24[2] - inh.max) < 1e-9
+    && Math.abs(u._qbBeat.anim.dxN - (1180 - inh.max)) < 1e-9
+    && u._qbBeat.anim.needsTail === true && u._qbBeat.anim.needsShift === true);
+  const logLenD = u.setScaleLog.length;
+  drain();
+  const xsLog24 = u.setScaleLog.slice(logLenD).filter((r) => r[0] === "x");
+  ok("S24 收敛: max 缘滑过旧末样本 1150 滑向新末样本 1180(帧循环 x 提交末笔 > 1150)"
+    + " + 尾值 80 真值写回 + 补点摘除落回真窗口 5 列 [1030..1180]",
+    u._qbBeat.anim === null && u.data[1][4] === 80 && u._qbPad === 0
+    && u.data[0].length === 5 && u.data[0][0] === 1030 && u.data[0][4] === 1180
+    && xsLog24.length >= 2 && xsLog24[xsLog24.length - 1][2] > 1150);
+  self.qbHistData = undefined;
+}
+// —— S25: 方向B边界: 换窗(rewin)打断在途摆回拍不继承 —— 几何不连续瞬时落地, 补点随整列
+//          替换丢弃, 继承视口让位原生锚形(继承门 !rewin) ——
+{
+  global.window.AQB_FX_CFG = CFG_ON;
+  self.qbHistData = { meta: { interval_s: 30 } };
+  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
+  u._qbPad = 1;
+  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
+  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
+  const logLenE = u.setScaleLog.length;
+  // 换窗打断(组距标称 30 -> 60 = 真换档; 换窗整列替换, 补点丢弃 _qbPad=0)
+  self.qbHistData = { meta: { interval_s: 60 } };
+  u.data = [[1000, 1060, 1120, 1180, 1240], [7, 0, 0, 0, 80], [9, 0, 0, 0, 60]];
+  u._qbPad = 0;
+  self._qbBeatStart("global", u, inh);
+  ok("S25 rewin 打断不继承: 瞬时落地零摆回(判定帧零 x/y setScale —— 不摆回继承视口)"
+    + " + anim 无 needsShift + step 重定标 60",
+    u.setScaleLog.length === logLenE
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === false
+    && u._qbBeat.step === 60);
+  drain();
+  ok("S25 rewin 打断收敛: fx-only 拍照常收口, 数据落真窗口 5 点", u._qbBeat.anim === null
+    && u.data[0].length === 5 && u.data[0][0] === 1000 && u.data[1][4] === 80);
+  self.qbHistData = undefined;
+}
+// —— S26: 方向B纯 min 侧剩余位移(评审轮1 nit 行为化): 翻动拍一几何(S15 同形: dx0>0、
+//          dxN=0)的在途摆回拍被零变化 GET 打断 —— 继承拍 dxN 剩余=0、dxMin0 剩余>0, anim.dx0
+//          = dxMin0 替换是帧循环提交守卫唯一能翻真的臂(缺失即零提交, 视口冻结在继承位直到
+//          收敛帧跳变; S24 拍 A 两侧都动 dxMax 臂可代偿拦不住) ——
+{
+  global.window.AQB_FX_CFG = CFG_ON;
+  self.qbHistData = { meta: { interval_s: 30 } };
+  const u = mkU([1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 6, 30, 60);   // 上一拍真窗 [1000,1150] 6 点(翻动拍一: 起点+1格末点不动)
+  u._qbBeat.xN0 = 1150;
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);        // 拍 A 摆回 [1000,1150](dx0=30, dxN=0)
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
+  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
+  ok("S26 捕获: 纯 min 侧摆回中段视口(max = 旧末样本 1150 恒驻, min 介于 1000 与真窗起点 1030)",
+    !!inh && inh.min > 1000 && inh.min < 1030 && inh.max === 1150);
+  const midMin26 = inh.min;
+  // 零变化 GET 打断(同列同值, 无补点 pad=0)
+  u.data = [[1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]];
+  u._qbPad = 0;
+  const logLenF = u.setScaleLog.length;
+  self._qbBeatStart("global", u, inh);
+  ok("S26 判定帧: 摆回 = 继承视口(max 恒驻 1150) + anim 位移纯 min 侧(dx0 字段 = dxMin0 剩余"
+    + " —— dxN 剩余=0 下帧循环守卫唯一驱动臂) + 纯 L0(needsTail=false)",
+    rafMap.size === 1
+    && Math.abs(u.setScaleLog[logLenF][1] - midMin26) < 1e-9
+    && u.setScaleLog[logLenF][2] === 1150
+    && u._qbBeat.anim !== null
+    && Math.abs(u._qbBeat.anim.dx0 - (1030 - midMin26)) < 1e-9
+    && Math.abs(u._qbBeat.anim.dx0 - u._qbBeat.anim.dxMin0) < 1e-9
+    && u._qbBeat.anim.dxN === 0
+    && u._qbBeat.anim.needsShift === true && u._qbBeat.anim.needsTail === false);
+  const logLenG = u.setScaleLog.length;
+  drain();
+  const xsLog26 = u.setScaleLog.slice(logLenG).filter((r) => r[0] === "x");
+  ok("S26 收敛: 纯 min 侧剩余滑完(帧循环 x 提交 >= 2 笔且 min 单调滑向真窗起点 1030 —— anim.dx0"
+    + " 替换缺失时本断言 0 提交即红) + 无补点列保持 5 点",
+    u._qbBeat.anim === null && xsLog26.length >= 2
+    && xsLog26.every((r, i) => i === 0 || r[1] >= xsLog26[i - 1][1] - 1e-9)
+    && xsLog26[0][1] >= midMin26 - 1e-9 && xsLog26[xsLog26.length - 1][1] > 1020
+    && u.data[0].length === 5 && u._qbPad === 0);
+  self.qbHistData = undefined;
+}
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -1890,6 +2096,18 @@ def test_frontend_qb_beat_kernel_battery():
       调度器电池照绿的变异盲区封堵, 评审 T3-R3)+
       _qbFxShiftGate 摆回门单点(快路 carry 门与判定帧 needsShift 同判据)+ S9 场景改写(真换档
       = 组距标称变化 + 起点跳位, 点数退役)。
+    12. 方向B打断继承(2026-11-22, 修 26-11-21-1704 数据面修剪后的视口层残留压缩面: 对账 GET
+      落袋撞上在途摆回拍 -> 零变化判定不纠偏 -> 补点滞留含补点全宽一拍采样周期 = 整列 x 向
+      压缩): 纯函数面 _qbBeatVpRem(rem 单点: easeOut + 末帧 ulp 吸附钳, 帧循环与重建共用 ——
+      两处公式漂移即打断回潮)/_qbInheritedViewport(取消瞬间视口重建: t=0 完整摆回锚/
+      clock>=shiftMs 真窗口/中段按 rem 比例/预览与非摆回拍 null/防御 NaN-Inf 与空列/纯函数零
+      mutate)+ 调度器面 S21(零变化打断继承全链: 捕获 -> 判定帧摆回继承位零回跳 -> anim 位移
+      = 剩余位移 + dx0 字段随 dxMin0(纯 min 侧剩余也逐帧提交)-> 收敛摘补点落回真窗口)/
+      S24(真滚动打断: max 侧从打断位续滑不回跳旧末样本, dxN = 剩余 max 位移, 两端独立记账
+      F5 对偶面)/S25(rewin 换窗打断不继承: 几何不连续瞬时落地, 继承门 !rewin)/S26(纯 min
+      侧剩余位移行为化, 评审轮1 nit: 翻动拍一几何被零变化 GET 打断 —— dxN 剩余=0 下 anim.dx0
+      = dxMin0 替换是帧循环提交守卫唯一能翻真的臂, 帧循环 x 提交 >= 2 笔且 min 单调滑向真窗
+      起点, 替换缺失即 0 提交红)。
     接缝面(静态钉):
     a. 续拉快路逐字序(F5): _qbPadTailColumns 单点(jPad 判定带 stepNom = meta 组距标称)->
       setData 落袋 -> _qbPad 记账 -> 同帧 _qbBeatStart(既有 setData/_qbBeatStart 相邻语义保持);
@@ -1913,17 +2131,23 @@ def test_frontend_qb_beat_kernel_battery():
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     # —— 接缝静态钉 ——
-    # a. 快路逐字序(F5; 变长点列适配 26-11-18-0037 阶段 3): 补尾格判定单点(stepNom = meta
-    #    组距标称)-> setData 落袋 -> _qbPad 记账 -> 同帧起拍(既有 setData/_qbBeatStart 相邻
-    #    语义保持, 中间只允许插入补尾格两行)
-    assert re.search(r"const jPad = _qbRollJudge\(prev\._qbBeat, data\.xs, 0, Number\(d\.meta && d\.meta\.interval_s\)\);\n\s*"
+    # a. 快路逐字序(F5; 变长点列适配 26-11-18-0037 阶段 3; 方向B打断继承 2026-11-22):
+    #    补尾格判定单点(stepNom = meta 组距标称)-> 打断继承捕获(先于 setData —— setData 会
+    #    把视口重置成含补点全宽 auto, 之后再读只剩全宽态; 读的是 prev.data[0] = 拍 A 显示列
+    #    补点在内)-> setData 落袋 -> _qbPad 记账 -> 同帧起拍带第三参(既有 setData/_qbBeatStart
+    #    相邻语义保持)
+    assert re.search(r"const jPad = _qbRollJudge\(prev\._qbBeat, data\.xs, 0, Number\(d\.meta && d\.meta\.interval_s\)\);\n"
+                     r"(?:\s*//[^\n]*\n)*\s*"
+                     r"const inh = _qbInheritedViewport\(prev\._qbBeat && prev\._qbBeat\.anim,\n\s*"
+                     r"prev\.data && prev\.data\[0\]\);\n\s*"
                      r"const padCols = _qbPadTailColumns\(prev, data, jPad,\n\s*"
                      r"!reduceF && _qbFxShiftGate\(cfgF, prev, jPad\)\);\n\s*"
                      r"prev\.setData\(padCols \|\| \[data\.xs, data\.up, data\.dl\]\);\n\s*"
                      r"prev\._qbPad = padCols \? padCols\[0\]\.length - data\.xs\.length : 0;\n\s*"
-                     r"this\._qbBeatStart\(scope, prev\);", js), \
+                     r"this\._qbBeatStart\(scope, prev, inh\);", js), \
         "续拉快路必须走补尾格单点(jPad 判定(stepNom = meta 组距标称) + _qbFxShiftGate 摆回门" \
-        " -> _qbPadTailColumns 构造) -> setData 落袋 -> _qbPad 记账 -> 同帧 _qbBeatStart(F5 判定帧序)"
+        " -> 打断继承捕获(先于 setData, 读 prev.data[0] 拍 A 显示列) -> _qbPadTailColumns 构造)" \
+        " -> setData 落袋 -> _qbPad 记账 -> 同帧 _qbBeatStart 带继承视口(方向B判定帧序)"
     # b. L0 成对: 判定帧摆回旧位 + 每帧 dx 归零 + 收敛帧 setData 交还 auto;
     #    y 钉成对(I4 纵轴瞬时定档): x 提交会让 uPlot 按偏置可视窗重推 y(vendor qn: Kl.x 非 null
     #    -> An(!0) -> y.auto 重算) —— 起拍与每个 shift 帧的 setScale("x") 必须成对补
@@ -1931,7 +2155,7 @@ def test_frontend_qb_beat_kernel_battery():
     #    range 单点(_qbYRange x _qbYCapOf), 不是显示尾值。
     #    F5 摆回锚在真窗口上(min = xs[pad] - dxMin0(显示列首点真值实距, 补点不计入真窗口),
     #    max = xs[n-1] - dxN —— 尾组推进拍 dx0=0 max 滑 si)
-    start_blk = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    start_blk = re.search(r"_qbBeatStart\(scope, u, inherited\) \{\n(.*?)\n    \},", js, re.S)
     assert start_blk, "qb_traffic_chart.js 缺 _qbBeatStart(判定帧开工单点)"
     assert 'u.setScale("x", { min: xs[pad] - dxMin0, max: xs[n - 1] - dxN });' in start_blk.group(1), \
         "L0 判定帧必须把视口摆回旧位置(setScale x 偏置, min 锚真窗起点 xs[pad] 计 dxMin0 = " \
@@ -1940,24 +2164,30 @@ def test_frontend_qb_beat_kernel_battery():
     frame_blk = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", js, re.S)
     assert frame_blk, "qb_traffic_chart.js 缺 _qbBeatFrame(每帧推进单点)"
     assert 'u.setScale("x", { min: xs[a.pad || 0] - dxMin, max: xs[n - 1] - dxMax });' in frame_blk.group(1) \
-        and "_qbFxEaseOut(a.clock / tl.shiftMs)" in frame_blk.group(1) \
+        and "const r = _qbBeatVpRem(a);" in frame_blk.group(1) \
         and "if (dx !== a.lastDx || dxMax !== a.lastDxMax)" in frame_blk.group(1) \
         and "a.dxMin0 != null ? a.dxMin0 : a.dx0" in frame_blk.group(1), \
         "L0 每帧按真实毫秒推进: dx = (1 - easeOut(clock/shiftMs)) * dx0 归零式(F5: min 锚按 dxMin0" \
         " = 显示列首点真值实距/max 锚按 dxMax/提交守卫双侧 —— 评审轮1 finding1/2; 变长点列" \
-        "按数据事实计, 26-11-18-0037 阶段 3)"
+        "按数据事实计, 26-11-18-0037 阶段 3; rem 计算单点 _qbBeatVpRem —— 方向B打断继承" \
+        "重建共用, 2026-11-22)"
     # issue 26-11-17-0936 12:35 根因纠正 + 第五次取证上调阈值: 末帧 rem 极小令 x.min 落在
     # 刻度整数边界前一丁点, uPlot splits 首刻位低一格单帧回跳。帧循环必须把 rem 低于阈值的
     # 残差精确钳零, 且 dx/min/max 三个方向都用钳零后的 r 派生(只钳 dx 会让 min/max 仍带残差)。
     # 真机捕获 clock=425 rem=1.71e-4 越过旧阈值 1e-4 未钳零, 残差 0.011px 却令整条网格线跳
     # 一格 —— 阈值上调 1e-3 覆盖末段两帧(4.05e-4/1.71e-4)提前钳零, 几何偏差 <0.01px。
     fb2 = frame_blk.group(1)
-    assert "const r = rem < _QB_FX_L0_SNAP_REM ? 0 : rem;" in fb2 \
+    assert "const r = _qbBeatVpRem(a);" in fb2 \
         and "const dx = r * a.dx0;" in fb2 \
         and "const dxMin = r * (a.dxMin0 != null ? a.dxMin0 : a.dx0);" in fb2 \
         and "const dxMax = r * (a.dxN != null ? a.dxN : a.dx0);" in fb2, \
-        "L0 末帧 ulp 吸附: rem < _QB_FX_L0_SNAP_REM 须精确钳零, 且 dx/dxMin/dxMax 三个方向" \
+        "L0 末帧 ulp 吸附: rem 须取自单点 _qbBeatVpRem(钳零在单点内), 且 dx/dxMin/dxMax 三个方向" \
         " 全部用钳零后的 r 派生(issue 26-11-17-0936; 否则残差视口令 splits 首刻位单帧回跳)"
+    vpfn = re.search(r"function _qbBeatVpRem\(a\) \{\n(.*?)\n\}", js, re.S)
+    assert vpfn and "const rem0 = 1 - _qbFxEaseOut(a.clock / a.tl.shiftMs);" in vpfn.group(1) \
+        and "return rem0 < _QB_FX_L0_SNAP_REM ? 0 : rem0;" in vpfn.group(1), \
+        "L0 rem 计算必须单点 _qbBeatVpRem(easeOut + 末帧 ulp 吸附钳在单点内 —— 方向B打断继承" \
+        "重建与帧循环共用, 两处公式漂移即打断回跳)"
     assert "const _QB_FX_L0_SNAP_REM = 1e-3;" in js, \
         "L0 末帧 ulp 吸附阈值常量 _QB_FX_L0_SNAP_REM 缺位或未按第五次取证上调到 1e-3" \
         "(1e-4 不足: 真机 rem=1.71e-4 帧未钳零令 splits 首刻位单帧换格)"
@@ -2069,8 +2299,18 @@ def test_frontend_qb_beat_kernel_battery():
     assert "padPrev" not in js_code, \
         "padPrev 等距记账面必须退役(变长点列摆回 min 锚 = 显示列首点真值实距 dxMin0, " \
         "26-11-18-0037 阶段 3 —— 按数据事实计, 无等距算术)"
-    assert "const needsShift = _qbFxShiftGate(cfg, u, j);" in start_blk.group(1), \
-        "判定帧摆回门必须走 _qbFxShiftGate 单点(与快路 carry 门同判据 —— 评审轮1 finding2, 判据漂移即状态迁移跳变)"
+    assert "const jShift = inherited && !rewin && !j.roll ? Object.assign({}, j, { roll: true }) : j;" in start_blk.group(1) \
+        and "const needsShift = _qbFxShiftGate(cfg, u, jShift);" in start_blk.group(1), \
+        "判定帧摆回门必须走 _qbFxShiftGate 单点(与快路 carry 门同判据 —— 评审轮1 finding2, 判据漂移" \
+        "即状态迁移跳变); 继承拍(方向B 2026-11-22)零变化打断须 roll 伪真进同一门 —— 剩余位移才" \
+        "滑得完/视口才摆回继承位(绕门即零变化打断拍滞留含补点全宽)"
+    assert "let dxMin0 = pad > 0 ? xs[pad] - xs[0] : dx0;" in start_blk.group(1) \
+        and "let dxN = j.dxN;" in start_blk.group(1) \
+        and "dxMin0 = Math.max(0, j.x0 - inherited.min);" in start_blk.group(1) \
+        and "dxN = Math.max(0, j.xN - inherited.max);" in start_blk.group(1), \
+        "方向B继承拍摆回锚必须按剩余位移计量(锚恒真窗口, dxMin0/dxN 换算到继承视口起点 —— " \
+        "判定帧摆回/帧循环/收敛/装饰 tip 四处公式不动, 只换位移; 判据面照用 j.dx0/j.dxN, " \
+        "roll 信号不随继承变)"
     assert "for (let i = pad; i < n; i++)" in start_blk.group(1), \
         "yMax 扫描必须从真窗口起步(F5: 头部补点不参与纵轴档位, 与收敛帧交还 auto 同值)"
     # —— 行为面 node 电池(纯函数面 + 调度器行为面各一发) ——
@@ -4666,7 +4906,7 @@ def test_frontend_qb_fx_panel_wiring_battery():
     b. ease 消费单点唯一: function _qbFxCurve 定义恰 1 + 调用恰 2(真拍 _qbBeatStart 与预览
        _qbPreviewBeat 两个判定帧)、cfg.ease 恰 2 处、S1 的帧循环预折算行
        `_qbFxEaseOut((a.clock` 已退场、L1 两轨经 _qbFxShown(track, p, a.easeF) 消费冻结曲线、
-       L0 每帧 dx 行恒 _qbFxEaseOut(a.clock / tl.shiftMs)(插值曲线只作用于数值收敛);
+       L0 每帧 dx 行恒 easeOut(经单点 _qbFxEaseOut(_qbBeatVpRem 内, a.clock / a.tl.shiftMs) —— 插值曲线只作用于数值收敛);
     c. shift 消费点: cfg.shift === "instant" 在 _qbBeatStart 判定帧(零消费字段补齐);
     d. 预览接缝: _qbBeatFrame 令牌失效门(a.preview !== st.previewToken) + 末帧分支
        _qbPreviewEnd(scope, u) 先于 _qbBeatConverge + _qbChartRescale 预览支路
@@ -4709,17 +4949,19 @@ def test_frontend_qb_fx_panel_wiring_battery():
         "S1 的帧循环预折算(预 easeOut 后 _qbFxShown 再 easeOut 的双重施加)必须退场 —— ease 单次施加于 _qbFxShown(计划 §03 公式/§04 演示口径)"
     assert "_qbFxShown(tr.up, p, a.easeF)" in js and "_qbFxShown(tr.dl, p, a.easeF)" in js, \
         "L1 两轨收敛必须消费判定帧冻结的 anim.easeF(拍内不换式 —— D21)"
-    assert js.count("_qbFxEaseOut(a.clock / tl.shiftMs)") == 1, \
-        "L0 每帧 dx 行恒 easeOut 恰 1 处(ease 只作用于数值收敛, L0 位移不随 ease 变 —— §05.3)"
+    assert js.count("_qbFxEaseOut(a.clock / a.tl.shiftMs)") == 1, \
+        "L0 每帧 dx 行恒 easeOut 恰 1 处(单点 _qbBeatVpRem 内 —— 帧循环与打断继承重建共用," \
+        " 第二处 easeOut 时钟行回潮即 rem 漂移/打断回潮; ease 只作用于数值收敛, L0 位移不随 ease 变 —— §05.3)"
     # —— c. shift 消费点(S3 补齐零消费字段; F5 评审轮1 finding2 后 instant 判据随摆回门
     #    上移 _qbFxShiftGate 单点, 消费仍在判定帧链路 —— 门内判据 + 判定帧调用双钉) ——
-    bsb = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    bsb = re.search(r"_qbBeatStart\(scope, u, inherited\) \{\n(.*?)\n    \},", js, re.S)
     assert bsb, "缺 _qbBeatStart(判定帧)"
     gate_blk = re.search(r"function _qbFxShiftGate\(cfg, u, j\) \{\n(.*?)\n\}", js, re.S)
     assert gate_blk and 'cfg.shift === "instant"' in gate_blk.group(1), \
         "摆回门缺 cfg.shift === instant 消费(面板左移策略对照档零消费即字段贯通缺口)"
-    assert "const needsShift = _qbFxShiftGate(cfg, u, j);" in bsb.group(1), \
-        "判定帧缺摆回门消费(instant 判据不在判定帧链路 = 字段贯通缺口)"
+    assert "const needsShift = _qbFxShiftGate(cfg, u, jShift);" in bsb.group(1), \
+        "判定帧缺摆回门消费(instant 判据不在判定帧链路 = 字段贯通缺口; jShift = 方向B继承拍" \
+        " roll 伪真的判定入参 —— 零变化打断照走同一门)"
     # —— d. 预览接缝(令牌门/末帧分支/重排支路/取消清镜像) ——
     frb = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", js, re.S)
     assert frb, "缺 _qbBeatFrame"
@@ -7258,7 +7500,7 @@ def test_frontend_qb_fx_anchor_battery():
     assert "ctx.clip();" in anb_code, "锚段 clip 放宽(F5)必须保留(lead 加亮/辉光仍画在画布)"
     assert 'cfg.dual === "lead"' in anb_code, "lead 策略从属轨描边加亮(D3-a)必须保留"
     # —— c. 四处同步点 ——
-    bsb = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    bsb = re.search(r"_qbBeatStart\(scope, u, inherited\) \{\n(.*?)\n    \},", js, re.S)
     assert bsb and "this._qbFxAnchorSync(u);" in bsb.group(1), \
         "缺判定帧同步点(_qbBeatStart: 轨道推进后同帧写 —— 覆盖零变化/早退拍)"
     assert bsb.group(1).index("_qbFxTrackNext(tr.dl") < bsb.group(1).index("this._qbFxAnchorSync(u);"), \
