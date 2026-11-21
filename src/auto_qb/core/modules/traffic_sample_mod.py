@@ -275,7 +275,8 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         # ---- 恢复埋点(§4.3, plan 26-10-12-2010: 消除静默, 读集有界可机检) ----
         # 上次 _recover_aggregates 的读集计数: 逐系列 {key: {"day_dates": 读集日期串,
         #   "bound": 下界来源("watermark" 水位日 / "fallback" 保留窗兜底), "new_hours":
-        #   补算小时数, "slots": 逐槽入账槽数}}; 汇总 {"series", "day_files", "hours",
+        #   补算小时数, "slots": 处理槽数(B1 开放段口径, plan 26-11-21-1546: 实际解析/
+        #   记账走过的块槽位, 封口块不计)}}; 汇总 {"series", "day_files", "hours",
         #   "slots", "elapsed_s"}。供测试断言「读集有界」(机检事实, 不靠读日志目测);
         #   None = 未启用/未恢复(dry_run 或流量模块关闭)
         self.recovery_reads: Optional[dict] = None
@@ -620,7 +621,9 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         读集按需(plan 26-10-12-2010 D1): 逐系列读集下界 = agg 水位所在日, 常态 1 个
         天文件、跨日界至多 2 个 —— 与 24h 流量图读侧契约同阶; 不打开流量图时的 0 文件
         由读侧轮询门控保证, 恢复读的是写侧缺口。起止各一条 INFO(消除静默) + 计数落
-        self.recovery_reads / self.recovery_stats 供测试机检「读集有界」。"""
+        self.recovery_reads / self.recovery_stats 供测试机检「读集有界」。slots 口径
+        自 B1(plan 26-11-21-1546)起 = 开放段: 实际解析/记账走过的块槽位数, 封口块
+        不再计(完成行同步改名处理槽)。"""
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled or not self._ctx.config.data_dir:
             return
@@ -651,7 +654,8 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         }
         logger.info(
             f"流量采样 | 启动恢复完成: {len(keys)} 系列 / 读入天文件 {total_files} 个 / "
-            f"补算小时 {total_hours} 个 / 入账槽 {total_slots} 个 / 耗时 {elapsed:.2f}s"
+            f"补算小时 {total_hours} 个 / 处理槽 {total_slots} 个(B1 开放段口径: 只计实际"
+            f"解析/记账走过的块, 封口块不计)/ 耗时 {elapsed:.2f}s"
         )
 
     # ---------- 优雅退出 stop() 钩子(§3.4) ----------

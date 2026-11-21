@@ -18,6 +18,10 @@ v4 写侧存储(S2a/S2b, TrafficV4Store):
 - test_v4_store_agg_append_read_and_torn_tail: agg 追加/读取/残行/空解析
 - test_v4_store_trim_agg_hours: hour 裁剪(唯一原子重写点; day/month 永久; 无到龄零写)
 - test_v4_store_trim_agg_hours_replace_locked: 裁剪重写被占用退避重试
+- test_v4_store_read_day_open_segment_b1: B1 开放段读取(plan 26-11-21-1546 S1)—— 段块与
+  整文件解析 blocks[j-1:] 逐位相等 / 全封口文件只解析末块 / 缺失与空 = None / 头行门闩
+  失守与无有效块头 = 退整文件解析(计数/告警与 fallback 同源, 评审 P1b-2)/ 末块撕裂尾
+  同判 / 缺 key 行退整文件解析
 
 v4 读侧解析缓存(S3a/S3b, V4DayCache):
 
@@ -97,6 +101,7 @@ from auto_qb.core.traffic_store import (
     V4DayCache,
     V4HourSample,
     V4NullRun,
+    V4ParsedDay,
     V4Sample,
     V4ZeroRun,
     format_agg_row,
@@ -418,6 +423,103 @@ def test_v4_store_trim_agg_hours_replace_locked(tmp_path, monkeypatch):
     monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _locked_once)
     assert st.trim_agg_hours(key, now, window) is None  # 唯一 hour 行到龄被裁 -> 空
     assert st.read_agg(key).hours == ()
+
+
+def test_v4_store_read_day_open_segment_b1(tmp_path, caplog):
+    """B1 开放段读取(read_day_open_segment, plan 26-11-21-1546 S1): 字节级块定位后只
+    解析开放段 —— 段块与整文件解析 blocks[j-1:] 逐位相等(V4Block dataclass 等值, 段
+    解析状态机在有效块头切点与整文件解析等价); 全封口文件只解析末块(tail 接力上下文,
+    块仍逐位同)/ 缺失与空文件 = None / 头行门闩失守与无有效块头 = 退整文件解析
+    (计数/告警与 fallback 路径 read_day 同源同判, 评审 P1b-2)/ 末块撕裂尾 =
+    torn_tail 且块完整 / 缺 key 行退整文件解析(块与整文件逐位同)"""
+    st = TrafficV4Store(str(tmp_path))
+    key = "global"
+    d0 = v4_date_str_epoch("2026-06-02")
+
+    def _put(date, blocks):
+        st.append_records(key, date, (blocks[0][0], blocks[0][1]), blocks[0][2], blocks[0][3])
+        for head, interval, recs, base in blocks[1:]:
+            st.append_records(key, date, (head, interval), recs, base)
+
+    # 三块文件: 02:00 / 08:00 / 14:00; wm = 10:00 -> 段自块1(08:00, 上下文块), 块0 跳过
+    date = "2026-06-02"
+    blocks = [
+        (d0 + 2 * HOUR_SECONDS, 30, (V4Sample(1, 1, 100, 200), V4Sample(2, 2, 200, 300)), (100, 200)),
+        (d0 + 8 * HOUR_SECONDS, 30, (V4Sample(3, 3, 300, 400), V4ZeroRun(5, 310, 410)), (300, 400)),
+        (d0 + 14 * HOUR_SECONDS, 30, (V4Sample(4, 4, 400, 500), V4NullRun(3), V4Sample(5, 5, 500, 600)), (400, 500)),
+    ]
+    _put(date, blocks)
+    path = st.series_day_path(key, date)
+    full = parse_v4_day_text(_read_text(path))
+    seg = st.read_day_open_segment(key, date, d0 + 10 * HOUR_SECONDS)
+    assert isinstance(seg, V4ParsedDay)
+    assert seg.key == key
+    assert seg.blocks == full.blocks[1:]  # 块1 + 块2 逐位相等; 封口块0 不在段内
+    assert (seg.bad_lines, seg.data_lines, seg.torn_tail) == (
+        0, 7, False
+    )  # 段计数口径: 段 = 块1(3 行) + 块2(4 行), 头两行 + 块0 的 4 行不在
+    # 全封口文件: 只解析末块(此处单块 = 整文件内容自 B 起, 块逐位同)
+    sealed_date = "2026-06-01"
+    sealed_blocks = [(v4_date_str_epoch(sealed_date) + 3 * HOUR_SECONDS, 30, (V4Sample(1, 1, 100, 200), ), (100, 200))]
+    _put(sealed_date, sealed_blocks)
+    full_sealed = parse_v4_day_text(_read_text(st.series_day_path(key, sealed_date)))
+    seg_sealed = st.read_day_open_segment(key, sealed_date, d0 + 10 * HOUR_SECONDS)
+    assert seg_sealed.blocks == full_sealed.blocks  # 末块逐位同(tail 接力上下文由入账侧取用)
+    # 缺失 / 空文件 = None
+    assert st.read_day_open_segment(key, "2026-06-03", d0 + 10 * HOUR_SECONDS) is None
+    empty_date = "2026-06-04"
+    os.makedirs(os.path.dirname(st.series_day_path(key, empty_date)), exist_ok=True)
+    open(st.series_day_path(key, empty_date), "wb").close()
+    assert st.read_day_open_segment(key, empty_date, d0 + 10 * HOUR_SECONDS) is None
+    # 头行门闩失守(旧头行) = 退整文件解析(评审 P1b-2): 空块结果/坏行计数/超阈告警
+    # 与 fallback 路径 read_day 完全同源 —— 损坏文件不因水位路径跳段而静默
+    bad_date = "2026-06-05"
+    with open(st.series_day_path(key, bad_date), "w", encoding="utf-8", newline="\n") as f:
+        f.write("# auto-qb qb-traffic v3\nkey,global\nB,1000,30\nr,1,1,0,0\n")
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        seg_bad = st.read_day_open_segment(key, bad_date, d0 + 10 * HOUR_SECONDS)
+        assert seg_bad.key is None and seg_bad.blocks == ()
+        assert seg_bad == st.read_day(key, bad_date)  # V4ParsedDay 逐字段相等(全文件记坏)
+    # 无有效块头(垃圾行)同口径: 整文件解析结果逐字段相等 + 超阈告警(每损坏文件恰
+    # 一条 —— 水位路径先读, read_day 复读被节流, 观测口径两路一致)
+    junk_date = "2026-06-10"
+    with open(st.series_day_path(key, junk_date), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nkey,global\nx,1\ny,2\nz,3\n")
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        seg_junk = st.read_day_open_segment(key, junk_date, d0 + 10 * HOUR_SECONDS)
+        assert seg_junk == st.read_day(key, junk_date)
+    assert seg_junk.blocks == () and seg_junk.bad_lines == 3 and seg_junk.data_lines == 4
+    warns = [r.getMessage() for r in caplog.records if "坏行" in r.getMessage()]
+    assert len(warns) == 2  # 损坏头行 + 垃圾行各一条(节流内), 水位路径不再静默
+    # 只头部行(无 B) = 空解析, key 行照读
+    head_date = "2026-06-06"
+    with open(st.series_day_path(key, head_date), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nkey,global\n")
+    seg_head = st.read_day_open_segment(key, head_date, d0 + 10 * HOUR_SECONDS)
+    assert seg_head.key == "global" and seg_head.blocks == ()
+    # 只头行且无 key 行(稀有)退整文件解析: 空块 + key=None 与整文件解析同判
+    bare_date = "2026-06-09"
+    with open(st.series_day_path(key, bare_date), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\n")
+    full_bare = parse_v4_day_text(_read_text(st.series_day_path(key, bare_date)))
+    seg_bare = st.read_day_open_segment(key, bare_date, d0 + 10 * HOUR_SECONDS)
+    assert seg_bare.key is None and seg_bare.blocks == full_bare.blocks == ()
+    # 末块撕裂尾: torn_tail 标记 + 块完整(坏行纪律与整文件解析同源)
+    torn_date = "2026-06-07"
+    with open(st.series_day_path(key, torn_date), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nkey,global\nB,1000,30\nr,1,1,0,0\nr,2,2,1,1")
+    full_torn = parse_v4_day_text(_read_text(st.series_day_path(key, torn_date)))
+    seg_torn = st.read_day_open_segment(key, torn_date, d0 + 10 * HOUR_SECONDS)
+    assert seg_torn.torn_tail and full_torn.torn_tail  # 两路同判
+    assert seg_torn.blocks == full_torn.blocks and seg_torn.bad_lines == full_torn.bad_lines
+    # 缺 key 行(崩溃窗口头两行未写全)退整文件解析: 块逐位同(n-only 无基线块合法)
+    nokey_date = "2026-06-08"
+    with open(st.series_day_path(key, nokey_date), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nB,1000,30\nn,2\nB,2000,30,5,6\nr,1,1,0,0\n")
+    full_nokey = parse_v4_day_text(_read_text(st.series_day_path(key, nokey_date)))
+    seg_nokey = st.read_day_open_segment(key, nokey_date, d0 + 10 * HOUR_SECONDS)
+    assert seg_nokey.key is None
+    assert seg_nokey.blocks == full_nokey.blocks and len(seg_nokey.blocks) == 2
 
 
 def test_v4_cumsum_restore_pointwise():

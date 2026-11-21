@@ -189,6 +189,9 @@ from .traffic_store_codec import (  # noqa: F401
     v4_block_agg_totals,
     v4_block_slots,
     v4_block_slots_from,
+    v4_day_block_offsets,
+    v4_day_block_starts,
+    v4_day_open_segment_offset,
     v4_live_tail_slots,
     v4_z_totals_ramp,
 )
@@ -440,6 +443,78 @@ class TrafficV4Store:
         None; OSError 上抛。"""
         path = self.series_day_path(key, date_str)
         return _read_parse(path, parse_v4_day_text, None)
+
+    def read_day_open_segment(self, key: str, date_str: str, wm_hour: int) -> Optional["V4ParsedDay"]:
+        """读单天文件的开放段(B1 水位前移, plan 26-11-21-1546 S1; 恢复路径专用)
+
+        整读字节单次 IO, 扫 \\nB, 定位各块 B 行字节偏移(v4_day_block_offsets)并按有效
+        块头 start_epoch 决策开放段切点(v4_day_open_segment_offset: 首个整块落保留
+        小时的块的前一块起 —— 前一块是跨块结算上下文来源, 其封口信用由入账侧
+        skip_through_hour 过滤; 全封口文件只取末块 —— 末块可能骑水位, 保留信用照常
+        入账, tail 供跨文件接力), 自切点到 EOF 经 parse_v4_day_text 的 resume= 续解
+        机制解析(前缀 = 头行 + key 行, 语义 = 对 (前缀 + 段) 拼接文本的整文件解析;
+        切点必为有效块头 = 真解析无条件 _close+开新块的边界, 段解析在该点的块状态机与
+        整文件解析等价)。封口块零解析零入账。
+
+        尾块空块回退(窄角, 评审 P1b-3): 段首块若为**空块**(有效 B 行后无合法记录,
+        崩溃恰在 B 行落盘后 —— build 丢弃空块), 该块的 tail 结算上下文会退化成上一
+        文件尾或 None, 与整文件解析(空块跳过, tail = 前一非空块末槽)不等价, 跨块/
+        跨文件结算信用会丢。自前一个有效块头重解更大段, 直到段首块非空(blocks[0]
+        恰为该块头)或已无更早块头 —— 回退段的更早块全部落封口小时, 其结算区间被
+        skip_through_hour 过滤, 零输出差异。
+
+        返回 V4ParsedDay(blocks = 开放段内非空块; bad/data/torn = 段内计数 —— 坏行告警
+        按开放段口径, 封口段坏行不在计数内: 该段不解析, 其损坏不影响重建输出); 缺失/
+        空文件 = None(读集断链, 调用方重置 tail 上下文); 头行门闩失守(旧头行/缺失)
+        或无有效块头 = **退整文件解析**(与 fallback 路径 read_day 同源同判: 空块结果
+        一致, 坏行计数与超阈告警口径一致 —— 损坏文件不因水位路径跳段而静默, 评审
+        P1b-2); 缺 key 行(崩溃窗口头两行未写全, 无合法续解前缀 V4DayResume 守卫)同退
+        整文件解析(稀有形态)。OSError 上抛。"""
+        path = self.series_day_path(key, date_str)
+        raw = _read_day_bytes(path)
+        if not raw:
+            return None
+        offsets = v4_day_block_offsets(raw)
+        starts = v4_day_block_starts(raw, offsets)
+        # 头部区(首个块头候选之前): 头行门闩 + key 行(Writer 形态 = 头两行)
+        head_end = offsets[0] if offsets else len(raw)
+        head_lines = raw[:head_end].decode("utf-8", errors="replace").splitlines()
+        header = head_lines[0].strip() if head_lines else None
+        if header != HEADER_LINE_V4 or not starts:
+            # 门闩失守 / 无有效块头: 退整文件解析(评审 P1b-2)—— 空块结果与坏行计数/
+            # 超阈告警和 fallback 路径(read_day)完全同源, 观测口径两路一致
+            return _read_parse(path, parse_v4_day_text, None)
+        key_line = None
+        for ln in head_lines[1:]:
+            parts = ln.strip().split(",")
+            if parts[0] == "key" and len(parts) == 2 and parts[1]:
+                key_line = parts[1]
+                break
+        seg_off = v4_day_open_segment_offset(starts, wm_hour)
+        if key_line is None:
+            return _read_parse(path, parse_v4_day_text, None)  # 无续解前缀: 退整文件解析
+        k = next(i for i, (off, _s) in enumerate(starts) if off == seg_off)
+        parsed = None
+        while True:
+            resume = V4DayResume(
+                key=key_line,
+                bad_lines=0,
+                data_lines=0,
+                blocks=(),
+                open_start=None,
+                open_interval=None,
+                open_dl_base=None,
+                open_up_base=None,
+                open_records=(),
+            )
+            parsed = parse_v4_day_text(raw[starts[k][0]:].decode("utf-8", errors="replace"), resume=resume)
+            if (parsed.blocks and parsed.blocks[0].start_epoch == starts[k][1]) or k == 0:
+                # 段首块非空(tail 结算上下文就位)或已到最早块头(空块跳过/全空文件的
+                # 形态与整文件解析一致, 见 docstring「尾块空块回退」)
+                break
+            k -= 1  # 段首块为空块: 回退前一有效块头重解(评审 P1b-3)
+        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警按开放段口径(读纪律单点同源)
+        return parsed
 
     def trim_agg_hours(self, key: str, now: float, rollup_window: float) -> Optional[int]:
         """hour 行按 rollup_window 裁剪(§04.5, 本层唯一 tmp+fsync+os.replace 原子重写点):

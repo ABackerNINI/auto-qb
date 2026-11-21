@@ -204,23 +204,36 @@ class _SampleAggMixin:
 
     @staticmethod
     def _agg_credit_hours(
-        pending: dict, start: float, end: float, dl: int, up: int, dl_total: int, up_total: int
+        pending: dict,
+        start: float,
+        end: float,
+        dl: int,
+        up: int,
+        dl_total: int,
+        up_total: int,
+        skip_through_hour: Optional[int] = None
     ) -> None:
         """区间 [start, end) 按小时界拆分入账(HourFold 逐笔 merge, dt = 桶内覆盖秒;
         D12 折叠态单点 —— 在线记账与恢复离线记账共用, 离线传局部 dict)。末槽的信用
         区间跨小时界时自然拆分, hour 桶 cov 上界 3600 由 seal 收口(= v4_hour_agg 同款
         min 截断)。信用按到达顺序并入(R2: 与旧列表路径逐条 append 的浮点求和序同序,
-        聚合输出 bitwise 等价)。"""
+        聚合输出 bitwise 等价)。
+
+        skip_through_hour 非 None(恢复离线侧 B1 水位前移, plan 26-11-21-1546 S1)时
+        hour <= 该值的桶即时跳过不入账(封口小时信用在记账入口丢弃, 不建桶不 merge;
+        在线路不传 = 无水位概念零过滤)。跳过支只跳过 merge, 桶界推进照常 —— 保留桶的
+        dt 值与合并序与旧「全量入账 + 尾部丢弃」逐位一致(对拍守阵钉住)。"""
         if end <= start:
             return
         cur = start
         while cur < end:
             h = int(cur) // HOUR_SECONDS * HOUR_SECONDS
             seg = min(end, h + HOUR_SECONDS) - cur
-            fold = pending.get(h)
-            if fold is None:
-                fold = pending[h] = HourFold()
-            fold.merge(dl, up, dl_total, up_total, seg)
+            if skip_through_hour is None or h > skip_through_hour:
+                fold = pending.get(h)
+                if fold is None:
+                    fold = pending[h] = HourFold()
+                fold.merge(dl, up, dl_total, up_total, seg)
             cur += seg
 
     def _agg_flush_all(self, now: float) -> None:
@@ -502,17 +515,29 @@ class _SampleAggMixin:
         raw 逐槽前向记账 / day <- agg 内 hour 行 / month <- day 行) -> 末尾才裁剪(硬序)。
 
         读集按需(plan 26-10-12-2010 D1): 读集下界 = agg 水位所在日
-        [v4_day_epoch(wm_hour), 今日] —— 水位封口小时不读不重算(现判据 h <= wm_hour
-        已在过滤), 读集常态 1 个天文件、跨日界至多 2 个, 与 24h 流量图读侧契约同阶;
-        rollup_window 只决定保留(D2: 1000000D 永久保留不动), 不决定启动读集。为什么是
-        「所在日」而非时刻: series_day_dates 按文件名日期过滤, 传 day(wm_hour) 恰好纳入
-        水位当天天文件(水位之后的 raw 必落在该日或更晚文件 —— 天文件 00:00 硬切、块不跨天)。
+        [v4_day_epoch(wm_hour), 今日] —— 水位封口小时不读不重算, 读集常态 1 个天文件、
+        跨日界至多 2 个, 与 24h 流量图读侧契约同阶; rollup_window 只决定保留(D2:
+        1000000D 永久保留不动), 不决定启动读集。为什么是「所在日」而非时刻:
+        series_day_dates 按文件名日期过滤, 传 day(wm_hour) 恰好纳入水位当天天文件
+        (水位之后的 raw 必落在该日或更晚文件 —— 天文件 00:00 硬切、块不跨天)。
         agg 无可用水位(wm_hour is None: 缺失/损坏/无 hour 行)时退回 now - window 全量
         兜底(D5: 无可信水位则不可判哪些小时已聚合, 全量重算 + INFO 留痕, 诚实兜底不猜)。
         停机超窗的天文件已删 -> 对应 hour/day 行缺失跳过不标注(图上真空, 与块间 gap 同)。
 
+        B1 水位前移(plan 26-11-21-1546 S1): 文件内处理范围从「全文件解析 + 全槽入账 +
+        尾部丢弃」改为「字节级块定位 + 开放段限定解析 + 记账入口过滤」—— 水位路径逐
+        文件只解析开放段(store.read_day_open_segment: 首个整块落保留小时的块自其前一块
+        起解析, 前一块供跨块结算上下文; 全封口文件只解析末块供跨文件 tail 接力), 封口
+        块零解析零入账; hour 信用经 _agg_credit_day_file(skip_through_hour=wm_hour)在
+        记账入口即时跳过(hour_samples 不再出现封口桶)。边界上下文忠实(R1): 上下文块
+        的封口信用被过滤但 tail 照常接力, 00:00 跨文件连续结算的信用落保留小时不丢;
+        等价性由对拍守阵钉死(D2 口径, tests/traffic_recovery_support.py)。末尾
+        h <= wm_hour 判据保留为防御二门(开放段决策的兜底)。fallback 路径(wm None)
+        零过滤全量入账, 语义零变化(D4/D5)。
+
         返回读集埋点 {"day_dates", "bound", "new_hours", "slots"}(供 _recover_aggregates
-        汇总与测试机检读集有界)。"""
+        汇总与测试机检读集有界; slots = B1 开放段口径: 实际解析/记账走过的块槽位数,
+        封口块不再计)。"""
         parsed = store.read_agg(key)
         agg = self._agg_state(key)
         agg.earliest_hour = parsed.hours[0].epoch if parsed.hours else None
@@ -536,9 +561,17 @@ class _SampleAggMixin:
         slot_counts: list = []
         day_dates = store.series_day_dates(key, lower)
         for date in day_dates:
-            parsed_day = store.read_day(key, date)
+            if wm_hour is None:
+                parsed_day = store.read_day(key, date)  # fallback(D4): 全量解析, 语义不变
+            else:
+                # B1(plan 26-11-21-1546 S1): 只解析开放段 —— 封口块零解析零入账; 上下文
+                # 块(开放段首块的前一块/全封口文件的末块)整块解析供 tail 接力, 其封口
+                # 信用由 skip_through_hour 在记账入口过滤(R1: 跨块/跨文件边界上下文忠实)
+                parsed_day = store.read_day_open_segment(key, date, wm_hour)
             if parsed_day is not None:
-                day_tail = self._agg_credit_day_file(hour_samples, parsed_day, day_tail, slot_counts)
+                day_tail = self._agg_credit_day_file(
+                    hour_samples, parsed_day, day_tail, slot_counts, skip_through_hour=wm_hour
+                )
             else:
                 day_tail = None  # 缺失文件: 结算上下文断链(其后间隙由 gap 判定兜底真空)
         if len(day_dates) > 2:
@@ -547,7 +580,8 @@ class _SampleAggMixin:
         new_hours = []
         for h in sorted(hour_samples):
             if wm_hour is not None and h <= wm_hour:
-                continue  # 水位之前已有行: 不重算(前向水位, §4.4)
+                continue  # 水位之前已有行: 不重算(前向水位, §4.4; B1 起记账入口已过滤,
+                # 此处为防御二门 —— 开放段决策的兜底)
             fold = hour_samples[h]
             if fold.credits == 0:
                 continue  # 空桶(全 null 覆盖的小时不产行, 空桶 = null; 防御支)
@@ -589,7 +623,8 @@ class _SampleAggMixin:
         hour_samples: dict,
         parsed_day: V4ParsedDay,
         prev_tail: Optional[tuple] = None,
-        slot_counter: Optional[List[int]] = None
+        slot_counter: Optional[List[int]] = None,
+        skip_through_hour: Optional[int] = None
     ) -> Optional[tuple]:
         """单天文件逐槽前向记账(恢复离线侧): 逐块展开槽位(块内相邻槽区间 [slot_k,
         slot_k+1) 记 slot_k 的观测 —— r = 其速率 / z = 摊配值(v4_block_agg_totals) / n =
@@ -602,10 +637,16 @@ class _SampleAggMixin:
         [末槽, 首槽) 结算进覆盖, 崩溃/停机间隙超容差为真空 —— 00:00 边界既有每天约 2s
         覆盖损失就此消除。prev_tail = (末槽 ts, obs) 或 None(无上下文/上文件缺链);
         返回本文件末槽上下文(末槽为 null 观测时 obs = None, 调用方结算侧自然跳过;
-        z 末槽的 obs 为摊配末端值 —— 与在线 z 记录的尾部信用同值)。
+        z 末槽的 obs 为摊配末端值 —— 与在线 z 记录的尾部信用同值; B1 全封口文件只解析
+        末块时本函数照常产出末块 tail, 跨文件接力不受开放段限定影响)。
 
-        slot_counter 非 None(恢复埋点 §4.3, plan 26-10-12-2010)时按块追加各块槽数
-        (读集成本的量级单点, 供计数属性断言); 不传 = 零影响(既有调用不变)。"""
+        slot_counter 非 None(恢复埋点 §4.3, plan 26-10-12-2010)时按块追加各块槽数;
+        B1(plan 26-11-21-1546 S1)起口径 = **实际解析/记账走过的块**(开放段 + 上下文
+        块; 封口块在 read_day_open_segment 已不进 blocks, 不再计), INFO 完成行同步改名
+        处理槽。skip_through_hour 非 None = B1 水位前移过滤(hour <= 该值的桶在
+        _agg_credit_hours 记账入口即时跳过, hour_samples 不再出现封口桶 —— 旧「全量
+        入账后尾部丢弃」退役; 上下文块的封口信用由此过滤, 骑水位块的保留信用照常入账);
+        不传 = 零过滤(在线/兜底路径不变)。"""
         tail = prev_tail
         for block in parsed_day.blocks:
             slots = v4_block_slots(block)
@@ -618,12 +659,14 @@ class _SampleAggMixin:
             if tail is not None and tail[1] is not None:
                 if v4_block_gap_continuous(tail[0], first.ts, block.interval_s):
                     dl, up, dlt, upt = tail[1]
-                    _SampleAggMixin._agg_credit_hours(hour_samples, tail[0], first.ts, dl, up, dlt, upt)
+                    _SampleAggMixin._agg_credit_hours(
+                        hour_samples, tail[0], first.ts, dl, up, dlt, upt, skip_through_hour
+                    )
             for k in range(len(slots) - 1):
                 cur, nxt = slots[k], slots[k + 1]
                 obs = _SampleAggMixin._slot_agg_obs(cur, agg_totals[k])
                 if obs is None:
                     continue  # n 槽: null 期不贡献
-                _SampleAggMixin._agg_credit_hours(hour_samples, cur.ts, nxt.ts, *obs)
+                _SampleAggMixin._agg_credit_hours(hour_samples, cur.ts, nxt.ts, *obs, skip_through_hour)
             tail = (slots[-1].ts, _SampleAggMixin._slot_agg_obs(slots[-1], agg_totals[-1]))
         return tail

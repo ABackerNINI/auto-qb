@@ -14,17 +14,29 @@
 3. 可重入: 语料一次生成多场景复用; 每 cell 结果实时落 JSON(按 cell 键合并, 同键
    重跑覆盖, 换 impl_tag 追加), 中途失败不丢已完成进度。
 
-场景语义(现行实现, 如实标注)
+场景语义(现行实现 = B1 后, 如实标注)
 ------------------------------
 现行实现下崩溃与优雅重启同路(累计器不落盘, 恢复一律从 raw 重建), 三场景只差
 agg.dat 水位形态:
 - fresh  水位新鲜: agg 含当日 00:00..18:00 整点 hour 行(相位 19:45 -> 最后封口小时
-         18h), 读集 = 水位当日 1 个天文件; 现行实现仍从当日 0 点起全量展开入账,
-         之后才按 h <= wm_hour 丢弃(计划 §02.1 缺陷 1 的"过滤后置")。
+         18h), 读集 = 水位当日 1 个天文件; B1(plan 26-11-21-1546 S1)后现行实现走
+         字节级块定位 + 开放段限定解析 + 记账入口水位过滤 —— 只解析/入账含保留槽位
+         的开放段(上下文块整块解析供 tail 接力, 封口块零解析零入账), 计划 §02.1
+         缺陷 1 的"过滤后置"已修。
 - stale  水位陈旧至昨日: agg 的 hour 行止于昨日 23:00, 读集 = 昨日+今日 2 个天文件。
 - fallback 无水位/全量兜底(D4/D5 语义): agg.dat 仅头行+key 行(无可用水位), 读集
          下界 = now - rollup_window(30d), 实际读到语料里存在的全部天文件。
 崩溃模拟与优雅重启共用同一语义(如实标注, 不单独设 cell)。
+
+S0 数字口径与回填纪律(评审 P1b-4)
+----------------------------------
+本 harness 记录的 S0 矩阵数字(计划 §02.2/§03.2 引用)为 **pre-B1 全量口径**(当时实现
+= 全文件解析 + 全槽入账 + 尾部丢弃)。B1 落地后回填重跑**必须换新 impl_tag**(如
+b1-open-segment)—— 结果按 cell@impl_tag 键追加不覆盖, pre-B1 与 B1 口径的数字不得
+混写同键。slots 字段已随 B1 由「slots_credited(入账槽, 全量口径)」更名
+「slots_processed(处理槽, B1 开放段口径: 实际解析/记账走过的块槽位, 封口块不计)」,
+并在 cell JSON 带 slots_semantics 字段; 旧结果 JSON 里的 slots_credited 是 pre-B1
+全量口径, 跨口径对照时注意。
 
 相位口径(与计划 §02.2 相位披露同源)
 ------------------------------------
@@ -469,7 +481,7 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
     if stats.get("series") != manifest["series"]:
         problems.append(f"series {stats.get('series')!r} != manifest {manifest['series']}")
     if not stats.get("slots"):
-        problems.append(f"slots_credited = {stats.get('slots')!r}(应为正)")
+        problems.append(f"slots_processed = {stats.get('slots')!r}(应为正)")
     if bound_counts.get(expect_bound) != stats.get("series"):
         problems.append(f"bound 分布 {bound_counts} 与场景 {scenario} 不符(期望 {manifest['series']} 个系列全部 {expect_bound})")
     if problems:
@@ -483,7 +495,9 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
         "series": stats.get("series"),
         "day_files": stats.get("day_files"),
         "new_hours": stats.get("hours"),
-        "slots_credited": stats.get("slots"),
+        "slots_processed": stats.get("slots"),
+        "slots_semantics": "处理槽(B1 开放段口径: 实际解析/记账走过的块槽位, 封口块不计; "
+                           "pre-B1 旧结果 JSON 的 slots_credited = 全量口径, 评审 P1b-4)",
         "elapsed_perf_s": round(elapsed, 3),
         "module_elapsed_s": round(float(stats.get("elapsed_s") or 0.0), 3),
         "wall_started": v4_epoch_date_str(wall0) + " " + time.strftime("%H:%M:%S", time.localtime(wall0)),
@@ -502,7 +516,8 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
                 "gen_date": manifest["gen_date"],
                 "raw_bytes_total": manifest["bytes_total"],
             },
-        "notes": "现行实现: 崩溃与优雅同路(累计器不落盘); 场景差异仅在 agg 水位形态",
+        "notes": "现行实现(B1 后): 字节级开放段限定解析 + 记账入口水位过滤(封口块不解析"
+                 "不入账); 崩溃与优雅同路(累计器不落盘); 场景差异仅在 agg 水位形态",
     }
 
 
@@ -537,7 +552,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     _merge_cell(args.out, cell)
     print(
         f"[run] {cell['cell']} 完成: {cell['elapsed_perf_s']}s (模块内 {cell['module_elapsed_s']}s) "
-        f"读入天文件 {cell['day_files']} 个 / 补算小时 {cell['new_hours']} / 入账槽 {cell['slots_credited']}",
+        f"读入天文件 {cell['day_files']} 个 / 补算小时 {cell['new_hours']} / 处理槽 {cell['slots_processed']}",
         flush=True,
     )
     return 0
@@ -565,7 +580,8 @@ def cmd_run_matrix(args: argparse.Namespace) -> int:
             _merge_cell(results_path, cell)
             print(
                 f"[matrix {k}/{total}] {cell['cell']} 完成: {cell['elapsed_perf_s']}s "
-                f"(模块内 {cell['module_elapsed_s']}s, 天文件 {cell['day_files']}, 槽 {cell['slots_credited']})",
+                f"(模块内 {cell['module_elapsed_s']}s, 天文件 {cell['day_files']}, "
+                f"处理槽 {cell['slots_processed']})",
                 flush=True,
             )
     print(f"[matrix] 全部 {total} cell 完成, 结果 = {results_path}", flush=True)
@@ -777,7 +793,7 @@ def main(argv: list) -> int:
     p = sub.add_parser("run", help="跑单个恢复 cell(真实入口计时)")
     p.add_argument("--corpus", required=True)
     p.add_argument("--scenario", required=True, choices=["fresh", "stale", "fallback"])
-    p.add_argument("--impl-tag", default="current", help="实现标签(P1/P2 后换 tag 追加矩阵)")
+    p.add_argument("--impl-tag", default="current", help="实现标签(口径变更后重跑必须换新 tag —— 结果按 cell@tag 追加不覆盖)")
     p.add_argument("--out", required=True, help="结果 JSON(按 cell 键合并)")
     p.add_argument("--log-file", default=None)
     p.set_defaults(fn=cmd_run)
@@ -786,7 +802,7 @@ def main(argv: list) -> int:
     p.add_argument("--bench-root", required=True, help="语料根(<bench-root>/corpus-<label>)")
     p.add_argument("--labels", required=True, help="逗号分隔语料标识")
     p.add_argument("--scenarios", required=True, help="逗号分隔场景(fresh,stale,fallback)")
-    p.add_argument("--impl-tag", default="current")
+    p.add_argument("--impl-tag", default="current", help="实现标签(口径变更后重跑必须换新 tag —— 结果按 cell@tag 追加不覆盖)")
     p.add_argument("--out", required=True, help="结果 JSON")
     p.set_defaults(fn=cmd_run_matrix)
 

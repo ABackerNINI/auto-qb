@@ -20,6 +20,14 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
   26-11-17)游标中段续展停驻记录型门闩 —— 停驻在 r 记录 = TypeError fail-fast
 - test_v4_block_slots_unknown_record_type_fails_fast: (S4 缺口收口)槽展开记录型白名单
   —— 未知型 TypeError fail-fast 不静默跳过
+
+B1 字节级块定位(plan 26-11-21-1546 S1, 恢复水位前移纯函数面):
+- test_v4_day_block_offsets_b1_byte_location: \\nB, 单趟字节扫描 —— 文件首块 B 无前导 \\n /
+  单块 / 多块 / 坏 B 行与撕裂半行也定位(候选不判行型)/ 空文件与无 B 行 = ()
+- test_v4_day_block_starts_b1_valid_rows: 有效块头过滤(与块状态机 B 行分支同源
+  _parse_v4_b_row 单点)—— 坏 B 行族不作切分点 + 镜像性质(starts 值集盖住整文件解析真块)
+- test_v4_day_open_segment_offset_b1_decision: 开放段切点决策(R1 边界上下文单点)——
+  首保留块 j 段自 j-1(结算上下文)/ j=0 整文件 / 全封口末块 / 单块 / 空表 None
 - test_v4_parse_discipline_dual_parser_same_verdict: 同纪律夹具双 parser 同判(issue 26-10-29-1304 R07-T06
   解析纪律收敛 _parse_v4_text 单点的行为守阵)—— 空文本/头行缺失与旧头行(整文件坏含头行本身)/
   坏行族+空行注释跳/撕裂尾(末行坏才豁免)/完整末行无换行 五组夹具, day 与 agg 纪律面逐项同判
@@ -146,9 +154,12 @@ from auto_qb.core.traffic_store import (
     v4_block_slots,
     v4_block_slots_from,
     v4_date_str_epoch,
+    v4_day_block_offsets,
+    v4_day_block_starts,
     v4_day_epoch,
     v4_day_file_date,
     v4_day_file_path,
+    v4_day_open_segment_offset,
     v4_epoch_date_str,
     v4_hour_agg,
     v4_live_tail_slots,
@@ -1032,3 +1043,89 @@ def test_v4_block_slots_unknown_record_type_fails_fast():
     blk = V4Block(1000, 2, 100, 50, (_Weird(), ))
     with pytest.raises(TypeError, match="未知块记录型"):
         v4_block_slots_from(blk, (0, 0, None, None, None), None)
+
+
+# ======================================================================
+# B1 字节级块定位(plan 26-11-21-1546 S1; 恢复水位前移, 纯函数面)
+# ======================================================================
+
+
+def test_v4_day_block_offsets_b1_byte_location():
+    """B1 块定位(v4_day_block_offsets): 单趟 \\nB, 字节扫描 —— 文件首块 B 行无前导 \\n
+    形态(raw 以 B, 开头)定位在 0 / 单块 / 多块 / 坏 B 行与撕裂 B 半行也定位(候选不判
+    行型, 有效性在 v4_day_block_starts)/ 空文件与无 B 行 = () / 偏移恒指向行首
+    (raw[off:off+2] == b'B,')"""
+    assert v4_day_block_offsets(b"") == ()
+    # 文件首块无前导 \n: raw 以 b"B," 开头
+    assert v4_day_block_offsets(b"B,100,30\nr,1,2,0,0") == (0, )
+    head = f"{HEADER_LINE_V4}\nkey,global\n".encode("utf-8")
+    # 常规形态: 头行 + key 行 + 两块
+    raw = head + b"B,100,30\nr,1,2,0,0\nB,200,30\nn,2\n"
+    offs = v4_day_block_offsets(raw)
+    assert offs == (len(head), len(head) + len(b"B,100,30\nr,1,2,0,0\n"))
+    assert all(raw[off:off + 2] == b"B," for off in offs)
+    # 单块文件: 头行 + key + 1 块
+    single = head + b"B,100,30\nz,3,0,0,0,0\n"
+    assert v4_day_block_offsets(single) == (len(head), )
+    # 坏 B 行(4 列)与撕裂 B 半行也定位(候选面; starts 侧过滤)
+    messy = head + b"B,100,30\nr,1,2,0,0\nB,200\nB,300,30\nn,1\nB,4"
+    assert len(v4_day_block_offsets(messy)) == 4  # 真 B + 3 个候选
+    assert all(messy[off:off + 2] == b"B," for off in v4_day_block_offsets(messy))
+
+
+def test_v4_day_block_starts_b1_valid_rows():
+    """B1 有效块头过滤(v4_day_block_starts): 与 _V4DayBlockMachine.feed 的 B 行分支同源
+    (_parse_v4_b_row 单点)—— 行型 B + 3/5 列 + 字段合法才入列; 坏 B 行族(列数不合/
+    字段非法/撕裂半行)不作为切分点。镜像性质: 整文件解析产出的每块 start_epoch 必在
+    starts 值集内(块头即真边界)。"""
+    head = f"{HEADER_LINE_V4}\nkey,global\n".encode("utf-8")
+    # 有效 3 列 + 5 列
+    raw = head + b"B,1000,30\nn,1\nB,2000,30,500,600\nr,1,2,0,0\n"
+    starts = v4_day_block_starts(raw, v4_day_block_offsets(raw))
+    assert starts == ((len(head), 1000), (len(head) + len(b"B,1000,30\nn,1\n"), 2000))
+    parsed = parse_v4_day_text(raw.decode("utf-8"))
+    assert [b.start_epoch for b in parsed.blocks] == [1000, 2000]  # 镜像: starts 值集盖住真块
+    assert all(any(s == b.start_epoch for _o, s in starts) for b in parsed.blocks)
+    # 坏 B 行族逐项不作切分点(真解析坏行整行计坏, 块在其后延续)
+    bads = [
+        b"B,1000\n",  # 2 列(撕裂半行修复形态)
+        b"B,1000,30,500\n",  # 4 列
+        b"B,abc,30\n",  # start 非整数
+        b"B,1000,0\n",  # interval < 1
+        b"B,1000,30,-5,600\n",  # 基线负值
+    ]
+    for bad in bads:
+        text = head + b"B,900,30\nn,1\n" + bad + b"B,2000,30\nn,1\n"
+        bad_off = len(head) + len(b"B,900,30\nn,1\n")
+        st = v4_day_block_starts(text, v4_day_block_offsets(text))
+        assert st == ((len(head), 900), (bad_off + len(bad), 2000))
+        p = parse_v4_day_text(text.decode("utf-8"))
+        assert [b.start_epoch for b in p.blocks] == [900, 2000]
+
+
+def test_v4_day_open_segment_offset_b1_decision():
+    """B1 开放段切点决策(v4_day_open_segment_offset, R1 边界上下文单点): 首个整块落
+    保留小时的块 j -> 段自块 j-1 起(j-1 = 结算上下文来源, 封口信用由入账侧过滤);
+    j = 0 -> 块 0(整文件); 全部块头落封口小时 -> 末块(封口文件只解析末块供跨文件
+    tail 接力); 无有效块头 = None。判据 = start_j >= wm_hour + HOUR_SECONDS。"""
+    # 块序: 08:00 / 12:00 / 18:00(偏移递增); wm = 10:00 -> j = 块1(12:00), 段自块0
+    offs_starts = ((100, 8 * 3600), (200, 12 * 3600), (300, 18 * 3600))
+    assert v4_day_open_segment_offset(offs_starts, 10 * 3600) == 100
+    # wm = 13:00 -> j = 块2(18:00), 段自块1(12:00, 骑水位候选)
+    assert v4_day_open_segment_offset(offs_starts, 13 * 3600) == 200
+    # wm = 12:00 整: 块1 start = 12*3600 < 13*3600 -> 仍封口小时, j = 块2
+    assert v4_day_open_segment_offset(offs_starts, 12 * 3600) == 200
+    # wm = 17:00 -> 块2(18:00)是首保留块, 段自块1(12:00, 骑水位候选);
+    # wm = 18:00 整 -> 块2 落封口小时 -> 全封口形态, 末块 = 块2
+    assert v4_day_open_segment_offset(offs_starts, 17 * 3600) == 200
+    assert v4_day_open_segment_offset(offs_starts, 18 * 3600) == 300
+    # j = 0: 首块已落保留小时 -> 段自块 0
+    assert v4_day_open_segment_offset(offs_starts, 7 * 3600) == 100
+    # 全部块头落封口小时 -> 末块(封口文件: 只解析末块, tail 供跨文件接力)
+    sealed = ((10, 1 * 3600), (20, 5 * 3600), (30, 9 * 3600))
+    assert v4_day_open_segment_offset(sealed, 10 * 3600) == 30
+    # 单块: 无论水位都返回该块
+    assert v4_day_open_segment_offset(((7, 3 * 3600), ), 9 * 3600) == 7
+    assert v4_day_open_segment_offset(((7, 3 * 3600), ), 1 * 3600) == 7
+    # 无有效块头 = None
+    assert v4_day_open_segment_offset((), 0) is None

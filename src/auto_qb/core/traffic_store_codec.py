@@ -777,6 +777,18 @@ class V4DayResume:
     open_records: tuple  # Tuple[V4Sample | V4ZeroRun | V4NullRun, ...](开放块已收记录)
 
 
+def _parse_v4_b_row(parts: list) -> tuple:
+    """B 行字段解析单点(块状态机 feed 与字节级块定位 v4_day_block_starts 两侧同源, B1
+    plan 26-11-21-1546): 二态块头 3 列无基线 / 5 列基线, 返回 (start_epoch, interval_s,
+    dl_base, up_base); 字段非法抛 ValueError/IndexError(列数把关在调用方)—— 两侧走
+    同一校验(镜像靠同源保持), 坏 B 行在状态机侧整行计坏、在字节定位侧不作切分点。"""
+    start = int(parts[1])
+    interval = _parse_interval_s(parts[2])
+    dl = _parse_nn_int(parts[3]) if len(parts) == 5 else None
+    up = _parse_nn_int(parts[4]) if len(parts) == 5 else None
+    return start, interval, dl, up
+
+
 class _V4DayBlockMachine:
     """天文件块状态机(parse_v4_day_text 行型分支单点; B/r/z/n 全部行型语义唯一实现)
 
@@ -822,11 +834,9 @@ class _V4DayBlockMachine:
         # False / ValueError / IndexError = 记坏(驱动器统一口径, data 语义不因来源分叉)
         if parts[0] == "B" and len(parts) in (3, 5):
             # 二态块头: 3 列无基线 / 5 列基线; 先解析校验再切换块状态(非法 B 行整行计坏,
-            # 既有块不受影响); 基线列负值按坏行(_parse_nn_int 拒负)
-            b_start = int(parts[1])
-            b_interval = _parse_interval_s(parts[2])
-            b_dl = _parse_nn_int(parts[3]) if len(parts) == 5 else None
-            b_up = _parse_nn_int(parts[4]) if len(parts) == 5 else None
+            # 既有块不受影响); 基线列负值按坏行(_parse_nn_int 拒负); 字段解析单点
+            # _parse_v4_b_row(与字节级块定位 v4_day_block_starts 同源, 镜像靠同源保持)
+            b_start, b_interval, b_dl, b_up = _parse_v4_b_row(parts)
             self._close()
             self._start = b_start
             self._interval = b_interval
@@ -937,3 +947,98 @@ def parse_v4_day_text(text: str, *, resume: Optional[V4DayResume] = None, with_r
     if with_resume:
         return result, cp
     return result
+
+
+# ======================================================================
+# 字节级块定位(B1 水位前移, plan 26-11-21-1546 S1; 恢复路径专用, 纯函数)
+#
+# 恢复读取面从「全文件解析 + 全槽入账 + 尾部丢弃」改为「字节级定位 + 开放段限定解析」
+# 的定位底座: 整读字节上单趟扫 \nB, 取块头行偏移(不解码不解析正文), 按有效块头的
+# start_epoch 决策开放段切点, 段文本经 parse_v4_day_text 的 resume= 续解机制解析
+# (前缀 = 头行 + key 行, 语义 = 对 (前缀 + 段) 的整文件解析)。三个纯函数只依赖字节,
+# 文件 IO 与告警纪律在调用方(TrafficV4Store.read_day_open_segment 单点)。
+# ======================================================================
+
+
+def v4_day_block_offsets(raw: bytes) -> tuple:
+    """天文件字节级块定位(单趟字节扫描, 纯函数): 各块 B 行候选的起始字节偏移升序元组
+
+    扫 b"\\nB,"(含文件首块 B 行无前导 \\n 的形态 —— raw 以 b"B," 开头)取行首偏移。
+    候选不判定行型有效性(坏 B 行/撕裂 B 半行也定位)—— 有效性过滤在 v4_day_block_starts
+    (切点必须用有效块头, 见其 docstring)。空文件/无候选 = ()。
+    """
+    if not raw:
+        return ()
+    offsets: list = []
+    if raw.startswith(b"B,"):
+        offsets.append(0)
+    find = raw.find
+    pos = 0
+    while True:
+        i = find(b"\nB,", pos)
+        if i < 0:
+            break
+        offsets.append(i + 1)
+        pos = i + 1
+    return tuple(offsets)
+
+
+def v4_day_block_starts(raw: bytes, offsets: tuple) -> tuple:
+    """候选 B 行 -> 有效块头 (字节偏移, start_epoch) 升序元组(纯函数)
+
+    有效性判定与 _V4DayBlockMachine.feed 的 B 行分支同源(字段解析单点 _parse_v4_b_row):
+    行型 B + 3/5 列 + 字段合法才算块头; 其余(列数不合/字段非法/撕裂半行)在真解析里是
+    坏行, 块在其后延续 —— 不得作切分点(段解析从坏 B 行切开会让其后记录落入
+    「块头前出现数据行」坏行, 与整文件解析发散)。行文本 = 偏移到下一 \\n(EOF 止),
+    strip 后 split —— 与 _parse_v4_text 的行纪律一致(前导空白容忍同源)。
+    """
+    starts: list = []
+    for off in offsets:
+        end = raw.find(b"\n", off)
+        line = raw[off:end if end >= 0 else len(raw)].decode("utf-8", errors="replace")
+        s = line.strip()
+        if not s:
+            continue
+        parts = s.split(",")
+        if parts[0] != "B" or len(parts) not in (3, 5):
+            continue
+        try:
+            start_epoch = _parse_v4_b_row(parts)[0]
+        except (ValueError, IndexError):
+            continue
+        starts.append((off, start_epoch))
+    return tuple(starts)
+
+
+def v4_day_open_segment_offset(starts: tuple, wm_hour: int) -> Optional[int]:
+    """开放段切点决策(B1/R1 边界上下文单点, 纯函数)
+
+    starts = v4_day_block_starts 产出((偏移, start_epoch) 升序 = 真块序; 前提 = 写侧
+    产出不变式「块按时间接续」—— 块 k 的槽位全在 [s_k, s_{k+1}) 内, 后块首槽 > 前块
+    末槽); wm_hour = 恢复水位 hour epoch。返回开放段起始字节偏移(恒为某有效块头 ——
+    真解析在块头处无条件 _close+开新块, 段解析在该点的块状态机与整文件解析等价, 切点
+    前缀无需携带任何状态), 无有效块头 = None(调用方按空解析处置 —— 块空则零信用零
+    tail 产出, 与整文件解析一致)。
+
+    - 存在首块 j: start_j >= 水位小时之后首个整点(整块落保留小时)-> 段自块 j-1 起
+      (j = 0 即自块 0 = 整文件)。块 j-1 整块解析供结算上下文
+      (R1): 其槽位若骑水位(末槽跨进保留小时)保留信用照常入账, 封口部分由入账侧
+      skip_through_hour 过滤; 更早的块全封口(末槽 < s_{j-1} 落封口小时)—— 跳过解析
+      与入账, 其结算区间 [末槽, s_{j-1}) 也整体落封口小时, 过滤后零差异。
+    - 无此类块(全部块头落封口小时)-> 只有末块可能骑水位(骑水位块的后续块首槽必落
+      保留小时 —— 块 k 若有槽位落在保留小时, 其后块首槽 > 该槽位必同判保留), 段 =
+      末块: 封口文件只解析末块供跨文件 tail 接力(00:00 连续结算的信用落保留小时,
+      丢弃它输出不等价), 骑水位的保留信用照常入账。
+    - 空块窄角(评审 P1b-3): 末块/上下文块为**空块**(有效 B 行后无合法记录)时不产
+      tail, 决策面不可见(空块与否须解析才知道)—— 由调用方 read_day_open_segment 在
+      段解析后回退前一有效块头重解, 保证 tail 结算上下文与整文件解析一致。
+    """
+    if not starts:
+        return None
+    # 水位小时之后的首个整点(wm_hour 为 hour epoch, 生产恒整点对齐; floor 兜底非对齐
+    # 入参 —— 判据按 wm 的小时桶语义, 与入账侧 skip_through_hour 的 h <= wm_hour 同构)
+    boundary = (wm_hour // HOUR_SECONDS + 1) * HOUR_SECONDS
+    for i, (_off, start_epoch) in enumerate(starts):
+        if start_epoch >= boundary:
+            return starts[i - 1][0] if i > 0 else starts[0][0]
+    return starts[-1][0]

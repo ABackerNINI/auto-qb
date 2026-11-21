@@ -1396,7 +1396,7 @@ def test_recovery_instrumentation_logs_counts(tmp_path, monkeypatch):
     text = logs.text
     assert "启动恢复开始: 启用态, 2 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)" in text
     assert "启动恢复完成: 2 系列 / 读入天文件 5 个" in text  # A 2 + B 3
-    assert "补算小时 0 个 / 入账槽 0 个 / 耗时" in text  # 空壳文件零入账(计数形状齐全)
+    assert "补算小时 0 个 / 处理槽 0 个(B1 开放段口径: 只计实际解析/记账走过的块, 封口块不计)/ 耗时" in text  # 空壳文件零入账(计数形状齐全; B1 口径改名)
     assert "agg 无可用水位(缺失/损坏/无 hour 行)" in text  # B 的 D5 兜底说明
     assert "读集 3 天(>2): 下界来源 = fallback 保留窗全量" in text  # B 的下界来源
     stats = mgr.host.get("qb_traffic").recovery_stats
@@ -1736,15 +1736,22 @@ def test_recovery_missing_day_file_breaks_tail_context(tmp_path, monkeypatch):
     mod.start(mgr.ctx, dry_run=False)
     assert mod.recovery_stats["slots"] == 4  # 两文件各 2 槽
     assert mod.recovery_stats["hours"] == 1  # 昨日 23 点: 槽间 30s + 跨文件连续段 20s
-    # 读集内昨日文件缺失 -> 末槽上下文断链
+    # 读集内昨日文件缺失 -> 末槽上下文断链(B1 后恢复走 read_day_open_segment, 两入口同断)
     real_read_day = TrafficV4Store.read_day
+    real_read_segment = TrafficV4Store.read_day_open_segment
 
     def _drop_yesterday(self, key, date_str):
         if key == GLOBAL_SERIES_KEY and date_str == y_date:
             return None
         return real_read_day(self, key, date_str)
 
+    def _drop_yesterday_segment(self, key, date_str, wm_hour):
+        if key == GLOBAL_SERIES_KEY and date_str == y_date:
+            return None
+        return real_read_segment(self, key, date_str, wm_hour)
+
     monkeypatch.setattr(TrafficV4Store, "read_day", _drop_yesterday)
+    monkeypatch.setattr(TrafficV4Store, "read_day_open_segment", _drop_yesterday_segment)
     mgr2 = _mgr_with_traffic(drop, conf, clock=clock)
     mod2 = mgr2.host.get("qb_traffic")
     mod2.start(mgr2.ctx, dry_run=False)
@@ -1769,7 +1776,7 @@ def test_recovery_open_hour_rebuilds_pending_bucket(tmp_path, monkeypatch):
     _write_day_file(tmp_path, GLOBAL_SERIES_KEY, v4_epoch_date_str(now))
     cur_hour, empty_hour = today0 + 13 * HOUR_SECONDS, today0 + 12 * HOUR_SECONDS
 
-    def _fake_credit(hour_samples, parsed_day, prev_tail=None, slot_counter=None):
+    def _fake_credit(hour_samples, parsed_day, prev_tail=None, slot_counter=None, skip_through_hour=None):
         hour_samples[cur_hour] = _hour_fold((100, 50, 1, 2, 30.0))  # 开放小时(未完结)
         hour_samples[empty_hour] = HourFold()  # 空桶: 不留行
         return None
