@@ -9,6 +9,7 @@ from .traffic_store_common import (
     TORRENTS_DIR_NAME,
     TORRENT_KEY_PREFIX,
     TRAFFIC_V4_DIR_NAME,
+    V4_ACC_LEDGER_NAME,
     V4_AGG_NAME,
     V4_DATE_FORMAT,
     V4_GLOBAL_DIR_NAME,
@@ -46,6 +47,13 @@ def v4_day_file_path(data_dir: str, key: str, date_str: str) -> str:
 def v4_agg_file_path(data_dir: str, key: str) -> str:
     """系列键 -> agg.dat 路径(§02.2: 每系列一个聚合文件)"""
     return os.path.join(v4_series_dir(data_dir, key), V4_AGG_NAME)
+
+
+def v4_acc_ledger_path(data_dir: str) -> str:
+    """acc 快照账本路径(S2, plan 26-11-21-1546 §03.1/D8): 根级单文件 <data_dir>/
+    qb-traffic-v4/acc.dat, 与 global//torrents/ 平级 —— 旧版本回滚不认识该陌生文件
+    (系列键扫描只看 global/ + torrents/ 两级), 原样留存不读不删, 降级零影响。"""
+    return os.path.join(v4_root_dir(data_dir), V4_ACC_LEDGER_NAME)
 
 
 def v4_rel_dir_to_key(rel_dir: str) -> Optional[str]:

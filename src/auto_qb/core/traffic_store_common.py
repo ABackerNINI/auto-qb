@@ -39,6 +39,14 @@ V4_GLOBAL_DIR_NAME = "global"
 #: v4 每系列聚合文件名(hour/day/month 9 列追加混存, §02.2)
 V4_AGG_NAME = "agg.dat"
 
+#: acc 快照账本文件名(S2, plan 26-11-21-1546 §03.1/D8: 根级单文件追加账本, 与 global//
+#: torrents/ 平级 —— 旧版本系列键扫描只看两级目录, 该陌生文件原样留存不读不删)
+V4_ACC_LEDGER_NAME = "acc.dat"
+
+#: acc 账本版本头行(S2, 门闩与天文件头行同款机制, 不设双读): 不匹配 = 整本无效 ->
+#: 调用方全体系列 fallback; 未来换代换本行留门
+ACC_LEDGER_HEADER_V1 = "# auto-qb qb-traffic-acc v1"
+
 #: dt_ms 校验上界(毫秒, 一天; §02.1 全整数/毫秒口径)
 DT_MS_MAX = 86_400_000
 
