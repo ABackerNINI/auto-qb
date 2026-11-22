@@ -1,0 +1,34 @@
+# WEB UI 交互细节 (响应性 / 部分组预警 / 键位现场提示)
+> 摘要: 乐观 UI 与 ingestion 物化缝、部分组操作的三落点预警与后端纵深闸门、键位现场提示的显影/键帽/页签徽标 —— 主档 webui.md 外迁的交互层细节。
+> 触发: 响应性, 乐观 UI, ingestion, _materializeGroupRows, 行窗口化, 部分组, partialGroups, 将缺文件, 整组迁移, rename-fs, 键位, 键帽, kbd-reveal, kbd-persist, aq-kbd, ctx-sub
+
+## 响应性设计 (plans/26-09-19-1241-webui-responsiveness-plan.html)
+
+总原则: **感知延迟与真实延迟分开治** —— 「不跟手」主因是沉默(点击后无反馈), 收益最大的是乐观 UI, 后端加速只负责把真值对齐压到百毫秒级。
+
+- **乐观 UI 只做白名单(pause/resume)**: 补丁**先于 POST** 贴上(放 await 之后 = 押在网络往返上); **3s 兜底显式回滚到补丁前值**(光删补丁记录不叫回落 —— rid 未变时服务端不回传数组, 行对象不被替换, 补丁值会永久留在行上); **真值匹配即清必须比服务端快照**(比行上的当前值 = 跟自己比, 首轮必假匹配); 只认本轮 payload 真带了的 hash; 失败立即回滚。
+- **命令后补刷新走完整同步**(只 apply 增量会留半刷新态), 整批命令 drain 完只补一次; qB 受理(HTTP 200)≠建好, 另有**有界追平**: 登记期望 hash, 同步线提前 +80ms 再问(≤3 次/TTL)。
+- **ingestion 物化缝**(plans/26-11-11-0630 §04 S2, 2026-11-12 接线): 组行 `members` 改 hash 引用式后, 前端在**摄入侧**物化成员明细 —— polling.js 三入口(applyStateRows 全量/delta + auth.js bootstrap)经 `_materializeGroupRows` 产**成员行浅拷贝**而非 canonical 行引用(动因: 乐观链 prev 采集「同 hash 多命中各为独立对象」, 别名化下第二命中读到已打补丁值 → `op.prev` 被污染, 失败回滚静默失效; 浅拷贝与物化前服务端成员字典同构, g.members 消费位零波及)。delta 桶序 torrents/singles 先于 groups 合并 ⇒ 物化时索引恒新鲜; 缺项保留原 hash 字符串不产 undefined + `_rematQueue`/`_rematDrain` 后续轮补物化(后端「成员脏 ⇒ 同代组脏」不变式下常规不可达, 纯兜底)。**已知语义边界**: `_snapshotTruth` 组员源换本地物化拷贝后, 组脏(他员变化)+ 该组另有成员 pending 同窗会提前撤 hold 且 op.prev 同窗污染 —— 成功路径观感不变, 失败/停滞路径补丁值滞留至该成员下次变化或下一次全量轮。守阵单点: node 电池 `test_r4_truth_snapshot_materialized_members` + `test_r4_remat_drain_after_assign_two_beat`(tests/test_webui_static_r4_poll_auth_lifecycle.py)+ e2e `group-hash-ref.spec.mjs`。
+- **行窗口化只减 DOM 行数不改布局模型**(上下占位撑高度, 列对齐与列宽协议保持有效); 行高逐行实测 + 前缀和 + 二分(行高不齐, 等高假设会漂); 展开的组在可见集合里时窗口退避全量。
+- **搜索索引**: 种子名匹配即时扫 store, 文件列表匹配靠索引(文件 API 只在主循环线程); 按 hash 增量维护 + 单次限流预算, 未拉完下一 tick 续建。
+- 前端纪律: 页面隐藏停轮询恢复即刷; setTimeout 链式续排不堆叠请求; **只做失败退避**, 不做「无变化退避」。
+
+## 部分组操作预警 (webui/static/shared/selection.js + delete_flow.js + drawer.js)
+
+- **判定/聚合双单点**(计划 plans/26-11-11-0820-plan-webui-partial-group-warning.html, 拍板 D2): 「辅种组只被选中一部分」的唯一判定点 `selection.js::_partialGroupsOf(keys, hashes)` → `[{key, name, sel, total}]`(真实组 `!virtual` 且 `total>1`: 有成员命中 ∧ 组键不在 groupKeys ∧ 未全选; hash→组反查走 decoratedGroups, 与 `_findGroup` 同源, 不得 filteredGroups 独走) + 展示聚合单点 `_partialGroupsSummary(partials)` → `{names, sel, total, gap}`(组名上限 3 个 +「等 K 个」)。消费方不得另写判定/聚合。
+- **三落点**(删除链/移动链共用上述单点): ① 删除确认框 `_deleteDetails` 末尾恒显行(tone error, D5 —— 与「同时删除磁盘文件」勾选无关恒显, 文案钉住词「将缺文件」); ② 设定位置迁移关提交前确认框(`drawer.js::_partialMoveConfirmGate`, error + danger 钮, 确认才发, 拍板 D3); ③ 迁移开披露条(`move-dialog.html` 内嵌, tone warn, 开框即见不加分步, 拍板 D4 —— 选 1 搬 N 由后端 `_buckets` 级联全组, 行为安全, 提交前醒目披露)。
+- **R6 降级口径(解析不出不误拦)**: 谓词对缺失组数据空返回; 迁移关闸门 `flags.relocate_enabled === false` 严判、迁移开披露条 `=== true` 严判(旗标取不到一律降级为无提示/直发) —— 绝不因开框到提交之间的快照竞态阻断正常操作。
+- **守阵**: `tests/test_webui_static_r4_node_batteries.py`(谓词五形态 + 三落点电池 + 对称单点锚); 文案钉住词「将缺文件」「整组迁移」双向钉住(reannounce-inactive-gate 同款纪律)。
+- **后端纵深闸门**(issue issues/26-11-11-0823, 2026-11-12): `/api/torrents/bulk` 直发可绕过全部前端预警 —— 分派前部分组闸(谓词 `commands_torrents.py::_partial_groups_of` 为前端 D2 口径的**后端镜像**, 成员取 groups∩在册; 文案单点 `_partial_group_reject_msg` 与前端聚合同形)。**混合形态**(用户拍板): delete×delete_files×部分组 fail-closed 硬拒(confirm 不释放); 迁移关 location 无 confirm 拒单、**confirm=true 放行**(声明位幂等, 与整组迁移 confirm 同范式但无服务端待确认状态; 前端 S3 确认框确认后 drawer.js `post(gated !== null)` 带上)。放行面: keys 覆盖全组/成员全选平铺/单成员组/未归组照常; 武装态在闸前分流(`_buckets` 级联全组无此洞)。后端守阵: `test_web_commands_bulk.py` 闸门电池 6 条 + dispatch 无 cmd_id 矩阵第 7 类。
+- **rename-fs 端点闸**(issue issues/26-11-12-0807, 2026-11-14): `/api/torrents/{hash}/rename-fs` 直发可重命名辅种组共享物理文件/文件夹(重命名后 qB 只重写本成员文件表, 同组其余成员仍指旧名缺文件不可逆) —— `_cmd_rename_fs` 在 qB 调用前复用同一谓词 `_partial_groups_of([hash], [])`(单 hash 直发 = keys 空, sel=1<total 即拦), 命中多成员在册组 raise ValueError fail-closed 硬拒(回执经 consume_commands error 分支带出, 与 set_file_priority 等单命令拒绝同形态); **无 confirm 位**(重命名共享文件对共存成员纯破坏, 无「明知且想要」的合法意图, 区别于迁移关 location)。放行面同口径: 单成员组/未归组/组缩到 1 在册成员照常。守阵: `test_web_commands_bulk.py::test_rename_fs_partial_group_hard_rejected`。
+
+## 键位现场提示 (webui/static/shared/shortcuts.js + ctx_menu.js + state.js)
+
+- **菜单键帽零二次维护**(计划 plans/26-11-12-0344-plan-webui-kbd-hints.html, 映射审计在其 §05): 右键菜单项 `key` 字段引用注册表 shortcut id(`CTX_ITEM_DEFS`/`CTX_SUB_ITEM_DEFS`, ctx_menu.js); 自定义项(flags 合并)无 key 自然留白对齐(I5); 渲染单点 `ctxRenderItem` 查注册表现算, **禁止模板写死键位串**(I1)。显示串取数链: `kbShortcutDisplay`(shortcuts.js, 模板基准 def ⊕ 用户草稿 overrides, 与 kbSerialWithDraft⊕kbDisplayName 同源, 改绑/清空即时生效) → `kbKeycapById(id)` → 适配器方法 `kbKeycapOf`(shortcuts.js 的 AQB_SHORTCUTS.methods, 经 app.mixin 挂入; 方法体内 `void this.kbKeysRev` 注册响应式依赖 —— 键位草稿源 AQB_KEYS 适配器各变更点自增 `kbKeysRev` 代次, 字段在 state.js)。
+- **页签徽标与键盘 run 同一单点**: `kbDrawerTabKbd(pages, merged)`(shortcuts.js)与键盘路径(shortcuts_engine.js `_kbDrawerTab`)同表 `KB_MERGE_TAB_REMAP` —— 合并页签态反查落点, 第 4/5 档(null)不显示, 可见页签徽标随位次变(流量 Alt+5 → Alt+3)。
+- **显影链与两态开关**(计划 plans/26-11-14-0041-plan-webui-kbd-reveal.html, D1/D4/D6/D7): `lifecycle.js` 在 document **冒泡阶段**挂 keydown/keyup + `window blur` + `visibilitychange(hidden)` 闭环; 判 `e.code === "Backquote"` 且 `!e.repeat` 且非 IME 组合期(`isComposing`/229); 输入态跳过(`closest("input, textarea, select, [contenteditable]")`); 录制态判 `kbRecId` 避让; 任意 keydown 自愈(丢 keyup 后下一次按键立即纠正); **绝不 preventDefault / stopPropagation**(排引擎之后, 组合键照常)。状态栏右角无文字图标开关: 开 = `body.kbd-persist` 全落点常驻 / 关 = 仅按住反引号 `body.kbd-reveal` 显影; 两态互斥(`_setKbdReveal` 常驻态早退)、共用同一条显示规则 `body.kbd-reveal .aq-kbd, body.kbd-persist .aq-kbd`, 都只是 body class 的 CSS 切换(零 JS 重绘); 状态持久化走现有 `autoqb.ui.kbdPersist` 本机偏好。
+- **键帽形态与落点**: `.aq-kbd`(console_hub_panels.css 尾段单点, 令牌复用零新增; 守阵 `test_aq_kbd_css_four_skin_isomorphic` 以「首个 .aq-kbd 规则块即共享基形」定位)已去按钮化(无实心底/无边框/无圆角), 默认 `opacity:0; visibility:hidden`(**保留几何、不脱流** => 显影前后零跳动); 显影只切 opacity/visibility/color, 不加 transition、不碰几何; 灰色括号由 `::before/::after` 伪元素生成(不写进模板、不动取数串)。无预留键位列的控件(顶栏添加种子「N」/列「K」、状态栏入口等)走 `.aq-kbd-host` **角标**挂载(绝对定位、不进布局流 => 药丸宽度不随键位变化), 取数仍走 `kbKeycapOf` 单点; 右键菜单用 `.ctx-kbd-slot` 恒渲染固定预留列。
+- **I4 例外裁定**: 键位提示不走 title/.aq-tip 通道(D10) —— 与 conventions/webui.md「悬浮提示」节默认口径不同, 仅限键帽面, 其余新元素仍按惯例写 title; 控件自身功能说明(如状态栏开关原生 `title`「按住 ` 显影 / 点此常驻」)不属键位提示, 仍写 title(D11)。
+- **子面板宽度与视口钳位**: `.ctx-sub` min-width 260 四皮肤同值 + menu.js `_subOverflowsRight` 首帧估宽 272(=260+12)五处耦合(`webui_static_scan_css.py::_scan_ctx_sub_width` 机械拦截)保留不动; 键位槽改为**恒渲染固定预留列(槽宽 88 / 槽距 0, 四皮肤同值)**, 实测菜单宽 259、子面板回归 260, 扫描器锚值已同步为 88/0; 实测重钳位 `_subFitViewport`(估宽只管首帧水平翻转方向)+ 二次收口 `_subFitRefit`(rAF 有界复核 1+3 帧收敛; 宿主菜单 `_menuFitRefit` 的 settle 会在子面板单次钳位后再修正菜单 x/y, 嵌套层不跟随即底缘溢出 vh-8 契约 —— 坑档 ctx-sub-clamp-host-settle)。
+- **表外 `<kbd>` 与测试面**: 帮助浮层 `tpl/popovers.html`、设置键位面板 `tpl/settings-detail.html`、`tpl/settings.html` 三处 `<kbd>` **不带 `.aq-kbd`**, 默认隐藏不波及(G5/D10); e2e `e2e/kbd-reveal.spec.mjs` 12 例(切窗自愈 / 输入态 / 录制态 / 显影落点 / 设置保存 / 组合键不吞 + 两态互斥)。
+- 字段渲染单点 `hub-field` 组件(嵌套 object 预先扁平化为带缩进的渲染项, 组件无需递归); 命名实体(站点/规则集/规则)增改删收敛为三个骨架 + 三份差异清单; **「不适用」整块隐藏 ≠「不可用」灰显**: 来源不支持 ⇒ 字段无意义整块不渲染; 功能开关关 ⇒ 灰显但仍可编辑(先把参数配好, 开回即生效)。
