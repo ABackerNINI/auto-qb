@@ -121,7 +121,10 @@ class _FakeRelocateJobs:
     """relocate 模块句柄的最小替身: 只暴露 WebUI 构建期消费的 jobs_snapshot()
     (views.py::_relocate_snapshot 只 getattr 这一个方法; 命令面方法桩上不可达, 不造)。
     T5 追加 foreign_notified_view()(views.py::_foreign_entry 的外部旧路径种子发布视图;
-    不暴露时呈现面按替身缺位回落 None, 不炸)。"""
+    不暴露时呈现面按替身缺位回落 None, 不炸)。
+    S4(26-11-21-1546)追加 relocating_hashes(): boot-first 模式走真 _sync_line, 真
+    grouping_mod._scan_triggered_groups 会调它(搬迁让路面, 无异常护栏 —— 缺了直接炸
+    启动首轮); 桩恒空集 = S5(bde75be0)前桩缺登记集被当空集的既有行为逐字保持。"""
     def __init__(self, snap, foreign=None):
         self._snap = snap
         self._foreign = foreign if foreign is not None else MappingProxyType({})
@@ -131,6 +134,9 @@ class _FakeRelocateJobs:
 
     def foreign_notified_view(self):
         return self._foreign
+
+    def relocating_hashes(self):
+        return frozenset()
 
 
 def _inject_relocate_jobs(mgr, torrents) -> None:

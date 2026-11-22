@@ -11,6 +11,10 @@ read_day_open_segment 开放段限定解析 + skip_through_hour 记账入口过�
   末笔必须逐位; cov ULP 免责(容差 COV_ULP_TOL, FP 论证见其注)—— 精确栅格语料
   (exact_grid=True)两路全程精确, cov 升级为逐位断言; credits 结构豁免(仅 ==0 判空
   消费, 不进聚合输出)。
+- day/month 逐级 rollup(S4-1 全管线封口面, reference_day_month_rollup): 生产
+  _recover_series catch-up 段 + _catch_up_level 骨架的逐字镜像(冻结在测试侧)—— 输入
+  参照 hour 行(存量 + 参照 seal 行), 输出 new_days/new_months 与生产补算行 bitwise
+  对拍 + 当日/当月开放累计器逐字段对拍。
 
 语料纪律(writer 形态不变式, open_segment 决策的前提): 单条连续采样流时刻严格递增,
 逐日一个文件(00:00 硬切块不跨天), 后块 B.start > 前块末槽, totals 单调递增, 块内
@@ -40,6 +44,8 @@ from auto_qb.core.traffic_store import (
     v4_block_slots,
     v4_date_str_epoch,
     v4_day_epoch,
+    v4_month_epoch,
+    v4_rollup_agg,
 )
 
 #: 写侧累积漂移容差(秒; traffic_store_common.DRIFT_TOL_MS / 1000 同源口径)
@@ -333,6 +339,47 @@ def b1_production_credit(store: TrafficV4Store, key: str, day_dates: tuple, wm_h
         else:
             tail = None
     return samples, tail, sum(slot_counts)
+
+
+def reference_day_month_rollup(
+    parsed_hours: tuple, parsed_days: tuple, parsed_months: tuple, ref_new_hours: list, now: float
+) -> tuple:
+    """day/month 逐级 rollup 参照件(plan 26-11-21-1546 S4-1 全管线对拍): 生产
+    _recover_series 的 catch-up 段 + _catch_up_level 骨架的逐字镜像(冻结在测试侧, 同
+    reference_slot_credit 先例 —— 骨架单点 issue 26-10-11-0207 R10 的两级同构)。输入 =
+    「参照全量路径」的各级子行: 存量 agg 行(parsed_*)+ 参照 hour seal 行(ref_new_hours,
+    来自 reference_full_credit), 严格逐级 day <- hour / month <- day(v4_rollup_agg)。
+    口径与生产 _catch_up_level 同款: 子行按桶 epoch 分组, 当前桶(今日/当月, b >= cur_bucket)
+    只重建累计器不出行(未完结), 水位前已有行不重算(b <= wm 跳过, §4.4 前向水位),
+    其余完结桶补算 rollup 行。返回 (new_days, new_months, cur_day_epoch, cur_day_hours,
+    cur_month_epoch, cur_month_days) —— 补算行供 bitwise 对拍, 当前桶累计器供逐字段对拍。"""
+    today = v4_day_epoch(now)
+    cur_month = v4_month_epoch(now)
+    wm_day = parsed_days[-1].epoch if parsed_days else None
+    wm_month = parsed_months[-1].epoch if parsed_months else None
+
+    def _catch_up_level_ref(children: list, bucket_epoch_of, cur_bucket: int, watermark, kind: str) -> tuple:
+        buckets: dict = {}
+        for c in children:
+            buckets.setdefault(bucket_epoch_of(c.epoch), []).append(c)
+        cur_epoch, cur_rows = None, []
+        out = []
+        for b in sorted(buckets):
+            if b >= cur_bucket:
+                cur_epoch, cur_rows = b, list(buckets[b])  # 当前桶累计器(未完结)
+                continue
+            if watermark is not None and b <= watermark:
+                continue  # 已有行: 不重算(前向水位 §4.4)
+            out.append(v4_rollup_agg(kind, b, tuple(buckets[b])))
+        return out, cur_epoch, cur_rows
+
+    new_days, cur_day_epoch, cur_day_hours = _catch_up_level_ref(
+        list(parsed_hours) + list(ref_new_hours), v4_day_epoch, today, wm_day, "day"
+    )
+    new_months, cur_month_epoch, cur_month_days = _catch_up_level_ref(
+        list(parsed_days) + list(new_days), v4_month_epoch, cur_month, wm_month, "month"
+    )
+    return new_days, new_months, cur_day_epoch, cur_day_hours, cur_month_epoch, cur_month_days
 
 
 def split_rows_pending(samples: dict, now: float) -> tuple:

@@ -52,6 +52,13 @@ B2 游程级闭合式定向守阵(plan §03.1 B2 / §07 R1 忠实移植):
   单条 86400 槽 z 游程 + z-heavy 1.5s 全天(约 3 千行/5.7 万槽): _agg_credit_hours
   调用数 B2 <= 2x行数+50 且 <= 参照/10(结构复杂度断言, 确定性), 耗时数字 print
   (量级证据, 不作时序断言)
+S4 全管线 day/month rollup 对拍守阵(plan 26-11-21-1546 S4-1, D2 day/month 封口面):
+- test_s4_pipeline_day_month_rollup_equivalence: 翻月语料(05-30..06-02, 合成器复用)x
+  2 风格 x 2 种子 x 三相位(迟到信用重封+翻月 / 前向水位不重算 / fallback 全量)—— 真
+  _recover_series 跑完 catch-up 后, agg 文件补算 new_days/new_months 与参照实现全量路径
+  (参照 hour 行 x 生产 _catch_up_level 骨架逐字镜像 reference_day_month_rollup)bitwise
+  相等(逐字段 + format_agg_row 文本), 当日/当月开放累计器 epoch+子行表逐字段, 开放小时
+  pending 桶集+字段分级相等; 存量行不重算不重写(前向水位)
 """
 
 import os
@@ -77,10 +84,12 @@ from auto_qb.core.traffic_store import (
     V4NullRun,
     V4Sample,
     V4ZeroRun,
+    format_agg_row,
     format_v4_day_text,
     parse_v4_agg_text,
     parse_v4_day_text,
     v4_date_str_epoch,
+    v4_month_epoch,
     v4_z_totals_ramp,
 )
 
@@ -90,6 +99,7 @@ from traffic_recovery_support import (
     assert_folds_field_equivalent,
     b1_production_credit,
     read_set_dates,
+    reference_day_month_rollup,
     reference_full_credit,
     reference_slot_credit,
     split_rows_pending,
@@ -757,3 +767,113 @@ def test_b2_credit_cost_rows_not_slots(tmp_path, monkeypatch):
     assert c_heavy_ref >= n_slots // 2  # z-heavy: 过半槽为 z 区间(逐槽 1 笔)
     assert c_heavy_b2 <= 2 * heavy_rows + 50  # 闭合式: 每记录至多 1 笔结算 + 每桶 1 笔
     assert c_big_b2 * 10 <= c_big_ref and c_heavy_b2 * 10 <= c_heavy_ref
+
+
+# ==================== S4-1 全管线 day/month rollup 对拍(plan 26-11-21-1546 S4) ====================
+
+#: 翻月语料日序(5 月末 -> 6 月初, 末日 = 「今日」)—— S4-1 day/month rollup 对拍用
+CORPUS_DATES_MB = ("2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02")
+_NOW_MB = v4_date_str_epoch("2026-06-02") + 13 * HOUR_SECONDS + 30  # 今日 13:00:30
+
+
+def _build_corpus_mb(tmp_path, seed, style):
+    """翻月随机合成语料(种子可复现): 返回 (store, info)"""
+    rng = random.Random(f"s4-rollup-{seed}-{style}")
+    store = TrafficV4Store(str(tmp_path))
+    info = synthesize_series_files(store, GLOBAL_SERIES_KEY, CORPUS_DATES_MB, rng, style=style)
+    return store, info
+
+
+@pytest.mark.parametrize("style", ["mixed", "z-heavy"])
+@pytest.mark.parametrize("seed", range(2))
+def test_s4_pipeline_day_month_rollup_equivalence(tmp_path, seed, style):
+    """S4-1 全管线 day/month rollup 对拍(D2「封口 hour/day/month 行 bitwise 相等」的
+    day/month 封口面): 翻月语料 x 三相位 —— 真 _recover_series 跑完 catch-up 后, agg
+    文件内补算的 new_days/new_months 与「参照实现全量路径」产出 bitwise 相等(封口行
+    逐字段 + format_agg_row 文本逐位), 当日/当月开放累计器 epoch + 子行表逐字段等值,
+    开放小时 pending 桶集 + 字段分级相等。参照件 = 参照 hour 行(存量 + reference_full_
+    credit seal 行)x 生产 _catch_up_level 骨架逐字镜像(reference_day_month_rollup,
+    冻结在 support)—— 生产侧改动 catch-up 输入面/骨架/append 面任一即红。相位:
+    - reseal-month-boundary(迟到信用重封 + 翻月): 水位 05-31 10:00, 存量 hour 行恰水位
+      行 + 存量 day 行 05-30(05-31 日行缺 = 崩溃窗形态)—— 05-31 日桶 = 存量 hour 行 +
+      恢复补算 hour 行混合重封; 5 月月桶 = 存量 day 行 + 新 day 行混合 rollup(补算 5 月
+      行), 6 月 = 当月只重建累计器不出行(翻月边界);
+    - wm-skip-discipline(前向水位不重算, §4.4): 水位 06-01 15:00, 存量 day 行 05-30/
+      05-31 + 5 月月行齐备(优雅停机形态)—— 5 月月桶 b <= wm_month 跳过不重算(存量行
+      原样), 仅 06-01 日桶重封(存量 hour 行 + 补算行混合), 当月 6 月不出行;
+    - fallback-full(D4/D5 全量兜底): 无存量 agg 行, 水位 None —— 读集 4 天文件全量重算,
+      day 三行 + 5 月月行补算, 6 月 = 当月(无水位下 day/month 骨架与参照仍逐位)。
+    多日跨日面: 偶数序日(05-30/06-01)日界尾块 + 次日 00:00 衔接(合成器编排), 跨 00:00
+    结算信用落对应日/月桶(读集内 06-01 -> 06-02 边界三相全覆盖, 05-30 -> 05-31 边界
+    fallback 相位覆盖)。"""
+    wm_a = v4_date_str_epoch("2026-05-31") + 10 * HOUR_SECONDS  # 05-31 10:00(5 月内, 陈旧)
+    wm_b = v4_date_str_epoch("2026-06-01") + 15 * HOUR_SECONDS  # 06-01 15:00(6 月内, 陈旧)
+    day_0530 = v4_date_str_epoch("2026-05-30")
+    day_0531 = v4_date_str_epoch("2026-05-31")
+    month_may = v4_month_epoch(day_0530)
+    phases = (
+        # (name, 存量 hour 行, 存量 day 行, 存量 month 行, 水位)
+        (
+            "reseal-month-boundary", (AggRow("hour", wm_a, 7, 9, 3, 4, 500, 600,
+                                             3600), ), (AggRow("day", day_0530, 7, 9, 3, 4, 500, 600,
+                                                               86400), ), (), wm_a
+        ),
+        (
+            "wm-skip-discipline", (AggRow("hour", wm_b, 7, 9, 3, 4, 500, 600, 3600), ), (
+                AggRow("day", day_0530, 7, 9, 3, 4, 500, 600,
+                       86400), AggRow("day", day_0531, 8, 10, 4, 5, 600, 700, 86400)
+            ), (AggRow("month", month_may, 7, 9, 3, 4, 500, 600, 31 * 86400), ), wm_b
+        ),
+        ("fallback-full", (), (), (), None),
+    )
+    for phase, seed_hours, seed_days, seed_months, wm in phases:
+        root = tmp_path / phase
+        root.mkdir()
+        store, _info = _build_corpus_mb(root, seed, style)
+        seed_rows = seed_hours + seed_days + seed_months
+        if seed_rows:
+            store.append_agg_rows(GLOBAL_SERIES_KEY, seed_rows)
+        clock = FakeClock(start=_NOW_MB)
+        mgr = _mgr_with_traffic(
+            root, QbTraffic(enabled=True, sample_interval_multiplier=30, rollup_window=_WINDOW), clock=clock
+        )
+        mod = mgr.host.get("qb_traffic")
+        mod.start(mgr.ctx, dry_run=False)  # 恢复 + catch-up(先于一切采样)
+        # 参照实现全量路径: 参照 hour 行 -> day/month 逐级 rollup(骨架镜像, S4-1 参照件)
+        dates = read_set_dates(store, GLOBAL_SERIES_KEY, _NOW_MB, wm, _WINDOW)
+        ref_samples, _ref_tail, _r = reference_full_credit(store, GLOBAL_SERIES_KEY, dates, wm)
+        ref_rows, ref_pending = split_rows_pending(ref_samples, _NOW_MB)
+        (
+            ref_new_days,
+            ref_new_months,
+            ref_day_epoch,
+            ref_day_hours,
+            ref_month_epoch,
+            ref_month_days,
+        ) = reference_day_month_rollup(seed_hours, seed_days, seed_months, ref_rows, _NOW_MB)
+        ctx = f"{style}/s{seed}/{phase}"
+        # 生产侧 agg 文件现值(存量行 + catch-up append 补算行; 解析按 kind 分列 epoch 升序)
+        parsed_after = parse_v4_agg_text(_agg_text(root, GLOBAL_SERIES_KEY))
+        # hour 面(D2 既有口径在翻月语料上的封口): 存量行原样 + 参照 seal 行逐位
+        assert parsed_after.hours == seed_hours + tuple(ref_rows), f"[{ctx}] agg hour 行不等"
+        # day 面: 存量行原样(不重算不重写)+ 补算行 bitwise(逐字段 + 文本)
+        assert parsed_after.days == seed_days + tuple(ref_new_days), f"[{ctx}] agg day 行不等"
+        assert [format_agg_row(r) for r in parsed_after.days[len(seed_days):]] == [
+            format_agg_row(r) for r in ref_new_days
+        ], f"[{ctx}] day 补算行文本不等"
+        # month 面: 同上(翻月边界: 5 月行补算 / 前向水位跳过 / 当月不出行)
+        assert parsed_after.months == seed_months + tuple(ref_new_months), f"[{ctx}] agg month 行不等"
+        assert [format_agg_row(r) for r in parsed_after.months[len(seed_months):]] == [
+            format_agg_row(r) for r in ref_new_months
+        ], f"[{ctx}] month 补算行文本不等"
+        # 当日/当月开放累计器: epoch + 子行表逐字段(重建口径与参照同源)
+        agg = mod._agg_state(GLOBAL_SERIES_KEY)
+        assert agg.day_epoch == ref_day_epoch, f"[{ctx}] 当日累计器 epoch 不等"
+        assert list(agg.day_hours) == list(ref_day_hours), f"[{ctx}] 当日累计器子行不等"
+        assert agg.month_epoch == ref_month_epoch, f"[{ctx}] 当月累计器 epoch 不等"
+        assert list(agg.month_days) == list(ref_month_days), f"[{ctx}] 当月累计器子行不等"
+        # 开放小时 pending(D2「pending 经聚合后相等」在翻月语料上的封口; 末日全天合成 ->
+        # 13:00 起多小时开放, 两路同形)
+        assert set(agg.pending) == set(ref_pending), f"[{ctx}] pending 桶集不等"
+        for h in sorted(ref_pending):
+            assert_folds_field_equivalent(ref_pending[h], agg.pending[h], ctx=f"{ctx} pending h={h}")
