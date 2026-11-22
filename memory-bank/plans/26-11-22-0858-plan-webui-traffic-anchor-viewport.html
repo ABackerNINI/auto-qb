@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>流量图尾锚显式视口重构(结构性消除压缩类问题)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-anchor-viewport">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-22-0858">
+<meta name="doc-updated" content="26-11-22-0858">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-22-webui-traffic-anchor-viewport.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-anchor-viewport</div>
+<h1>流量图尾锚显式视口重构(结构性消除压缩类问题)</h1>
+<p class="lede">本篇只回答: 流量图 x 向压缩为何三轮修复仍有残留, 以及如何用「尾锚显式视口」三不变量从结构上彻底消除此类问题 —— 重构主线、落点、分期与验收。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-22-0858 · <b>doc-updated</b> 26-11-22-0858 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话第三轮报障分析(只读取证 + 全链仿真) + 用户拍板「不要再打补丁了，需要重构」 + ExitPlanMode 批准(2026-11-22); 前序轮次: 26-11-21-1704(数据面修剪) / 26-11-22-0626(打断继承)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>: 三轮修复各修一层仍有残留 —— R1 数据面修剪(26-11-21-1704)、R2 视口打断继承(26-11-22-0626)、R3 取证定位换窗竞态(stale 判据不含窗口名)。共同的<b>结构根因</b>: <b>视口是隐式派生态</b> —— uPlot auto range 从显示列跨度现推, 而显示列是「GET 组点列 + SSE 事件尾点 + F5 补点」三源拼接物; 凡列跨度 ≠ 名义窗的时刻(修剪失效/补点滞留/打断继承漏判/旧窗响应落袋), 视口跟着错 = 用户看到的「整列 x 向压缩」。</p>
+<p><b>做到什么算成</b>: 三不变量立住后, 压缩在结构上不可表达 —— 电池与 e2e 钉死不变量, 任何回归即红; 真机 1m 连续观察 + 换窗对比无压缩无左缺口。</p>
+<p><b>三条结构性不变量</b> (poka-yoke, 坏状态不可表达):</p>
+<ol>
+  <li><b>视口恒等式</b>: <code>viewport = [anchor − span_s, anchor]</code>, anchor = 末样本时刻、单调递增(<code>anchorTo = max(当前anchor, 新tail)</code>), span_s = meta 名义窗长。视口永不从数据跨度现推(auto x range 全窗退役)。旧窗响应晚到只是数据层小噪声, 视口不动。</li>
+  <li><b>单列恒等</b>: store 列 == 显示列(补点/_qbPad 记账/收敛 slice/悬停扣减全退役)。列不变量 = <code>[tail − (span_s + margin), tail]</code>, margin = 2×组距(左缘裁剪余量, 防滑动期左缺口 G-B)。</li>
+  <li><b>取数有效性</b>: <code>_qbLoad</code> 落袋前 stale 判据加窗口分量(发射时捕获 <code>w0 = this[def.window]</code>, 到达时 <code>this[def.window] !== w0</code> 即弃)—— 竞态从数据层根除, 与不变量 1 构成双防线。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+  <li><b>R3 根因(取证坐实)</b>: <code>_qbLoad</code> 落袋前 stale 判据(chart 文件 :2063/:2070, 三谓词 :371/:389/:405)只核对作用域上下文。仿真复现: 快速双切 1m→5m→1m 响应乱序后 qbHistWindow="1m" 而视口跨度 299.5s, 且 trim 门读 stale meta 的 span_s=300 使压缩不自愈到下一笔对账(≤30s)。触发概率: 单次换窗撞 30s 对账在途 ≈0.2-0.7%, 快速双切两发 GET 重叠高达数十个百分点 —— 「偶尔」; 结尾落在 1m 压缩倍数最大(5m=5×…24h=1440×) —— 「特别是1m」。</li>
+  <li><b>前两轮修的面经全链仿真证明无残留</b>: 16+15 相位 GET 打断扫描 × 40-60 拍, 叠加隐藏往返/seq 断档/突发帧/尾点替代, 收敛态视口跨度全部 ≤ 名义窗。</li>
+  <li><b>补丁层堆积</b>: 显示列三源拼接 + 补点生命周期(S14-S17 携带门/收敛摘除) + 打断继承公式重建(_qbInheritedViewport/_qbBeatVpRem, 因 uPlot scales 滞后一帧不能直读) + 双锚分离记账(dx0/dxN)。instant/reduce 档恒定压缩变体(上档案 D4)待拍板无解 —— 补点退役后自然消失。</li>
+  <li><b>长窗残留锯齿</b>: 5m+ 窗尾组推进拍视口右缘逐拍扩宽(+si/拍), 头切拍补点+摆回把右缘拉回 —— 扩宽-回拉锯齿, 与压缩同类。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>主线</h3>
+<ul>
+  <li><b>判定帧重写</b>: judge 输出收敛为 <code>{rewin, slide, anchorDelta, step, span}</code>(step/span 变化或锚位移 >2×组距 → rewin 瞬时落地, 保留防假 morph 语义); setData 后<b>无条件</b>显式 <code>setScale("x", [anchor−span, anchor])</code>(含零变化早退拍 —— 列含 margin 后 auto 恒偏宽, 显式视口是唯一真值)。st 记账换 anchor/step/span(退役 xs0/xN0/n)。</li>
+  <li><b>帧循环 L0 重写</b>: 单锚滑动 <code>setScale("x", {min: anchor(t)−span, max: anchor(t)})</code>, dx0/dxN 双锚分离退役。打断从 anim.anchorFrom/anchorTo + clock 现算续滑(自身状态直读, 无公式重建)。</li>
+  <li><b>收敛帧</b>: dropPad/slice 退役, 只留 L1 真值写回 + setData(视口已到目标)。</li>
+  <li><b>快路</b>: _qbPadTailColumns 调用与 _qbPad 赋值整段退役; inh 捕获退役。</li>
+  <li><b>修剪线</b>: <code>tail − (span_s + margin)</code>, margin = 2×组距; 函数保留线宽一处变。</li>
+  <li><b>历史保留合并</b>: _qbStreamOnLoad GET 列落地时, 把旧 store 列中小于新列头且 ≥ 余量线的真值点并入(真实历史观测, 填 GET 打断滑动期左缘裁剪数据 —— 数据层等价替代补点携带, 无状态无门)。</li>
+  <li><b>取数竞态</b>: _qbLoad 发射时捕获窗口名, 成败两路 stale 判据加 <code>this[def.window] !== w0</code>。</li>
+  <li><b>周边对齐</b>: _qbFxSpawn span/pxPerT 公式重推导(span = 名义 span_s, 不再读 _qbPad); setCursor 悬停扣减改直通; _qbSummaryOf 桶数按「t ≥ tail−span_s」现数(保住 R1 的窗内桶数语义); 建图 opts scales.x 带初始锚视口(免 auto 闪帧); _qbChartRescale slice 退役 + 重申显式视口; 头注 :24-33/:55-58/:79-99/:101-104 与体内全套节注换代。</li>
+</ul>
+<h3>退役清单</h3>
+<p><code>_qbInheritedViewport</code> / <code>_qbBeatVpRem</code> / <code>_qbPadTailColumns</code> / <code>_qbRollJudge</code>(旧形) / <code>u._qbPad</code> 全部记账面 / dx0-dxN 分离位移 / F5 补点携带门。</p>
+<h3>分期</h3>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收</th></tr>
+  <tr><td>S0 立项</td><td>计划 HTML + 任务档案 + 取证归档</td><td>零代码改动, 双向补链齐</td></tr>
+  <tr><td>S1 核心重构</td><td>chart 全改动面(含竞态) + 电池重写 + 静态钉 + e2e 适配</td><td>红绿双验 + test.full 全绿</td></tr>
+  <tr><td>S2 回写</td><td>beat 权威附件换代 + pitfalls 新档 + 架构文档 + kb.index</td><td>kb.check 绿</td></tr>
+  <tr><td>S3 收尾</td><td>基线切片 + 分批评审零 actionable + 真机冒烟</td><td>评审零 actionable + 真机通过或明示豁免理由</td></tr>
+</table>
+<h3>不动的面</h3>
+<p>L1 双轨收敛 / fx 装饰引擎(bbox+valToPos 读几何, 不读 scales.x) / 节奏内核时间线 / 停流徽标 / SSE 与对账机制 / 后端零改动(meta.span_s 契约原样)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<ol>
+  <li><b>S1-a judge 与拍循环</b>: 新 judge 单点(小纯函数) + _qbBeatStart/Frame/Converge 重写 + st 记账换代; 验收: 调度器电池新场景绿(锚滑动/打断续滑/rewin 落地)。</li>
+  <li><b>S1-b 快路与数据面</b>: 快路补点段退役 + 修剪余量线 + _qbStreamOnLoad 历史保留合并 + _qbLoad 窗口分量 + 摘要窗内桶数 + 悬停直通 + fx spawn 公式 + 建图初始视口 + rescale; 验收: A 系电池绿 + 新增竞态/保留合并用例绿。</li>
+  <li><b>S1-c 电池与静态钉</b>: 退役场景清零(J1-J7f/L1-L8/S14-S18/S21/S24-S26 及 S1/S2/S7b/S9/S19/S20 摆回几何部分) + 新锚不变量矩阵(细相位打断/隐藏/断档/突发/尾点替代/换窗乱序落袋/历史保留/左缘连续性) + 静态钉换钉(显式视口单点/stale 窗口分量/setData 后必跟显式 setScale); 验收: 全部 node 电池绿, 红验(删不变量断言即红)。</li>
+  <li><b>S1-d e2e 适配</b>: traffic-grid-stability(列点数 = 窗内+margin, 视口跨度恰 72 格保留) / traffic-fx-frames(G2/R1 双缘平移、A5 冻结 max==xsN 天然一致) / traffic-fx-anchor / traffic-stream; 验收: test.linux-e2e 流量系全绿。</li>
+  <li><b>S1-e 提交</b>: dev.fmt + 分批评审零 actionable + ship.commit。</li>
+  <li><b>S2 回写</b>: webui-traffic-beat.md 换代 + pitfalls 新档(视口隐式派生态教训 + 换窗竞态) + 架构文档 + kb.index。</li>
+  <li><b>S3 收尾</b>: test.full + kb.baseline 新切片 + 真机冒烟(1m ≥5 分钟含对账撞拍、换窗对比、切页往返)。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>(无 —— D1 已拍板, 其余按推荐默认执行)</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>L0 左移动画 = 保留平滑左移, 全窗统一「整体平移」语义(锚滑动, min/max 同步平移; 长窗从「右缘扩宽」变「每拍平移一格」); 备选「取消动画全瞬时」未采纳</td><td>2026-11-22</td></tr>
+  <tr><td>D2</td><td>重构授权: 用户「不要再打补丁了，需要重构，从结构上彻底消除此类问题」+ ExitPlanMode 计划批准(方案 = 尾锚显式视口三不变量)</td><td>2026-11-22</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>G-B 左缺口回潮</td><td>GET 落地打断滑动期, 新列头右于视口左缘</td><td>余量列 + 历史保留合并兜底; 电池钉「滑动起点视口 == 上一收敛视口」与「列覆盖 [锚−span−margin, 锚]」</td></tr>
+  <tr><td>长窗视觉语义变化</td><td>5m+ 用户观感从「右缘扩宽」变「每拍平移」</td><td>用户已拍板(D1); 24h 等亚可见窗仍走 0.75px 门瞬时落地</td></tr>
+  <tr><td>e2e 时敏面</td><td>traffic-grid-stability 对刻位/逐帧敏感</td><td>按新几何逐一适配后全量 test.linux-e2e</td></tr>
+  <tr><td>vendor 提交批处理</td><td>setData 后同块 setScale 的消费时序</td><td>已被现有电池桩+vendor 双向实证, 无新风险</td></tr>
+  <tr><td>电池重写遗漏</td><td>退役场景删了但替代断言没立</td><td>红绿双验: 每个新不变量场景先证红(删断言/改公式即红)再绿</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-22-0858</span> 初版: 第三轮报障分析(全链仿真取证 + 换窗竞态端到端复现)后用户拍板重构; 方案 = 尾锚显式视口三不变量; D1 动画语义拍板整体平移; S0-S3 分期待开工。</li>
+</ul>
+
+</div>
+</body>
+</html>

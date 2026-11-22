@@ -85,9 +85,9 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * A2 三窗帧采样(plan 26-11-15-1104, F5 批; 评审轮1 finding4 两类翻动拍签名都逐帧钉)追加在
  * 文件尾部: 左端像素连续性全帧判据(曲线左端 <= 1px —— 补尾格后判定帧左端贴住摆回视图左缘,
  * G-B「摆回固有左缺口瞬移」的判别面)覆盖 1m/5m/24h 三窗(24h = 非整倍窗, 脚本化注入两类相位
- * 翻动拍) —— 翻动拍一(498->497 形: 起点 +1 格/末点不动/点数 -1)照常播 L0(旧 rewin 裸点数
+ * 翻动拍) —— 翻动拍一(498->497 形: 起点 +1 格/末点不动)零位移瞬时拍(尾点不动 = 锚零位移; 旧 rewin 裸点数
  * 判据误判换档即签名缺席); 翻动拍二(497->498 形: 起点不动/末点 +1 格/点数 +1)不 rewin 且
- * 入 roll(dx0=0 位移在 max 侧 —— 评审轮1 finding1 roll 放宽): L0 照播(min 恒驻/max 滑一格),
+ * 入 roll(评审轮1 finding1; 尾锚显式视口下翻动拍一 = 零位移瞬时拍): 视口静止,
  * 旧判据瞬跳或 roll 门未放宽缺席即签名红。
  *
  * A3 零变化拍环境层解绑(F6/D3, plan 26-11-15-1104)追加在文件尾部: 稳态零变化拍(base 固定
@@ -128,7 +128,7 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *     > GET 列末(追加分支), 且事件 lastT 跟住墙钟, watchdog(D9: lastT 落后墙钟 >3x si
  *     立即 GET 重拉)不误触发; 泵运行期的 30s 对账/watchdog 重拉落一帧同列 GET 时, tail
  *     归并产出与停推前逐位相同列 -> 零变化拍段(dx0=dxN=0, F6 下 fx 照常在场 —— A3 零变化
- *     拍案已证合法形态)—— A/A2 泵案的 per-run 断言只吃数据推进拍段(run[0].dxN > 0),
+ *     拍案已证合法形态)—— A/A2 泵案的 per-run 断言只吃滑动拍段(dxN > 0 且 shift=true),
  *     零变化拍段跳过(评审 T4b #2)。
  */
 
@@ -258,8 +258,9 @@ async function stubTrafficScripted(page, n0, interval, windowLabel, script) {
         sample_interval_s: interval,   // F7/D6: 轮询节奏读生效采样间隔, 桩对齐生产契约
         schema: 2,                     // 26-11-18-0037 D6: raw 段窗样本分组契约, 本桩 k=1
         stride: 1,
-        source: 'qb',
-        stale: false,
+        span_s: (n0 - 1) * iv,         // 26-11-21-1704 起契约必带; 常量(初始列形状, 不随形变) ——
+        source: 'qb',                  // (26-11-22-0858)下列头必须随锚走 —— 旧形状桩缺
+        stale: false,                  // span_s 会令修剪门关 -> 列头不随锚 -> 左缘漂移
         server_started_at: t0 - 3600,
       },
     };
@@ -399,8 +400,9 @@ test.describe('节拍动效 · 步进连续性(G2/R1 帧级探针; 26-11-18-0037
               t: performance.now(),
               anim: !!a,
               phase: a ? a.phase : null,
-              dx0: a ? a.dx0 : null,
-              dxN: a && a.dxN != null ? a.dxN : (a ? a.dx0 : null),
+              dx0: a ? (a.anchorTo - a.anchorFrom) : null,
+              dxN: a ? (a.anchorTo - a.anchorFrom) : null,
+              shift: a ? a.needsShift : null,
               animEnd: a && a.tl ? a.tl.animEndMs : null,
               min: u.scales.x.min,
               max: u.scales.x.max,
@@ -414,7 +416,7 @@ test.describe('节拍动效 · 步进连续性(G2/R1 帧级探针; 26-11-18-0037
             const inImpact = !!(a && a.phase !== 'tail');
             /* 拍段计数只吃数据推进拍(评审 T4b #2): 零变化拍(dxN=0, 对账 GET 落同列 ——
              * F6 合法形态)不计, 与采样后 advRuns 过滤同口径 */
-            if (inImpact && !fs.prevAnim && fr.dxN > 0) fs.starts++;
+            if (inImpact && !fs.prevAnim && fr.dxN > 0 && fr.shift) fs.starts++;
             fs.prevAnim = inImpact;
             if (fs.starts >= 3 && !inImpact) fs.done = true;
           }
@@ -438,7 +440,7 @@ test.describe('节拍动效 · 步进连续性(G2/R1 帧级探针; 26-11-18-0037
        * (anim dx0=dxN=0, F6 下 fx 照常在场 —— A3 零变化拍案已证合法形态), 视口/数据零位移,
        * 吃进「max 缘滑一格/dxN>0」判据即假红 —— per-run 断言只吃数据推进拍段(dxN > 0)。 */
       const runs = beatRuns(frames);
-      const advRuns = runs.filter((r) => r[0].dxN > 0);
+      const advRuns = runs.filter((r) => r[0].dxN > 0 && r[0].shift);
       expect(advRuns.length, '采样窗内应记录到 >= 3 个数据推进拍段(事件泵推进的尾组滚动拍;'
         + ` 全部拍段 ${runs.length} 个, 其中零变化拍段 ${runs.length - advRuns.length} 个不计)`)
         .toBeGreaterThanOrEqual(3);
@@ -479,7 +481,7 @@ test.describe('节拍动效 · 步进连续性(G2/R1 帧级探针; 26-11-18-0037
           expect(run[j].min, `第 ${i + 1} 拍第 ${j} 帧视口 min 单调(不回跳)`).toBeGreaterThanOrEqual(run[j - 1].min - 1e-6);
           expect(run[j].max, `第 ${i + 1} 拍第 ${j} 帧视口 max 单调(不回跳)`).toBeGreaterThanOrEqual(run[j - 1].max - 1e-6);
         }
-        expect(run[0].dx0, `第 ${i + 1} 拍 dx0 必须 >= 0(首端静止 —— 尾组推进拍位移在 max 缘)`).toBeGreaterThanOrEqual(0);
+        expect(run[0].dx0, `第 ${i + 1} 拍锚位移必须 >= 0(单调锚 —— 尾锚显式视口两缘同步平移)`).toBeGreaterThanOrEqual(0);
         expect(run[0].dxN, `第 ${i + 1} 拍 dxN 必须为正(末样本逐拍推进 —— D1 全步进主信号)`)
           .toBeGreaterThan(0);
 
@@ -646,7 +648,7 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
             pf.frames.push({
               anim: !!a,
               isPreview: !!(a && a.preview !== undefined),
-              dx0: a ? a.dx0 : null,
+              dx0: a ? (a.anchorTo - a.anchorFrom) : null,
               min: u2.scales.x.min,
               max: u2.scales.x.max,
               xsCks: cks,
@@ -694,7 +696,7 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
       }
       /* 预览帧语义: preview 令牌在场 + dx ≡ 0 + 粒子预算 */
       for (const f of previewFrames) {
-        expect(f.dx0, '预览 dx ≡ 0(不动窗口)').toBe(0);
+        expect(f.dx0, '预览锚位移 ≡ 0(不动窗口 —— anchorFrom === anchorTo)').toBe(0);
         expect(f.parts, '粒子 spawn 清单合计必须 <= 32(I9 两轨合计)').toBeLessThanOrEqual(32);
       }
       expect(previewFrames[0].parts, '预览假 Δ(Lv.2+)必须有装饰清单在场(零装饰=探针空转)').toBeGreaterThanOrEqual(2);
@@ -946,8 +948,9 @@ test.describe('节拍动效 · A3 零流量(F1 真 0 静默 + 环境层不静默
               anim: !!a,
               phase: a ? a.phase : null,
               fx: !!(a && a.fx),
-              dx0: a ? a.dx0 : null,
-              dxN: a && a.dxN != null ? a.dxN : (a ? a.dx0 : null),
+              dx0: a ? (a.anchorTo - a.anchorFrom) : null,
+              dxN: a ? (a.anchorTo - a.anchorFrom) : null,
+              shift: a ? a.needsShift : null,
               min: u2.scales.x.min,
               max: u2.scales.x.max,
               w: u2.bbox.width,
@@ -983,7 +986,7 @@ test.describe('节拍动效 · A3 零流量(F1 真 0 静默 + 环境层不静默
         const pxPerUnit = (run[0].w / run[0].dpr) / (run[0].max - run[0].min);
         const cellPx = (run[0].w / run[0].dpr) / run[0].xsLen;
         const glidePx = (run[run.length - 1].max - run[0].max) * pxPerUnit;
-        expect(run[0].dx0, `第 ${i + 1} 拍 dx0 必须 >= 0(首端静止)`).toBeGreaterThanOrEqual(0);
+        expect(run[0].dx0, `第 ${i + 1} 拍锚位移必须 >= 0(单调锚)`).toBeGreaterThanOrEqual(0);
         expect(run[0].dxN, `第 ${i + 1} 拍 dxN 必须为正(零流量也步进 —— 末样本推进)`).toBeGreaterThan(0);
         expect(glidePx, `第 ${i + 1} 拍视口 max 缘行程 ${glidePx.toFixed(2)}px 应约一格(>= ${(cellPx * 0.5).toFixed(2)}px)`
           + ' —— 零流量下 L0 instant 化即红').toBeGreaterThanOrEqual(cellPx * 0.5);
@@ -1203,14 +1206,13 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
    *   · 全帧曲线左端像素位 <= 1px(贴住/滑出左缘 —— G-B 判定帧左端跳进一格即红);
    *   · 滚动拍健康: 边界视口位移 <= 1px / dx0 >= 0 / 拍内平滑滑入一格(min/max 任一缘滑过
    *     半格 —— 翻动拍二位移在 max 侧)/ 双缘单调不回跳 / 拍内数据冻结 / 墙钟 <= animEnd+余量;
-   *   · 显示列点数 = 真窗口点数或 +1(补尾格拍)。
+   *   · 显示列点数有界 = 真窗口点数 + 余量 2 组距(修剪线 span+margin)。
    * 24h 案(非整倍窗)额外钉相位翻动拍(R5 两类 +1 来源的帧级面, 评审轮1 finding4: 两类签名
    * 都必须真实采到 —— 脚本双 flip 对前置 + minRuns=6 覆盖):
-   *   · 翻动拍一(flipA: 窗起点 +1 格、末点不动、点数 -1 —— 498->497 形)照常播 L0: 签名 =
-   *     本拍帧 497+补点=498 点 且 前一静止帧 498 点, 缺席即红(旧点数判据误判换档);
-   *   · 翻动拍二(flipB: 窗起点不动、末点 +1 格、点数 +1 —— 497->498 形)不 rewin 且入 roll
-   *     (dx0=0 位移在 max 侧): L0 照播, 签名 = 本拍帧数较前一静止帧 +1(无补点)+ dx0=0 +
-   *     min 缘零滑动 + max 缘滑过半格, 缺席即红(旧判据瞬跳/未放宽的 roll 门缺席)。
+   *   · 翻动拍一(flipA: 窗起点 +1 格、末点不动): 零位移瞬时拍(shift=false && dx0=0 ——
+   *     尾点不动 = 锚零位移), 签名拍段在场(签名缺席 = 判据回潮);
+   *   · 翻动拍二(flipB: 窗起点不动、末点 +1 格): 位移一格滑动(shift=true, 两缘同步平移,
+   *     签名 = 本拍帧数较前一静止帧 +1), 缺席即红。
    * 桩口径(26-11-18-0037 阶段 3 改写, 见文件头): 1m/5m 案拍源 = 事件泵(si=2 尾组推进拍);
    * 24h 案翻动帧只能来自 GET 列几何(SSE 事件只追加尾点, 造不出翻动)—— 改走**降级路径**:
    * 票据 503 x3 -> GET 轮询接管, stubTrafficScripted 每请求恰推进一格(与旧墙钟解耦同款),
@@ -1230,7 +1232,7 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
 
   for (const c of CASES) {
     test(`[${skin}] ${c.label} 窗(${c.n} 桶): 全帧左端贴左缘 + 滚动拍边界连续`
-      + `${c.script ? ' + 相位翻动拍照常播 L0' : ''} @fast`, async ({ page, request }) => {
+      + `${c.script ? ' + 相位翻动拍语义换代' : ''} @fast`, async ({ page, request }) => {
       const runtimeErrors = collectRuntimeErrors(page);   // goto 前挂监听(手工错误把关 —— 见组头注)
       test.setTimeout(120_000);
       await pumpStop(request).catch(() => null);
@@ -1263,8 +1265,9 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
               t: performance.now(),
               anim: !!a,
               phase: a ? a.phase : null,
-              dx0: a ? a.dx0 : null,
-              dxN: a && a.dxN != null ? a.dxN : (a ? a.dx0 : null),
+              dx0: a ? (a.anchorTo - a.anchorFrom) : null,
+              dxN: a ? (a.anchorTo - a.anchorFrom) : null,
+              shift: a ? a.needsShift : null,
               animEnd: a && a.tl ? a.tl.animEndMs : null,
               min: u.scales.x.min,
               max: u.scales.x.max,
@@ -1277,9 +1280,9 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
             s.frames.push(fr);
             const inImpact = !!(a && a.phase !== 'tail');
             /* 拍段计数只吃数据推进拍(评审 T4b #2): 零变化拍(dxN=0, 对账 GET 落同列 —— 泵
-             * 案)不计, 与采样后 judgedRuns 过滤同口径; 24h 案翻动拍一 dxN=0 是合法位移形态
+             * 案)不计, 与采样后 judgedRuns 过滤同口径; 24h 案翻动拍一是零位移拍(shift=false)不计入滑动计数, 照常采样入 runs 由 flipA 签名钉
              * (位移在 min 侧), 不计入 minRuns 但照常采样入 runs(签名判据吃 runs)。 */
-            if (inImpact && !s.prevImpact && fr.dxN > 0) s.starts++;
+            if (inImpact && !s.prevImpact && fr.dxN > 0 && fr.shift) s.starts++;
             s.prevImpact = inImpact;
             if (s.starts >= s.minRuns && !inImpact) s.done = true;
           }
@@ -1308,7 +1311,7 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
        * 已证合法形态), 吃进「行程约一格」判据即假红 —— 只断言数据推进拍段(dxN > 0)。
        * 脚本案(24h 降级轮询)列几何每发必变无零变化拍, 且翻动拍一 dxN=0(dx0>0)是合法位移
        * 形态(位移在 min 侧), 不过滤 —— 翻动拍签名/逐拍判据全保留。 */
-      const judgedRuns = c.script ? runs : runs.filter((r) => r[0].dxN > 0);
+      const judgedRuns = c.script ? runs.filter((r) => r[0].shift) : runs.filter((r) => r[0].dxN > 0);
       expect(judgedRuns.length, `采样窗内应记录到 >= ${c.minRuns} 个拍段(滚动拍)`
         + (c.script ? '' : `; 全部拍段 ${runs.length} 个, 其中零变化拍段 ${runs.length - judgedRuns.length} 个不计`))
         .toBeGreaterThanOrEqual(c.minRuns);
@@ -1328,12 +1331,12 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
           expect(dpx, `${c.label} 第 ${i + 1} 拍边界视口位移 ${dpx.toFixed(3)}px 必须 <= 1px`).toBeLessThanOrEqual(1);
         }
 
-        /* 拍内平滑: dx0 >= 0(翻动拍二 dx0=0, 位移在 max 侧)+ 视口行程约一格(min/max 任一缘
+        /* 拍内平滑: 锚位移 >= 0(单调锚 —— 尾锚显式视口两缘同步平移, 旧 min/max 分离记账退役)+ 视口行程约一格(min/max 任一缘
          * 滑过半格)+ 逐帧单调不回跳(min/max 双侧)+ 多帧推进 */
         const cellPx = (run[0].w / run[0].dpr) / run[0].xsLen;
         const glidePx = Math.max(Math.abs(run[run.length - 1].min - run[0].min),
           Math.abs(run[run.length - 1].max - run[0].max)) * pxPerUnit;
-        expect(run[0].dx0, `${c.label} 第 ${i + 1} 拍 dx0 必须 >= 0(滚动/翻动拍二位移在 max 侧)`)
+        expect(run[0].dx0, `${c.label} 第 ${i + 1} 拍锚位移必须 >= 0(单调锚)`)
           .toBeGreaterThanOrEqual(0);
         expect(glidePx, `${c.label} 第 ${i + 1} 拍视口行程 ${glidePx.toFixed(2)}px 应约一格`
           + `(>= ${(cellPx * 0.5).toFixed(2)}px) —— instant 化即红`).toBeGreaterThanOrEqual(cellPx * 0.5);
@@ -1365,24 +1368,24 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
       }
 
       /* 全帧点数不变量(26-11-18-0037 阶段 3 变长点列口径): 降级案(脚本 GET 列) = 真窗口
-       * 点数或 +1(补尾格拍), 翻动拍一收敛后真窗口恒久 -1(498 -> 497) -> 下界 n - 1;
+       * 点数有界(窗内 + 余量 2 组距), 翻动拍一收敛后点数 -1 -> 下界 n - 1;
        * 泵案(SSE 尾点追加) = 初始列起逐拍 +1, 上界 = 事件尾点预算 564(_QB_RAW_POINTS_MAX
        * + headroom)。 */
       const nLo = c.script ? c.n - 1 : c.n;
-      const nHi = c.script ? c.n + 1 : 564;
-      for (const f of frames) {
+      const nHi = c.script ? c.n + 2 : 564;   // 尾锚显式视口: 余量列 = 窗内 + 2 组距点(修剪线
+      for (const f of frames) {                // span+margin), 上界放宽到窗内 + 2
         expect(f.xsLen >= nLo && f.xsLen <= nHi, `${c.label} 帧点数 ${f.xsLen} 必须在`
-          + ` [${nLo}, ${nHi}](${c.script ? '真窗口或补尾格拍; 翻动拍一收敛后真窗口 -1' : '初始列起事件尾点逐拍 +1, 预算 564'})`)
+          + ` [${nLo}, ${nHi}](${c.script ? '真窗口; 余量列窗内 + 2 组距(修剪线 span+margin)' : '初始列起事件尾点逐拍 +1, 预算 564'})`)
           .toBe(true);
       }
 
       if (c.script) {
         /* 翻动拍签名(R5 帧级钉, 评审轮1 finding4: 两类都必须真实采到并逐帧断言):
          *   · 翻动拍一(498->497 形): 拍段帧 497 真桶 + 1 补点 = 498 点 且 前一静止帧 498 点
-         *     —— 照常播 L0, 签名缺席即红(旧点数判据误判换档);
-         *   · 翻动拍二(497->498 形): 拍段帧数较前一静止帧 +1(无补点 —— dx0=0 不补)且 dx0=0/
-         *     min 缘零滑动/max 缘滑过半格(位移在 max 侧)—— 旧点数判据/未放宽的 roll 门都会
-         *     让该拍缺席或瞬跳, 签名缺席即红。 */
+         *     —— 零位移瞬时落地, 签名缺席即红;
+         *   · 翻动拍二(497->498 形): 拍段帧数较前一静止帧 +1 且两缘同步平移各滑约一格
+         *     (尾锚显式视口: 尾点 +1 格 = 锚平移 si —— 旧 min 缘零滑动/max 缘滑过的分离记账
+         *     随双锚退役), 签名缺席即红。 */
         const runInfo = runs.map((run) => {
           const idx0 = frames.indexOf(run[0]);
           const prev = idx0 >= 1 ? frames[idx0 - 1] : null;
@@ -1394,18 +1397,19 @@ test.describe('A2 三窗帧采样 · 左端像素连续 + 24h 非整倍窗相位
             cellPx: (run[0].w / run[0].dpr) / run[0].xsLen,
           };
         });
-        const flipARun = runInfo.some((r) => r.run[0].xsLen === c.n && !!r.prev && r.prev.xsLen === c.n);
-        const flipBRun = runInfo.some((r) => !!r.prev && r.run[0].xsLen === r.prev.xsLen + 1
-          && r.run[0].dx0 === 0 && r.minGlidePx < r.cellPx * 0.5 && r.maxGlidePx >= r.cellPx * 0.5);
+        const flipARun = runInfo.some((r) => r.run[0].shift === false && r.run[0].dx0 === 0);
+        const flipBRun = runInfo.some((r) => r.run[0].shift === true && r.run[0].dx0 > 0
+          && r.minGlidePx >= r.cellPx * 0.5 && r.maxGlidePx >= r.cellPx * 0.5);
         const runSig = runInfo.map((r) => `[run@${r.idx0} xsLen=${r.run[0].xsLen}`
           + ` prevXsLen=${r.prev ? r.prev.xsLen : 'n/a'} dx0=${r.run[0].dx0}`
           + ` minGlide=${r.minGlidePx.toFixed(3)}px maxGlide=${r.maxGlidePx.toFixed(3)}px]`).join(' ');
-        expect(flipARun, '翻动拍一(498->497 形)必须照常播 L0(签名拍段在场 —— 旧点数判据误判'
-          + '换档致该拍瞬时落地即红; 「翻动拍后紧跟的滚动拍」签名不同: 其前静止帧是 497 点)'
-          + ` 实测拍段签名: ${runSig}`).toBe(true);
-        expect(flipBRun, '翻动拍二(497->498 形)必须照常播 L0(签名拍段在场: min 缘恒驻/max 缘滑'
+        expect(flipARun, '翻动拍一(498->497 形)零位移瞬时落地(签名拍段在场: shift=false + dx0=0'
+          + ' —— 尾锚显式视口: 尾点不动 = 锚零位移(旧滑动语义随两缘平移退役); '
+          + '「翻动拍后紧跟的滚动拍」签名不同: 其前静止帧是 497 点)'
+          + ` 实测拍段签名(翻动拍点数 ±1 被余量列修剪线吸收, 行为语义 = flipA 零位移瞬时 / flipB 位移一格滑动): ${runSig}`).toBe(true);
+        expect(flipBRun, '翻动拍二(497->498 形)位移一格滑动(签名拍段在场: shift=true + 两缘同步平移各滑约一格 —— 旧「min 缘恒驻/max 缘滑」双锚语义随双锚退役'
           + '一格 —— 旧点数判据误判换档或 roll 门未放宽致该拍瞬跳/缺席即红)'
-          + ` 实测拍段签名: ${runSig}`).toBe(true);
+          + ` 实测拍段签名(翻动拍点数 ±1 被余量列修剪线吸收, 行为语义 = flipA 零位移瞬时 / flipB 位移一格滑动): ${runSig}`).toBe(true);
       }
 
       /* 手工运行期错误把关: pageerror 为零; console.error 只许 503 桩噪音(降级案)/全零(泵案) */

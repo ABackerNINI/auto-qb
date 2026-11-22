@@ -5,7 +5,7 @@
 - test_frontend_qb_traffic_window_persist_and_single_source: 流量图「视图选择」持久化 + 窗口档位单点(2026-10-05) —— QB_WINDOW_NAMES 十三档与后端 traffic_qb.WINDOW_NAMES 逐字一致, 为展示(模板 v-for 走 qbWindowNames)/前后切换(qbCycleWindow)/持久化校验(qbInitialWindow)三处唯一来源(任一处硬编码即与后端 400 校验漂移); 持久化粒度 = 全局单独(autoqb.ui.qbWinGlobal)/组与种子共用(autoqb.ui.qbWinShared), 键按 scope 单点分派, 初值只认合法档位且坏值回落默认, 换窗即落盘并吞写入异常; 初值函数在 qb_traffic_chart.js 且全部皮肤(_UI_ALL)的 tpl-manifest 里排在 state.js 之前(否则 state data() 调它未定义 = 启动白屏); R8 追加 state.js 数值面板接线静态钉(fx: qbInitialFx() / fxPanel 显式建字段, plan 26-11-12-1139 §05.5), 修复轮追加状态行展示值 computed 落位钉(qbFxPeriodS/qbFxBeatMs 恰 1 次定义且夹在 computed: { 与 mounted() { 之间, fx-panel.html 保持裸插值不带括号 —— 落 methods 即复现 toDisplayString 函数源码渲染 blocker)
 - test_frontend_qb_fx_store_and_sanitize_battery: 数值面板持久化读路径与逐字段校验 node 电池(R8, plan 26-11-12-1139 §05.5, §09 脏值探针) —— qbInitialFx 桩 localStorage 钉四脏值场景(坏 JSON/v:0/数组根/空串)整体回落默认且键保留(全程零 removeItem) + _qbFxSanitize 逐字段: 错类型(数字字段 null/布尔/数组不得被 Number() 误收、布尔严格 ===true/false 且类型归位、合法 false 保真)/未知枚举与空串回落/clamp 边界(impact/particles [0,1]、shiftRatio [0.2,1] 双侧, 数字串"0.9"抢救)/未知键静默丢弃(旧版残留 scene/amp/tpl 清场)/合法值全字段保真 + layers 残缺(数组根/缺键)逐层补默认。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键) + S4-a 轮追加 section 5(§05.9 第 6 项/第 9 项的电池级等价): openFxPanel 经 overlay_fit 单点钳位 + 图宿主右缘钳位(右缘 >=8px)/重开复位 alt/Alt 看穿三路(keydown+keyup 同处理器按 e.altKey 写态 + 面板不可见早退 + blur 失焦复位)/四皮肤 .fx-panel CSS 成对(fixed 本体/max-height 兜底/fx-alt/120ms 仅 opacity/reduce 零动画)/D20 渗色禁令(fx CSS 段剥注释零 --today-up/--today-down)
-- test_frontend_qb_beat_kernel_battery: 节拍内核 S1 电池 + 接缝静态钉(S1, plan 26-11-12-1139 §03 节奏模型/L0/L1, §06 S1 行) —— node 电池真跑(同 _NODE_QB_FX_PROBE 的 new Function 取出口径): 节奏公式四组(multiplier 1/2/8 与 600s 长窗 -> beat 600/夹顶 1000×3, 下限 320 与非法 period 防御) + 每拍时间线(impact 0.12/shift=shiftRatio×beat 防御夹取/converge [0.12,0.6]/tail=min(period-beat,2000) 封顶非常驻, animEnd<=beat<=1000 全域扫 = I1 真值落地可验证面) + easeOut 三次多项式 1000 采样单调无 overshoot(D9) + 0.75px 最小可见位移规则(短窗播 L0/24h 长窗 2880 点瞬时/0.75 边界/量不到宽瞬时) + L1 双轨独立(上传 Δ=0 恒 Lv.1 下限(F1: 值>0, plan 26-11-14-1313) + 下载 Lv.3 各自正确/Δ 分档端点归属 0.005/0.05/0.30(上限语义不变)/真 0(target==0)与缺口轨恒静默/缺参旧 2 参形态向后兼容/缺口轨 live=false 不插值/复活轨直落真值不造斜坡/分母可视下限防爆炸/0->0 守卫) + 以显示值接续不回跳(打断中值作下一拍 prev, 上下行收敛序列单调落在 [prev,target] 终点恰真值 —— I3); 接缝静态钉: :426 逐字行后追加 _qbBeatStart(不改写既有字面量)/L0 判定帧摆回旧位与每帧 dx 归零成对/收敛帧 setData 交还 auto/ticks 冻结挂 pending 与清冻结先于 setData/reduce 短路读 AQB_FX_CFG.on 有效值(仅 reduce 分量短路, enabled=false 不短路)/_qbChartDestroy 先 _qbBeatCancel 再 destroy/面板 beat 展示值复用 _qbBeatMs 单点(内联 clamp 公式退场)/模块级头部零 BOM 触碰(rAF/performance.now/document.hidden 只准方法域)/调度器域零 destroy+new uPlot+零 loading(I3 反向钉)/tooltip 读数面接缝(_qbHoverOf 读 d.points[i] 不读 u.data, 与 L1 插值写面零交集 —— I4); y 钉成对(x 提交必配 setScale("y") 全窗真值档位, 纯数值收敛帧先钉 y 再 redraw, 钉值口径 _qbYRange x _qbYCapOf, 收敛帧不得再钉 —— 评审 #1 I4 纵轴定档)/ticks 冻结等长守卫在位(splits 数变化即解除缓存回落现算 —— 评审 #4)/_qbChartRescale 在途拍收口(落真值 + _qbBeatCancel + 清冻结先于 setData —— 评审 #6); S8 收敛帧补逐帧 ySeen 钉 y 恒 31.5(只记确有绘制的帧 —— S8 不播 L0, impact 窗静默帧零提交; 封 setScaleLog.every 在零钉时空转的盲区, 删纯数值帧 y 钉即红) + S9b roll 恰边界 dx0=2x step 仍播 L0(rAF=1 + 视口摆回旧位 [1000,1120], 判据改 < 即红) + S4-a 轮追加: S7b 零变化滚窗 F1 后口径: anim.fx 恒在场 lv=1(值>0 恒 >=Lv.1, A1 稳态反馈的调度器面)+ 尾点零改写/impact 窗装饰帧保障补 redraw/S12 零变化连拍 10 次累积零 rAF 零提交(plan §03 I6 行验收列「Δ≈0 连拍 10 次叠加层零绘制」电池级等价 —— §10 零变化静默用例双指)/S13 动画中悬停读数面行为化(_qbHoverOf 读 points 真值不读 u.data 插值面 + 索引越界与负值 null(I8 钳制) + 链中洞 gap=true 区段 mid —— 静态钉 i 的运行时等价, §10「动画中悬停 tooltip 取值用例」电池级) + S13b 显式空值点对照(schema=2 洞位 {t, dl:null, up:null}: _qbHoverOf 双 null 分支真执行 —— 变异盲区封堵, 评审 T3-R2; 空值点列真值点照常出速率对照)。F5 轮追加(plan 26-11-15-1104 §03 F5/§07 R5/§06 D2; 变长点列适配 26-11-18-0037 阶段 3): 拍几何判定单点 _qbRollJudge 纯函数面(rewin 判据 = 组距标称 step 变化 或 真窗起点跳出 ±2 组距滚动域, 点数与等距 xs[1]-xs[0] step 假设双退役 —— stepNom = meta.interval_s 显式传入, 缺席回落真窗首间距; 补点拍(+1)/翻动拍一(起点+1格末点不动 dxN=0)/翻动拍二(起点不动末点+1格)都不 rewin, 真换窗(step 变/起点跳位/滚动域外)仍 rewin, 2 组距恰边界 roll 保持; J7 变长点列面: 相位抖动不 rewin(step=组距标称非 xs[1]-xs[0])/尾组推进拍 dx0=0 dxN=si(窗右沿锚末样本)/组距标称变化 rewin) + 补尾格列构造 _qbPadTailColumns(滚动补滚出真值点 1-2 点(真实历史/缺口观测不造数, data 列零改写 —— 悬停锚同引用; 滚出点数按真值现数), 尾组推进拍/换窗/滚动域外不补; J7f 缺口点照实补) + 调度器面五钉(S14 补点拍全生命周期: 摆回锚=上一拍收敛视图 [1000,1120] 补点贴左缘, 收敛帧 slice 摘补点 _qbPad 归零; S15 翻动拍一不 rewin 照播 L0 且 max 锚按 dxN=0 恒驻真窗末点 —— G-B 右缘镜像一并消灭; S16 翻动拍二 L0+L1 同拍(摆回 min 恒驻真窗起点/max 滑一格 —— 评审轮1 finding1 roll 放宽: 任一端正向位移且两端 |位移| 均 <= 2 组距); S18 变长点列补点拍(step 取 meta 组距标称, 摆回锚贴列首真值); S19 尾组推进拍(L0 只滑 max 侧 si + L1 同拍收敛); S20 建图拍底座(真 _qbChartBuild + 桩 uPlot/DOM 全链: 相位抖动列 u._qbBeat.step = meta 组距标称 30 而非 xs[1]-xs[0]=29 —— step 初值行的变异盲区封堵, 评审 T3-R3)) + S17 状态迁移钉(kept-pad 静止态后首个摆回拍 min = 显示列首点真值, t=0 视口与曲线左端双连续, dxMin0 = 显示列实距按比例退役, 收敛帧全部补点摘除零跳变) + S9 场景改写(真换档 = 组距标称 30->60 + 起点跳位, 点数变化只作伴随症状) + 静态钉 k(剥注释后 st.n !== n 与 padPrev 全文件零残留 —— 旧裸点数判据与等距记账面不得旁路回潮/判定帧 _qbRollJudge 单点(stepNom = meta 组距标称)与 step/xN0 记账/悬停索引按 _qbPad 扣回/yMax 扫描真窗口起步) + 既有静态钉 a/b 随变长点列锚形更新(快路补尾格序 jPad 带 stepNom 无 padPrev/摆回 min=xs[pad]-dxMin0 max=按 dxN) + 方向B打断继承轮追加(2026-11-22, 修 26-11-21-1704 数据面修剪后的视口层残留压缩面「对账 GET 落袋撞上在途摆回拍 -> 零变化判定不纠偏 -> 补点滞留含补点全宽一拍采样周期 = 整列 x 向压缩」): rem 计算单点 _qbBeatVpRem(easeOut + 末帧 ulp 吸附钳, 帧循环与打断继承重建共用 —— 两处公式漂移即打断回潮, 内联 rem 行退役) + 视口重建纯函数 _qbInheritedViewport(t=0 完整摆回锚/clock>=shiftMs 真窗口/中段按 rem 比例滑向真窗口/预览与非摆回拍 null/防御 NaN-Inf 空列/纯函数零 mutate)+ 快路捕获逐字钉(_qbInheritedViewport 先于 setData 读 prev.data[0] 拍 A 显示列 —— setData 会把视口重置成含补点全宽 auto, 之后再读只剩全宽态)+ 判定帧第三参 inherited(摆回锚 dxMin0/dxN 换算剩余位移, 锚恒真窗口四处公式不动 —— 摆回/帧循环/收敛/装饰 tip; 判据面照用 j.dx0/j.dxN roll 信号不随继承变)+ 继承拍 roll 伪真进同一 _qbFxShiftGate 单点(零变化打断照判可见性/instant)+ 调度器四场景 S21(零变化打断继承全链: 摆回中段捕获 -> 判定帧摆回继承位零回跳 -> 剩余位移滑完 -> 收敛摘补点落回真窗口)/S24(真滚动打断: max 侧从打断位续滑不回跳旧末样本, dxN = 剩余 max 位移, 两端独立记账 F5 对偶面)/S25(rewin 换窗打断不继承: 几何不连续瞬时落地零摆回, 继承门 !rewin)/S26(纯 min 侧剩余位移行为化, 评审轮1 nit: 翻动拍一几何被零变化 GET 打断 —— dxN 剩余=0 下 anim.dx0 = dxMin0 替换是帧循环提交守卫唯一驱动臂, 帧循环 x 提交 >= 2 笔且 min 单调滑向真窗起点)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_beat_kernel_battery: 节拍内核 S1 电池 + 接缝静态钉(plan 26-11-12-1139 §03 节奏模型/L0/L1, §06 S1 行; 尾锚显式视口换代 26-11-22-0858) —— node 电池双发(new Function 取出口径): 节奏公式四组(multiplier 1/2/8 与 600s 长窗 -> beat 600/夹顶 1000, 下限 320 与非法 period 防御) + 每拍时间线(impact 0.12/shift=shiftRatio×beat 防御夹取/converge [0.12,0.6]/tail=min(period-beat,2000) 封顶非常驻, animEnd<=beat<=1000 全域扫 = I1) + easeOut 三次多项式单调无 overshoot(D9) + 0.75px 最小可见位移规则(短窗播平移/长窗瞬时/0.75 边界/量不到宽瞬时) + L1 双轨独立(上传 Δ=0 恒 Lv.1 下限(F1) + 下载 Lv.3/Δ 分档端点归属 0.005/0.05/0.30/真 0 与缺口轨恒静默/缺参向后兼容/复活轨直落真值/分母可视下限防爆炸/0->0 守卫) + 以显示值接续不回跳(I3) + 锚视口纯函数面 _qbAnchorJudge(J1-J10: 单调锚 anchor=max(st.anchor,tail) 旧窗响应晚到不回拖/组距标称与名义窗长变化 rewin/±2 组距滚动域恰边界 slide 保持/位移上界不含/J8 首拍锚起步/J9-J10 meta 缺席防御)+ _qbAnimAnchorAt(L1-L4: 在途锚现值单点 帧循环与打断续滑共用/clock=0=anchorFrom/clock>=shiftMs 钳 anchorTo/末帧 ulp 吸附/easeOut 特征值 0.875/零 mutate)+ _qbRetainHistory(L5-L7: t<新列头恰等不并入 与 keepLine 含界对称/keepLine 外弃/引用共享/防御空列与新头无 t)+ _qbTrimStaleHead 余量线(L8-L9: 保留窗 span+margin=2 组距/尾点无 t 不剪/keepS 非法不剪) + 调度器面 S0-S20b(S0/S0b 桩忠实性含 redraw(false,true) 不重写 x pending —— 尾锚显式视口依赖此语义/S1-S2 平移全生命周期: 视口落滑动起点=上一收敛视口 左右缘双连续 + 逐帧锚单调不减两缘同步跨度恒名义窗 + 收敛帧 setData 后显式重申覆盖列全宽 auto + 锚记账落位/S3 打断接续 L1 值面与锚续滑面/S4 隐藏暂停恢复/S5 reduce 显式视口一次落笔(旧零 setScale 交 auto 随换代退役)/S6 enabled=false 不短路/S7 零变化拍 fx 在场 + 显式视口照常落笔/S7a 真 0 静默 + 显式视口照常/S7b 尾值不变滚窗平移照播尾点零改写/S8 长窗 gate 拒绝瞬时落地目标锚视口 恰一次 x+y —— 旧 auto 落地面退役 instant/长窗恒定压缩变体随补点退役消失/S9-S9c 换档瞬时(组距标称+名义窗长变化)/滚动域外(delta>2x step)/恰 2 组距边界仍平移/S10 销毁终止/S11 rescale 显式视口重申锚不动/S12-S12b 零变化连拍显式视口每拍同值落笔/S13-S13b 悬停读数面/S14 零位移打断续滑全链(在途锚直读 零回跳 —— 旧 _qbInheritedViewport 公式重建退役)/S15 真滚动打断单调锚到新尾/S16 rewin 打断瞬时落地新窗长锚视口/S17 单调锚尾回退不回拖/S18 instant 档瞬时落地目标锚视口 恒定压缩变体随补点退役消失/S19 建图拍底座 anchor=列尾真值 step=meta 组距标称 span=meta 名义窗长 + 建图初始视口播种 [锚-span,锚] 免首绘 auto 全列宽闪帧/S20b 余量列变异盲区封堵: 列含余量点 setData 的列全宽 auto 必须被收敛帧显式重申覆盖 重申行删除即红 —— 其余场景列恒真值无余量 auto 与锚视口同形拦不住) + 接缝静态钉 a-k(a 快路纯 setData 三列原样落袋->同帧 _qbBeatStart 补点构造/继承捕获退役/b 判定帧显式视口无条件落笔 vAnchor-j.span + y 成对钉 + 帧循环 anchor=a-_qbAnimAnchorAt(a) 单锚位守卫 + min=anchor-a.span max=anchor + y 成对 + 纯数值收敛帧先钉 y 再 redraw + yMax 全列扫描 + 收敛帧 setData+显式重申+redraw(false,true) 不得再钉 y/c 右缘刻位过滤+标签逐帧现算+tick freeze 退役/d reduce 读有效值单点/e destroy 先 cancel/f beat 展示值复用单点/g BOM 纪律/h I3 反向钉/i tooltip 读数面接缝/k 尾锚反向钉: 退役件 _qbRollJudge/_qbPadTailColumns/_qbInheritedViewport/_qbBeatVpRem/_qbPad 剥注释全文件零残留 + _qbAnchorJudge 单点消费 + st.anchor/step/span 记账 + 悬停索引直通 + yMax 全列 + anchorPrev/disp 单点 + 历史保留合并单点; 取数窗口分量钉在 wiring 电池)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
 - test_frontend_qb_fx_visual_engine_battery: 视觉引擎 V + N 霓虹元素层 S2-a 电池 + 接缝静态钉(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行) —— node 电池真跑(同节拍内核范式): I6 图层顺序常量逐字(geometry/neon 恒在 curve 前、anchor 在后)+ I11 N 层白名单六元素(S2-b 增 bandHalo 数值光带辉光)/黑名单八元素逐字且零交集 + V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6; 四皮肤无 --qb-lv* 令牌已核查, 计划色值常量落 shared 层)+ 三档配色 blur 上限(neon 10/glitch 14/calm 0)+ V2 环边数映射(3/6/8)+ I9 预算常量(粒子 ≤32/每轨半套 ≤16/N 0.33×beat/粒子窗 0.55×beat/y 间距 26px/切片 ≤5/微震 3px/光点 ≤2/末段 6 桶) + D3 lead 仲裁(argmax 优先非缺口非静默轨/双轨静默 null/恰等取 up) + partCap(等级基数 16/24/32 x 密度, clamp 32, 密度 ≤0 零粒子) + D3 三策略分配(both 对半各 ≤16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both) + D4 y 间距缩小(线性 /26 下限 0.4 不合并不取消) + N 回落 0.33×beat + 冲击环(easeOut 扩张/alpha 线性回落/0.55×beat 后 null) + V3 粒子三阶段(爆发 ×4.5 闭式/拖尾 easeOut 减速位移步单调收缩/末态恰 dist/t=0 alpha=1 与判定线闪光同帧/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边非圆点/同种子恒同/左向 270° 弧避开右向扇区/尺寸行程界) + R6 撕裂切片(≤5/|dy0| ≤3/长 10-80/同参数恒同) + 伪随机确定性; 调度器 fx 面(真 mixin 方法 + 桩 uPlot 含 valToPos/bbox 全量): 判定帧 fx 生成门(cfg.on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/双轨真 0 零装饰 —— F1 后值>0 恒 >=Lv.1)+ both/lead/merge 三策略落 fx 清单 + D4 y 间距实测缩小 + 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘 + y 钉 31.5 成对)+ 次区相位(收敛帧衔接/光点 ≤4 alpha ≤0.35 位置在绘图区内/1px 量化节流零提交/窗尽收尾 anim null/拍内关 tail 下一帧收尾)+ merge+缺口轨落位退 lead 末点 y(F7: specs.merge[0].y0 === yOf(lead.shown), 与底边的假中点即红 —— 评审修复2; S2-b 起切片锚带改 R6 撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H, 断言带内且清单无条件生成)+ spawn 满额清单与密度解耦(F8: 密度 0.4 仍 16/16, cap=partCap(lv,1) —— 评审修复3) + R6 撕裂带 spawn 公式逐条紧断言(F9: halfBand=(0.08+0.30×min(1,Δ/0.5))×H + strat×hash01(尾桶,slot) + 带内钳边与梳齿绘图区钳 —— 评审 minor4: 半带系数与归一分母变异即红); 绘制面 ctx 桩电池(G0-G12, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor): blur 预算(非零赋值恰 1 施加点/带 blur stroke = spots 数 ≤2/逐帧扫帧末 shadowBlur 恒 0/palette=calm 恒不赋非零 —— 评审修复7, 变异自证删 blur 清零行必红; 旧场景 shown=prev 光带零长 bandHalo 不参与, S2-b 完整 ≤3 预算在 scan_band 电池)+ neon=false 零白名单元素落笔(fillText/shadowBlur/Lv 色描边, 锚段同验)+ 密度拍内即时(0.4→13/1→32/0.1→3 粒)+ 切片 palette 逐帧门(neon 零切片/拍内切 glitch 下一帧即画 5 条 1px 级 —— 评审修复4; S2-b 计数按 x<绘图右缘滤除束体梳齿)+ draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点四点均值观测, 假中点即红)+ lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25] 对照 —— 评审修复6); 静态钉: I6/I11/V1/I9 常量行逐字 + 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect→drawClear→Pl.forEach[axes→series]→draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后系列前 —— drawClear 斜纹恒最底/drawAxes fx(挂 drawClear 会被网格盖住违 I6)/draw 限速→锚)+ 背景零铺色(fx 域剥注释后 fillRect 恰 1 处且为切片 1px 级、锚/次区域零 fillRect)+ I11 黑名单(fx 域零触碰 legend/cursor/series)+ I3 反向钉(fx 域零 destroy/new uPlot/loading)+ 生效条件门(spawn 与 fx 装饰段逐帧复核 cfg.on、tail 域复核 cfg.tail)+ 收敛帧次区衔接(phase tail/fxTail/cfg.tail 门)+ 装饰帧保障行 + 次区相位分支在 _qbBeatFrame(装饰帧挂调度器循环, 无独立循环) + S4-a 轮 F1e/G9(§10 双轨探针「上传零粒子零环、下载有反馈」两面; F1 后静默面收窄为真 0/缺口轨): F1e 上轨真 0(target==0 -> level 0)时 lead=dl 真零轨不参与仲裁/act.up=false/act.dl=true/次区资格只 dl —— 与 F1d 缺口轨(live=false)互补的「live=true 但真 0」面; B3 追加 F1e2(F1 下限 spawn 消费面: 值>0 delta=0 恒 Lv.1 -> act/次区资格全开 + 装饰清单在场)与 G0(fx/锚段 clip 实参记账: 右缘放宽到画布右缘宽 840, F5)/G11(环心钳制分支: shown 经 yOf 越下界 305->钳 T+H-rMax=281/越上界 24.3->钳 T+rMax=39/区间内恒等不咬合 —— 评审 major: 近底 e2e 墨量探针对钳制删除假阴性, 钳制语义的机检面)/G12(粒子底缘镜像: 90° 单粒子 ps.y=318.6 越底 -> fill 顶点均值 = 折回值 301.4, 删镜像行必红); G9 绘制面计数(spawn 侧 alloc 照发 both 半套, spots 组装被 fx.act 门滤除 —— 真 0 注入态 16 vs 双活性对照 32, act 门删掉即 32/32 翻倍) + 裁决轮追加 F1f/G10 并经评审 major 修正(calm 档零粒子: plan §04 原型 partCap 的 isCalm 口径, §10「克制档零粒子」原文补齐; 生产只采纳 calm 分量 —— 原型另有 leadLevel()<=1->0 门, Lv.1 发粒子系用户拍板维持现状/P9 未采纳; 唯一闸 = 绘制面 eff 逐帧门, spawn 恒满额清单与配色档解耦(F1f 钉, F8 同款 —— spawn 冻 palette 会让拍内切出 calm 余下冲击窗零粒子到下一拍才恢复且切片带 yCenter 漂移) + 拍内切 calm 下一帧零粒/切出恢复(G10 记账 ctx, neon 同参数 32 对照); isCalm 的 reduce 分量由 spawn 顶门 cfg.on !== true 承接)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_scan_band_battery: T6 综合表现层 S2-b 电池 + 接缝静态钉(S2-b, plan 26-11-12-1139 §03 T4/T6 行/R6 节/D17-D19, §02 R5/R6/R7) —— node 电池真跑(同视觉引擎范式): R6 确定性伪随机(_qbFxHash01 同(拍,槽)恒同且恒 [0,1)/分布 45/35/20 ±0.05 —— plan §04 原型带符号 >> 版本实测 90% 落 [0,0.5) 色池失真, 生产改 Math.imul+>>> 雪崩, 分布断言守)/strat 分层采样恒 [0,1) 且第 i 条只在第 i 层内不聚集/tearRnd 三档(fixed 恒 0.5/random 连续调用不恒同/linked=hash01)/撕裂切片(2/3/5 按等级且 ≤5/长 10-80 随 Δ/alpha 0.18/0.26/0.34 按等级/y 在撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H 内且钳绘图区/同参数恒同/fixed 跨拍序号同形/linked 跨拍序号异形)+ 梳齿(3/5/7 按等级/长 4-24 随 Δ/带内/fixed 等距恒长) + 回声数学(D19/R7: span=clamp(0.22×绘图宽,100,200) 且不超绘图宽/full 存储档降格 auto/100-150-200 直取; fall=pow(1−d/span,0.85) 且 d≥span 恒 0 几何硬停/单调不增; echoQ 0.18-0.45beat 匀速且 q=1 即到点) + 束包络 stops(双峰分立/贴近 <0.08 合并单峰/钳 [0.02,0.98]/NaN 退 0.5) + T5 联动单点(lvColor/beamWScale: grade 关恒 Lv.1, 开随等级, 非法等级退 Lv.3) + 束体指令计数(_qbDrawFxScan 记账 ctx: 逐帧扫 t=0..beat 步 30 ≤23 且 Lv.3 色散+回声双开窗恰 23/回声窗止 450ms 恰 21/色散窗止 500ms 恰 19/0.55×beat 后 0/palette=calm 0/layers.scan=false 0/impact=0 0; 相位 A 行程: x0 从判定线+1.2 格 easeOut 单调收敛、0.12beat(冲击窗)内抵达; 除回声外全部竖笔 x ≥ 判定线不横穿数据、回声 x ≥ 判定线−200(I9-R7 探针); 回声 alpha ≤0.20 且 d=span 帧零回声指令而束体仍在)+ T2 光带(_qbDrawFx 记账 ctx: layers.band=true 双轨各一道渐变 stroke 于末点 x/shown=prev 零长不落笔/band=false 零渐变笔/bandHalo 仅 lead 一道 blur 描边 —— 同帧 blur stroke = 环外圈 2 + 光带 1 = 3(I9 辉光预算)/非零 blur 赋值点 ≤2/帧末 shadowBlur 恒清零)+ 横向线条(glitch 门下切片 5 条 1px 级且 x<右缘、束体+切片 5+23=28 合计、横向细线 5+7=12)+ 微震让位(_drawerAnimRaf 非零时切片零落笔, 归零恢复 —— §09)+ T5 grade=false 全域(描边/填充/渐变 stop/阴影色)无 Lv.3 色; 静态钉: 层开关接线点(cfg.layers.band/scan/grade 字面量 + _qbDrawFx 调用 _qbDrawFxScan 行在位)/束体绘制域(_qbDrawFxScan)剥注释后 fillRect 恰 1 处且为梳齿 1px 级、光带块零 fillRect/I3 反向钉扩 scan 域(零 destroy/new uPlot/loading)/切片微震让位门(!this._drawerAnimRaf 在切片条件内)/_qbFxLvColor(fx.lv, cfg.layers.grade === true) 恰 3 处(fx/锚/束)/束体常量行逐字(六层晕表/强度 0.78/条数表/alpha 表/回声七常量)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
@@ -18,7 +18,7 @@
 - test_frontend_qb_poll_rhythm_and_immediate_first_beat: F7/F8/A7 电池(plan 26-11-15-1104; 组距口径 26-11-18-0037 阶段 3; T4a 子波 2 起 GET 轮询骨架 = 降级态取数路径, 逐拍面不变) —— 轮询节奏 = 采样间隔全窗统一(D6): _qbPollMs 读 meta.sample_interval_s(生效采样间隔)经 [1.5s,600s] 防御夹取, si 1.5/30/600/900/0.8 逐值 + 只带 interval_s 的旧形状(桶宽 3600)不吃(30000 兜底, 旧「被夹成 600000」形态即旧口径回潮) + meta 缺失/si 非法(0/负)兜底; A7 状态行两组值同源: 周期实算 qbFxPeriodS/beat qbFxBeatMs 与采样行 qbFxSampleText 都从 sample_interval_s 来(schema=2 样本分组契约两值形态 si=1.5/iv=174(schema 2, stride 116) -> 「1.5 s · 组距 174.0 s」(interval_s = 组距标称 k x si, 桶面退役)+ beat 600, 旧口径吃组距 beat 恒 1000 即回潮; agg 段窗无 schema 键二值仍「1.5 s · 桶宽 3600.0 s」(D4 零改动); 相等形态回落单值逐字一致); F8 冷开首拍立即(D4): startPoll immediate 首拍立即(delay 0)/非 immediate 调用面零变化/直拉在途首拍被 mutex 挡掉不双发 + 短重试 AQB_POLL_FIRST_RETRY_MS=1500 不落 30s fallback/直拉落定后首拍真实执行记账清位回归节律周期/隐藏期首拍跳过拉数但重排仍短间隔; 静态钉: AQB_POLL_FIRST_RETRY_MS=1500 + 骨架首拍记账表达式 + 流量侧 immediate: true 声明; 行为面 node 电池真跑(真骨架 + 真 _qbPollMs/_qbLoad/computed, 无 node 静默跳过)
 - test_frontend_qb_tick_label_and_isolated_idxs: R5#192 —— x 轴刻度与孤点索引 node 电池(同文件其余纯函数均有电池, 唯这两处标着纯函数却零执行): _qbTickLabel 四族分支 13 档逐档断言(1m/5m 标到秒 / 30m-24h 只标时刻 / 3d/7d/30d 标日期 / 6mo/1y/all 标年月; 期望值由同一 Date 本地时区现算, 与机器时区无关)+ torrent 挂点读自己的窗口字段(三挂点窗口互不串) + _qbIsolatedIdxs 三态(两侧皆 null 的孤点收/任一侧非 null 的链中链端不收/贴边孤点与空系列边界)
 - test_frontend_qb_themechange_event_pair: R5#194 —— theme.js↔qb_traffic_chart.js 换肤事件契约成对静态锚(此前 theme.js 全文件零测试, 事件名/派发点被改名或删除时流量图 canvas 换肤残旧色且无测试变红): theme.js 手动切换(set)与系统明暗跟随(onSys, R5#180 补)两路都必须派发 autoqb:themechange 且落在 documentElement 上, qb_traffic_chart.js 必须监听同名事件且挂在同一 target(documentElement) —— 成对断言, 单侧改名/换 target 即红
-- test_frontend_qb_stream_merge_degrade_and_badge_battery: SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3 子波 2; D7/D9/E1/E4/E7) —— 判定帧节拍源换轴后的前端事件驱动面, 行为级真跑(真骨架 polling.js + 真图方法 + EventSource/票据桩): 合并语义纯函数 _qbStreamAppend(t > 列末追加「最新测量」尾点=步进 / t == 列末尾点替代 / 同值重发 false / t < 列末丢弃(GET 竞态不得回退) / 显式空值点透传 / 超预算 500+64 从头截断) + wiring(换票 POST /api/events/ticket -> EventSource ?scope=&ticket= 建流 / 对账 30s + watchdog 两张骨架定时器 / hello+onopen 双源 live) + 数据帧(首帧基线=后端「断档检测在基线之后」契约 / seq 连续推进 / 断档立即 GET 重拉 + 3s 节流防断档风暴 / GET 快照晚于事件按 ts 归并: t > GET 列末保留其余折叠) + 徽标 D3(两文案两态: 滞后 Ns = 末样本 ts vs 墙钟超 3 x si / 已断连 = retry/degraded/pullFail 叠加静默 / connecting 不惊扰; 恢复自动消显; 位置 = 判定线 x/绘图区顶沿, 变值才写; ensure 幂等) + 降级 E7(票据 503 计失败轮, 连续 3 轮 3s/轮失败 -> GET 轮询 qb:<scope> 接管 + 对账停摆 + 60s 保守重试; 恢复 = 流回来撤销降级 + 轮询退役 + 立即对账) + 清理面(_qbStreamStop 收 ES/重试定时器/三张定时器/状态缓冲, 幂等; 重开先停后起不泄漏; 目标未就绪不开流; 落票后复查= polling.js #7 同款竞态窗口); 静态钉: E4 常量五件(对账 30000/静默 3/重连 3000/失败上限 3/降级恢复 60000)+ 尾点预算(500+64)+ _QB_SCOPES stream 构建器三形态(与后端 _parse_scope 同语法)+ 生命周期挂钩(openDrawerTraffic _qbStreamStart / drawer_store 页签 _qbStreamStart("torrent") / _stopDrawerPoll 与 _qbTeardown 收流 / _qbReloadOnEnter _qbStreamResume / 换窗不动流)+ 徽标接线(build ensure + _qbFxAnchorSync 顶部搭车(anc 早退之前, 不受 FX 门控)+ destroy 清记录)+ CSS 单点(transform 右收/pointer-events:none/z-index 2 照 tooltip 惯例, --warn 断连色)+ 会话代际三件(_qbStreamStop 翻代 gen / _qbStreamConnect 两处 await 后核验 / onopen/hello/帧/onerror 四监听器来连核验 st.es === es)+ 失败计数单点(onopen 不清 —— 握手成功 ≠ 可用 / _qbStreamFrame 来帧清); 行为面含 watchdog 静默沿(>3 x si)三检查点: 静默沿立即 GET 重拉一次(D6)+ silentPull 记账防同段静默重复重拉(D6b)+ 新帧到复位(下一次静默重新判, D6c) + A7 名义窗头部修剪真跑(2026-11-21, 修「左移时左边曲线不出窗口而是整列 x 向压缩」): _qbStreamFrame 数据入口面按 尾t - meta.span_s 剪除 store 列头部陈旧点(schema=2 + span_s 门) —— store 列与显示列恒对齐(悬停取值/缺口区段索引零错位面) + 建图触发; 无 span_s 门关不剪(旧后端/agg 回落)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_stream_merge_degrade_and_badge_battery: SSE 主路径 node 电池 + 生命周期静态钉(T4a, plan 26-11-18-0037 阶段 3 子波 2; D7/D9/E1/E4/E7) —— 判定帧节拍源换轴后的前端事件驱动面, 行为级真跑(真骨架 polling.js + 真图方法 + EventSource/票据桩): 合并语义纯函数 _qbStreamAppend(t > 列末追加「最新测量」尾点=步进 / t == 列末尾点替代 / 同值重发 false / t < 列末丢弃(GET 竞态不得回退) / 显式空值点透传 / 超预算 500+64 从头截断) + wiring(换票 POST /api/events/ticket -> EventSource ?scope=&ticket= 建流 / 对账 30s + watchdog 两张骨架定时器 / hello+onopen 双源 live) + 数据帧(首帧基线=后端「断档检测在基线之后」契约 / seq 连续推进 / 断档立即 GET 重拉 + 3s 节流防断档风暴 / GET 快照晚于事件按 ts 归并: t > GET 列末保留其余折叠) + 徽标 D3(两文案两态: 滞后 Ns = 末样本 ts vs 墙钟超 3 x si / 已断连 = retry/degraded/pullFail 叠加静默 / connecting 不惊扰; 恢复自动消显; 位置 = 判定线 x/绘图区顶沿, 变值才写; ensure 幂等) + 降级 E7(票据 503 计失败轮, 连续 3 轮 3s/轮失败 -> GET 轮询 qb:<scope> 接管 + 对账停摆 + 60s 保守重试; 恢复 = 流回来撤销降级 + 轮询退役 + 立即对账) + 清理面(_qbStreamStop 收 ES/重试定时器/三张定时器/状态缓冲, 幂等; 重开先停后起不泄漏; 目标未就绪不开流; 落票后复查= polling.js #7 同款竞态窗口); 静态钉: E4 常量五件(对账 30000/静默 3/重连 3000/失败上限 3/降级恢复 60000)+ 尾点预算(500+64)+ _QB_SCOPES stream 构建器三形态(与后端 _parse_scope 同语法)+ 生命周期挂钩(openDrawerTraffic _qbStreamStart / drawer_store 页签 _qbStreamStart("torrent") / _stopDrawerPoll 与 _qbTeardown 收流 / _qbReloadOnEnter _qbStreamResume / 换窗不动流)+ 徽标接线(build ensure + _qbFxAnchorSync 顶部搭车(anc 早退之前, 不受 FX 门控)+ destroy 清记录)+ CSS 单点(transform 右收/pointer-events:none/z-index 2 照 tooltip 惯例, --warn 断连色)+ 会话代际三件(_qbStreamStop 翻代 gen / _qbStreamConnect 两处 await 后核验 / onopen/hello/帧/onerror 四监听器来连核验 st.es === es)+ 失败计数单点(onopen 不清 —— 握手成功 ≠ 可用 / _qbStreamFrame 来帧清); 行为面含 watchdog 静默沿(>3 x si)三检查点: 静默沿立即 GET 重拉一次(D6)+ silentPull 记账防同段静默重复重拉(D6b)+ 新帧到复位(下一次静默重新判, D6c) + A7 名义窗头部修剪真跑(2026-11-21, 修「左移时左边曲线不出窗口而是整列 x 向压缩」): _qbStreamFrame 数据入口面按保留窗剪: 尾t − (span_s + margin=2×组距) 剪除头部陈旧点(schema=2 + span_s 门) —— store 列与显示列恒对齐(悬停取值/缺口区段索引零错位面) + 建图触发; 无 span_s 门关不剪(旧后端/agg 回落)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -543,8 +543,15 @@ def test_frontend_qb_traffic_chart_wiring():
     assert load_body.index("await this.api(") < load_body.index('this[def.error] = "";') \
         and load_body.index("this[def.data] = data;") < load_body.index('this[def.error] = "";'), \
         "错误态只允许在**成功落袋**分支清(发请求前清 = 续拉把错误文案换成 loading/空态再换回 = 每个轮询周期闪一次)"
-    assert "prev.setData(padCols || [data.xs, data.up, data.dl]);" in js and "prev.root.parentElement === host" in js, \
-        "qb_traffic_chart.js 缺 setData 原地快路(每次轮询 destroy+new uPlot 清屏 = 每隔一个轮询周期闪一次; F5: 补尾格列经同一快路落袋)"
+    # 取数有效性不变量(3)(计划 26-11-22-0858): 发射时快照窗口名, 成败两路 stale 判据都带窗口
+    # 分量 —— 旧窗口在途响应不得覆盖新窗数据(换窗竞态: 1m 选择下整列呈旧窗跨度 = x 向压缩)。
+    assert "const w0 = this[def.window];" in load_body \
+        and load_body.index("const w0 = this[def.window];") < load_body.index("await this.api(") \
+        and load_body.count("def.stale(this, ctx) || this[def.window] !== w0") == 2, \
+        "_qbLoad 必须发射时快照窗口名(先于 await —— 快照挪 await 后 stale 恒等判真)且成败两路" \
+        " stale 判据都带窗口分量(旧窗口在途响应落袋 = 换窗竞态回潮)"
+    assert "prev.setData([data.xs, data.up, data.dl]);" in js and "prev.root.parentElement === host" in js, \
+        "qb_traffic_chart.js 缺 setData 原地快路(每次轮询 destroy+new uPlot 清屏 = 每隔一个轮询周期闪一次; 尾锚显式视口: 三列原样落袋 + 判定帧显式视口)"
     theme_blk = re.search(r"_qbOnThemeChange = \(\) => \{\n(.*?)\n        \};", js, re.S)
     assert theme_blk and theme_blk.group(1).find("this._qbChartDestroy(s)") < theme_blk.group(1).find("this._qbChartBuild(s)"), \
         "换肤处理器必须先 _qbChartDestroy 再 _qbChartBuild(canvas 色建图时烘焙, setData 快路不换色)"
@@ -897,11 +904,11 @@ global.window = {};
 const src = fs.readFileSync(process.argv[1], "utf8");
 const {
   _qbBeatMs, _qbBeatTimeline, _qbFxEaseOut, _qbFxCellPx, _qbFxShouldShift,
-  _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbRollJudge, _qbPadTailColumns, _qbFxShiftGate,
-  _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS, _qbBeatVpRem, _qbInheritedViewport,
+  _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbAnchorJudge, _qbAnimAnchorAt, _qbFxShiftGate,
+  _qbRetainHistory, _qbTrimStaleHead, _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS,
 } = new Function(src + "\nreturn { _qbBeatMs, _qbBeatTimeline, _qbFxEaseOut, _qbFxCellPx,"
-  + " _qbFxShouldShift, _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbRollJudge, _qbPadTailColumns,"
-  + " _qbFxShiftGate, _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS, _qbBeatVpRem, _qbInheritedViewport };")();
+  + " _qbFxShouldShift, _qbFxLevel, _qbFxTrackNext, _qbFxShown, _qbAnchorJudge, _qbAnimAnchorAt,"
+  + " _qbFxShiftGate, _qbRetainHistory, _qbTrimStaleHead, _qbDropRightEdgeSplits, _QB_X_SPLIT_EPS };")();
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
 const close = (a, b, eps) => Math.abs(a - b) <= (eps === undefined ? 1e-9 : eps);
@@ -1013,134 +1020,39 @@ ok("下行收敛同样单调(0.7 -> 0.3, 不回跳不上穿)", (() => {
   return true;
 })());
 ok("收敛终点恒为真值(shown(p=1) === target)", close(seq(0.7, 1.0, 1), 1.0) && close(seq(10, 20, 1), 20));
-// —— J. F5 拍几何判定单点(plan 26-11-15-1104 F5/R5; 变长点列适配 26-11-18-0037 阶段 3:
-//         rewin 判据 = 「组距标称 step 变化 或 真窗起点跳出 ±2 组距滚动域」, 点数与等距
-//         xs[1]-xs[0] step 假设双退役 —— stepNom = meta.interval_s 显式传入, 缺席回落真窗
-//         首间距) + 补尾格列构造(电池三钉的纯函数面) ——
-// J1 补点拍(padded 显示列): 真窗 [1030..1150] + 头部 1 点补点(1000) —— rewin 恒 false + 真窗口语义
+// —— J. 锚视口判定单点(计划 26-11-22-0858 换代; 旧 _qbRollJudge/_qbPadTailColumns 退役) ——
+// 判据: anchor = max(st.anchor, tail)(单调 —— 旧窗响应晚到不回拖), 组距标称/名义窗长变化
+// 或锚位移 > 2 组距滚动域 -> rewin 瞬时落地(防假 morph 语义承袭); 其余位移拍 slide;
+// 位移 <= 2 组距恰边界 slide 保持(上界承袭 <= 口径)。
 {
-  const j = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [1000, 1030, 1060, 1090, 1120, 1150], 1);
-  ok("J1 补点拍(+1): rewin=false/roll=true(补点不误判换档 —— 电池钉 2 纯函数面), 真窗口 n/x0/dx0 补点不计",
-    j.rewin === false && j.roll === true && j.n === 5 && j.x0 === 1030 && j.dx0 === 30 && j.step === 30);
-}
-// J2 翻动拍一(非整倍窗相位跨左边界: 窗起点 +1 格、窗末点不动、真点数 -1)—— 不 rewin, dxN=0
-{
-  const j = _qbRollJudge({ xs0: 1000, n: 6, step: 30, xN0: 1150 }, [1030, 1060, 1090, 1120, 1150], 0);
-  ok("J2 翻动拍一(498->497 形: 起点+1格/末点不动/n-1): rewin=false(电池钉 1 纯函数面)+ roll=true 照播 L0"
-    + " + dxN=0(末端位移与首端分离 —— max 锚按 dxN 走, 摆回右缘不窄格)",
-    j.rewin === false && j.roll === true && j.dx0 === 30 && j.dxN === 0 && j.n === 5);
-}
-// J3 翻动拍二(相位跨右边界: 窗起点不动、窗末点 +1 格、真点数 +1)—— 不 rewin 且入 roll
-// (评审轮1 finding1: roll 放宽为任一端正向位移 + 两端 |位移| 均 <= 2 格 —— 右缘扩格照播 L0)
-{
-  const j = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [1000, 1030, 1060, 1090, 1120, 1150], 0);
-  ok("J3 翻动拍二(497->498 形: 起点不动/末点+1格/n+1): rewin=false(电池钉 1 纯函数面)+ roll=true"
-    + "(dx0=0 位移在 max 侧 —— 摆回 min 恒驻, max 滑一格) + dx0=0/dxN=30",
-    j.rewin === false && j.roll === true && j.dx0 === 0 && j.dxN === 30 && j.n === 6);
-}
-// J4 真换窗仍 rewin(电池钉 3 纯函数面): 桶宽变化 / 窗起点跳出滚动域 / 多格停摆补拍
-{
-  const a = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [1000, 1060, 1120, 1180, 1240], 0);
-  const b = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [400, 430, 460, 490, 520], 0);
-  const c = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [1090, 1120, 1150, 1180, 1210], 0);
-  ok("J4 真换窗仍 rewin(电池钉 3 纯函数面): step 30->60 翻真 / 起点跳位 -600 翻真 / 停摆 +3 格(>2 格)翻真",
-    a.rewin === true && b.rewin === true && c.rewin === true);
-}
-// J5 连续滚动域边界: +1/+2 格 roll=true(2 格恰边界不越), 零变化拍(两端 0)非 roll
-{
-  const a = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [1060, 1090, 1120, 1150, 1180], 0);
-  const b = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 }, [1000, 1030, 1060, 1090, 1120], 0);
-  ok("J5 滚动域: dx0=2x step 恰边界 roll=true(S9b 同判据)/零变化拍(两端 0 位移)非 roll(D2 静默)",
-    a.rewin === false && a.roll === true && b.rewin === false && b.roll === false);
-}
-// J6 补尾格列构造: 整格滚动补 1 格(真实历史观测, data 列零改写)/ 2 格滚动补 2 格 /
-//    翻动拍二(pIdx=0)与换窗不补(旧首桶仍在列内/几何不连续)/ 携带门(评审轮1 finding2)
-{
-  const prev = { _qbBeat: { xs0: 1000, n: 5, step: 30, xN0: 1120 },
-    data: [[1000, 1030, 1060, 1090, 1120], [7, 0, 0, 0, 30], [9, 0, 0, 0, 60]], _qbPad: 0 };
-  const data = { xs: [1030, 1060, 1090, 1120, 1150], up: [0, 0, 0, 0, 30], dl: [0, 0, 0, 0, 60] };
-  const jA = _qbRollJudge(prev._qbBeat, data.xs, 0);
-  const cols = _qbPadTailColumns(prev, data, jA, true);
-  ok("J6a 补 1 格: 头部恰 = 上一拍首桶点(t=1000 真实观测, up/dl 照搬), 新数据列零改写(悬停锚同引用保持真值)",
-    !!cols && cols[0].length === 6 && cols[0][0] === 1000 && cols[0][5] === 1150
-    && cols[1][0] === 7 && cols[2][0] === 9 && cols[1][5] === 30
-    && data.xs.length === 5 && data.xs[0] === 1030);
-  const prev2 = { _qbBeat: { xs0: 970, n: 5, step: 30, xN0: 1090 },
-    data: [[970, 1000, 1030, 1060, 1090], [7, 8, 0, 0, 30], [9, 10, 0, 0, 60]], _qbPad: 0 };
-  const jB = _qbRollJudge(prev2._qbBeat, data.xs, 0);
-  const cols2 = _qbPadTailColumns(prev2, data, jB, true);
-  ok("J6b 2 格滚动补 2 格(dx0=2x step 恰边界: 上一拍头部两格真值桶都补, 曲线左端仍贴左缘)",
-    !!cols2 && cols2[0].length === 7 && cols2[0][0] === 970 && cols2[0][1] === 1000
-    && cols2[1][0] === 7 && cols2[1][1] === 8 && cols2[1][6] === 30);
-  const dataFlipB = { xs: [1000, 1030, 1060, 1090, 1120, 1150], up: [0, 0, 0, 0, 30, 88], dl: [0, 0, 0, 0, 60, 88] };
-  const jFlipB = _qbRollJudge(prev._qbBeat, dataFlipB.xs, 0);
-  const colsB = _qbPadTailColumns(prev, dataFlipB, jFlipB, true);
-  const dataRewin = { xs: [1000, 1060, 1120, 1180, 1240], up: [0, 0, 0, 0, 30], dl: [0, 0, 0, 0, 60] };
-  const jRewin = _qbRollJudge(prev._qbBeat, dataRewin.xs, 0);
-  const colsR = _qbPadTailColumns(prev, dataRewin, jRewin, true);
-  ok("J6c 翻动拍二(pIdx=0, k=0 无格可补)/ 换窗不补(几何不连续)", colsB === null && colsR === null);
-  const dataX = { xs: [1085, 1115, 1145, 1175, 1205], up: [0, 0, 0, 0, 30], dl: [0, 0, 0, 0, 60] };
-  const jX = _qbRollJudge(prev._qbBeat, dataX.xs, 0);
-  const colsX = _qbPadTailColumns(prev, dataX, jX, true);
-  ok("J6c2 滚动域外位移不补(dx0=85 > 2x step 30 翻 rewin —— 补点域随 judge 滚动域 ±2 组距)", colsX === null);
-  // J6d 携带门(评审轮1 finding2): kept-pad 静止态(pIdx=1)下 —— 摆回拍携带旧补点(total=2,
-  // 从列首切); 非摆回有新增拍重置为 k 格(从 pIdx 切, 不累积); 翻动拍二(k=0)只携带不增长。
-  const prevStuck = { _qbBeat: { xs0: 1000, n: 5, step: 30, xN0: 1120 },
-    data: [[970, 1000, 1030, 1060, 1090, 1120], [5, 7, 0, 0, 0, 30], [6, 9, 0, 0, 0, 60]], _qbPad: 1 };
-  const jStuck = _qbRollJudge(prevStuck._qbBeat, data.xs, 0);
-  const colsCarry = _qbPadTailColumns(prevStuck, data, jStuck, true);
-  const colsReset = _qbPadTailColumns(prevStuck, data, jStuck, false);
-  const dataStill = { xs: [1000, 1030, 1060, 1090, 1120], up: [0, 0, 0, 0, 30], dl: [0, 0, 0, 0, 60] };
-  const jStill = _qbRollJudge(prevStuck._qbBeat, dataStill.xs, 0);
-  const colsStill = _qbPadTailColumns(prevStuck, dataStill, jStill, false);
-  ok("J6d 携带门: 摆回拍携带旧补点(total=pIdx+k=2, 列首起切, 末格恰贴新窗起点左邻)/ 非摆回有新增"
-    + "重置 k 格(pIdx 起, 补点数有界)/ 零变化拍(k=0)只携带(total=pIdx=1, 不增长)",
-    !!colsCarry && colsCarry[0].length === 7 && colsCarry[0][0] === 970 && colsCarry[0][1] === 1000
-    && colsCarry[0][6] === 1150
-    && !!colsReset && colsReset[0].length === 6 && colsReset[0][0] === 1000
-    && !!colsStill && colsStill[0].length === 6 && colsStill[0][0] === 970 && colsStill[0][5] === 1120);
-}
-// —— J7. 变长点列(schema=2 样本分组, 26-11-18-0037 阶段 3): step = meta 组距标称显式传入,
-//          等距 xs[1]-xs[0] 假设退役 —— 相位抖动/缺口折叠下点间距浮动不再是 step ——
-{
-  // J7a 相位抖动拍: 点间距 29/2/29/30 浮动(真值 t), stepNom=30 —— 旧判据 xs[1]-xs[0]=29
-  // != st.step 30 会误 rewin, 新判据按组距标称 30 照常 roll(变长点列如实适配的核心面)
-  const st7 = { xs0: 1000, n: 5, step: 30, xN0: 1090 };
-  const xs7 = [1029, 1031, 1060, 1090, 1120];
-  const j7 = _qbRollJudge(st7, xs7, 0, 30);
-  ok("J7a 相位抖动不 rewin: step=组距标称 30(非 xs[1]-xs[0]=29), dx0=29/dxN=30 双侧入滚动域照播 L0",
-    j7.rewin === false && j7.roll === true && j7.step === 30 && j7.dx0 === 29 && j7.dxN === 30);
-  // J7b 尾组推进拍(k>1 组距: 尾组 t = 最新样本 ts 每 tick 推进 si, 首端成组滚出 dx0=0)
-  const j7b = _qbRollJudge({ xs0: 1000, n: 5, step: 45, xN0: 1180 },
-    [1000, 1045, 1090, 1135, 1195], 0, 45);
-  ok("J7b 尾组推进拍(窗右沿锚末样本): dx0=0/dxN=15(si)不 rewin 且 roll=true(任一端正向位移)"
-    + " —— L0 摆回 min 恒驻/max 滑 si",
-    j7b.rewin === false && j7b.roll === true && j7b.dx0 === 0 && j7b.dxN === 15);
-  // J7c 组距标称变化(分组口径 k 上调/换窗/采样档变更)仍 rewin
-  const j7c = _qbRollJudge({ xs0: 1000, n: 5, step: 30, xN0: 1120 },
-    [1000, 1033, 1066, 1099, 1132], 0, 33);
-  ok("J7c 组距标称 30->33 翻 rewin(k 上调/换窗重定标)", j7c.rewin === true);
-  // J7d stepNom 缺席(防御): 回落真窗口首间距(pad 点不计 —— xs[p+1]-xs[p])
-  const j7d = _qbRollJudge({ xs0: 1000, n: 6, step: 30, xN0: 1150 },
-    [970, 985, 1000, 1030, 1060, 1090, 1120, 1150], 2);
-  ok("J7d stepNom 缺席回落真窗口首间距(display 列头 2 补点不计, step=1030-1000=30)",
-    j7d.step === 30 && j7d.x0 === 1000 && j7d.n === 6);
-  // J7e 变长点列补点: 滚出点数按真值现数(不等距下 k' = #{t < 新窗起点}, 非 round(dx0/step))
-  const prev7 = { _qbBeat: st7, data: [[1000, 1029, 1031, 1060, 1090], [7, 0, 0, 0, 30], [9, 0, 0, 0, 60]], _qbPad: 0 };
-  const data7 = { xs: xs7, up: [0, 0, 0, 0, 30], dl: [0, 0, 0, 0, 60] };
-  const cols7 = _qbPadTailColumns(prev7, data7, j7, true);
-  ok("J7e 变长点列补 1 点(t=1000 真值观测滚出, 新窗起点 1029 左侧; data 列零改写)",
-    !!cols7 && cols7[0].length === 6 && cols7[0][0] === 1000 && cols7[0][1] === 1029
-    && cols7[1][0] === 7 && cols7[2][0] === 9 && data7.xs.length === 5 && data7.xs[0] === 1029);
-  // J7f 缺口点照实补(显式空值点滚出 —— 补点取真值列, null 桶/空值点同款)
-  const prevG = { _qbBeat: { xs0: 1000, n: 5, step: 30, xN0: 1120 },
-    data: [[1000, 1030, 1060, 1090, 1120], [7, null, 0, 0, 30], [9, null, 0, 0, 60]], _qbPad: 0 };
-  const dataG = { xs: [1060, 1090, 1120, 1150, 1180], up: [0, 0, 0, 0, 30], dl: [0, 0, 0, 0, 60] };
-  const jG = _qbRollJudge(prevG._qbBeat, dataG.xs, 0, 30);
-  const colsG = _qbPadTailColumns(prevG, dataG, jG, true);
-  ok("J7f 缺口点(双 null)滚出照实补 2 点(真实历史观测含缺口, 不造数)",
-    !!colsG && colsG[0].length === 7 && colsG[0][0] === 1000 && colsG[0][1] === 1030
-    && colsG[1][0] === 7 && colsG[1][1] === null && colsG[2][1] === null && colsG[1][6] === 30);
+  const st0 = { anchor: 1000, step: 1.5, span: 60 };
+  ok("J1 锚滑动拍: anchor=max(1000,1001.5)=1001.5 / delta=1.5 / slide / 不 rewin",
+    (() => { const j = _qbAnchorJudge(st0, 1001.5, 1.5, 60);
+      return j.anchor === 1001.5 && j.delta === 1.5 && j.slide === true && j.rewin === false
+        && j.step === 1.5 && j.span === 60; })());
+  ok("J2 锚单调(尾回退不回拖 —— 旧窗响应晚到与取数窗口分量构成双防线): anchor 恒 1000 / 零位移",
+    (() => { const j = _qbAnchorJudge(st0, 999, 1.5, 60);
+      return j.anchor === 1000 && j.delta === 0 && j.slide === false && j.rewin === false; })());
+  ok("J3 滚动域外(delta 10 > 2x step) -> rewin 瞬时(缺口折叠多格补拍/停摆补齐不假 morph)",
+    (() => { const j = _qbAnchorJudge(st0, 1010, 1.5, 60);
+      return j.rewin === true && !j.slide && j.anchor === 1010; })());
+  ok("J4 恰 2 组距边界(delta=3)不 rewin(上界承袭 <= 口径)",
+    (() => { const j = _qbAnchorJudge(st0, 1003, 1.5, 60); return !j.rewin && j.slide; })());
+  ok("J5 组距标称变化 -> rewin(换窗/采样档变更/分组口径上调)",
+    (() => { const j = _qbAnchorJudge(st0, 1001.5, 3, 60); return j.rewin === true && j.step === 3; })());
+  ok("J6 名义窗长变化 -> rewin(换窗跨段)",
+    (() => { const j = _qbAnchorJudge(st0, 1001.5, 1.5, 300); return j.rewin === true && j.span === 300; })());
+  ok("J7 位移 3.1 > 3 -> rewin(上界不含, 变异面: 判据改 <= 即红)",
+    (() => { const j = _qbAnchorJudge(st0, 1003.1, 1.5, 60); return j.rewin === true; })());
+  ok("J8 首拍(st 无 anchor 记账): anchor=tail / delta=0 / 不滑不换档(建图锚起步)",
+    (() => { const j = _qbAnchorJudge(null, 1000, 1.5, 60);
+      return j.anchor === 1000 && j.delta === 0 && !j.slide && !j.rewin; })());
+  ok("J9 meta 缺席防御: step/span 回落 st 记账(判据照常)",
+    (() => { const j = _qbAnchorJudge(st0, 1001.5, NaN, NaN);
+      return j.step === 1.5 && j.span === 60 && j.slide === true; })());
+  ok("J10 全缺参防御: step/span 恒 0(调用方退 auto, 不动画)",
+    (() => { const j = _qbAnchorJudge({ anchor: 1000, step: 0, span: 0 }, 1001.5, 0, 0);
+      return j.step === 0 && j.span === 0; })());
 }
 // —— K. x 轴右缘刻位过滤(issue 26-11-17-0936 第三次纠正, 模块级纯函数真跑) ——
 {
@@ -1179,56 +1091,55 @@ ok("收敛终点恒为真值(shown(p=1) === target)", close(seq(0.7, 1.0, 1), 1.
     Array.isArray(_qbDropRightEdgeSplits(() => null)(null, 0, 0, max, [], 0, false))
     && _qbDropRightEdgeSplits(() => null)(null, 0, 0, max, [], 0, false).length === 0);
 }
-// —— L. 方向B打断继承纯函数面(2026-11-22; rem 单点 _qbBeatVpRem + 视口重建 _qbInheritedViewport)
-//       —— 打断继承的语义锚: t=0 = 完整摆回锚 / clock=shiftMs = 真窗口(ulp 吸附钳) / 单调滑向
-//       真窗口 / 预览与非摆回拍 null(无可继承) / 防御(null/列空/非有限) / 纯函数零 mutate ——
+// —— L. 在途锚现值 + 历史保留合并 + 余量修剪(尾锚显式视口纯函数面, 计划 26-11-22-0858;
+//       旧 _qbBeatVpRem/_qbInheritedViewport 打断继承重建随三不变量退役) ——
 {
   const mkAnim = (over) => Object.assign({ needsShift: true, clock: 0, preview: undefined,
-    tl: { shiftMs: 600 }, pad: 1, dx0: 30, dxMin0: 30, dxN: 30 }, over || {});
-  const XS = [1000, 1030, 1060, 1090, 1120, 1150];  // 显示列: 头 1 补点(t=1000) + 真窗口 5 点
-  ok("L1 rem 单点: clock=0 恒 1(完整摆回), clock>=shiftMs 钳零(真窗口), [0,1] 单调递减",
-    _qbBeatVpRem(mkAnim({ clock: 0 })) === 1
-    && _qbBeatVpRem(mkAnim({ clock: 600 })) === 0
-    && _qbBeatVpRem(mkAnim({ clock: 5000 })) === 0
-    && (() => { let prev = 1.1; for (let c = 0; c <= 600; c += 25) {
-      const r = _qbBeatVpRem(mkAnim({ clock: c }));
-      if (!(r <= prev && r >= 0 && r <= 1)) return false; prev = r; } return true; })());
-  ok("L2 rem 单点: 末帧吸附(rem=4.6e-9 < 1e-3 阈值精确归零 —— issue 26-11-17-0936 口径)",
-    _qbBeatVpRem(mkAnim({ clock: 599 })) === 0);
-  ok("L3 重建 t=0: min = xs[pad]-dxMin0 / max = 末点-dxN(完整摆回锚 —— 与判定帧摆回同位)",
-    (() => { const a = mkAnim(); const v = _qbInheritedViewport(a, XS);
-      return !!v && v.min === 1030 - 30 && v.max === 1150 - 30
-        && !("0" in a) && a.clock === 0 && XS[0] === 1000; })());
-  ok("L4 重建中段: 位移按 rem 比例收缩(min/max 严格滑向真窗口), rem 单点驱动(公式同源)",
-    (() => { const v0 = _qbInheritedViewport(mkAnim({ clock: 150 }), XS);
-      const v1 = _qbInheritedViewport(mkAnim({ clock: 300 }), XS);
-      const r150 = _qbBeatVpRem(mkAnim({ clock: 150 }));
-      return !!v0 && !!v1 && v1.min > v0.min && v1.max > v0.max
-        && v0.min === 1030 - r150 * 30 && v0.max === 1150 - r150 * 30
-        && Math.abs(v0.min - (1030 - 30 * Math.pow(0.75, 3))) < 1e-9; })());
-  ok("L5 重建终态: clock>=shiftMs 视口恰真窗口(min=xs[pad]=1030, max=末点=1150)——零剩余位移",
-    (() => { const v = _qbInheritedViewport(mkAnim({ clock: 600 }), XS);
-      return !!v && v.min === 1030 && v.max === 1150; })());
-  ok("L6 门与防御: 非摆回拍/预览拍/null anim/空列/非有限位移回落 null(调用方走原生锚形)",
-    _qbInheritedViewport(mkAnim({ needsShift: false }), XS) === null
-    && _qbInheritedViewport(mkAnim({ preview: 3 }), XS) === null
-    && _qbInheritedViewport(null, XS) === null
-    && _qbInheritedViewport(mkAnim(), []) === null
-    && _qbInheritedViewport(mkAnim(), null) === null
-    && _qbInheritedViewport(mkAnim({ dxMin0: NaN }), XS) === null
-    && _qbInheritedViewport(mkAnim({ dxN: Infinity }), XS) === null);
-  ok("L7 缺参回落: 无 pad 记账(anim.pad=0)按 xs[0] 锚 / dxMin0 缺参回落 dx0 / dxN 缺参回落 dx0"
-    + "(旧 anim 形态)",
-    (() => { const a0 = mkAnim({ pad: 0 });
-      const v0 = _qbInheritedViewport(a0, XS);
-      const a1 = mkAnim({ dxMin0: null, dxN: null });
-      const v1 = _qbInheritedViewport(a1, XS);
-      return !!v0 && v0.min === XS[0] - 30 && !!v1 && v1.min === 1030 - 30 && v1.max === 1150 - 30; })());
-  ok("L8 纯函数: anim 与 xs 列零 mutate(打断捕获不得污染上一拍状态面)",
-    (() => { const a = mkAnim({ clock: 200 }); const xs = XS.slice();
-      const aSnap = JSON.stringify(a); const xsSnap = JSON.stringify(xs);
-      _qbInheritedViewport(a, xs);
-      return JSON.stringify(a) === aSnap && JSON.stringify(xs) === xsSnap; })());
+    anchorFrom: 1000, anchorTo: 1030, tl: { shiftMs: 600 } }, over || {});
+  ok("L1 在途锚: clock=0 = anchorFrom(滑动起点), clock>=shiftMs = anchorTo(目标), [from,to] 单调",
+    _qbAnimAnchorAt(mkAnim({ clock: 0 })) === 1000
+    && _qbAnimAnchorAt(mkAnim({ clock: 600 })) === 1030
+    && _qbAnimAnchorAt(mkAnim({ clock: 5000 })) === 1030
+    && (() => { let prev = 999; for (let c = 0; c <= 600; c += 25) {
+      const v = _qbAnimAnchorAt(mkAnim({ clock: c }));
+      if (!(v >= prev && v <= 1030)) return false; prev = v; } return true; })());
+  ok("L2 末帧吸附(clock=599: rem 约 1e-6 < 1e-3 阈值 -> 恰 anchorTo —— issue 26-11-17-0936 口径)",
+    _qbAnimAnchorAt(mkAnim({ clock: 599 })) === 1030);
+  ok("L3 中段 easeOut 三次曲线特征值(clock=300: e=0.875 -> 锚 = 1000 + 30x0.875)",
+    Math.abs(_qbAnimAnchorAt(mkAnim({ clock: 300 })) - (1000 + 30 * 0.875)) < 1e-9);
+  ok("L4 纯函数: anim 零 mutate(打断续滑捕获不得污染在途拍状态面)",
+    (() => { const a = mkAnim({ clock: 200 }); const snap = JSON.stringify(a);
+      _qbAnimAnchorAt(a); return JSON.stringify(a) === snap; })());
+  // 历史保留合并(GET 落地清空余量列 -> 旧列真值点回填左缘裁剪数据; F5 补点携带的数据层等价替代)
+  const newPts = [{ t: 1100, up: 1, dl: 2 }, { t: 1101.5, up: 1, dl: 2 }];
+  const oldPts = [{ t: 1094, up: 1, dl: 2 }, { t: 1096, up: 1, dl: 2 }, { t: 1097.5, up: 1, dl: 2 }, { t: 1099, up: 1, dl: 2 }, { t: 1100, up: 1, dl: 2 }];
+  ok("L5 保留合并: t < 新列头(1100, 恰等不并入 —— 与 keepLine 含界 >= 对称)且 >= 余量线(1096)"
+    + "的真值点并入, 升序不破",
+    (() => { const r = _qbRetainHistory(oldPts, newPts, 1096);
+      return r.length === 3 && r[0].t === 1096 && r[2].t === 1099; })());
+  ok("L6 保留线外旧点弃(1094 < 1096)且引用共享(点 dict 只读直传)",
+    (() => { const r = _qbRetainHistory(oldPts, newPts, 1096); return r[0] === oldPts[1]; })());
+  ok("L7 防御: 旧列空/新列空/null/新头无 t -> 空数组(调用方 concat 零操作)",
+    _qbRetainHistory([], newPts, 1096).length === 0 && _qbRetainHistory(oldPts, [], 1096).length === 0
+    && _qbRetainHistory(null, newPts, 1096).length === 0
+    && _qbRetainHistory(oldPts, [{ up: 1 }], 1096).length === 0);
+  // 余量修剪(列不变量: [tail − (span+margin), tail], margin = 2 组距 —— 左缘裁剪数据面)
+  const pts = Array.from({ length: 45 }, (_, i) => ({ t: 1000 + i * 1.5, up: 1, dl: 2 }));
+  const kept = _qbTrimStaleHead(pts, 60 + 3);   // tail=1066, 线=1003 -> 剪 2 点(1000/1001.5)
+  ok("L8 余量修剪: 保留窗 = span+margin(63s) -> 列首 1003, 窗内点全留",
+    kept.length === 43 && kept[0].t === 1003 && kept[kept.length - 1].t === 1066);
+  ok("L9 防线: 尾点无 t 不剪 / keepS 非法不剪(调用方门已滤, 纯函数面零假设)",
+    _qbTrimStaleHead([{ up: 1 }], 60).length === 1 && _qbTrimStaleHead(pts, 0) === pts);
+  ok("L9b 锚优先: anchorT 领先尾时修剪线按锚(列仍覆盖视口左缘 —— G-B 防回潮; 锚=尾时同形)",
+    (() => {
+      const ptsA = Array.from({ length: 45 }, (_, i) => ({ t: 1000 + i * 1.5, up: 1, dl: 2 }));
+      // 锚 1080 领先尾 1066: 线 = 1080 − 63 = 1017 -> 保留 t >= 1017: 列首 1018(首格 1016.5
+      // 落线外), 33 点; 无锚回落尾 1066 -> 线 1003 -> 列首 1003, 43 点
+      const keptA = _qbTrimStaleHead(ptsA, 63, 1080);
+      return keptA.length === 33 && keptA[0].t === 1018
+        && _qbTrimStaleHead(ptsA, 63).length === 43;  // 无锚回落尾 1066 -> 线 1003 -> 列首 1003
+    })());
+
 }
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
@@ -1241,10 +1152,11 @@ _NODE_QB_BEAT_SCHED_PROBE = r"""
 const fs = require("fs");
 global.window = {};
 const src = fs.readFileSync(process.argv[1], "utf8");
-const { methods, _qbInheritedViewport } = new Function(src
-  + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods, _qbInheritedViewport };")();
+const { methods, _qbAnimAnchorAt } = new Function(src
+  + "\nreturn { methods: window.AQB_QB_TRAFFIC.methods, _qbAnimAnchorAt: _qbAnimAnchorAt };")();
 const checks = [];
 const ok = (name, cond) => checks.push([name, !!cond]);
+const close_ = (a, b) => Math.abs(a - b) < 1e-9;
 // —— 桩环境: 假 rAF 队列 + 可拨动的毫秒时钟 + 可开关的页面可见性 ——
 let rafId = 0;
 const rafMap = new Map();
@@ -1253,17 +1165,15 @@ global.cancelAnimationFrame = (id) => { rafMap.delete(id); };
 let nowMs = 0;
 Object.defineProperty(global, "performance", { value: { now: () => nowMs }, configurable: true });
 global.document = { hidden: false };
-/* 桩 uPlot 域对象, 提交语义按 vendor qn 忠实复刻: setScale 只写 pending(Kl), commit 消费 ——
- * x 提交即 An(!0)(可视窗重定), y 无手动钉时按可视窗重算(偏置窗会剔出窗沿峰值), 有钉原样拷贝。
- * y 重推面不忠实复刻的话, y 钉断言就是空转, 故先有 S0 对照用例证明桩会漂移。 */
+/* 桩 uPlot 域对象, 提交语义按 vendor qn 忠实复刻: setScale 只写 pending(Kl), commit 消费;
+ * redraw(l, e) 按 vendor 语义建模(l !== false 才写 x pending = current —— redraw(false, true)
+ * 只提交既有 pending 并强制轴重算, 不写 x scale; 尾锚显式视口下收敛帧 setData(auto 全列宽)后
+ * 的显式 setScale pending 必须由 redraw(false, true) 原样提交, 桩不忠实即把显式视口吃掉)。 */
 function mkU(xs, up, dl) {
   const u = {
     root: { isConnected: true },
     data: [xs, up, dl],
     scales: { x: { min: xs[0], max: xs[xs.length - 1] }, y: { min: 0, max: 1 } },
-    /* bbox 全量(F1/26-11-14-1313 起 _qbFxSpawn 在调度器面真跑, 几何门 g.W/g.H>0 要过 ——
-     * 与 fx 电池 mkDrawU 同口径; 旧桩只有 width, spawn 恒 null 是 S1 期「调度器面不验装饰」
-     * 的形态, F1 后 S7b 要在调度器面钉 fx 在场, 桩必须喂饱几何) */
     bbox: { left: 60, top: 10, width: 800, height: 300 },
     yCap: 0,
     pending: {},
@@ -1275,12 +1185,12 @@ function mkU(xs, up, dl) {
     setData(d) {
       this.data = d;
       this.setDataCount++;
-      this.pending = { x: { min: d[0][0], max: d[0][d[0].length - 1] } };  // resetScales=true: x auto 全窗
+      this.pending = { x: { min: d[0][0], max: d[0][d[0].length - 1] } };  // resetScales=true: x auto 全列
       this.commit();
     },
-    redraw() {
+    redraw(l, e) {
       this.redrawCount++;
-      this.pending.x = { min: this.scales.x.min, max: this.scales.x.max };  // vendor redraw(true) 走 setScale(x, current)
+      if (l !== false) this.pending.x = { min: this.scales.x.min, max: this.scales.x.max };
       this.commit();
     },
     commit() {
@@ -1291,11 +1201,11 @@ function mkU(xs, up, dl) {
         if (py) this.scales.y = { min: py.min, max: py.max };
         return;
       }
-      const xs = this.data[0];
+      const xs2 = this.data[0];
       let lo = 0;
-      let hi = xs.length - 1;
-      while (lo < hi && xs[lo] < px.min) lo++;
-      while (hi > lo && xs[hi] > px.max) hi--;
+      let hi = xs2.length - 1;
+      while (lo < hi && xs2[lo] < px.min) lo++;
+      while (hi > lo && xs2[hi] > px.max) hi--;
       if (py) {
         this.scales.y = { min: py.min, max: py.max };  // Kl.y 非 null: 原样拷贝, 跳过重推(vendor Bl)
       } else {
@@ -1315,9 +1225,11 @@ function mkU(xs, up, dl) {
   };
   return u;
 }
-function mkBeat(xs0, n, upShown, dlShown) {
+/* 拍记账底座(尾锚显式视口换代): anchor = 上一收敛锚(单调跨拍记账), step/span = 组距标称/名义窗长
+ * (meta 缺席时 judge 回落本记账 —— 场景不设 qbHistData 即走此路)。 */
+function mkBeat(anchor, step, span, upShown, dlShown) {
   return {
-    raf: 0, anim: null, xs0, n,
+    raf: 0, anim: null, anchor, step, span,
     tracks: {
       up: { prev: upShown, target: upShown, shown: upShown, delta: 0, level: 0, live: true },
       dl: { prev: dlShown, target: dlShown, shown: dlShown, delta: 0, level: 0, live: true },
@@ -1330,7 +1242,8 @@ const self = Object.assign({}, methods, {
 });
 const CFG_ON = { enabled: true, on: true, shiftRatio: 0.6 };
 global.window.AQB_FX_CFG = CFG_ON;
-const XS1 = [1030, 1060, 1090, 1120, 1150];
+const XS1 = [1030, 1060, 1090, 1120, 1150];   // 5 点 x 30, 尾 1150
+const SPAN1 = 120;                            // 名义窗长(场景不设 meta -> judge 回落 st.span)
 const pump = () => {
   const fns = [...rafMap.values()];
   rafMap.clear();
@@ -1339,77 +1252,99 @@ const pump = () => {
   if (cu && cu.commit) cu.commit();  // 微任务渲染等价(同步块内 setScale 攒 pending, 帧末提交)
 };
 const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50; pump(); } return g; };
-// —— S0: 桩忠实性对照 —— 无 y 钉的裸 x 提交确实按偏置可视窗重推 y(窗沿峰值出窗) ——
+// —— S0: 桩忠实性对照 —— 无 y 钉的裸 x 提交确实按可视窗重推 y + redraw(false,true) 不写 x pending ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u.setScale("x", { min: 1000, max: 1120 });  // 判定帧偏置视口(尾峰 60 出窗)
+  u.setScale("x", { min: 1000, max: 1120 });  // 判定帧显式视口
   u.commit();
   ok("S0 桩忠实性: 无 y 钉的 x 提交重推 y(峰值出窗 -> dmax=0 -> top=1, 复现 vendor 漂移)",
     u.scales.y.max === 1);
+  const u2 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u2.setData([XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]]);  // setData 交还 auto(全列宽, 复刻收敛帧)
+  u2.setScale("x", { min: 1000, max: 1120 });   // 显式视口 pending(复刻 setData 后的显式重申)
+  ok("S0b 桩忠实性: setData 的 auto 与显式视口不同值(auto 全列宽 vs 锚窗), redraw(false,true)"
+    + " 只提交既有 pending 不重写 x(尾锚显式视口依赖此语义 —— 桩吃掉 pending 即收敛态回 auto 全列宽)",
+    (() => { const before = u2.setScaleLog.length;
+      u2.redraw(false, true);
+      return u2.scales.x.min === 1000 && u2.scales.x.max === 1120
+        && u2.setScaleLog.length === before; })());
 }
-// —— S1/S2: 完整一拍 —— 起拍摆回旧位 + y 钉恒定 + 逐帧归零 + 收敛真值(I1/I3/I4/I8 电池级) ——
+// —— S1/S2: 完整一拍 —— 起拍视口落滑动起点(上一收敛视口, 左缘连续) + 尾点摆回显示值 + 逐帧锚
+//            平移(两缘同步) + 收敛帧真值写回 + 显式视口重申(I1/I3/I4/I8 电池级) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);  // 上拍窗起点 1000(旧窗 [1000,1120]), 尾显示值 10/55
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);  // 上一收敛锚 1120(旧尾), 尾 1150 -> delta=30 滑动
   self._qbCharts = { global: u };
   const t0 = nowMs;
   self._qbBeatStart("global", u);
   u.commit();
-  ok("S1 起拍: rAF 已挂 + 尾点摆回显示值(10/55) + 视口摆回旧位 [1000,1120]", rafMap.size === 1
+  ok("S1 起拍: rAF 已挂 + 尾点摆回显示值(10/55) + 视口落滑动起点 [1000,1120](= 上一收敛视口,"
+    + " 左/右缘双连续 —— 尾锚平移的连续性锚) + y 钉成对(63)", rafMap.size === 1
     && u.data[1][4] === 10 && u.data[2][4] === 55
     && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120);
-  ok("S1 y 钉成对(x 提交必配 y) + 钉值 = 全窗真值档位 63(真峰 60 x1.05, 非显示尾值)",
-    u.setScaleLog[1][0] === "y" && u.setScaleLog[1][1] === 0 && u.setScaleLog[1][2] === 63
-    && u.scales.y.max === 63);
+    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120
+    && u.setScaleLog[1][0] === "y" && u.setScaleLog[1][2] === 63);
+  ok("S1 anim 记账: anchorFrom=1120/anchorTo=1150/span=120/needsShift+needsTail 双在场",
+    u._qbBeat.anim !== null && u._qbBeat.anim.anchorFrom === 1120
+    && u._qbBeat.anim.anchorTo === 1150 && u._qbBeat.anim.span === SPAN1
+    && u._qbBeat.anim.needsShift === true && u._qbBeat.anim.needsTail === true);
   const tails = [];
   const ySeen = [];
-  let guard = 0;
-  while (rafMap.size && guard++ < 100) {
+  while (rafMap.size) {
     nowMs += 50;
     pump();
-    if (u._qbBeat && u._qbBeat.anim) {
+    if (u._qbBeat.anim && u._qbBeat.anim.phase !== "tail") {
       tails.push([u.data[1][4], u.data[2][4]]);
       ySeen.push(u.scales.y.max);
     }
   }
-  ok("S2 收敛帧: setData 交还 auto + 两轨真值写回(30/60) + anim 收口", u.setDataCount === 1
-    && u.data[1][4] === 30 && u.data[2][4] === 60 && u._qbBeat.anim === null
-    && u._qbBeat.raf === 0);
   ok("S2 I1 电池级: 动画结束时刻 - 判定时刻 <= beat(1000ms)", nowMs - t0 <= 1000);
   ok("S2 尾点序列单调收敛(10->30 与 55->60 无回跳无 overshoot)", tails.length > 3
     && tails.every((v, i) => i === 0 || (v[0] >= tails[i - 1][0] - 1e-12 && v[1] >= tails[i - 1][1] - 1e-12))
     && tails[0][0] >= 10 && tails[tails.length - 1][0] <= 30);
-  const xsLog = u.setScaleLog.filter((r) => r[0] === "x");
-  ok("S2 视口偏置逐帧归零(dx 单调收缩, 末帧逼近真窗起点 1030)", xsLog.length > 3
-    && xsLog.every((r, i) => i === 0 || r[1] > xsLog[i - 1][1]) && xsLog[xsLog.length - 1][1] > 1020);
+  const xLog = u.setScaleLog.filter((r) => r[0] === "x");
+  ok("S2 锚位单调不减滑向目标(min 单调 -> 1150-120=1030, 两缘同步平移跨度恒 120 —— 尾锚平移"
+    + "几何; 收敛帧显式重申与末帧锚位同值故取不减), 末笔 max = anchorTo 1150(ulp 吸附落锚)",
+    xLog.length > 3
+    && xLog.every((r, i) => i === 0 || r[1] >= xLog[i - 1][1] - 1e-9)
+    && xLog.every((r) => close_(r[2] - r[1], SPAN1))
+    && xLog[xLog.length - 1][2] === 1150);
   ok("S2 I4 纵轴定档: 每帧 y 恒 63(动画全程零漂移), 收敛帧 auto 重推同值(交还无跳变)",
     ySeen.length > 3 && ySeen.every((v) => v === 63) && u.scales.y.max === 63);
-  ok("S2 每个 x 提交都成对补 y(x 后紧跟 y; F1 后桩几何喂饱 -> spawn 在场, impact 首帧装饰帧"
-    + "保障允许一笔无 x 的独立 y 钉 —— 成对面钉的是「x 不单独出现」)", 
+  ok("S2 每个 x 提交都成对补 y(x 后紧跟 y; impact 首帧装饰帧保障允许一笔无 x 的独立 y 钉 ——"
+    + " 成对面钉的是「x 不单独出现」; 收敛帧末笔显式重申不配 y —— y 交还 auto 重推同值)",
     u.setScaleLog.every((r, i) => r[0] === "x"
-      ? (i + 1 < u.setScaleLog.length && u.setScaleLog[i + 1][0] === "y") : true)
-    && u.setScaleLog.filter((r) => r[0] === "y").length >= xsLog.length);
+      ? ((i + 1 < u.setScaleLog.length && u.setScaleLog[i + 1][0] === "y")
+        || i === u.setScaleLog.length - 1) : true)
+    && u.setScaleLog.filter((r) => r[0] === "y").length >= xLog.length - 1);
+  ok("S2 收敛: setData 真值写回 + 显式锚视口重申 [1030,1150](auto 全列宽被覆盖 —— 不变量(1))"
+    + " + 锚记账落位 1150", u._qbBeat.anim === null && u.setDataCount === 1
+    && u.data[1][4] === 30 && u.data[2][4] === 60
+    && u.scales.x.min === 1030 && u.scales.x.max === 1150
+    && u._qbBeat.anchor === 1150 && u.redrawCount > 0);
 }
-// —— S3: 打断接续(隐藏恢复竞态形态: 上拍未收敛即被新拍打断) ——
+// —— S3: 打断接续(L1 值面: 上拍未收敛即被新拍打断, 中断值作新拍 prev; 锚面 = 打断位续滑) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 5; i++) { nowMs += 50; pump(); }  // clock 200: 尾点已越过 impact 窗
   const midUp = u.data[1][4];
   u.data = [[1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 80], [0, 0, 0, 0, 60]];
   self._qbBeatStart("global", u);
-  ok("S3 打断: 新拍以当前显示值接续(prev=中断值, 不回跳到 10), 旧 rAF 已摘", rafMap.size === 1
-    && midUp > 10 && u._qbBeat.tracks.up.prev === midUp && u.data[1][4] === midUp);
+  ok("S3 打断: 新拍以当前显示值接续(prev=中断值, 不回跳到 10), 旧 rAF 已摘 + 锚续滑(打断在途"
+    + "位 -> 新目标 1180)", rafMap.size === 1
+    && midUp > 10 && u._qbBeat.tracks.up.prev === midUp && u.data[1][4] === midUp
+    && u._qbBeat.anim.anchorFrom > 1120 && u._qbBeat.anim.anchorTo === 1180);
   drain();
-  ok("S3 新拍照常收敛到新真值(80)", u.data[1][4] === 80 && u._qbBeat.anim === null);
+  ok("S3 新拍照常收敛到新真值(80) + 显式视口落 [1060,1180]", u.data[1][4] === 80
+    && u._qbBeat.anim === null && u.scales.x.min === 1060 && u.scales.x.max === 1180);
 }
 // —— S4: 页面隐藏暂停 + 恢复从当前显示值接续(不重播整拍) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }  // clock 100
@@ -1422,7 +1357,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
     && u.data[1][4] === before.tail);
   global.document.hidden = false;
   nowMs += 50;
-  pump();  // 恢复首帧: dt 从 0 起算(不吞隐藏 5s), dx 与 shown 均无变化 -> 不提交
+  pump();  // 恢复首帧: dt 从 0 起算(不吞隐藏 5s), 锚位与 shown 均无变化 -> 不提交
   ok("S4 恢复接续: 不重播整拍(clock 仍 100 续跑, 未吞 5s 未归 0)", u._qbBeat.anim !== null
     && u._qbBeat.anim.clock === 100);
   nowMs += 50;
@@ -1435,91 +1370,99 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = { enabled: true, on: false, shiftRatio: 0.6 };
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S5 reduce 短路: 零 rAF/零 setScale/u.data 恒真值(退回原快路 + 瞬时左移)", rafMap.size === 0
-    && u.setScaleLog.length === 0 && u.data[1][4] === 30 && u.data[2][4] === 60
-    && u._qbBeat.tracks.up.shown === 30);
-  // S6 换一份新落袋数据(窗口滚一格 + 尾值变化), enabled=false 时 L0/L1 必须照常执行
+  ok("S5 reduce 短路: 零 rAF/真值直落 + 显式锚视口一次落笔 [1030,1150](目标锚 —— 列含余量后"
+    + " auto 恒偏宽, reduce 拍的瞬时平移也走显式视口; 旧「零 setScale 交 auto」随显式视口换代)",
+    rafMap.size === 0 && u.data[1][4] === 30 && u.data[2][4] === 60
+    && u._qbBeat.tracks.up.shown === 30
+    && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
+    && u.setScaleLog[0][1] === 1030 && u.setScaleLog[0][2] === 1150);
+  // S6 换一份新落袋数据(尾点 +1 格 + 尾值变化), enabled=false 时 L0/L1 必须照常执行
   global.window.AQB_FX_CFG = { enabled: false, on: false, shiftRatio: 0.6 };
   u.data = [[1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 40], [0, 0, 0, 0, 60]];
+  const xBefore6 = u.setScaleLog.filter((r) => r[0] === "x").length;
   self._qbBeatStart("global", u);
-  ok("S6 enabled=false 不短路: L0/L1 照常执行(数据刷新语义, 不是装饰)", rafMap.size === 1
-    && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x" && u.setScaleLog[0][1] === 1030
+  const xw6 = u.setScaleLog.filter((r) => r[0] === "x").slice(xBefore6);
+  ok("S6 enabled=false 不短路: L0/L1 照常执行(数据刷新语义, 不是装饰) + 视口落滑动起点"
+    + " [1030,1150](锚 1150 - span 120, S5 reduce 拍已落目标锚; 判定帧新增笔迹)", rafMap.size === 1
+    && xw6.length === 1 && xw6[0][1] === 1030 && xw6[0][2] === 1150
     && u.data[1][4] === 30);
   drain();
-  ok("S6 enabled=false 收敛落地", u.data[1][4] === 40 && u._qbBeat.anim === null);
+  ok("S6 enabled=false 收敛落地 + 显式视口 [1060,1180]", u.data[1][4] === 40
+    && u._qbBeat.anim === null && u.scales.x.max === 1180);
   global.window.AQB_FX_CFG = CFG_ON;
 }
-// —— S7/S7a/S7b: 零变化拍(同网格)F6 环境层解绑后只跑 fx / 双轨真 0 全静默 /
-//            零变化滚窗(dx0=step>0 尾值不变) L0 照常 ——
+// —— S7/S7a/S7b: 零变化拍(锚零位移)F6 环境层解绑后只跑 fx / 双轨真 0 静默(显式视口照常落笔) /
+//            尾值不变滚窗(尾点 +1 格) L0 照常 ——
 {
   // F6/D3(plan 26-11-15-1104): 零变化拍 spawn 与早退门解绑 —— 值>0 恒 >=Lv.1(D1)贯彻全窗,
-  // 数据面零动画(L0/L1 零 rAF 保留: 零 setScale("x")/零数据改写), 只跑 fx 的 impact 窗。
-  const u = mkU([1000, 1030, 1060, 1090, 1120], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);  // 同网格(dx0=0) + 尾值无变化
+  // 数据面零动画(L0/L1 零 rAF 保留), 只跑 fx 的 impact 窗。显式视口无条件落笔(不变量(1):
+  // setData 的列全宽 auto 必须被锚视口覆盖 —— 零变化拍也如此, 旧「零 setScale」随换代退役)。
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 30, 60);  // 锚已收敛(=尾), 零位移 + 尾值无变化
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S7 零变化拍(F6 环境层解绑): anim.fx 在场 lv=1 且 anim 不带 shift/tail, 零 setScale"
-    + "(数据面零 rAF 保留面), 数据零改写", u._qbBeat.anim !== null
+  ok("S7 零变化拍(F6 环境层解绑): anim.fx 在场 lv=1 且 anim 不带 shift/tail, 显式视口照常落笔"
+    + " [1030,1150](零位移 -> vAnchor=目标), 数据零改写", u._qbBeat.anim !== null
     && u._qbBeat.anim.fx !== null && u._qbBeat.anim.fx.lv === 1
     && u._qbBeat.anim.needsShift === false && u._qbBeat.anim.needsTail === false
-    && u.setScaleLog.length === 0 && u.data[1][4] === 30 && u.data[2][4] === 60);
+    && u.setScaleLog.length === 2 && u.setScaleLog[0][1] === 1030 && u.setScaleLog[0][2] === 1150
+    && u.data[1][4] === 30 && u.data[2][4] === 60);
   drain();
-  ok("S7 零变化拍收敛: 只跑 fx impact 窗(装饰帧保障 redraw 在场)+ 收敛帧 setData 清场, "
-    + "全程零 x 提交", u.redrawCount > 0 && u.setDataCount === 1 && u._qbBeat.anim === null
-    && u.setScaleLog.every((r) => r[0] !== "x") && u.data[1][4] === 30 && u.data[2][4] === 60);
+  ok("S7 零变化拍收敛: 只跑 fx impact 窗(装饰帧保障 redraw 在场)+ 收敛帧 setData 清场 +"
+    + " 显式视口重申", u.redrawCount > 0 && u.setDataCount === 1 && u._qbBeat.anim === null
+    && u.scales.x.min === 1030 && u.scales.x.max === 1150 && u.data[1][4] === 30);
 }
 {
-  // F6 收窄后的「双静默」面: 双轨真 0(值恒 0)零变化拍 lead=null -> spawn null -> 整拍零 anim
-  // 零 rAF 零提交(I10/D2 —— 数据面与装饰面同口径静默; 旧 S7 的全静默面自此只属于真 0/缺口)。
-  const u = mkU([1000, 1030, 1060, 1090, 1120], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]);
-  u._qbBeat = mkBeat(1000, 5, 0, 0);
+  // F6 收窄后的「双静默」面: 双轨真 0(值恒 0)零变化拍 lead=null -> spawn null -> 零 anim
+  // 零 rAF 零数据提交(I10/D2); 显式视口照常落笔(视口面不是数据提交)。
+  const u = mkU(XS1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 0, 0);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S7a 双轨真 0 零变化拍: spawn null 整拍静默(零 rAF 零 anim 零提交 —— I10/D2)",
-    rafMap.size === 0 && u._qbBeat.anim === null && u.setScaleLog.length === 0
-    && u.setDataCount === 0 && u.redrawCount === 0);
+  ok("S7a 双轨真 0 零变化拍: spawn null 零 rAF 零 anim 零数据提交(I10/D2) + 显式视口照常落笔",
+    rafMap.size === 0 && u._qbBeat.anim === null && u.setDataCount === 0 && u.redrawCount === 0
+    && u.setScaleLog.length === 2 && u.setScaleLog[0][1] === 1030 && u.setScaleLog[0][2] === 1150);
 }
 {
-  // §06 S1 验收「零变化连拍」面, F1(plan 26-11-14-1313)后口径修正: 值>0 的滚窗拍 delta=0
-  // 恒 >=Lv.1(下限) -> spawn 出 Lv.1 装饰清单(A1 的电池级等价 —— 既有视觉预算被用到),
-  // 但尾点零改写不变; 「零装饰」半边收窄为真 0/缺口轨(S7 同网格零变化拍提前归位, 零 rAF)。
-  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  // 尾值不变滚窗(尾点 +1 格, 值不变): 锚平移照播(delta=si) + 尾点零改写(L0 与数据驱动解耦)。
+  // 旧「头切驱动摆回」形态(F5 dx0)随尾锚平移退役 —— 头切不动视口, 视口只随尾锚走。
+  const u = mkU([1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 30, 60);  // 锚 1150(旧尾), 尾 1180 -> delta=30 滑动
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S7b 零变化滚窗: L0 照常起拍(rAF=1 + 视口摆回旧位 [1000,1120] + y 钉成对)", rafMap.size === 1
+  ok("S7b 尾值不变滚窗: L0 锚平移起拍(rAF=1 + 视口落滑动起点 [1030,1150] + y 钉成对) + fx 在场"
+    + " lv=1(F1 下限)", rafMap.size === 1
     && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120
-    && u.setScaleLog[1][0] === "y");
-  ok("S7b 值>0 恒 >=Lv.1: anim.fx 在场且 lv=1(F1 下限, delta=0 不再 lead=null -> spawn null;"
-    + " A1「稳态流每拍出反馈」的调度器面), 双轨 act/次区资格全开", u._qbBeat.anim !== null
-    && u._qbBeat.anim.fx !== null && u._qbBeat.anim.fx.lv === 1
-    && u._qbBeat.anim.fx.act.up === true && u._qbBeat.anim.fx.act.dl === true
-    && u._qbBeat.anim.fx.tail.length === 2);
+    && u.setScaleLog[0][1] === 1030 && u.setScaleLog[0][2] === 1150
+    && u.setScaleLog[1][0] === "y"
+    && u._qbBeat.anim !== null && u._qbBeat.anim.fx !== null && u._qbBeat.anim.fx.lv === 1);
   const tailAtStart = [u.data[1][4], u.data[2][4]];
   drain();
-  ok("S7b 零变化滚窗: 尾点零改写(L0 滚动与数据驱动解耦不变), 收敛帧 setData 交还 auto;"
-    + " impact 窗内装饰帧保障补 redraw(fx 恒 >=Lv.1 在场 -> 帧保障行生效)",
-    u.data[1][4] === tailAtStart[0] && u.data[2][4] === tailAtStart[1]
-    && u.redrawCount > 0 && u.setDataCount === 1 && u._qbBeat.anim === null);
+  ok("S7b 收敛: 尾点零改写(L0 滚动与数据驱动解耦不变) + 显式锚视口重申 [1060,1180]"
+    + " + impact 窗装饰帧保障补 redraw", u.data[1][4] === tailAtStart[0]
+    && u.data[2][4] === tailAtStart[1] && u.redrawCount > 0 && u.setDataCount === 1
+    && u._qbBeat.anim === null && u.scales.x.min === 1060 && u.scales.x.max === 1180);
 }
-// —— S8: 长窗 0.75px 规则(不播 L0, 尾点真变化仍收敛) ——
+// —— S8: 长窗 0.75px 规则(gate 拒绝 -> 瞬时落地到目标锚视口, 尾点真变化仍收敛) ——
 {
   const xs = Array.from({ length: 2880 }, (_, i) => 1000 + i * 30);
   const up = new Array(2880).fill(0);
   up[2879] = 30;
   const dl = new Array(2880).fill(0);
   const u = mkU(xs, up, dl);
-  u._qbBeat = mkBeat(970, 2880, 10, 0);  // dx0=30(滚一格) 但 cellPx=800/2880 约 0.28 < 0.75
+  // 上一收敛锚 = 旧尾 87340(= 1000 + 2878x30), 尾 87370 -> delta=30; nWin = span/step = 2880
+  // -> cellPx = 800/2880 约 0.28 < 0.75 -> gate 拒绝 -> 瞬时落地目标锚视口 [970, 87370]
+  u._qbBeat = mkBeat(87340, 30, 86400, 10, 0);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S8 长窗 0.75px 规则: 不播 L0(零 setScale), 尾点真变化仍走收敛", u.setScaleLog.length === 0
+  ok("S8 长窗 0.75px 规则: gate 拒绝不播平移(零滑动帧), 显式目标视口一次落笔 [970,87370]"
+    + "(瞬时落地也有真值视口 —— 旧 auto 落地面退役, instant/长窗恒定压缩变体随补点退役消失)",
+    u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
+    && u.setScaleLog[0][1] === 970 && u.setScaleLog[0][2] === 87370
     && rafMap.size === 1 && u.data[1][2879] === 10);
-  // ySeen 口径同 S2(逐帧记在途帧 scales.y.max), 差异: S8 不播 L0, impact 窗帧(clock<120)
-  // 尾点未动零提交(逐帧提交守卫), y 还是 mkU 初值 —— 只记「本帧确有绘制」的帧, 静默帧不混入。
   const drawn = () => u.setScaleLog.length + u.redrawCount + u.setDataCount;
   const ySeen = [];
   let guard = 0;
@@ -1533,59 +1476,61 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
     }
   }
   ok("S8 长窗尾点收敛落地(逐帧 y 钉 + redraw 重画)", u.data[1][2879] === 30 && u._qbBeat.anim === null
-    && u.redrawCount > 3 && u.setScaleLog.every((r) => r[0] === "y" && r[2] === 31.5)
+    && u.redrawCount > 3 && u.setScaleLog.every((r) => r[0] !== "x" || (r[1] === 970 && r[2] === 87370))
     && ySeen.length > 3 && ySeen.every((v) => v === 31.5));
 }
-// —— S9/S9b: 跨窗换档瞬时(F5 后判据 = 窗几何不连续: 桶宽变化/起点跳出 ±2 格滚动域, 点数退役)/
-//            多桶滚动(roll 上界)瞬时 ——
+// —— S9/S9b/S9c: 跨窗换档瞬时(组距标称/名义窗长变化 -> rewin)/滚动域外(delta > 2x step)瞬时/
+//            恰 2 组距边界仍平移 ——
 {
-  // 真换档: 桶宽 30 -> 60(重定标)且起点跳位 —— 点数 5 -> 3 在此只是伴随症状(F5 后不再作为判据:
-  // 补点 +1 与非整倍窗 497<->498 相位翻动都是点数波动而窗没换, 见 S14/S15/S16)。F6/D3 后数据/
-  // 视口面照旧瞬时落地(不造假 morph), 但 fx 不再被早退门连坐 —— lead 等级 >=1 即 spawn(环境
-  // 层脉冲, 只跑 impact 窗)。
+  // 真换档: 组距标称 30 -> 60 + 名义窗长 120 -> 240(meta 显式传入 —— 生产 meta 恒在场,
+  // 场景经 qbHistData 提供)。数据/视口面瞬时落地到新窗长锚视口(不造假 morph), fx 照常在场。
+  self.qbHistData = { meta: { interval_s: 60, span_s: 240 } };
   const u = mkU([1120, 1180, 1240], [0, 0, 50], [0, 0, 70]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
-  u._qbBeat.step = 30;   // 上一拍桶宽 30 -> 新列 step 60: stepChanged 翻真
+  u._qbBeat = mkBeat(1000, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S9 真换档(桶宽 30->60 重定标 + 起点跳位): 数据/视口面瞬时落地(尾桶已非同一桶, 不造假"
-    + " morph —— 零 setScale + shown 直落真值), fx 环境层照常在场(F6 解绑)", rafMap.size === 1
-    && u.setScaleLog.length === 0 && u._qbBeat.tracks.up.shown === 50
-    && u._qbBeat.anim !== null && u._qbBeat.anim.fx !== null
-    && u._qbBeat.anim.needsShift === false && u._qbBeat.anim.needsTail === false);
-  drain();  // 收敛落地清 rAF, 不给后续块留残余帧
-}
-{
-  const u = mkU([1090, 1120, 1150, 1180, 1210], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);  // dx0 = 90 = 3x step(30) > 2x step: 多桶滚动非滚动语义
-  self._qbCharts = { global: u };
-  self._qbBeatStart("global", u);
-  ok("S9b 多桶滚动(dx0=3x step 超 roll 上界): 数据/视口面瞬时落地零 setScale, fx 照常在场"
-    + "(F6 解绑 —— 不再被早退门连坐)", rafMap.size === 1 && u.setScaleLog.length === 0
-    && u._qbBeat.tracks.up.shown === 30 && u._qbBeat.anim !== null
+  ok("S9 真换档(组距 30->60 + 窗长 120->240 -> rewin): 瞬时落地新窗长锚视口 [1000,1240]"
+    + "(尾桶已非同一桶, 不造假 morph) + shown 直落真值 + fx 环境层在场(F6 解绑)",
+    rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
+    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1240
+    && u._qbBeat.tracks.up.shown === 50 && u._qbBeat.anim !== null
     && u._qbBeat.anim.fx !== null && u._qbBeat.anim.needsShift === false
-    && u._qbBeat.anim.needsTail === false);
-  drain();  // 收敛落地清 rAF, 不给后续块留残余帧
+    && u._qbBeat.anim.needsTail === false && u._qbBeat.step === 60 && u._qbBeat.span === 240);
+  drain();
+  self.qbHistData = undefined;
 }
 {
-  // roll 判据 `dx0 <= step * 2` 的恰边界: 2 格滚动仍在滚动语义内, 照播 L0 过渡(判据改 < 即红)
-  const u = mkU([1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);  // dx0 = 1060-1000 = 60 = 2x step(30): 恰落 roll 上界
+  // 滚动域外: delta = 210 > 2x step(60) -> rewin 瞬时(停摆多拍补齐不假 morph)
+  const u = mkU([1090, 1120, 1150, 1180, 1210], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1000, 30, SPAN1, 30, 60);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S9b roll 恰边界(dx0=2x step): 仍播 L0 过渡(rAF=1 + 视口摆回旧位 [1000,1120] + y 钉成对)",
+  ok("S9b 滚动域外(delta=210 > 2x step): 瞬时落地目标锚视口 [1090,1210] + fx 照常在场",
+    rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][1] === 1090
+    && u.setScaleLog[0][2] === 1210 && u._qbBeat.tracks.up.shown === 30
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === false);
+  drain();
+}
+{
+  // 恰 2 组距边界(delta = 60 = 2x step 30): 仍在滚动语义内, 照播锚平移(判据改 < 即红)
+  const u = mkU([1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 30, 60);  // 锚 1120(旧尾), 尾 1180 -> delta=60=2x step
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);
+  ok("S9c 恰边界(delta=2x step): 仍播锚平移(rAF=1 + 视口落滑动起点 [1000,1120] + y 钉成对)",
     rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
     && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120
     && u.setScaleLog[1][0] === "y");
-  drain();  // 收敛落地清 rAF, 不给后续块留残余帧
-  ok("S9b roll 恰边界收敛落地: 尾值无变化(数据面零改写), setData 交还 auto; F1 后 fx 恒在场 ->"
-    + " impact 窗装饰帧保障补 redraw(旧「零 redraw」面随零装饰一并退役)", u._qbBeat.anim === null
-    && u.redrawCount > 0 && u.setDataCount === 1 && u.data[1][4] === 30 && u.data[2][4] === 60);
+  drain();
+  ok("S9c 恰边界收敛落地: 尾值无变化(数据面零改写), setData + 显式视口重申 [1060,1180]",
+    u._qbBeat.anim === null && u.redrawCount > 0 && u.setDataCount === 1
+    && u.data[1][4] === 30 && u.data[2][4] === 60
+    && u.scales.x.min === 1060 && u.scales.x.max === 1180);
 }
 // —— S10: 销毁终止(换肤/关抽屉路径) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);
   self._qbCharts = { global: u };
   self._qbChartRos = { global: { disconnect() { } } };
   self._qbBeatStart("global", u);
@@ -1598,69 +1543,70 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   ok("S10 销毁后无残余帧(提交数停在起拍时刻)", u.setScaleLog.length === atStart.scale
     && u.setDataCount === atStart.data);
 }
-// —— S11: 在途拍内 _qbChartRescale(y 切档/限速变化入口): 终止在途拍直接落真值 ——
+// —— S11: 在途拍内 _qbChartRescale(y 切档/限速变化入口): 终止在途拍直接落真值 + 显式视口重申 ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 4; i++) { nowMs += 50; pump(); }  // clock 150: 插值中
   ok("S11 前置: 在途拍插值中(尾点偏离真值)", u._qbBeat.anim !== null && u.data[1][4] > 10
     && u.data[1][4] < 30);
   self._qbChartRescale("global");
-  ok("S11 rescale: 在途拍终止 + 真值直接落袋 + setData 交还(不留半帧)",
-    rafMap.size === 0 && u._qbBeat.anim === null && u.data[1][4] === 30 && u.data[2][4] === 60
-    && u.setDataCount === 1);
+  ok("S11 rescale: 在途拍终止 + 真值直接落袋 + setData + 显式锚视口重申 [1030,1150]"
+    + "(锚记账不动 —— y 重排不搬窗口)", rafMap.size === 0 && u._qbBeat.anim === null
+    && u.data[1][4] === 30 && u.data[2][4] === 60 && u.setDataCount === 1
+    && u.scales.x.min === 1030 && u.scales.x.max === 1150);
   pump();
   ok("S11 rescale 后无残余帧", u.setDataCount === 1 && u._qbBeat.anim === null);
 }
 // —— S12: 零变化连拍(plan §03 I6 行验收列「Δ≈0 连拍 10 次叠加层零绘制(静态网格不计)」
-//          的电池级等价; §10 亦有零变化静默用例条目 —— 双指)。F6/D3 后口径改写: 连拍不再整拍
-//          静默 —— 值>0 每拍出 fx 的 impact 窗(环境层, 26-11-14-1313 D1 恒 Lv.1 贯彻全窗),
-//          「不随连拍累积」改钉为: 每拍 fx 即抛即清(收敛帧清场零残留)、数据面零改写、
-//          零 setScale("x")(L0 不滚)、setData 恰收敛帧一笔; 全静默半边(真 0)归 S12b。 ——
+//          的电池级等价)。F6/D3 后口径: 连拍不整拍静默 —— 值>0 每拍出 fx 的 impact 窗,
+//          每拍 fx 即抛即清(收敛帧清场零残留)、数据面零改写、显式视口每拍落笔(静止态同值)、
+//          setData 恰收敛帧一笔; 全静默半边(真 0)归 S12b。 ——
 {
-  const u = mkU([1000, 1030, 1060, 1090, 1120], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);  // 同网格(dx0=0) + 尾值与显示值相同: 每一拍都是零变化拍
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 30, 60);  // 锚已收敛 = 尾: 每一拍都是零变化拍
   self._qbCharts = { global: u };
   const d0 = u.setDataCount;
   let clean = true;
   for (let i = 0; i < 10; i++) {
+    const xBefore = u.setScaleLog.filter((r) => r[0] === "x").length;
     self._qbBeatStart("global", u);
     if (!(u._qbBeat.anim !== null && u._qbBeat.anim.fx !== null && u._qbBeat.anim.fx.lv === 1
       && u._qbBeat.anim.needsShift === false && u._qbBeat.anim.needsTail === false)) clean = false;
-    if (u.setScaleLog.some((r) => r[0] === "x") || u.setDataCount !== d0 + i) clean = false;
+    const xw = u.setScaleLog.filter((r) => r[0] === "x").slice(xBefore);
+    if (!(xw.length === 1 && xw[0][1] === 1030 && xw[0][2] === 1150)) clean = false;
     drain();
     if (!(u._qbBeat.anim === null && u.setDataCount === d0 + i + 1
-      && u.data[1][4] === 30 && u.data[2][4] === 60)) clean = false;
+      && u.data[1][4] === 30 && u.data[2][4] === 60
+      && u.scales.x.min === 1030 && u.scales.x.max === 1150)) clean = false;
   }
-  ok("S12 零变化连拍 10 次(F6 口径): 每拍 fx 在场即抛即清(收敛帧清场零残留), 数据面零改写"
-    + "零 x 提交, setData 恰收敛帧一笔(叠加层不随连拍累积 —— I6 行「零绘制」验收面收敛为"
-    + "「零累积」, 环境层瞬态)", clean);
+  ok("S12 零变化连拍 10 次(F6 口径): 每拍 fx 在场即抛即清(收敛帧清场零残留), 数据面零改写,"
+    + " 显式视口每拍同值落笔(零位移 -> 目标锚), setData 恰收敛帧一笔(叠加层零累积 —— I6)", clean);
 }
 {
   // 真 0 连拍(F6 后全静默面只属于真 0/缺口): 双轨恒 0 -> lead=null -> spawn null ->
-  // 连拍 10 次每拍零 rAF 零 anim 零提交(D2/I10)。
-  const u = mkU([1000, 1030, 1060, 1090, 1120], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]);
-  u._qbBeat = mkBeat(1000, 5, 0, 0);
+  // 连拍 10 次每拍零 rAF 零 anim 零数据提交; 显式视口照常落笔(视口面非数据面)。
+  const u = mkU(XS1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 0, 0);
   self._qbCharts = { global: u };
   const at0 = { scale: u.setScaleLog.length, data: u.setDataCount, redraw: u.redrawCount };
   let silent = true;
   for (let i = 0; i < 10; i++) {
     self._qbBeatStart("global", u);
     if (rafMap.size !== 0 || u._qbBeat.anim !== null) silent = false;
-    if (u.setScaleLog.length !== at0.scale || u.setDataCount !== at0.data
-      || u.redrawCount !== at0.redraw) silent = false;
+    if (u.setDataCount !== at0.data || u.redrawCount !== at0.redraw) silent = false;
+    if (u.setScaleLog.length !== at0.scale + 2 * (i + 1)) silent = false;
   }
-  ok("S12b 双轨真 0 零变化连拍 10 次: 每拍零 rAF 零 anim 零提交(叠加层零绘制不随连拍累积"
-    + " —— I10/D2, F6 后全静默面收窄于此)", silent);
+  ok("S12b 双轨真 0 零变化连拍 10 次: 每拍零 rAF 零 anim 零数据提交(I10/D2) + 显式视口照常"
+    + " 落笔(静止态)", silent);
 }
 // —— S13: 动画中悬停读数面(I4 行为化, 静态钉 i 的运行时等价): tooltip 读 points 真值,
-//          与 L1 插值写面(u.data)零交集; 索引钳制(越界/负值 -> null)—— §10「动画中悬停 tooltip
-//          取值用例」电池级等价, 不需要真浏览器 ——
+//          与 L1 插值写面(u.data)零交集; 索引钳制(越界/负值 -> null) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 4; i++) { nowMs += 50; pump(); }  // clock 200: 尾点插值中(收敛窗内)
@@ -1672,7 +1618,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   self.qbHistHoverIdx = 4;
   self.qbHistHoverLeft = 0;
   self._qbChartWs = { global: 800 };
-  self.fmtTime = (ts) => "T" + ts;  // fmtTime 住全局 mixin, 电池只验取值面不验格式
+  self.fmtTime = (ts) => "T" + ts;
   const h = self._qbHoverOf("global");
   ok("S13 动画中悬停: 读 points 真值 30/60(不读 u.data 插值面 —— tooltip 与已落袋真值逐字一致)",
     !!h && h.up === 30 && h.dl === 60 && h.gap === undefined && h.flip === false);
@@ -1684,9 +1630,6 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   const hg = self._qbHoverOf("global");
   ok("S13 缺口桶悬停: gap=true + 区段 mid(链中间的洞走区段判据 —— 链 [0,4] 内 idx1 的洞), 同样零 u.data 触碰",
     !!hg && hg.gap === true && hg.zone === "mid");
-  // S13b schema=2 对照(26-11-18-0037 阶段 3; 评审 T3-R2): 洞位用显式空值点 {t, dl:null, up:null}
-  // 替换 null 元素 —— _qbHoverOf 的空值点分支(p 双 null)必须真执行, 否则该分支回退成 !p 时
-  // 空值点按数据点渲染 null 速率而全电池仍绿(变异盲区)。
   self.qbHistData = { points: [{ t: 1030, up: 30, dl: 60 }, { t: 1060, dl: null, up: null },
       { t: 1090, up: 28, dl: 58 }, { t: 1120, up: 29, dl: 59 }, { t: 1150, up: 30, dl: 60 }],
     limits: [], meta: { interval_s: 30 } };
@@ -1699,339 +1642,221 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   const ht2 = self._qbHoverOf("global");
   ok("S13b 对照: 空值点列的真值点照常出速率(gap 分支不误吞真值点)",
     !!ht2 && ht2.up === 30 && ht2.dl === 60 && ht2.gap === undefined);
+  self.qbHistData = undefined;
   drain();
 }
-// —— S14: F5 补点拍全生命周期(电池钉 2 调度器面; 快路 _qbPadTailColumns 产物注入 + 判定帧
-//          摆回锚贴左缘 + 收敛帧补点出列) ——
+// —— S14: 打断续滑(统一语义, 计划 26-11-22-0858; 旧方向B S21/S24/S25/S26 四场景随「在途锚
+//          直读」统一为一族): 在途平移拍被零位移对账拍打断(GET 落袋撞滑动窗)—— 新拍从在途锚
+//          续滑剩余位移(视口连续零回跳; 旧形态此处视口会跳回列全宽 auto) ——
 {
-  // 快路模拟: 上一拍真窗口 [1000,1120](5 点), 新真窗 [1030..1150], 补点列 = 上一拍首桶点
-  // (t=1000, up=7/dl=9 真实历史观测)拼在新数据头部, _qbPad = 1
-  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
-  u._qbPad = 1;
-  u._qbBeat = mkBeat(1000, 5, 30, 60);  // 真窗起点记账 1000(补点不计), 尾显示值 = 新尾值(L1 静默, 纯 L0 拍)
+  global.window.AQB_FX_CFG = CFG_ON;
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 30, 60);   // 拍 A: 锚 1120 -> 1150 平移
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S14 补点拍起拍: 摆回锚 = 上一拍收敛视图 [1000,1120](min = 真窗起点 1030 - dx0, 补点恰贴左缘"
-    + " —— G-B 左缺口瞬移的调度器面) + anim 记账 pad=1/n=6(显示列长)", rafMap.size === 1
-    && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120
-    && u._qbBeat.anim !== null && u._qbBeat.anim.pad === 1 && u._qbBeat.anim.n === 6);
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }   // clock 150: 平移中段
+  const hold = _qbAnimAnchorAt(u._qbBeat.anim);
+  ok("S14 捕获: 在途平移拍取消瞬间锚位(自身状态直读 —— 旧 _qbInheritedViewport 公式重建退役)",
+    hold > 1120 && hold < 1150);
+  // 零位移对账拍打断(GET 落袋, 列同形同值: 尾 1150 == st.anchor -> delta=0)
+  const logLenA = u.setScaleLog.length;
+  self._qbBeatStart("global", u);
+  const jx = u.setScaleLog[logLenA];
+  const jy = u.setScaleLog[logLenA + 1];
+  ok("S14 判定帧: 零位移打断照续滑(剩余位移 > 0 -> slide), 视口落打断瞬间锚位(零回跳 —— 旧形态"
+    + " 此处会落到列全宽 auto)+ x/y 钉成对 + anim anchorFrom = 在途锚",
+    rafMap.size === 1 && !!jx && jx[0] === "x"
+    && Math.abs(jx[1] - (hold - SPAN1)) < 1e-9 && Math.abs(jx[2] - hold) < 1e-9
+    && !!jy && jy[0] === "y"
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === true
+    && Math.abs(u._qbBeat.anim.anchorFrom - hold) < 1e-9
+    && u._qbBeat.anim.anchorTo === 1150);
+  const logLenB = u.setScaleLog.length;
   drain();
-  ok("S14 补点拍收敛: 补点出列(setData 落回真窗口 5 列 [1030..1150])+ _qbPad 归零 + 尾值真值面",
-    u.setDataCount === 1 && u.data[0].length === 5 && u.data[0][0] === 1030
-    && u.data[0][4] === 1150 && u._qbPad === 0 && u.data[1][4] === 30 && u._qbBeat.anim === null);
+  const xLog14 = u.setScaleLog.slice(logLenB).filter((r) => r[0] === "x");
+  ok("S14 收敛: 剩余位移滑完(min 从打断位单调滑向 1030, 全程无回跳) + 显式视口重申 [1030,1150]"
+    + " + 锚记账落位", u._qbBeat.anim === null && u.setDataCount === 1
+    && xLog14.length > 2
+    && xLog14.every((r, i) => i === 0 || r[1] >= xLog14[i - 1][1] - 1e-9)
+    && xLog14[0][1] >= hold - SPAN1 - 1e-9 && xLog14[xLog14.length - 1][2] === 1150
+    && u.scales.x.min === 1030 && u._qbBeat.anchor === 1150);
 }
-// —— S15: F5 翻动拍一(电池钉 1 调度器面; 498->497 形: 窗起点 +1 格、窗末点不动、真点数 -1)
-//          —— 不 rewin 照播 L0, max 锚按 dxN=0 恒驻真窗末点(摆回右缘不窄格 —— G-B 右缘镜像) ——
+// —— S15: 真滚动打断(新样本拍打断在途平移拍: 尾点 +1 格真推进)—— 新拍从打断位续滑到新目标
+//          (单调锚 max(旧目标, 新尾)), 不回跳旧锚 ——
 {
-  const u = mkU([1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 6, 30, 60);  // 上一拍真窗口 [1000,1150](6 点; 旧判据 st.n 6 !== 5 会误 rewin)
-  u._qbBeat.xN0 = 1150;                 // 上一拍真窗末点(翻动拍一末点不动 -> dxN=0)
+  global.window.AQB_FX_CFG = CFG_ON;
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 30, 60);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S15 翻动拍一不 rewin: L0 照播(rAF=1)+ 摆回 = 上一拍收敛视图 [1000,1150](min 滑一格, max 恒驻)",
-    rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1150);
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
+  const hold15 = _qbAnimAnchorAt(u._qbBeat.anim);
+  // 新样本拍打断(尾点 t 1180 推进一格 + 尾值真变化)
+  u.data = [[1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 80], [0, 0, 0, 0, 60]];
+  const logLenC = u.setScaleLog.length;
+  self._qbBeatStart("global", u);
+  const jx15 = u.setScaleLog[logLenC];
+  ok("S15 真滚动打断: 视口落打断位(min/max 都从打断位续滑 —— 不回跳旧锚 1120) + anim"
+    + " anchorTo = 1180(单调锚 max(旧目标 1150, 新尾 1180))+ 尾值真变化 needsTail 同拍",
+    rafMap.size === 1 && !!jx15 && jx15[0] === "x"
+    && Math.abs(jx15[1] - (hold15 - SPAN1)) < 1e-9 && Math.abs(jx15[2] - hold15) < 1e-9
+    && u._qbBeat.anim.anchorTo === 1180 && u._qbBeat.anim.needsTail === true
+    && u._qbBeat.anim.needsShift === true);
+  const logLenD = u.setScaleLog.length;
   drain();
-  ok("S15 翻动拍一收敛落地(尾值零改写, anim 归位)", u.data[1][4] === 30 && u._qbBeat.anim === null);
+  const xLog15 = u.setScaleLog.slice(logLenD).filter((r) => r[0] === "x");
+  ok("S15 收敛: 平移滑过旧目标 1150 滑向新尾 1180(帧循环 x 提交末笔 max > 1150)"
+    + " + 尾值 80 真值写回 + 显式视口 [1060,1180]",
+    u._qbBeat.anim === null && u.data[1][4] === 80
+    && xLog15.length >= 2 && xLog15[xLog15.length - 1][2] > 1150
+    && u.scales.x.min === 1060 && u.scales.x.max === 1180);
 }
-// —— S16: F5 翻动拍二(电池钉 1 调度器面; 497->498 形: 窗起点不动、窗末点 +1 格、真点数 +1)
-//          —— 不 rewin 且入 roll(评审轮1 finding1: dx0=0 位移在 max 侧): L0 照播(摆回 min 恒驻
-//          上一拍视图, max 滑一格), 尾值真变化 L1 同拍收敛(旧判据 rewin 会双双瞬时落地) ——
+// —— S16: 换窗(rewin)打断在途平移拍不续滑 —— 几何不连续瞬时落地到新窗长锚视口(继承位让位
+//          原生锚形; 旧继承门 !rewin 语义承袭) ——
 {
-  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 0, 80], [0, 0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
-  u._qbBeat.xN0 = 1120;
+  global.window.AQB_FX_CFG = CFG_ON;
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 30, 60);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S16 翻动拍二不 rewin 照播 L0: 摆回 = 上一拍视图 [1000,1120](min = xs[0]-dx0 恒驻真窗起点,"
-    + " max = 末点 - dxN 滑一格)+ anim 记账 dx0=0/dxN=30 + needsShift/needsTail 双在场",
-    rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120
-    && u._qbBeat.anim !== null && u._qbBeat.anim.dx0 === 0 && u._qbBeat.anim.dxN === 30
-    && u._qbBeat.anim.needsShift === true && u._qbBeat.anim.needsTail === true);
-  drain();
-  // 评审轮2 finding3: max 缘滑动在帧循环证据面钉死(drain 后现取)—— 帧循环 x 提交 >= 2 笔
-  // (判定帧摆回 + 滑动帧)且末笔 max 滑向 1150(翻动拍二 dx0=0, 位移全在 max 侧)。
-  const xLog16 = u.setScaleLog.filter((r) => r[0] === "x");
-  ok("S16 翻动拍二收敛落地: 尾值 80 真值写回 + 无补点列(k=0 不携带, pIdx=0)真窗口 6 点交还"
-    + " + max 缘滑过格(帧循环 x 提交 >= 2 笔且末笔 max > 1120 滑向 1150)",
-    u.data[1][5] === 80 && u._qbBeat.anim === null && u.data[0].length === 6 && u._qbPad === 0
-    && xLog16.length >= 2 && xLog16[xLog16.length - 1][2] > 1120);
-}
-// —— S17: F5 状态迁移钉(评审轮1 finding2; 变长点列适配后 min 锚 = 显示列首点真值):
-//          kept-pad 静止态(非摆回拍遗留补点, 视图 min = 列首补点 t)后的**首个摆回拍** ——
-//          摆回 min = 显示列首点 970(补点携带, t=0 视口与曲线左端双连续; 旧 padPrev·step
-//          等距算术退役 —— dxMin0 = 显示列实距, 滑动终点恰落真窗起点), 收敛帧全部补点摘除
-//          零跳变 ——
-{
-  const u = mkU([970, 1000, 1030, 1060, 1090, 1120], [5, 7, 0, 0, 0, 30], [6, 9, 0, 0, 0, 60]);
-  u._qbPad = 1;                            // kept-pad 静止态: 显示列头 1 点补点(t=970), 视图 min = 970
-  u._qbBeat = mkBeat(1000, 5, 30, 60);     // 真窗起点记账 1000, 尾显示值 = 新尾值(纯 L0 迁移拍)
-  self._qbCharts = { global: u };
-  // 快路模拟(_qbPadTailColumns 携带产物由 J6d 钉): 摆回门 true + 携带式补点(旧 1 点 + 新
-  // 1 点 = 2 点, 从列首切)。
-  u.data = [[970, 1000, 1030, 1060, 1090, 1120, 1150], [5, 7, 0, 0, 0, 30], [6, 9, 0, 0, 0, 60]];
-  ok("S17 前置: 摆回拍补点携带列(旧 1 点 t=970 + 新 1 点 t=1000 = 2 点, 末点恰贴新窗起点左邻)",
-    u.data[0].length === 7 && u.data[0][0] === 970 && u.data[0][1] === 1000 && u.data[0][6] === 1150);
-  u._qbPad = 2;
+  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
+  const logLenE = u.setScaleLog.length;
+  // 换窗打断(组距标称 30 -> 60 + 窗长 120 -> 240 = 真换档) —— meta 在拍 A 起拍之后才落,
+  // 拍 A 走 st 回落正常滑动, 打断拍读新 meta 判 rewin(生产换窗 = 新 meta 随响应落袋)。
+  self.qbHistData = { meta: { interval_s: 60, span_s: 240 } };
+  u.data = [[1000, 1060, 1120, 1180, 1240], [7, 0, 0, 0, 80], [9, 0, 0, 0, 60]];
   self._qbBeatStart("global", u);
-  ok("S17 状态迁移摆回: min = xs[pad]-dxMin0 = 970(= kept-pad 静止视图 min, 视口连续)"
-    + " + 补点曲线左端 = 列首 970 恰贴 min(左端 0px 连续) + anim 记账 pad=2/dxMin0=60(显示列实距)",
-    u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 970 && u.setScaleLog[0][2] === 1120
-    && u._qbBeat.anim !== null && u._qbBeat.anim.pad === 2
-    && u._qbBeat.anim.dxMin0 === 60);
+  const jx16 = u.setScaleLog[logLenE];
+  ok("S16 rewin 打断不续滑: 瞬时落地新窗长锚视口 [1000,1240](尾 1240 - span 240, 不落打断位)"
+    + " + anim 无 needsShift + step/span 重定标", rafMap.size === 1 && !!jx16 && jx16[0] === "x"
+    && jx16[1] === 1000 && jx16[2] === 1240
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === false
+    && u._qbBeat.step === 60 && u._qbBeat.span === 240);
   drain();
-  ok("S17 状态迁移收敛: min 滑动终点 = 真窗起点 1030(dxMin0 按比例退役补点占位)+ 全部补点"
-    + "摘除(pad=2 slice)落回真窗口 5 列 + _qbPad 归零",
-    u.data[0].length === 5 && u.data[0][0] === 1030 && u._qbPad === 0
-    && u._qbBeat.anim === null
-    && u.setScaleLog.filter((r) => r[0] === "x").slice(-1)[0][1] > 1020);
-}
-// —— S18: 变长点列滚动拍(26-11-18-0037 阶段 3; schema=2 真值 t 非等距): step 取 meta
-//          组距标称(相位抖动下 xs[1]-xs[0] 不再是 step), 滚出补点按真值现数, 摆回锚贴列首 ——
-{
-  self.qbHistData = { meta: { interval_s: 30 } };
-  const u = mkU([1000, 1029, 1031, 1060, 1090, 1120], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
-  u._qbPad = 1;                            // 快路补点: 滚出点 t=1000(真值观测)拼在新数据头部
-  u._qbBeat = mkBeat(1000, 5, 30, 60);     // 真窗起点记账 1000(相位抖动列 [1029,1031,1060,1090,1120])
-  u._qbBeat.xN0 = 1090;                    // 上一拍真窗末点 1090 -> dxN = 30(与 dx0=29 分离记账)
-  self._qbCharts = { global: u };
-  self._qbBeatStart("global", u);
-  ok("S18 变长点列补点拍: 摆回锚 = 上一拍视图 [1000,1090](min = 显示列首点真值 —— 左端贴缘;"
-    + " max = 末样本 - dxN = 上一拍末样本 1090) + anim 记账 pad=1/step=30(meta 组距标称, "
-    + "非 xs[1]-xs[0]=29)/dxMin0=29",
-    rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1090
-    && u._qbBeat.anim !== null && u._qbBeat.anim.pad === 1 && u._qbBeat.anim.dxMin0 === 29
-    && u._qbBeat.step === 30);
-  drain();
-  ok("S18 变长点列补点拍收敛: 补点出列(真窗口 5 列 [1029..1120])+ _qbPad 归零",
-    u.setDataCount === 1 && u.data[0].length === 5 && u.data[0][0] === 1029
-    && u._qbPad === 0 && u._qbBeat.anim === null);
+  ok("S16 rewin 打断收敛: fx-only 拍照常收口 + 显式视口保持", u._qbBeat.anim === null
+    && u.scales.x.min === 1000 && u.scales.x.max === 1240);
   self.qbHistData = undefined;
 }
-// —— S19: 尾组推进拍(k>1 组距: 尾组 t = 最新样本 ts 每 tick 推进 si, 首端成组不动)——
-//          窗右沿锚末样本(D1): L0 只滑 max 侧 si(min 恒驻), 尾值真变化 L1 同拍收敛 ——
+// —— S17: 旧窗响应晚到(tail < 锚)不回拖 —— 单调锚(不变量(1))调度器面: 视口静止在当前锚 ——
 {
-  self.qbHistData = { meta: { interval_s: 45 } };
-  const u = mkU([1000, 1045, 1090, 1135, 1195], [0, 0, 0, 0, 80], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
-  u._qbBeat.xN0 = 1180;                    // 上一拍末样本 1180 -> dxN = 15(si), dx0 = 0(首组未滚出)
+  global.window.AQB_FX_CFG = CFG_ON;
+  const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 30, 60);   // 锚已收敛 1150
+  self._qbCharts = { global: u };
+  self._qbBeatStart("global", u);   // 先落一笔目标视口 [1030,1150]
+  drain();
+  const minBefore = u.scales.x.min;
+  // 旧窗响应(尾 1120 < 锚 1150)落袋: delta=0 -> 视口静止(不回拖)
+  u.data = [[1000, 1030, 1060, 1090, 1120], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]];
+  self._qbBeatStart("global", u);
+  ok("S17 单调锚: 尾回退(delta<0 -> j.anchor=max=1150)零位移 -> 视口静止 [1030,1150](不回拖)"
+    + " + 锚记账保持", u.setScaleLog.filter((r) => r[0] === "x").slice(-1)[0][1] === 1030
+    && u.scales.x.min === minBefore && u._qbBeat.anchor === 1150
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === false);
+  drain();
+  ok("S17 收敛: 视口恒 [1030,1150]", u._qbBeat.anim === null
+    && u.scales.x.min === 1030 && u.scales.x.max === 1150);
+}
+// —— S18: instant 档(gate 拒绝)瞬时落地目标锚视口 —— 旧方向A「auto 落地含补点全宽 = 恒定压缩」
+//          变体随补点退役结构性消失: 显式目标视口恒等名义窗 ——
+{
+  global.window.AQB_FX_CFG = { enabled: true, on: true, shiftRatio: 0.6, shift: "instant" };
+  const u = mkU([1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1150, 30, SPAN1, 30, 60);   // delta=30 滑动候选
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("S19 尾组推进拍: L0+L1 同拍(摆回 min 恒驻真窗起点 1000/max 滑向旧末样本 1180) + anim"
-    + " 记账 dx0=0/dxN=15/step=45(meta 组距标称)",
-    rafMap.size === 1 && u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
-    && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1180
-    && u._qbBeat.anim !== null && u._qbBeat.anim.dx0 === 0 && u._qbBeat.anim.dxN === 15
-    && u._qbBeat.step === 45 && u._qbBeat.anim.needsShift === true);
+  ok("S18 instant 档: gate 拒绝 -> 瞬时落地目标锚视口 [1060,1180](跨度恰名义窗 —— 压缩不可表达)"
+    + " + 零滑动帧 + fx 照常在场", rafMap.size === 1
+    && u.setScaleLog.filter((r) => r[0] === "x").length === 1
+    && u.setScaleLog[0][1] === 1060 && u.setScaleLog[0][2] === 1180
+    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === false
+    && u._qbBeat.anim.fx !== null);
   drain();
-  const xLog19 = u.setScaleLog.filter((r) => r[0] === "x");
-  ok("S19 尾组推进拍收敛: 尾值 80 真值写回 + max 缘滑过旧末样本(帧循环 x 提交 >= 2 笔且末笔"
-    + " max > 1180 滑向 1195), min 侧零位移(无补点无滚出)",
-    u.data[1][4] === 80 && u._qbBeat.anim === null && u.data[0].length === 5 && u._qbPad === 0
-    && xLog19.length >= 2 && xLog19[xLog19.length - 1][2] > 1180);
-  self.qbHistData = undefined;
+  ok("S18 instant 档收敛: 显式视口保持 [1060,1180]", u._qbBeat.anim === null
+    && u.scales.x.min === 1060 && u.scales.x.max === 1180);
+  global.window.AQB_FX_CFG = CFG_ON;
 }
-// —— S20: 建图拍底座(26-11-18-0037 阶段 3; 评审 T3-R3): 真 _qbChartBuild + 桩 uPlot/DOM
-//          全链跑通 —— 拍底座 step 初值必须取 meta 组距标称(相位抖动列 xs[1]-xs[0]=29;
-//          该行回退旧 xs[1]-xs[0] 形态时首拍 step 取抖动间距 -> 下一拍 step 变化恒误 rewin
-//          -> L0 永不播, 而全部纯函数/调度器电池照绿 —— 本用例封该变异盲区) ——
+// —— S19: 建图拍底座: 真 _qbChartBuild + 桩 uPlot/DOM 全链跑通 —— 拍底座 anchor/step/span
+//          初值取列尾/meta 组距标称/名义窗长 + 建图初始视口播种(免首绘 auto 全列宽闪帧) ——
 {
-  // 桩 DOM/BOM 面(_qbChartBuild 全链: InjectCss/Tokens/ResizeObserver/themechange/锚)
   global.document.getElementById = () => null;
   global.document.createElement = () => ({});
   global.document.head = { appendChild() {} };
   global.document.documentElement = { addEventListener() {} };
   global.getComputedStyle = () => ({ getPropertyValue: () => "" });
   global.ResizeObserver = function () { return { observe() {}, disconnect() {} }; };
+  let builtOpts = null;
   global.uPlot = function (opts, data) {
+    builtOpts = opts;
     return { root: { isConnected: true, querySelector: () => null }, data,
       scales: { x: { min: data[0][0], max: data[0][data[0].length - 1] }, y: { min: 0, max: 1 } },
       bbox: { left: 60, top: 10, width: 800, height: 300 },
       setData() {}, redraw() {}, setScale() {}, destroy() {} };
   };
-  const host20 = { isConnected: true, clientWidth: 800, clientHeight: 300, addEventListener() {} };
-  self.$refs = { qbChartHost: host20 };
+  const host19 = { isConnected: true, clientWidth: 800, clientHeight: 300, addEventListener() {} };
+  self.$refs = { qbChartHost: host19 };
   self.drawerIsTraffic = true;
   self.drawer = { open: true, scope: "global" };
   self.page = "groups";
   self._qbCharts = {};
   self._qbChartRos = {};
   self._qbThemeBound = false;
-  // schema=2 相位抖动列(真值 t 间距 29/2/29/30 浮动) + meta 组距标称 30
+  // schema=2 相位抖动列(真值 t 间距 29/2/29/30 浮动) + meta 组距标称 30 / 名义窗长 150
   self.qbHistData = { points: [{ t: 1000, up: 1, dl: 2 }, { t: 1029, up: 3, dl: 4 },
       { t: 1031, up: 5, dl: 6 }, { t: 1060, up: 7, dl: 8 }, { t: 1090, up: 9, dl: 10 }],
     totals: [], limits: [],
-    meta: { interval_s: 30, sample_interval_s: 1.5, schema: 2, stride: 1 } };
+    meta: { interval_s: 30, span_s: 150, sample_interval_s: 1.5, schema: 2, stride: 1 } };
   self._qbChartBuild("global");
-  const u20 = self._qbCharts.global;
-  ok("S20 建图拍底座(step = meta 组距标称 30, 非 xs[1]-xs[0]=29): u._qbBeat 记账 step/xs0/xN0"
-    + " 真值 + _qbPad=0 + 悬停锚 anchor.xs 全列真值",
-    !!u20 && u20._qbBeat.step === 30 && u20._qbBeat.xs0 === 1000 && u20._qbBeat.xN0 === 1090
-    && u20._qbBeat.n === 5 && u20._qbPad === 0
+  const u19 = self._qbCharts.global;
+  ok("S19 建图拍底座(anchor = 列尾真值 1090 / step = meta 组距标称 30(非 xs[1]-xs[0]=29) /"
+    + " span = meta 名义窗长 150) + 悬停锚 anchor.xs 全列真值",
+    !!u19 && u19._qbBeat.anchor === 1090 && u19._qbBeat.step === 30 && u19._qbBeat.span === 150
     && !!self._qbAnchors.global && self._qbAnchors.global.xs.length === 5);
+  ok("S19 建图初始视口播种: opts.scales.x.min/max = [锚-span, 锚] = [940,1090](免首绘 auto 全列宽"
+    + " 闪帧 —— 旧 auto 起步随显式视口换代)",
+    !!builtOpts && builtOpts.scales.x.min === 940 && builtOpts.scales.x.max === 1090);
   self.qbHistData = undefined;
   self.$refs = undefined;
+  self.drawerIsTraffic = false;
+  self.drawer = { open: false, scope: "" };
+  self.page = "";
+  self._qbThemeBound = false;
 }
-// —— S21: 方向B打断继承(2026-11-22 修「偶发整列 x 向压缩」残留面)主面: 在途摆回拍被
-//          零变化对账拍打断(GET 落袋撞摆回窗, 采样间隔内无新样本 -> dx0=dxN=0)—— 继承
-//          取消瞬间视口(剩余位移继续滑完), 打断重建零回跳, 补点不再滞留含补点全宽 ——
+// —— S20b: 收敛帧显式视口重申的变异盲区封堵(列含余量): 列 = [余量点 1000] + 窗内 [1030..1150]
+//          —— setData 交还的 auto = 列全宽 [1000,1150](跨度 150 != 名义窗 120), 收敛帧必须重申
+//          锚视口 [1030,1150] —— 重申行删除即本用例红(其余场景列恒真值无余量, auto 与锚视口
+//          同形拦不住) ——
 {
-  global.window.AQB_FX_CFG = CFG_ON;
-  self.qbHistData = { meta: { interval_s: 30 } };
-  // 拍 A(补点拍, S14 几何): 显示列 = 补点 t=1000 + 真窗口 [1030..1150], _qbPad=1
-  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
-  u._qbPad = 1;
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
-  self._qbCharts = { global: u };
-  self._qbBeatStart("global", u);   // 摆回锚 [1000,1120](S14 同)
-  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }   // clock 150: 摆回中段(rem=(0.75)^3)
-  // 快路捕获面等价(setData 前): 用拍 A 显示列重建取消瞬间视口
-  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
-  ok("S21 捕获: 在途摆回拍取消瞬间视口可重建(rem 中段: min/max 严格介于摆回锚与真窗口之间)",
-    !!inh && inh.min > 1000 && inh.min < 1030 && inh.max > 1120 && inh.max < 1150);
-  const midMin = inh.min;
-  // 对账 GET 落袋(快路模拟): 列零变化(同几何同值), 补点携带(_qbPad 保持 1)
-  u.data = [[1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]];
-  u._qbPad = 1;
-  const logLenA = u.setScaleLog.length;
-  self._qbBeatStart("global", u, inh);
-  const jx = u.setScaleLog[logLenA];
-  const jy = u.setScaleLog[logLenA + 1];
-  ok("S21 判定帧: 零变化打断强制进摆回门(roll 伪真), 视口摆回继承位 = 打断瞬间视口(零回跳,"
-    + " 旧形态此处会落到含补点全宽 [1000,1150])+ anim 位移 = 剩余位移 + dx0 字段随 dxMin0"
-    + "(纯 min 侧剩余也逐帧提交)+ x/y 钉成对",
-    rafMap.size === 1 && !!jx && jx[0] === "x"
-    && Math.abs(jx[1] - midMin) < 1e-9 && Math.abs(jx[2] - inh.max) < 1e-9
-    && !!jy && jy[0] === "y"
-    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === true
-    && u._qbBeat.anim.pad === 1
-    && Math.abs(u._qbBeat.anim.dxMin0 - (1030 - midMin)) < 1e-9
-    && Math.abs(u._qbBeat.anim.dxN - (1150 - inh.max)) < 1e-9
-    && Math.abs(u._qbBeat.anim.dx0 - u._qbBeat.anim.dxMin0) < 1e-9);
-  const logLenB = u.setScaleLog.length;
-  drain();
-  const xsLog21 = u.setScaleLog.slice(logLenB).filter((r) => r[0] === "x");
-  ok("S21 收敛: 剩余位移滑完(min 从继承位单调滑向真窗起点 1030, 全程无回跳低于继承位)"
-    + " + 补点摘除 _qbPad 归零 + 落回真窗口 5 列",
-    u._qbBeat.anim === null && u._qbPad === 0 && u.setDataCount === 1
-    && xsLog21.length > 2
-    && xsLog21.every((r, i) => i === 0 || r[1] >= xsLog21[i - 1][1] - 1e-9)
-    && xsLog21[0][1] >= midMin - 1e-9 && xsLog21[xsLog21.length - 1][1] > 1020
-    && u.data[0].length === 5 && u.data[0][0] === 1030);
-  self.qbHistData = undefined;
-}
-// —— S24: 方向B真滚动打断(新样本拍打断在途摆回拍: dxN=si 真推进)—— 摆回 max 从打断位
-//          续滑(不回跳旧末样本), min 从继承位续滑, 两端位移各自独立记账(F5 对偶面) ——
-{
-  global.window.AQB_FX_CFG = CFG_ON;
-  self.qbHistData = { meta: { interval_s: 30 } };
-  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
-  u._qbPad = 1;
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
-  u._qbBeat.xN0 = 1120;   // 上一拍真窗末点 1120 -> 拍 A dxN = 30
-  self._qbCharts = { global: u };
-  self._qbBeatStart("global", u);   // 摆回 [1000,1120]
-  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
-  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
-  // 新样本拍打断(尾点 t 1180 推进一格 + 尾值真变化; 窗起点不动 dx0=0)
-  u.data = [[1000, 1030, 1060, 1090, 1120, 1180], [7, 0, 0, 0, 0, 80], [9, 0, 0, 0, 0, 60]];
-  u._qbPad = 1;
-  const logLenC = u.setScaleLog.length;
-  self._qbBeatStart("global", u, inh);
-  const jx24 = u.setScaleLog[logLenC];
-  ok("S24 真滚动打断: 摆回 = 继承视口(min/max 都从打断位续滑 —— max 不回跳旧末样本 1120)"
-    + " + dxN = 剩余 max 位移(1180 - 继承 max)+ 尾值真变化 needsTail 同拍",
-    rafMap.size === 1 && !!jx24 && jx24[0] === "x"
-    && Math.abs(jx24[1] - inh.min) < 1e-9 && Math.abs(jx24[2] - inh.max) < 1e-9
-    && Math.abs(u._qbBeat.anim.dxN - (1180 - inh.max)) < 1e-9
-    && u._qbBeat.anim.needsTail === true && u._qbBeat.anim.needsShift === true);
-  const logLenD = u.setScaleLog.length;
-  drain();
-  const xsLog24 = u.setScaleLog.slice(logLenD).filter((r) => r[0] === "x");
-  ok("S24 收敛: max 缘滑过旧末样本 1150 滑向新末样本 1180(帧循环 x 提交末笔 > 1150)"
-    + " + 尾值 80 真值写回 + 补点摘除落回真窗口 5 列 [1030..1180]",
-    u._qbBeat.anim === null && u.data[1][4] === 80 && u._qbPad === 0
-    && u.data[0].length === 5 && u.data[0][0] === 1030 && u.data[0][4] === 1180
-    && xsLog24.length >= 2 && xsLog24[xsLog24.length - 1][2] > 1150);
-  self.qbHistData = undefined;
-}
-// —— S25: 方向B边界: 换窗(rewin)打断在途摆回拍不继承 —— 几何不连续瞬时落地, 补点随整列
-//          替换丢弃, 继承视口让位原生锚形(继承门 !rewin) ——
-{
-  global.window.AQB_FX_CFG = CFG_ON;
-  self.qbHistData = { meta: { interval_s: 30 } };
-  const u = mkU([1000, 1030, 1060, 1090, 1120, 1150], [7, 0, 0, 0, 0, 30], [9, 0, 0, 0, 0, 60]);
-  u._qbPad = 1;
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  const u = mkU([1000].concat(XS1), [0, 0, 0, 0, 0, 30], [0, 0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 0, 0);   // 锚 1120, 尾 1150 -> delta=30 平移; 双轨零变化(纯 L0)
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
-  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
-  const logLenE = u.setScaleLog.length;
-  // 换窗打断(组距标称 30 -> 60 = 真换档; 换窗整列替换, 补点丢弃 _qbPad=0)
-  self.qbHistData = { meta: { interval_s: 60 } };
-  u.data = [[1000, 1060, 1120, 1180, 1240], [7, 0, 0, 0, 80], [9, 0, 0, 0, 60]];
-  u._qbPad = 0;
-  self._qbBeatStart("global", u, inh);
-  ok("S25 rewin 打断不继承: 瞬时落地零摆回(判定帧零 x/y setScale —— 不摆回继承视口)"
-    + " + anim 无 needsShift + step 重定标 60",
-    u.setScaleLog.length === logLenE
-    && u._qbBeat.anim !== null && u._qbBeat.anim.needsShift === false
-    && u._qbBeat.step === 60);
+  ok("S20b 起拍: 视口落滑动起点 [1000,1120](余量点 1000 恰贴视口左缘 —— 左缘裁剪数据在位)",
+    u.setScaleLog.length === 2 && u.setScaleLog[0][1] === 1000 && u.setScaleLog[0][2] === 1120);
   drain();
-  ok("S25 rewin 打断收敛: fx-only 拍照常收口, 数据落真窗口 5 点", u._qbBeat.anim === null
-    && u.data[0].length === 5 && u.data[0][0] === 1000 && u.data[1][4] === 80);
-  self.qbHistData = undefined;
+  ok("S20b 收敛: setData 交还列全宽 auto [1000,1150] 被显式锚视口 [1030,1150] 覆盖(跨度恰名义窗)"
+    + " —— 收敛帧重申行删除即本断言红(变异盲区封堵)",
+    u._qbBeat.anim === null && u.scales.x.min === 1030 && u.scales.x.max === 1150
+    && u.scales.x.max - u.scales.x.min === SPAN1);
 }
-// —— S26: 方向B纯 min 侧剩余位移(评审轮1 nit 行为化): 翻动拍一几何(S15 同形: dx0>0、
-//          dxN=0)的在途摆回拍被零变化 GET 打断 —— 继承拍 dxN 剩余=0、dxMin0 剩余>0, anim.dx0
-//          = dxMin0 替换是帧循环提交守卫唯一能翻真的臂(缺失即零提交, 视口冻结在继承位直到
-//          收敛帧跳变; S24 拍 A 两侧都动 dxMax 臂可代偿拦不住) ——
-{
-  global.window.AQB_FX_CFG = CFG_ON;
-  self.qbHistData = { meta: { interval_s: 30 } };
-  const u = mkU([1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 6, 30, 60);   // 上一拍真窗 [1000,1150] 6 点(翻动拍一: 起点+1格末点不动)
-  u._qbBeat.xN0 = 1150;
-  self._qbCharts = { global: u };
-  self._qbBeatStart("global", u);        // 拍 A 摆回 [1000,1150](dx0=30, dxN=0)
-  for (let i = 0; i < 3; i++) { nowMs += 50; pump(); }
-  const inh = _qbInheritedViewport(u._qbBeat.anim, u.data[0]);
-  ok("S26 捕获: 纯 min 侧摆回中段视口(max = 旧末样本 1150 恒驻, min 介于 1000 与真窗起点 1030)",
-    !!inh && inh.min > 1000 && inh.min < 1030 && inh.max === 1150);
-  const midMin26 = inh.min;
-  // 零变化 GET 打断(同列同值, 无补点 pad=0)
-  u.data = [[1030, 1060, 1090, 1120, 1150], [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]];
-  u._qbPad = 0;
-  const logLenF = u.setScaleLog.length;
-  self._qbBeatStart("global", u, inh);
-  ok("S26 判定帧: 摆回 = 继承视口(max 恒驻 1150) + anim 位移纯 min 侧(dx0 字段 = dxMin0 剩余"
-    + " —— dxN 剩余=0 下帧循环守卫唯一驱动臂) + 纯 L0(needsTail=false)",
-    rafMap.size === 1
-    && Math.abs(u.setScaleLog[logLenF][1] - midMin26) < 1e-9
-    && u.setScaleLog[logLenF][2] === 1150
-    && u._qbBeat.anim !== null
-    && Math.abs(u._qbBeat.anim.dx0 - (1030 - midMin26)) < 1e-9
-    && Math.abs(u._qbBeat.anim.dx0 - u._qbBeat.anim.dxMin0) < 1e-9
-    && u._qbBeat.anim.dxN === 0
-    && u._qbBeat.anim.needsShift === true && u._qbBeat.anim.needsTail === false);
-  const logLenG = u.setScaleLog.length;
-  drain();
-  const xsLog26 = u.setScaleLog.slice(logLenG).filter((r) => r[0] === "x");
-  ok("S26 收敛: 纯 min 侧剩余滑完(帧循环 x 提交 >= 2 笔且 min 单调滑向真窗起点 1030 —— anim.dx0"
-    + " 替换缺失时本断言 0 提交即红) + 无补点列保持 5 点",
-    u._qbBeat.anim === null && xsLog26.length >= 2
-    && xsLog26.every((r, i) => i === 0 || r[1] >= xsLog26[i - 1][1] - 1e-9)
-    && xsLog26[0][1] >= midMin26 - 1e-9 && xsLog26[xsLog26.length - 1][1] > 1020
-    && u.data[0].length === 5 && u._qbPad === 0);
-  self.qbHistData = undefined;
-}
+  ok("L9c 摘要窗内桶数(schema=2): 余量列不计(t >= 尾t − span_s 现数), 缺 span_s/旧契约回落全列长"
+    + " —— 变异面: 比较符/线常数/回落分支各自变异即红",
+    (() => {
+      const mkVmL = (data) => Object.assign(Object.create(self), { qbHistData: data });
+      const win = { points: [{ t: 1000, up: 1, dl: 2 }, { t: 1010, up: 1, dl: 2 }, { t: 1020, up: 1, dl: 2 }],
+        totals: [], limits: [], meta: { schema: 2, interval_s: 10, span_s: 20 } };
+      const margin = { points: [{ t: 995, up: 1, dl: 2 }].concat(win.points),
+        totals: [], limits: [], meta: { schema: 2, interval_s: 10, span_s: 20 } };
+      const agg = { points: [null, { up: 5 }, null, { up: 7 }], totals: [], limits: [],
+        meta: { interval_s: 3600 } };
+      const r1 = mkVmL(margin)._qbSummaryOf("global");   // 余量点 995 < 1020-20=1000 -> 不计
+      const r2 = mkVmL(agg)._qbSummaryOf("global");      // 旧契约回落全列长 4
+      return !!r1 && r1.buckets === 3 && !!r2 && r2.buckets === 4
+        && mkVmL(win)._qbSummaryOf("global").buckets === 3;
+    })());
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+
 """
 
 
@@ -2075,43 +1900,19 @@ def test_frontend_qb_beat_kernel_battery():
       「动画中悬停 tooltip 取值用例」不再依赖真浏览器) + S13b 显式空值点对照(schema=2 洞位
       {t, dl:null, up:null}: _qbHoverOf 双 null 分支真执行, 空值点不出速率出缺口文案 + 真值点
       照常出速率对照 —— 该分支回退成 !p 时全电池仍绿的变异盲区封堵, 评审 T3-R2)。
-    11. F5 三钉 + 补尾格面(plan 26-11-15-1104 §03 F5/§07 R5/§06 D2; 评审轮1 finding1/2 后
-      判据为「roll = 任一端正向位移且两端 |位移| 均 <= 2 组距」; 变长点列适配 26-11-18-0037
-      阶段 3 —— step = meta 组距标称显式传入, 等距 xs[1]-xs[0] 假设退役, 窗右沿锚末样本):
-      纯函数面 _qbRollJudge(补点拍/翻动拍一 dxN=0/翻动拍二 dx0=0 都不 rewin 且入 roll ——
-      位移在 max 侧; 真换窗 step 变/起点跳位/滚动域外仍 rewin; 2 组距恰边界 roll 保持, 零变化
-      拍两端 0 非滚; J7 变长点列面: 相位抖动不 rewin(step=组距标称非 xs[1]-xs[0])/尾组推进拍
-      dx0=0 dxN=si/组距标称变化 rewin/stepNom 缺席回落真窗首间距)+ _qbPadTailColumns(滚动补
-      滚出真值点 1-2 点、data 列零改写、尾组推进拍(pIdx=0)/换窗/滚动域外不补; J7e 变长点列
-      滚出点数按真值现数/J7f 缺口点照实补)+ 携带门 J6d(kept-pad 静止态: 摆回拍携带旧补点
-      total=pIdx+k 从列首切/非摆回有新增重置 k 点不累积/k=0 只携带不增长)+ 调度器面 S14
-      (补点拍全生命周期: 摆回锚=上一拍收敛视图、收敛帧 slice 摘补点 _qbPad 归零)/S15(翻动拍一
-      L0 照播 + max 锚按 dxN=0 恒驻)/S16(翻动拍二 L0+L1 同拍: 摆回 min 恒驻真窗起点/max 滑
-      一格, 尾值真变化同拍收敛)/S17(状态迁移钉: kept-pad 静止态后首个摆回拍 min = 显示列首点
-      真值, t=0 视口与曲线左端双连续, dxMin0 = 显示列实距按比例退役, 收敛帧全部补点摘除零
-      跳变)/S18(变长点列补点拍: step 取 meta 组距标称, 摆回锚贴列首真值)/S19(尾组推进拍:
-      L0 只滑 max 侧 si + L1 同拍收敛 —— 窗右沿锚末样本)/S20(建图拍底座: 真 _qbChartBuild +
-      桩 uPlot/DOM 全链跑通, 相位抖动列 u._qbBeat.step = meta 组距标称 30 而非 xs[1]-xs[0]=29
-      —— step 初值行回退旧等距形态时首拍 step 抖动 -> 下一拍恒误 rewin -> L0 永不播而纯函数/
-      调度器电池照绿的变异盲区封堵, 评审 T3-R3)+
-      _qbFxShiftGate 摆回门单点(快路 carry 门与判定帧 needsShift 同判据)+ S9 场景改写(真换档
-      = 组距标称变化 + 起点跳位, 点数退役)。
-    12. 方向B打断继承(2026-11-22, 修 26-11-21-1704 数据面修剪后的视口层残留压缩面: 对账 GET
-      落袋撞上在途摆回拍 -> 零变化判定不纠偏 -> 补点滞留含补点全宽一拍采样周期 = 整列 x 向
-      压缩): 纯函数面 _qbBeatVpRem(rem 单点: easeOut + 末帧 ulp 吸附钳, 帧循环与重建共用 ——
-      两处公式漂移即打断回潮)/_qbInheritedViewport(取消瞬间视口重建: t=0 完整摆回锚/
-      clock>=shiftMs 真窗口/中段按 rem 比例/预览与非摆回拍 null/防御 NaN-Inf 与空列/纯函数零
-      mutate)+ 调度器面 S21(零变化打断继承全链: 捕获 -> 判定帧摆回继承位零回跳 -> anim 位移
-      = 剩余位移 + dx0 字段随 dxMin0(纯 min 侧剩余也逐帧提交)-> 收敛摘补点落回真窗口)/
-      S24(真滚动打断: max 侧从打断位续滑不回跳旧末样本, dxN = 剩余 max 位移, 两端独立记账
-      F5 对偶面)/S25(rewin 换窗打断不继承: 几何不连续瞬时落地, 继承门 !rewin)/S26(纯 min
-      侧剩余位移行为化, 评审轮1 nit: 翻动拍一几何被零变化 GET 打断 —— dxN 剩余=0 下 anim.dx0
-      = dxMin0 替换是帧循环提交守卫唯一能翻真的臂, 帧循环 x 提交 >= 2 笔且 min 单调滑向真窗
-      起点, 替换缺失即 0 提交红)。
+    11. 尾锚显式视口(计划 26-11-22-0858 换代; 旧 F5 补尾格/_qbRollJudge/_qbPadTailColumns/
+      方向B打断继承四层退役): 纯函数面 _qbAnchorJudge(锚 = max(st.anchor, tail) 单调 —— 旧窗
+      响应晚到不回拖; 组距标称/名义窗长变化 或 锚位移 > 2 组距滚动域 -> rewin 瞬时; 恰边界
+      slide 保持)+ _qbAnimAnchorAt(在途锚现值单点 —— 帧循环与打断续滑共用, 公式漂移即续滑回跳)
+      + _qbRetainHistory(GET 落地历史保留合并)+ _qbTrimStaleHead 余量线(span+2 组距) + 调度器面
+      S14(零位移打断续滑全链)/S15(真滚动打断 —— 单调锚到新尾)/S16(rewin 打断瞬时落地)/S17
+      (单调锚不回拖)/S18(instant 档瞬时落地目标锚视口 —— 方向A恒定压缩变体随补点退役消失)/
+      S19(建图拍底座: anchor/step/span 初值 + 建图初始视口播种)。
     接缝面(静态钉):
-    a. 续拉快路逐字序(F5): _qbPadTailColumns 单点(jPad 判定带 stepNom = meta 组距标称)->
-      setData 落袋 -> _qbPad 记账 -> 同帧 _qbBeatStart(既有 setData/_qbBeatStart 相邻语义保持);
-    b. L0 视口偏置(t=0 摆回旧位 + 每帧 dx 归零)与收敛帧 setData 交还 auto 的成对在位;
+    a. 续拉快路逐字序(尾锚显式视口): 纯 setData 落袋三列原样 -> 同帧 _qbBeatStart(补点构造/
+      继承捕获退役 —— 打断续滑由判定帧读自身在途锚, 锚不依赖列形状, 无捕获时序约束);
+    b. 显式视口无条件落笔(判定帧 setScale("x", 锚视口) + y 成对钉档)与每帧锚平移
+      (_qbAnimAnchorAt 单点)与收敛帧 setData + 显式视口重申的成对在位;
     c. x 轴右缘刻位过滤 + 标签逐帧现算(issue 26-11-17-0936 三次纠正): 模块级
       _qbDropRightEdgeSplits 建图后挂 axes[0].splits 丢掉 >= vMax-eps 的右缘刻位;
       tick freeze 整体退役, 收敛帧 u.redraw(false, true) 强制轴重算保留;
@@ -2123,11 +1924,12 @@ def test_frontend_qb_beat_kernel_battery():
     h. I3 反向钉: 调度器域零 destroy/new uPlot/零 loading 触碰(逐帧 commit 只走 setScale/redraw);
     i. tooltip 读数面接缝(I4): _qbHoverOf 读 Vue points(d.points[i]) 不读 u.data —— 与 L1 尾点
       插值写面(u.data 绘制面)零交集, 动画期 tooltip 与已落袋真值逐字一致。
-    k. F5 接缝(plan 26-11-15-1104; 变长点列适配 26-11-18-0037 阶段 3): 剥注释后 st.n !== n
-      与 padPrev 全文件零残留(旧裸点数判据与等距记账面不得旁路回潮)/ 判定帧 _qbRollJudge
-      单点(stepNom = meta 组距标称)+ st.step/st.xN0 记账 / 收敛帧 dropPad slice 摘补点 /
-      rescale 收口 _qbPad 归零 / 悬停索引按 _qbPad 扣回(R5: 补点不参与 tooltip 锚)/ yMax
-      扫描真窗口起步(补点不参与纵轴档位)。"""
+    k. 尾锚显式视口反向钉(计划 26-11-22-0858): 剥注释后 _qbRollJudge/_qbPadTailColumns/
+      _qbInheritedViewport/_qbBeatVpRem/_qbPad 全文件零残留(四层退役件不得旁路回潮)/ 判定帧
+      _qbAnchorJudge 单点消费(meta 组距标称/名义窗长)+ st.anchor/step/span 记账 / 收敛帧显式
+      视口重申(dropPad slice 退役) / rescale 显式视口重申 / 悬停索引直通(单列恒等 —— 补点扣减
+      退役) / yMax 全列扫描 + _qbLoad 取数窗口分量(stale 判据双路 + w0 快照)+ 历史保留合并
+      单点(_qbRetainHistory 调用)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     # —— 接缝静态钉 ——
@@ -2136,18 +1938,10 @@ def test_frontend_qb_beat_kernel_battery():
     #    把视口重置成含补点全宽 auto, 之后再读只剩全宽态; 读的是 prev.data[0] = 拍 A 显示列
     #    补点在内)-> setData 落袋 -> _qbPad 记账 -> 同帧起拍带第三参(既有 setData/_qbBeatStart
     #    相邻语义保持)
-    assert re.search(r"const jPad = _qbRollJudge\(prev\._qbBeat, data\.xs, 0, Number\(d\.meta && d\.meta\.interval_s\)\);\n"
-                     r"(?:\s*//[^\n]*\n)*\s*"
-                     r"const inh = _qbInheritedViewport\(prev\._qbBeat && prev\._qbBeat\.anim,\n\s*"
-                     r"prev\.data && prev\.data\[0\]\);\n\s*"
-                     r"const padCols = _qbPadTailColumns\(prev, data, jPad,\n\s*"
-                     r"!reduceF && _qbFxShiftGate\(cfgF, prev, jPad\)\);\n\s*"
-                     r"prev\.setData\(padCols \|\| \[data\.xs, data\.up, data\.dl\]\);\n\s*"
-                     r"prev\._qbPad = padCols \? padCols\[0\]\.length - data\.xs\.length : 0;\n\s*"
-                     r"this\._qbBeatStart\(scope, prev, inh\);", js), \
-        "续拉快路必须走补尾格单点(jPad 判定(stepNom = meta 组距标称) + _qbFxShiftGate 摆回门" \
-        " -> 打断继承捕获(先于 setData, 读 prev.data[0] 拍 A 显示列) -> _qbPadTailColumns 构造)" \
-        " -> setData 落袋 -> _qbPad 记账 -> 同帧 _qbBeatStart 带继承视口(方向B判定帧序)"
+    assert re.search(r"prev\.setData\(\[data\.xs, data\.up, data\.dl\]\);\n\s*"
+                     r"this\._qbBeatStart\(scope, prev\);", js), \
+        "续拉快路必须纯 setData 三列原样落袋 -> 同帧 _qbBeatStart(尾锚显式视口: 补点构造/继承" \
+        "捕获退役 —— 打断续滑由判定帧读自身在途锚, 无捕获时序约束)"
     # b. L0 成对: 判定帧摆回旧位 + 每帧 dx 归零 + 收敛帧 setData 交还 auto;
     #    y 钉成对(I4 纵轴瞬时定档): x 提交会让 uPlot 按偏置可视窗重推 y(vendor qn: Kl.x 非 null
     #    -> An(!0) -> y.auto 重算) —— 起拍与每个 shift 帧的 setScale("x") 必须成对补
@@ -2155,39 +1949,34 @@ def test_frontend_qb_beat_kernel_battery():
     #    range 单点(_qbYRange x _qbYCapOf), 不是显示尾值。
     #    F5 摆回锚在真窗口上(min = xs[pad] - dxMin0(显示列首点真值实距, 补点不计入真窗口),
     #    max = xs[n-1] - dxN —— 尾组推进拍 dx0=0 max 滑 si)
-    start_blk = re.search(r"_qbBeatStart\(scope, u, inherited\) \{\n(.*?)\n    \},", js, re.S)
+    start_blk = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
     assert start_blk, "qb_traffic_chart.js 缺 _qbBeatStart(判定帧开工单点)"
-    assert 'u.setScale("x", { min: xs[pad] - dxMin0, max: xs[n - 1] - dxN });' in start_blk.group(1), \
-        "L0 判定帧必须把视口摆回旧位置(setScale x 偏置, min 锚真窗起点 xs[pad] 计 dxMin0 = " \
-        "显示列首点真值到真窗起点的实距 / max 锚按 dxN —— F5; 变长点列按数据事实计, " \
-        "26-11-18-0037 阶段 3)"
+    assert 'u.setScale("x", { min: vAnchor - j.span, max: vAnchor });' in start_blk.group(1), \
+        "判定帧必须无条件显式落笔锚视口(尾锚显式视口不变量(1): setData 的列全宽 auto 恒偏宽," \
+        "显式视口是唯一真值 —— 含零变化早退拍/reduce 拍; vAnchor = 滑动起点或目标锚)"
     frame_blk = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", js, re.S)
     assert frame_blk, "qb_traffic_chart.js 缺 _qbBeatFrame(每帧推进单点)"
-    assert 'u.setScale("x", { min: xs[a.pad || 0] - dxMin, max: xs[n - 1] - dxMax });' in frame_blk.group(1) \
-        and "const r = _qbBeatVpRem(a);" in frame_blk.group(1) \
-        and "if (dx !== a.lastDx || dxMax !== a.lastDxMax)" in frame_blk.group(1) \
-        and "a.dxMin0 != null ? a.dxMin0 : a.dx0" in frame_blk.group(1), \
-        "L0 每帧按真实毫秒推进: dx = (1 - easeOut(clock/shiftMs)) * dx0 归零式(F5: min 锚按 dxMin0" \
-        " = 显示列首点真值实距/max 锚按 dxMax/提交守卫双侧 —— 评审轮1 finding1/2; 变长点列" \
-        "按数据事实计, 26-11-18-0037 阶段 3; rem 计算单点 _qbBeatVpRem —— 方向B打断继承" \
-        "重建共用, 2026-11-22)"
+    assert 'u.setScale("x", { min: anchor - a.span, max: anchor });' in frame_blk.group(1) \
+        and "const anchor = _qbAnimAnchorAt(a);" in frame_blk.group(1) \
+        and "if (anchor !== a.lastAnchor)" in frame_blk.group(1), \
+        "L0 每帧按真实毫秒推进: anchor = anchorFrom + easeOut(clock/shiftMs) x 位移(两缘同步" \
+        "平移 —— 尾锚显式视口; 提交守卫单锚位; 在途锚单点 _qbAnimAnchorAt 与打断续滑共用)"
     # issue 26-11-17-0936 12:35 根因纠正 + 第五次取证上调阈值: 末帧 rem 极小令 x.min 落在
     # 刻度整数边界前一丁点, uPlot splits 首刻位低一格单帧回跳。帧循环必须把 rem 低于阈值的
     # 残差精确钳零, 且 dx/min/max 三个方向都用钳零后的 r 派生(只钳 dx 会让 min/max 仍带残差)。
     # 真机捕获 clock=425 rem=1.71e-4 越过旧阈值 1e-4 未钳零, 残差 0.011px 却令整条网格线跳
     # 一格 —— 阈值上调 1e-3 覆盖末段两帧(4.05e-4/1.71e-4)提前钳零, 几何偏差 <0.01px。
     fb2 = frame_blk.group(1)
-    assert "const r = _qbBeatVpRem(a);" in fb2 \
-        and "const dx = r * a.dx0;" in fb2 \
-        and "const dxMin = r * (a.dxMin0 != null ? a.dxMin0 : a.dx0);" in fb2 \
-        and "const dxMax = r * (a.dxN != null ? a.dxN : a.dx0);" in fb2, \
-        "L0 末帧 ulp 吸附: rem 须取自单点 _qbBeatVpRem(钳零在单点内), 且 dx/dxMin/dxMax 三个方向" \
-        " 全部用钳零后的 r 派生(issue 26-11-17-0936; 否则残差视口令 splits 首刻位单帧回跳)"
-    vpfn = re.search(r"function _qbBeatVpRem\(a\) \{\n(.*?)\n\}", js, re.S)
-    assert vpfn and "const rem0 = 1 - _qbFxEaseOut(a.clock / a.tl.shiftMs);" in vpfn.group(1) \
-        and "return rem0 < _QB_FX_L0_SNAP_REM ? 0 : rem0;" in vpfn.group(1), \
-        "L0 rem 计算必须单点 _qbBeatVpRem(easeOut + 末帧 ulp 吸附钳在单点内 —— 方向B打断继承" \
-        "重建与帧循环共用, 两处公式漂移即打断回跳)"
+    assert "const anchor = _qbAnimAnchorAt(a);" in fb2 \
+        and "if (anchor !== a.lastAnchor)" in fb2, \
+        "L0 末帧 ulp 吸附: 锚位须取自单点 _qbAnimAnchorAt(钳零在单点内, issue 26-11-17-0936 " \
+        "口径承袭 —— 残差视口令 splits 首刻位单帧回跳)"
+    vpfn = re.search(r"function _qbAnimAnchorAt\(a\) \{\n(.*?)\n\}", js, re.S)
+    assert vpfn and "_qbFxEaseOut(a.clock / a.tl.shiftMs)" in vpfn.group(1) \
+        and "a.anchorFrom + (a.anchorTo - a.anchorFrom) * e" in vpfn.group(1) \
+        and "_QB_FX_L0_SNAP_REM" in vpfn.group(1), \
+        "在途锚现值必须单点 _qbAnimAnchorAt(easeOut + 末帧 ulp 吸附钳在单点内 —— 帧循环与打断" \
+        "续滑共用, 两处公式漂移即续滑回跳)"
     assert "const _QB_FX_L0_SNAP_REM = 1e-3;" in js, \
         "L0 末帧 ulp 吸附阈值常量 _QB_FX_L0_SNAP_REM 缺位或未按第五次取证上调到 1e-3" \
         "(1e-4 不足: 真机 rem=1.71e-4 帧未钳零令 splits 首刻位单帧换格)"
@@ -2195,10 +1984,10 @@ def test_frontend_qb_beat_kernel_battery():
         assert 'u.setScale("y", { min: 0, max: yMax });' in blk or 'u.setScale("y", { min: 0, max: a.yMax });' in blk, \
             f"{name} 缺 y 钉成对(x 提交不配 y 钉 = 动画期纵轴按偏置可视窗重推, I4 纵轴瞬时定档被破)"
     sb, fb = start_blk.group(1), frame_blk.group(1)
-    assert sb.index('u.setScale("x", { min: xs[pad] - dxMin0') \
+    assert sb.index('u.setScale("x", { min: vAnchor - j.span') \
         < sb.index('u.setScale("y", { min: 0, max: yMax });'), \
-        "_qbBeatStart 的 y 钉必须紧跟 x 摆回(同一提交批, 缺 y = 该提交按偏置窗重推 y)"
-    assert fb.index('u.setScale("x", { min: xs[a.pad || 0] - dxMin') \
+        "_qbBeatStart 的 y 钉必须紧跟 x 显式视口(同一提交批, 缺 y = 该提交按可视窗重推 y)"
+    assert fb.index('u.setScale("x", { min: anchor - a.span') \
         < fb.index('u.setScale("y", { min: 0, max: a.yMax });'), \
         "_qbBeatFrame 的 y 钉必须紧跟 x 提交(同一提交批)"
     # 纯数值收敛帧必须先钉 y 再 redraw(S2-a 起 _qbBeatFrame 前段还有次区相位的清理 redraw,
@@ -2212,13 +2001,11 @@ def test_frontend_qb_beat_kernel_battery():
         "y 钉值必须复用建图 range 单点口径(_qbYRange x _qbYCapOf = 真窗档位 yMax, 不是显示尾值)"
     conv_blk = re.search(r"_qbBeatConverge\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
     assert conv_blk, "qb_traffic_chart.js 缺 _qbBeatConverge(收敛帧单点)"
-    assert "u.setData(dropPad" in conv_blk.group(1) \
-        and "? [u.data[0].slice(a.pad), u.data[1].slice(a.pad), u.data[2].slice(a.pad)]" in conv_blk.group(1) \
-        and ": [u.data[0], u.data[1], u.data[2]]);" in conv_blk.group(1), \
-        "收敛帧必须 setData 交还 auto range(uPlot 无持久手动 range, resetScales 默认即重推 auto)" \
-        " —— dropPad 实参形逐字(摆回拍 slice 摘补点/非摆回拍同三列原样交还, 评审轮1 finding5)"
-    assert "dropPad" in conv_blk.group(1) and ".slice(a.pad)" in conv_blk.group(1), \
-        "收敛帧必须按摆回拍摘除头部补点(F5: needsShift 拍 slice(pad) 落回真窗口, 补点出视图)"
+    assert "u.setData([u.data[0], u.data[1], u.data[2]]);" in conv_blk.group(1) \
+        and 'u.setScale("x", { min: st.anchor - st.span, max: st.anchor });' in conv_blk.group(1), \
+        "收敛帧必须 setData 真值写回 + 显式锚视口重申(尾锚显式视口: setData 的 resetScales 交还" \
+        "列全宽 auto 恒偏宽非真值, 必须重申 [st.anchor - st.span, st.anchor] —— 旧 dropPad slice" \
+        " 摘补点随单列恒等退役)"
     assert 'setScale("y"' not in conv_blk.group(1), \
         "收敛帧不得再钉 y(setData 交还 auto 重推的正是真窗档位, 与钉值同值 —— 双钉反而挡住 auto 交还)"
     # c. x 轴右缘刻位过滤 + 标签逐帧现算(issue 26-11-17-0936 第三次纠正): 模块级包装单点
@@ -2238,7 +2025,8 @@ def test_frontend_qb_beat_kernel_battery():
     # issue 26-11-17-0936 二次纠正(保留): L0 末帧钳零后收敛帧 scale 与末帧逐位相同, uPlot
     # 不置轴重算脏标记 -> 本次轴值不刷新。收敛帧必须在 setData 之后强制 mt=true 重算一次。
     assert "u.redraw(false, true);" in conv_body \
-        and conv_body.index("u.setData(dropPad") < conv_body.index("u.redraw(false, true);"), \
+        and conv_body.index("u.setData([u.data[0], u.data[1], u.data[2]]);") \
+        < conv_body.index("u.redraw(false, true);"), \
         "收敛帧 setData 后必须 u.redraw(false, true) 强制重算 axes(scale 未变时 uPlot 不会" \
         "重算 _values, 轴值刷新慢一拍 = issue 26-11-17-0936 二次根因回潮)"
     # d. reduce 短路读有效值单点(on = enabled && !reduce 的 S0-b 产物)
@@ -2278,41 +2066,41 @@ def test_frontend_qb_beat_kernel_battery():
     rb = rescale_blk.group(1)
     assert "st.anim" in rb and "_qbBeatCancel(" in rb, \
         "_qbChartRescale 必须收口在途拍(落真值 + _qbBeatCancel), 再 setData 重排"
-    assert rb.index("_qbBeatCancel(") < rb.index("u.setData(dropPad"), \
-        "_qbChartRescale 的拍收口必须先于 setData(先落真值, 再按新档位重排)"
-    assert "u._qbPad = 0;" in rb, \
-        "_qbChartRescale 收口必须摘除头部补点(F5: 落真窗口, 补点不常驻 —— _qbPad 记账归零)"
-    # k. F5 rewin 判据单点与补尾格面(plan 26-11-15-1104 F5/R5; 变长点列适配 26-11-18-0037
-    #    阶段 3): 旧裸点数比较 st.n !== n 与等距 xs[1]-xs[0] step 假设双退役(剥注释后全文件
-    #    零残留 —— 判据不得从旁路回潮); 判定帧走 _qbRollJudge 单点(stepNom = meta 组距标称 +
-    #    真窗口语义 + dxN 末样本位移分离); 悬停索引按 _qbPad 扣回(补点不参与 tooltip/悬停
-    #    取值锚 —— R5); spawn 的像素密度按真窗口(xs[pad] 起)。
+    assert rb.index("_qbBeatCancel(") < rb.index("u.setData([u.data[0], u.data[1], u.data[2]]);"), \
+        "_qbChartRescale 必须先终止在途拍再 setData(重排不改数据, 终止即落真值不留半帧)"
+    assert 'u.setScale("x", { min: stR.anchor - stR.span, max: stR.anchor });' in rb \
+        and rb.index("u.setData([u.data[0], u.data[1], u.data[2]]);") \
+        < rb.index('u.setScale("x", { min: stR.anchor - stR.span'), \
+        "rescale 的 setData 交还列全宽 auto 后必须重申显式锚视口(尾锚显式视口不变量(1); 旧" \
+        " dropPad slice/_qbPad 归零随单列恒等退役)"
+    # k. 尾锚显式视口反向钉(计划 26-11-22-0858): 四层退役件剥注释后全文件零残留(不得旁路
+    #    回潮) + 判定帧 _qbAnchorJudge 单点消费 + st.anchor/step/span 记账 + 悬停索引直通
+    #    (单列恒等)+ yMax 全列扫描 + _qbLoad 取数窗口分量 + 历史保留合并单点。
     js_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", js, flags=re.S))
-    assert "st.n !== n" not in js_code, \
-        "旧 rewin 裸点数比较(st.n !== n)必须退役(F5: 补点 +1 与非整倍窗 497<->498 相位翻动都会误判换档)"
-    assert "const j = _qbRollJudge(st, xs, pad, Number(dSrc && dSrc.meta && dSrc.meta.interval_s));" in start_blk.group(1) \
-        and "st.step = step;" in start_blk.group(1) and "st.xN0 = j.xN;" in start_blk.group(1), \
-        "判定帧拍几何必须走 _qbRollJudge 单点(stepNom = meta 组距标称 —— 等距 xs[1]-xs[0] " \
-        "step 假设退役, 26-11-18-0037 阶段 3)并记账 step/xN0(F5: 跨拍对照值, 补点不计)"
-    assert "idx - (u._qbPad || 0)" in js, \
-        "悬停索引必须按补点点数扣回真值列(F5/R5: 补点不参与 tooltip/悬停取值锚)"
-    assert "padPrev" not in js_code, \
-        "padPrev 等距记账面必须退役(变长点列摆回 min 锚 = 显示列首点真值实距 dxMin0, " \
-        "26-11-18-0037 阶段 3 —— 按数据事实计, 无等距算术)"
-    assert "const jShift = inherited && !rewin && !j.roll ? Object.assign({}, j, { roll: true }) : j;" in start_blk.group(1) \
-        and "const needsShift = _qbFxShiftGate(cfg, u, jShift);" in start_blk.group(1), \
-        "判定帧摆回门必须走 _qbFxShiftGate 单点(与快路 carry 门同判据 —— 评审轮1 finding2, 判据漂移" \
-        "即状态迁移跳变); 继承拍(方向B 2026-11-22)零变化打断须 roll 伪真进同一门 —— 剩余位移才" \
-        "滑得完/视口才摆回继承位(绕门即零变化打断拍滞留含补点全宽)"
-    assert "let dxMin0 = pad > 0 ? xs[pad] - xs[0] : dx0;" in start_blk.group(1) \
-        and "let dxN = j.dxN;" in start_blk.group(1) \
-        and "dxMin0 = Math.max(0, j.x0 - inherited.min);" in start_blk.group(1) \
-        and "dxN = Math.max(0, j.xN - inherited.max);" in start_blk.group(1), \
-        "方向B继承拍摆回锚必须按剩余位移计量(锚恒真窗口, dxMin0/dxN 换算到继承视口起点 —— " \
-        "判定帧摆回/帧循环/收敛/装饰 tip 四处公式不动, 只换位移; 判据面照用 j.dx0/j.dxN, " \
-        "roll 信号不随继承变)"
-    assert "for (let i = pad; i < n; i++)" in start_blk.group(1), \
-        "yMax 扫描必须从真窗口起步(F5: 头部补点不参与纵轴档位, 与收敛帧交还 auto 同值)"
+    assert "_qbRollJudge" not in js_code and "_qbPadTailColumns" not in js_code \
+        and "_qbInheritedViewport" not in js_code and "_qbBeatVpRem" not in js_code, \
+        "尾锚显式视口退役件(_qbRollJudge/_qbPadTailColumns/_qbInheritedViewport/_qbBeatVpRem)" \
+        "剥注释后全文件零残留(回潮即绕过三不变量)"
+    assert "_qbPad" not in js_code, \
+        "补点记账 u._qbPad 剥注释后零残留(单列恒等: store 列 == 显示列, 补点面不得回潮)"
+    assert "const j = _qbAnchorJudge(st, xs[n - 1]," in start_blk.group(1) \
+        and "st.anchor = j.anchor;" in start_blk.group(1) \
+        and "st.step = j.step;" in start_blk.group(1) and "st.span = j.span;" in start_blk.group(1), \
+        "判定帧必须走 _qbAnchorJudge 单点(meta 组距标称/名义窗长入参)+ st.anchor/step/span " \
+        "跨拍记账(单调锚与换档判据的单点消费面)"
+    assert "this[def.hoverIdx] = idx;" in js \
+        and "idx - (u._qbPad" not in js_code, \
+        "悬停索引必须直通(单列恒等: store 列 == 显示列, 补点扣减面随补点退役)"
+    assert "for (let i = 0; i < n; i++)" in start_blk.group(1), \
+        "yMax 扫描必须全列(单列恒等: 列即真值, 无补点格跳过面)"
+    assert "const anchorPrev = anchorHold != null ? anchorHold : anchorTo - j.delta;" in start_blk.group(1) \
+        and "const disp = anchorTo - anchorPrev;" in start_blk.group(1), \
+        "判定帧视口锚三态必须经 anchorPrev/disp 单点(打断续滑 anchorHold 与上一收敛锚统一" \
+        " —— 全新位移拍与打断续滑拍同路, 旧 roll 伪真继承特判退役)"
+    # 取数窗口分量钉(不变量(3))在 test_frontend_qb_traffic_chart_wiring(_qbLoad 块在该电池钉)。
+    assert "_qbRetainHistory(oldPoints, d.points, keepLine)" in js \
+        and "const oldPoints = this[def.data] && Array.isArray(this[def.data].points)" in js, \
+        "GET 落地必须走历史保留合并单点(旧列快照先于整列替换捕获 —— 余量列回填, G-B 防回潮)"
     # —— 行为面 node 电池(纯函数面 + 调度器行为面各一发) ——
     node = shutil.which("node")
     if not node:
@@ -2613,9 +2401,9 @@ function mkU(xs, up, dl) {
   };
   return u;
 }
-function mkBeat(xs0, n, upShown, dlShown) {
+function mkBeat(anchor, step, span, upShown, dlShown) {
   return {
-    raf: 0, anim: null, xs0, n,
+    raf: 0, anim: null, anchor, step, span,
     tracks: {
       up: { prev: upShown, target: upShown, shown: upShown, delta: 0, level: 0, live: true },
       dl: { prev: dlShown, target: dlShown, shown: dlShown, delta: 0, level: 0, live: true },
@@ -2639,7 +2427,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 // —— F1a: 正常拍(双轨活性, both 默认) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2659,7 +2447,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { enabled: false, on: false });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   ok("F1b enabled=false: 起拍照常但 fx null(装饰零绘制, §05.6)", rafMap.size === 1
@@ -2672,7 +2460,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { on: false });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   ok("F1c reduce 短路: 零 rAF 零 anim(退回快路)", rafMap.size === 0 && u._qbBeat.anim === null);
@@ -2681,7 +2469,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 // —— F1d: 缺口轨(dl null): lead 单轨, 另一轨零反馈(D4/I10) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, null]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2698,7 +2486,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 //          恒 >=Lv.1), 静默面收窄为真 0/缺口轨 —— 原形态(上轨尾值 30>0 delta=0)改由 F1e2 钉。 ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 0, 10);  // up 尾值 0(真 0 -> Lv.0 静默), dl 10->60(delta 0.5 -> Lv.3)
+  u._qbBeat = mkBeat(1120, 30, 120, 0, 10);  // up 尾值 0(真 0 -> Lv.0 静默), dl 10->60(delta 0.5 -> Lv.3)
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2713,7 +2501,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 //          现恒 Lv.1 -> act/次区资格全开 + 装饰清单在场(A1 稳态流每拍反馈的 spawn 等价面) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 10);  // up 尾值 30 与显示值 30 相同(delta=0 -> Lv.1 下限), dl 10->60 Lv.3
+  u._qbBeat = mkBeat(1120, 30, 120, 30, 10);  // up 尾值 30 与显示值 30 相同(delta=0 -> Lv.1 下限), dl 10->60 Lv.3
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2732,7 +2520,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { palette: "calm" });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2750,7 +2538,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { dual: "lead" });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   let fx = u._qbBeat.anim.fx;
@@ -2759,7 +2547,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   drain();
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { dual: "merge" });
   const u2 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u2._qbBeat = mkBeat(1000, 5, 10, 55);
+  u2._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u2 };
   self._qbBeatStart("global", u2);
   fx = u2._qbBeat.anim.fx;
@@ -2773,7 +2561,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 // —— F3: D4 末点 y 间距缩小(实测) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 32.73], [0, 0, 0, 0, 35]);
-  u._qbBeat = mkBeat(1000, 5, 30, 32.73);
+  u._qbBeat = mkBeat(1120, 30, 120, 30, 32.73);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim.fx;
@@ -2792,15 +2580,18 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   up[2879] = 30;
   const dl = new Array(2880).fill(0);
   const u = mkU(xs, up, dl);
-  u._qbBeat = mkBeat(970, 2880, 10, 0);
+  u._qbBeat = mkBeat(87340, 30, 86400, 10, 0);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
-  ok("F4 前置: 无 shift 长窗起拍(零 setScale) + fx 在", u.setScaleLog.length === 0
+  ok("F4 前置: 无 shift 长窗 gate 拒绝 -> 瞬时落地目标锚视口恰一次 x+y([970,87370] —— 旧"
+    + " auto 落地面随显式视口退役, 长窗恒定压缩变体随补点退役消失) + fx 在",
+    u.setScaleLog.length === 2 && u.setScaleLog[0][0] === "x"
+    && u.setScaleLog[0][1] === 970 && u.setScaleLog[0][2] === 87370
     && u._qbBeat.anim && !!u._qbBeat.anim.fx);
   for (let i = 0; i < 2; i++) { nowMs += 50; pump(); }   // clock 0/50: impact 窗(120)内尾点冻结
   ok("F4 装饰帧保障: impact 窗内 L0/L1 零提交帧强制重绘(粒子不冻结在 t=0) + y 钉成对 31.5",
-    u.redrawCount === 2 && u.setScaleLog.length === 2
-    && u.setScaleLog.every((r) => r[0] === "y" && r[2] === 31.5));
+    u.redrawCount === 2 && u.setScaleLog.length === 4
+    && u.setScaleLog.slice(2).every((r) => r[0] === "y" && r[2] === 31.5));
   drain();
   ok("F4 收敛落地(cfg.tail=false 无次区)", u.data[1][2879] === 30 && u._qbBeat.anim === null);
 }
@@ -2813,7 +2604,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   const dl = new Array(2880).fill(0);
   dl[2879] = 20;
   const u = mkU(xs, up, dl);
-  u._qbBeat = mkBeat(970, 2880, 10, 5);
+  u._qbBeat = mkBeat(87340, 30, 86400, 10, 5);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 13; i++) { nowMs += 50; pump(); }   // clock 600: 收敛帧
@@ -2847,7 +2638,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { tail: true });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   for (let i = 0; i < 13; i++) { nowMs += 50; pump(); }
@@ -2863,7 +2654,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { dual: "merge" });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, null]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2887,7 +2678,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { particles: 0.4 });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -2903,7 +2694,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 {
   global.window.AQB_FX_CFG = CFG;
   const u = mkU(XS1, [0, 0, 0, 0, 60], [0, 0, 0, 0, 40]);
-  u._qbBeat = mkBeat(1000, 5, 31.5, 40);
+  u._qbBeat = mkBeat(1120, 30, 120, 31.5, 40);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   const fx = u._qbBeat.anim && u._qbBeat.anim.fx;
@@ -4204,9 +3995,9 @@ function mkU(xs, up, dl) {
   };
   return u;
 }
-function mkBeat(xs0, n, upShown, dlShown) {
+function mkBeat(anchor, step, span, upShown, dlShown) {
   return {
-    raf: 0, anim: null, xs0, n,
+    raf: 0, anim: null, anchor, step, span,
     tracks: {
       up: { prev: upShown, target: upShown, shown: upShown, delta: 0, level: 0, live: true },
       dl: { prev: dlShown, target: dlShown, shown: dlShown, delta: 0, level: 0, live: true },
@@ -4240,15 +4031,17 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— B. 预览一拍 §05.4 第 1 条: 不动窗口(dx ≡ 0, xs / u.scales.x 零变化) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);  // 收敛稳态 + 同网格(无真位移可借道)
+  u._qbBeat = mkBeat(1150, 30, 120, 30, 60);  // 收敛稳态 + 同网格(无真位移可借道)
   self._qbCharts = { global: u };
   const xsBefore = JSON.stringify(u.data[0]);
   const xScaleBefore = { min: u.scales.x.min, max: u.scales.x.max };
   const yMaxBefore = u.scales.y.max;
   self._qbPreviewBeat("global");
   const a = u._qbBeat.anim;
-  ok("B 预览起拍: anim.preview=token(1) + needsShift=false + dx0=0(窗口搬运整体跳过)",
-    !!a && a.preview === 1 && u._qbBeat.previewToken === 1 && a.needsShift === false && a.dx0 === 0);
+  ok("B 预览起拍: anim.preview=token(1) + needsShift=false + 锚零位移(anchorFrom === anchorTo"
+    + " —— 窗口搬运整体跳过)",
+    !!a && a.preview === 1 && u._qbBeat.previewToken === 1 && a.needsShift === false
+    && a.anchorFrom === a.anchorTo);
   ok("B 起拍零 setScale(\"x\") + y 钉在当前档位(零跳轴)", u.setScaleLog.length === 0
     && a.yMax === yMaxBefore);
   ok("B 镜像 fxPreviewing 翻 true(状态行「· 预览中」)", self.fxPreviewing === true);
@@ -4276,7 +4069,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   const run = (particles) => {
     global.window.AQB_FX_CFG = Object.assign({}, CFG, { particles });
     const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-    u._qbBeat = mkBeat(1000, 5, 30, 60);
+    u._qbBeat = mkBeat(1150, 30, 120, 30, 60);
     self._qbCharts = { global: u };
     self._qbPreviewBeat("global");
     const snap = {
@@ -4300,7 +4093,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   // 尾值 0: up 减被钳 0(诚实静默 —— 数值域非负), dl 加照发(Δ 恰 mag)
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { particles: 0.7 });
   const u2 = mkU(XS1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]);
-  u2._qbBeat = mkBeat(1000, 5, 0, 0);
+  u2._qbBeat = mkBeat(1150, 30, 120, 0, 0);
   self._qbCharts = { global: u2 };
   self._qbPreviewBeat("global");
   ok("C 零流量: up target 钳 0 静默(delta 0), dl 加发 Δ=mag(单轨照常)",
@@ -4309,7 +4102,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   drain();
   // 缺口/死轨: 预览不造斜坡(复活直落真值语义, 预览不造假复活)
   const u3 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, null, 60]);
-  u3._qbBeat = mkBeat(1000, 5, 30, 60);
+  u3._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   u3._qbBeat.tracks.up = { prev: null, target: null, shown: null, delta: 0, level: 0, live: false };
   self._qbCharts = { global: u3 };
   self._qbPreviewBeat("global");
@@ -4322,7 +4115,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— D. §05.4 第 3 条: 连点重启(previewToken 递增令旧帧失效, 从当前显示值重起, 不排队不叠加) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  u._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   self._qbCharts = { global: u };
   for (let i = 1; i <= 5; i++) {
     self._qbPreviewBeat("global");
@@ -4344,7 +4137,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— E. §05.4 第 4 条: 真值抢占(判定帧先取消预览态, 真实拍走正常链路 —— 真值永远优先) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  u._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   self._qbCharts = { global: u };
   self._qbPreviewBeat("global");
   for (let i = 0; i < 5; i++) { nowMs += 50; pump(); }  // clock 200: 收敛窗内, 假值已上屏
@@ -4363,7 +4156,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   ok("E 真实拍照常收敛到新真值(链路无残扰)", u.data[1][4] === 40 && u._qbBeat.anim === null);
   // 对偶: 真拍主区在途时预览点击被忽略(§05.4 第 4 条的对偶面)
   const u2 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u2._qbBeat = mkBeat(1000, 5, 10, 55);
+  u2._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u2 };
   self._qbBeatStart("global", u2);
   self._qbPreviewBeat("global");
@@ -4373,7 +4166,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   // 次区装饰相位无真值语义: 可被预览接管
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { tail: true });
   const u3 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u3._qbBeat = mkBeat(1000, 5, 10, 55);
+  u3._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u3 };
   self._qbBeatStart("global", u3);
   for (let i = 0; i < 14; i++) { nowMs += 50; pump(); }  // 有界推进: 过收敛帧(600)入次区相位, 不抽干
@@ -4391,7 +4184,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 {
   const runBeat = (ease, easeFlipAt) => {
     const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-    u._qbBeat = mkBeat(1000, 5, 10, 55);
+    u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
     self._qbCharts = { global: u };
     global.window.AQB_FX_CFG = Object.assign({}, CFG, { ease });
     self._qbBeatStart("global", u);
@@ -4424,7 +4217,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
     && flip.seq.every((v, i) => close(v, out.seq[i], 1e-9)));
   global.window.AQB_FX_CFG = Object.assign({}, CFG, { ease: "linear" });
   const u2 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u2._qbBeat = mkBeat(1000, 5, 10, 55);
+  u2._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u2 };
   self._qbBeatStart("global", u2);
   ok("F 下一拍起用: 新拍 anim.easeF = linear(判定帧重读 cfg.ease)",
@@ -4436,7 +4229,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   drain();
   // 预览同样消费 cfg.ease(起拍冻结)
   const u3 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u3._qbBeat = mkBeat(1000, 5, 30, 60);
+  u3._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   self._qbCharts = { global: u3 };
   self._qbPreviewBeat("global");
   ok("F 预览起拍同款冻结(anim.easeF = linear)", u3._qbBeat.anim.easeF === _qbFxLinear);
@@ -4446,7 +4239,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— G. §05.3 shift 行消费端(S3 补齐): instant = 退回瞬时跳变(对照), 下一拍起 ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   ok("G smooth 基线: L0 过渡在播(x 提交在 + rAF 在)", rafMap.size === 1
@@ -4464,8 +4257,10 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   u.data = [[1060, 1090, 1120, 1150, 1180], [0, 0, 0, 0, 40], [0, 0, 0, 0, 60]];
   const yBefore = u.setScaleLog.length;
   self._qbBeatStart("global", u);
-  ok("G instant 下一拍: L0 过渡不播(零 x 提交)但数据语义不变(真值已落袋, L1 照跑)",
-    u.setScaleLog.length === yBefore && !u.setScaleLog.slice(yBefore).some((r) => r[0] === "x")
+  const xwG = u.setScaleLog.slice(yBefore).filter((r) => r[0] === "x");
+  ok("G instant 下一拍: gate 拒绝 -> 瞬时落地目标锚视口恰一笔 x 提交([1060,1180] —— 旧 auto"
+    + " 落地面随显式视口退役) + 数据语义不变(真值已落袋, L1 照跑)",
+    xwG.length === 1 && xwG[0][1] === 1060 && xwG[0][2] === 1180
     && rafMap.size === 1 && u._qbBeat.anim.needsShift === false);
   drain();
   ok("G instant 拍尾点照常收敛(L1 不受左移策略影响)", u.data[1][4] === 40 && u._qbBeat.anim === null);
@@ -4474,7 +4269,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— H. §05.3 shiftRatio 行: 下一拍起(拍中改不影响在途拍时间线) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   ok("H shiftRatio 0.6 -> 本拍 shiftMs 600", u._qbBeat.anim.tl.shiftMs === 600);
@@ -4507,7 +4302,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   ok("I 面板链前置: CFG.on = true(单一状态源同步面)", global.window.AQB_FX_CFG.on === true
     && global.window.AQB_FX_CFG.enabled === true);
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   s2._qbCharts = { global: u };
   s2._qbBeatStart("global", u);
   ok("I 开关开: 真拍 fx 在(装饰面启用)", u._qbBeat.anim.fx !== null);
@@ -4556,7 +4351,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   const s3 = Object.assign({}, methods, { _qbPollMs: () => 3000, _qbCharts: {}, qbCurScope: "",
     fxPreviewing: false, fxBeatAt: 0, fxNow: 0 });
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 10, 55);
+  u._qbBeat = mkBeat(1120, 30, 120, 10, 55);
   s3._qbCharts = { global: u };
   s3._qbBeatStart("global", u);
   ok("J scope 不对齐不写镜像(qbCurScope=\"\")", s3.fxBeatAt === 0);
@@ -4567,7 +4362,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
   drain();
   const at = s3.fxBeatAt;
   const u2 = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u2._qbBeat = mkBeat(1000, 5, 30, 60);
+  u2._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   s3._qbCharts = { global: u2 };
   s3._qbPreviewBeat("global");
   drain();
@@ -4583,7 +4378,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— K. 预览在途重排(_qbChartRescale): 假 target 不得当真值写回 ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  u._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   self._qbCharts = { global: u };
   self._qbPreviewBeat("global");
   for (let i = 0; i < 5; i++) { nowMs += 50; pump(); }  // clock 200: 收敛窗内, 假值已上屏
@@ -4598,7 +4393,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— L. 面板缺省 scope: fxPreview() 无参走 qbCurScope(处理器面) ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  u._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   self._qbCharts = { global: u };
   self._qbPreviewBeat();
   ok("L 缺省 scope = qbCurScope(面板浮在当前图上)", u._qbBeat.anim !== null
@@ -4609,7 +4404,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 //          取消的是在途预览(假值已上屏)必须走还原核心再退, 不滞留到下次真值落袋 ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 0, 60);
+  u._qbBeat = mkBeat(1150, 30, 120, 0, 60);
   self._qbCharts = { global: u };
   self._qbPreviewBeat("global");  // dl 60->63(贴轴钳, Δ0.05), up 0->0 钳 0 静默
   for (let i = 0; i < 5; i++) { nowMs += 50; pump(); }
@@ -4626,7 +4421,7 @@ ok("A 收敛插值终点/起点与曲线无关(p=1 -> target, p<0 -> prev)",
 // —— M2. 令牌失效门的兜底触发(评审 minor2): 门置空 anim 即同步清镜像, 「· 预览中」不卡常亮 ——
 {
   const u = mkU(XS1, [0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1000, 5, 30, 60);
+  u._qbBeat = mkBeat(1150, 30, 120, 30, 60);
   self._qbCharts = { global: u };
   self._qbPreviewBeat("global");
   u._qbBeat.previewToken = 99;  // 病理预设(状态面, S11 同口径): 令牌已走而 anim 未换 —— 门即触发
@@ -4952,16 +4747,16 @@ def test_frontend_qb_fx_panel_wiring_battery():
     assert js.count("_qbFxEaseOut(a.clock / a.tl.shiftMs)") == 1, \
         "L0 每帧 dx 行恒 easeOut 恰 1 处(单点 _qbBeatVpRem 内 —— 帧循环与打断继承重建共用," \
         " 第二处 easeOut 时钟行回潮即 rem 漂移/打断回潮; ease 只作用于数值收敛, L0 位移不随 ease 变 —— §05.3)"
-    # —— c. shift 消费点(S3 补齐零消费字段; F5 评审轮1 finding2 后 instant 判据随摆回门
-    #    上移 _qbFxShiftGate 单点, 消费仍在判定帧链路 —— 门内判据 + 判定帧调用双钉) ——
-    bsb = re.search(r"_qbBeatStart\(scope, u, inherited\) \{\n(.*?)\n    \},", js, re.S)
-    assert bsb, "缺 _qbBeatStart(判定帧)"
-    gate_blk = re.search(r"function _qbFxShiftGate\(cfg, u, j\) \{\n(.*?)\n\}", js, re.S)
+    # —— c. shift 消费点(S3 补齐零消费字段; instant 判据随滑动门 _qbFxShiftGate 单点,
+    #    消费仍在判定帧链路 —— 门内判据 + 判定帧调用双钉) ——
+    gate_blk = re.search(r"function _qbFxShiftGate\(cfg, u, nWin\) \{\n(.*?)\n\}", js, re.S)
     assert gate_blk and 'cfg.shift === "instant"' in gate_blk.group(1), \
-        "摆回门缺 cfg.shift === instant 消费(面板左移策略对照档零消费即字段贯通缺口)"
-    assert "const needsShift = _qbFxShiftGate(cfg, u, jShift);" in bsb.group(1), \
-        "判定帧缺摆回门消费(instant 判据不在判定帧链路 = 字段贯通缺口; jShift = 方向B继承拍" \
-        " roll 伪真的判定入参 —— 零变化打断照走同一门)"
+        "滑动门缺 cfg.shift === instant 消费(面板左移策略对照档零消费即字段贯通缺口)"
+    bsb = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
+    assert bsb, "缺 _qbBeatStart(判定帧)"
+    assert "const slide = !reduce && !j.rewin && disp > 0 && haveVp && _qbFxShiftGate(cfg, u, nWin);" in bsb.group(1), \
+        "判定帧缺滑动门消费(instant 判据不在判定帧链路 = 字段贯通缺口; 尾锚显式视口下滑动门 = " \
+        " _qbFxShiftGate(cfg, u, nWin), reduce/rewin/零位移/亚可见四分量在位 —— 打断续滑同门)"
     # —— d. 预览接缝(令牌门/末帧分支/重排支路/取消清镜像) ——
     frb = re.search(r"_qbBeatFrame\(scope\) \{\n(.*?)\n    \},", js, re.S)
     assert frb, "缺 _qbBeatFrame"
@@ -5847,9 +5642,10 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
         assert "this.persistQbYAxis(s);" in bd and "this._qbChartRescale(s);" in bd, \
             f"{sig} 必须落盘 + 立即重排 y 轴(不改数据/不重建图, 重取数等于白拉一发)"
     rs = re.search(r"_qbChartRescale\(scope\) \{\n(.*?)\n    \},", js, re.S)
-    assert rs and "u.setData(dropPad > 0" in rs.group(1), \
-        "_qbChartRescale 必须走 setData 重算 scale(重跑 range 与 draw 钩子), 不重建图(F5: 补点列经 slice" \
-        " 摘除后同一 setData 落袋 —— dropPad 实参形逐字, 评审轮1 finding5)"
+    assert rs and "u.setData([u.data[0], u.data[1], u.data[2]]);" in rs.group(1) \
+        and 'u.setScale("x", { min: stR.anchor - stR.span, max: stR.anchor });' in rs.group(1), \
+        "_qbChartRescale 必须走 setData 重算 scale + 显式锚视口重申(重跑 range 与 draw 钩子, 不重建" \
+        "图 —— 旧 dropPad slice 形随单列恒等退役)"
     # 限速随主轮询变化重排(mounted 注册; 全局 mixin 必须先按 this.drawer 守卫剔除假实例)
     assert "this._qbLimitUnwatch = this.$watch(() => this._qbGlobalLimit()" in js, \
         "缺限速变化重排 watcher(长窗轮询可夹到 600s, 不重排则固定上限迟迟不生效)"
@@ -6548,29 +6344,66 @@ const COL = (tEnd, n) => {
     for (let i = 0; i < 600; i++) adv = _qbStreamAppend(big, tbig, { t: i * 10, dl: i, up: i }, 564) || adv;
     ok("A6 超预算(MAN_RAW 500 + 余量 64)从头截断(防御双通道同故障的无界增长)",
       big.length === 564 && big[0].t === 360 && tbig.length === 564);
-    // —— A7: 名义窗头部修剪(2026-11-21, _qbStreamFrame 数据入口面; 修「左移时左边曲线不出
-    //          窗口而是整列 x 向压缩」: 修剪线 = 尾t - meta.span_s, store 列与显示列恒对齐)——
+    // —— A7: 保留窗头部修剪(计划 26-11-22-0858 换代, _qbStreamFrame 数据入口面): 修剪线 =
+    //          尾t - (span_s + margin)(margin = 2x 组距 —— 视口左缘滑动期余量列), store 列与
+    //          显示列恒对齐(单列恒等)——
     {
       const col = COL(1030, 11);   // t = 730..1030 步进 30(跨度 300)
-      col.points = [{ t: 700, dl: 1, up: 2 }].concat(col.points);  // 头部补陈旧点(t=700)
+      col.points = [{ t: 640, dl: 1, up: 2 }].concat(col.points);  // 头部补陈旧点(t=640, 余量线外)
       col.meta = { interval_s: 30, sample_interval_s: 1.5, schema: 2, stride: 1, span_s: 300 };
       const v = mkVm({ qbHistData: col, _qbStreams: { global: { want: true, tail: [], seq: null, lastT: 0 } } });
       let buildCalls = 0;
       v._qbChartBuild = () => { buildCalls += 1; };
       v._qbStreamFrame("global", { seq: 5, points: [{ t: 1060, dl: 9, up: 9 }] });
-      // 尾点 1060 -> 修剪线 760: 头部 700/730 两点剪除(点列 13 -> 11), store 列即修剪列
-      ok("A7 修剪在数据入口面落地: store 列头部陈旧点剪除(首点 700 -> 760)+ 尾点推进(1060)"
-        + " + store/显示列同源(悬停索引零错位) + 建图触发",
-        v.qbHistData.points.length === 11 && v.qbHistData.points[0].t === 760
-        && v.qbHistData.points[10].t === 1060 && buildCalls === 1);
+      // 尾点 1060 -> 保留线 1060 - (300 + 2x30) = 700: 头部 640 剪除(点列 13 -> 12), 700..730
+      // 在余量区内保留(视口左缘滑动期的真实历史裁剪数据), store 列即修剪列
+      ok("A7 修剪在数据入口面落地: store 列头部陈旧点剪除(首点 640 -> 730, 余量线 700 内的"
+        + " 700/730 保留)+ 尾点推进(1060) + store/显示列同源(悬停索引零错位) + 建图触发",
+        v.qbHistData.points.length === 12 && v.qbHistData.points[0].t === 730
+        && v.qbHistData.points[11].t === 1060 && buildCalls === 1);
       const col2 = COL(1030, 11);
-      col2.points = [{ t: 700, dl: 1, up: 2 }].concat(col2.points);   // META 无 span_s: 门关
+      col2.points = [{ t: 640, dl: 1, up: 2 }].concat(col2.points);   // META 无 span_s: 门关
       const v2 = mkVm({ qbHistData: col2, _qbStreams: { global: { want: true, tail: [], seq: null, lastT: 0 } } });
       v2._qbChartBuild = () => {};
       v2._qbStreamFrame("global", { seq: 6, points: [{ t: 1060, dl: 9, up: 9 }] });
-      ok("A7 对照(无 span_s 门关, 旧后端/agg 回落): 列原样不剪(首点 700 保留, 尾点照常追加)",
-        v2.qbHistData.points.length === 13 && v2.qbHistData.points[0].t === 700
+      ok("A7 对照(无 span_s 门关, 旧后端/agg 回落): 列原样不剪(首点 640 保留, 尾点照常追加)",
+        v2.qbHistData.points.length === 13 && v2.qbHistData.points[0].t === 640
         && v2.qbHistData.points[12].t === 1060);
+      // —— A7b GET 落地历史保留合并行为(尾锚显式视口不变量(2)调用面, 评审轮2 minor):
+      //    keepLine = 视口锚 − (span + margin) 锚优先 —— 旧列余量区真值点并入列头 ——
+      {
+        const col3 = COL(1030, 11);   // t = 730..1030
+        col3.meta = { interval_s: 30, sample_interval_s: 1.5, schema: 2, stride: 1, span_s: 300 };
+        const v3 = mkVm({ qbHistData: col3, _qbStreams: { global: { want: true, tail: [], seq: null, lastT: 0 } } });
+        v3._qbChartBuild = () => {};
+        // 锚领先尾(旧窗响应落袋形态): 图记录锚 = 1060(尾 1030 前方 30s)
+        v3._qbCharts = { global: { root: { isConnected: true }, data: col3.points.slice(),
+          _qbBeat: { raf: 0, anim: null, anchor: 1060, step: 30, span: 300, tracks: {} } } };
+        const oldPts3 = [{ t: 610, dl: 1, up: 2 }, { t: 640, dl: 1, up: 2 }, { t: 670, dl: 1, up: 2 }];
+        const fresh3 = { points: buildCol(1000, 4), totals: [], limits: [], meta: col3.meta };
+        function buildCol(t0, n) { const a = []; for (let i = 0; i < n; i++) a.push({ t: t0 + i * 30, dl: 1, up: 2 }); return a; }
+        v3.qbHistData = fresh3;   // 真实流程: _qbLoad 先整列替换再调 _qbStreamOnLoad
+        v3._qbStreamOnLoad("global", fresh3, oldPts3);
+        // keepLine = max(锚 1060, 尾 1090) − 300 − 60 = 730 -> 旧列 610/640/670 全线外不并入,
+        // 新列 [1000..1090] 全保留 —— 锚领先尾时不产生越线并入(负样本)
+        const kept3 = v3.qbHistData.points;
+        ok("A7b 保留合并(锚领先尾): keepLine 按视口锚, 线外旧点不并入(负样本), 列尾推进",
+          kept3.length === fresh3.points.length && kept3[0].t === 1000
+          && kept3[kept3.length - 1].t === 1090);
+        // 正样本: 旧列含余量区真值点(锚 1060, 线 = 1060 − 360 = 700, 旧列 700..730 并入)
+        const v4 = mkVm({ qbHistData: col3, _qbStreams: { global: { want: true, tail: [], seq: null, lastT: 0 } } });
+        v4._qbChartBuild = () => {};
+        v4._qbCharts = { global: { root: { isConnected: true }, data: col3.points.slice(),
+          _qbBeat: { raf: 0, anim: null, anchor: 1060, step: 30, span: 300, tracks: {} } } };
+        const oldPts4 = [{ t: 700, dl: 1, up: 2 }, { t: 715, dl: 1, up: 2 }, { t: 670, dl: 1, up: 2 }];
+        const fresh4 = { points: [{ t: 1060, dl: 1, up: 2 }], totals: [], limits: [], meta: col3.meta };
+        v4.qbHistData = fresh4;   // 同上: 整列替换先行
+        v4._qbStreamOnLoad("global", fresh4, oldPts4);
+        const kept4 = v4.qbHistData.points;
+        ok("A7b 正样本: 旧列余量区点(700/715 >= 线 700)并入列头, 线外(670)弃, 升序不破",
+          kept4.length === 3 && kept4[0].t === 700 && kept4[2].t === 1060
+          && kept4.every((p, i) => i === 0 || p.t > kept4[i - 1].t));
+      }
     }
   }
   // —— B: 开流 wiring(票据 -> EventSource -> live) ——
@@ -7500,15 +7333,15 @@ def test_frontend_qb_fx_anchor_battery():
     assert "ctx.clip();" in anb_code, "锚段 clip 放宽(F5)必须保留(lead 加亮/辉光仍画在画布)"
     assert 'cfg.dual === "lead"' in anb_code, "lead 策略从属轨描边加亮(D3-a)必须保留"
     # —— c. 四处同步点 ——
-    bsb = re.search(r"_qbBeatStart\(scope, u, inherited\) \{\n(.*?)\n    \},", js, re.S)
+    bsb = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
     assert bsb and "this._qbFxAnchorSync(u);" in bsb.group(1), \
         "缺判定帧同步点(_qbBeatStart: 轨道推进后同帧写 —— 覆盖零变化/早退拍)"
     assert bsb.group(1).index("_qbFxTrackNext(tr.dl") < bsb.group(1).index("this._qbFxAnchorSync(u);"), \
         "判定帧同步必须在双轨推进之后(锚位读推进后的显示面)"
     conv_blk = re.search(r"_qbBeatConverge\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
-    assert conv_blk and conv_blk.group(1).index("u.setData(dropPad") \
+    assert conv_blk and conv_blk.group(1).index("u.setData([u.data[0], u.data[1], u.data[2]]);") \
         < conv_blk.group(1).index("this._qbFxAnchorSync(u);"), \
-        "缺收敛帧同步点(_qbBeatConverge: setData 交还 auto 之后写终值)"
+        "缺收敛帧同步点(_qbBeatConverge: setData 真值写回之后写终值)"
     assert anb.group(1).lstrip().startswith("this._qbFxAnchorSync(u);"), \
         "缺锚钩子同步点(_qbDrawFxAnchor 块首行: 每次画布提交顺路重写)"
     ro_m = re.search(r"u\.setSize\(\{ width: w, height: h \}\);.*?this\._qbFxAnchorSync\(u\);", js, re.S)

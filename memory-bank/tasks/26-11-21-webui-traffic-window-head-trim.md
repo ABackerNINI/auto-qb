@@ -5,7 +5,7 @@
 **Updated:** 2026-11-21
 **Summary:** 修 SSE 主路径下流量图左移时整列 x 向压缩、左端不出窗: 显示列两笔对账 GET 之间只增尾不剪头, auto x range 跨度随尾点变宽且 L0 min 恒驻(dx0=0)。修法 = 后端 meta 增 span_s(WINDOW_SPECS 经栅格单点下发)+ 前端 _qbTrimStaleHead 在 _qbStreamFrame 数据入口面按 尾t − span_s 修剪 store 列头部(门 = schema=2 且 span_s>0 且页面可见), 修剪点经 F5 补点通道出窗; 评审 3 轮(检 3/3 修 3)修掉显示面修剪悬停错位(major)与 hidden 期修剪脱拍(minor); 附带 13 处 node 探针 stdin 化(WinError 206 命令行上限)。
 **Topics:** webui-traffic-window-head-trim
-**Refs:** memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/testing/baselines/26-11-21-1704-webui-traffic-window-head-trim.md
+**Refs:** memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/testing/baselines/26-11-21-1704-webui-traffic-window-head-trim.md, memory-bank/tasks/26-11-22-webui-traffic-anchor-viewport.md
 
 ## 本篇只回答
 

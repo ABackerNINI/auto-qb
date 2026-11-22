@@ -18,14 +18,14 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * SSE 尾点逐拍追加), 本用例改钉**变长点列口径下的精确形状 + 刻度只沿边缘演化**:
  *
  * 拍源 = 事件泵(e2e/lib/traffic-stream.mjs): GET 桩静态 31 点列(schema=2/stride=1), 泵
- * 每 2s 一帧(t 每帧 +2)—— 每拍显示列恰 +1 点(事件尾点追加), 判定帧逐拍起。10 拍约 22s
- * 墙钟, @fast 预算内。后端保证面: 分组口径电池(预算/相位 ±1)已钉读侧; 前端判据面 =
- * _qbRollJudge(变长点列: step 不连续/窗起点跳出滚动域才换档, 点数退役)。
+ * 每 2s 一帧(t 每帧 +2)—— 每拍锚推进一格(尾锚显式视口 26-11-22-0858: 视口随锚走, 点数
+ * 有界), 判定帧逐拍起。10 拍约 22s 墙钟, @fast 预算内。后端保证面: 分组口径电池(预算/相位
+ * ±1)已钉读侧; 前端判据面 = _qbAnchorJudge(单调锚 = max(上拍锚, 新尾); 组距标称/名义窗长
+ * 变化或锚位移 > 2 组距 -> rewin)。
  *
  * 断言面(observational, 不碰生产内部变量):
- *   · 点数按桩数据精确推: xsLen === 31 + 已见判定帧数(每帧恰一事件点追加; 判定帧计数 =
- *     st.xN0 distinct —— 26-11-18-0037 起拍记账锚末样本), 且全程在预算内(>0 且 <= 564,
- *     _QB_RAW_POINTS_MAX + _QB_STREAM_TAIL_HEADROOM);
+ *   · 点数有界(窗内 + 余量 2 组距, 修剪线锚优先), 判定帧计数 = st.anchor distinct
+ *     (起拍记账锚末样本);
  *   · 刻度只沿边缘演化: 首刻位逐帧单调不减(min 缘恒驻 = SSE 步进不滚首端; 回跳 = 中段
  *     pop 回潮) + 末刻位逐帧单调不减(max 缘只右移)。逐帧 splits 长度恒定判据退役:
  *     max 缘逐拍推进下 span 增长, uPlot 增量档位跨档时整组刻位重对齐 —— 长度可变是
@@ -57,8 +57,9 @@ function makePayload(base) {
       sample_interval_s: 2,          // F7(26-11-15-1104 D6): 节拍读生效采样间隔, 桩对齐生产契约
       schema: 2,                     // 26-11-18-0037 D6: raw 段窗样本分组契约
       stride: 1,
-      source: 'qb',
-      stale: false,
+      span_s: (N - 1) * 2,           // 26-11-21-1704 起契约必带; 常量(随列形状定, 不随泵涨) ——
+      source: 'qb',                  // 尾锚显式视口(26-11-22-0858)下 st.span 走 meta, 缺键回落
+      stale: false,                  // 列宽(泵追加恒涨) -> min=anchor-span 回缩 = 刻位回跳
       server_started_at: base - 3600,
     },
   };
@@ -118,6 +119,7 @@ function makeHourPayload(base) {
       window: '3d',
       interval_s: HOUR_INTERVAL,
       sample_interval_s: 1.5,        // F7(26-11-15-1104 D6): 轮询节奏=生效采样间隔(全窗统一, 不再吃桶宽)
+      span_s: 3 * 86400,             // 26-11-21-1704 起契约必带(st.span 走 meta, 缺键回落列宽)
       source: 'qb',
       stale: false,
       server_started_at: base - 3600,
@@ -143,7 +145,7 @@ test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: 变长点列精�
       await pumpStart(request, { scope: 'torrent:' + (await readInst(page, 'vm.drawer.hash')), si: 2, t0: pumpT0(2) });
 
       /* 页面侧 rAF 采样器(只读): 每帧记 xsLen / splits 长度与首末刻位 / 判定帧计数
-       * (st.xN0 每 26-11-18-0037 判定帧必新值 —— 末样本推进, distinct 计数即已观察判定
+       * (st.anchor 每判定帧必新值 —— 末样本推进, distinct 计数即已观察判定
        * 帧数); 满 BEATS+1 个判定帧收口。u.axes[0]._splits 是 uPlot 每次绘制回填的刻位真值
        * 数组(网格/轴标同源; 注意 .splits 是生成器函数, vendor 1.6.32 实证: t._splits =
        * t.splits(...) —— 读它不碰生产内部)。 */
@@ -158,9 +160,11 @@ test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: 变长点列精�
           if (u && u.data && u.data.length && sp && sp.length) {
             const xs = u.data[0];
             const st = u._qbBeat;
-            if (st && st.xN0 != null) s.xN0s.add(st.xN0);
+            if (st && st.anchor != null) s.xN0s.add(st.anchor);
             s.frames.push({
               xsLen: xs.length,
+              anchor: st.anchor != null ? st.anchor : null,
+              vMin: u.scales.x.min,
               beats: s.xN0s.size,   // 本帧采样时刻已见判定帧数(逐帧精确推导用)
               splitsLen: sp.length,
               splits0: sp[0],
@@ -181,31 +185,34 @@ test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: 变长点列精�
       expect(frames.length, `采样窗应覆盖 >= ${BEATS + 1} 帧(判定帧全被观察到, 量具没空转)`)
         .toBeGreaterThanOrEqual(BEATS + 1);
 
-      /* A4 本体 1(变长点列精确形状, 逐帧): 点数随判定帧数**恰逐拍 +1** —— 基线取首采样帧
-       * (相位无关: 泵首帧可能在采样器起跑前已建拍, 首帧的 beats/xsLen 即基线), 此后每帧
-       * 点数 = 首帧点数 + (本帧已见判定帧数 - 首帧判定帧数); 全程在事件尾点预算内
-       * (>0 且 <= 564)。点数与判定帧数脱钩(多加/少加点)即合并面回潮。 */
+      /* A4 本体 1(尾锚显式视口 26-11-22-0858 换代): 点数**有界**(窗内 9 点 + 余量 2 组距
+       * 4 点, 修剪线 = 视口锚 − (span+margin) 锚优先) —— 旧「逐拍 +1 单调涨」随修剪线开启
+       * 退役(SSE 步进列只增尾不剪头 = 三轮 x 向压缩补丁的根面, 本轮结构性关断)。逐帧断言
+       * 点数在界内 + 判定帧增量照常 >= BEATS(步进语义 = 锚推进, 不再等于列增长)。 */
       const baseFrame = frames[0];
+      const ptsLo = 30, ptsHi = 36;  // 窗内 (span_s/iv = 30)+1 与 +margin(2x2s=4s -> 2-3 点)余量
       for (const f of frames) {
-        expect(f.xsLen > 0 && f.xsLen <= 564, `点数 ${f.xsLen} 必须在预算内(>0 且 <= 564)`)
+        expect(f.xsLen >= ptsLo && f.xsLen <= ptsHi, `点数 ${f.xsLen} 必须在窗内有界`
+          + ` [${ptsLo}, ${ptsHi}](窗内 31 + 余量 2 组距 —— 旧「逐拍 +1 单调涨」随修剪线开启退役)`)
           .toBe(true);
-        expect(f.xsLen, `点数 ${f.xsLen} 必须 = 首帧 ${baseFrame.xsLen} + (本帧已见判定帧数 `
-          + `${f.beats} - 首帧 ${baseFrame.beats})(每帧恰一事件点追加 —— 脱钩即合并面回潮)`)
-          .toBe(baseFrame.xsLen + f.beats - baseFrame.beats);
       }
       expect(beatsFinal - baseFrame.beats, `已见判定帧数增量应 >= ${BEATS}`)
         .toBeGreaterThanOrEqual(BEATS);
 
-      /* A4 本体 2: 刻度只沿边缘演化 —— 首末刻位逐帧单调不减(min 缘恒驻/max 缘只右移;
-       * 回跳 = 中段 pop 回潮)。逐帧长度恒定判据退役 —— 见文件头断言面注。 */
+      /* A4 本体 2: 刻度只沿边缘演化(尾锚显式视口 26-11-22-0858 口径) —— max 缘逐帧单调不减
+       * (max = 锚, 单调); 首刻位允许 ≤2s 的**单刻度细化凹口**(min = 锚 − span 连续推进跨
+       * 对齐边界时, uPlot 时间轴密度切换会瞬时吐一枚更细的首刻位 —— 间歇自愈非回潮; 真
+       * 「split 集中段 pop」会掉 30s+ 整段, 判据仍拦得住)。逐帧长度恒定判据退役。 */
       expect(frames[0].splitsLen, 'splits 长度必须为正(uPlot 真刻位在场)').toBeGreaterThan(0);
       for (let i = 1; i < frames.length; i++) {
-        expect(frames[i].splits0, `第 ${i} 帧首刻位 ${frames[i].splits0} 不得小于前帧 `
-          + `${frames[i - 1].splits0}(min 缘恒驻下刻位回跳 = split 集中段 pop)`)
-          .toBeGreaterThanOrEqual(frames[i - 1].splits0);
-        expect(frames[i].splitsN, `第 ${i} 帧末刻位 ${frames[i].splitsN} 不得小于前帧 `
-          + `${frames[i - 1].splitsN}(max 缘只右移, 刻位回跳 = 中段 pop)`)
-          .toBeGreaterThanOrEqual(frames[i - 1].splitsN);
+        expect(frames[i].splits0, `第 ${i} 帧首刻位 ${frames[i].splits0} 相对前帧 `
+          + `${frames[i - 1].splits0} 允许 ≤2s 细化凹口(连续滑动的密度切换), 大幅回跳`
+          + `(>2s)= split 集中段 pop 回潮`)
+          .toBeGreaterThanOrEqual(frames[i - 1].splits0 - 2);
+        expect(frames[i].splitsN, `第 ${i} 帧末刻位 ${frames[i].splitsN} 相对前帧 `
+          + `${frames[i - 1].splitsN} 允许 ≤2s 细化凹口(与首刻位同款 —— 连续滑动的密度切换), `
+          + `大幅回跳(>2s)= split 集中段 pop 回潮`)
+          .toBeGreaterThanOrEqual(frames[i - 1].splitsN - 2);
       }
     });
   }
@@ -268,11 +275,11 @@ test.describe('R1 处置 · hour 段窗(3天档)栅格语义: 初始形状 73=72
         .toBeGreaterThan(0);
 
       /* R1 面 3(SSE 步进节奏, 26-11-18-0037): 事件泵每 1.5s 一帧 -> 判定帧每 si 一步进。
-       * 采样器记每次判定帧(xN0 变更)的墙钟, 相邻判定帧间距应落在 si 附近(泵线程/事件
+       * 采样器记每次判定帧(anchor 变更)的墙钟, 相邻判定帧间距应落在 si 附近(泵线程/事件
        * 派发/rAF 采样抖动给 [si-0.5, si+1.1] 余量 —— 判别面 = 长窗一拍迟钝 10 分钟的
        * 旧口径回潮(间距漂到 600s 档)与帧源断裂(间距 > 5s 无判定帧)。t0 锚墙钟 pumpT0
        * (评审 T4b #1): 首帧 t 可远超 hour 列末(墙钟已进下一小时内) -> 首拍 dxN 超滚动域
-       * 瞬时落地, 但判定帧照落(xN0 照写), 间距量测从次拍起, 判据不受影响。 */
+       * 瞬时落地, 但判定帧照落(anchor 照写), 间距量测从次拍起, 判据不受影响。 */
       await waitStreamLive(page);
       await pumpStart(request, {
         scope: 'torrent:' + (await readInst(page, 'vm.drawer.hash')),
@@ -286,11 +293,11 @@ test.describe('R1 处置 · hour 段窗(3天档)栅格语义: 初始形状 73=72
           if (s.done) return;
           const u = vm._qbCharts && vm._qbCharts.torrent;
           const st = u && u._qbBeat;
-          if (st && st.xN0 != null) {
+          if (st && st.anchor != null) {
             if (s.lastXN0 === null) {
-              s.lastXN0 = st.xN0;
-            } else if (st.xN0 !== s.lastXN0) {
-              s.lastXN0 = st.xN0;
+              s.lastXN0 = st.anchor;
+            } else if (st.anchor !== s.lastXN0) {
+              s.lastXN0 = st.anchor;
               s.ats.push(performance.now());
               if (s.ats.length >= 8) s.done = true;
             }
@@ -343,7 +350,7 @@ test.describe('A4-b 每拍 +1 点真实几何 · 末帧刻位不回跳 + 标签�
       return route.fulfill({ json: {
         points, totals: points.map((p) => ({ ...p })), limits: [],
         meta: { window: '1m', interval_s: 1.5, sample_interval_s: 1.5, schema: 2, stride: 1,
-          source: 'qb', stale: false, server_started_at: b0 - 3600 },
+          span_s: (N1 - 1) * 1.5, source: 'qb', stale: false, server_started_at: b0 - 3600 },
       } });
     });
     await openApp(page, SKINS[0]);
@@ -377,7 +384,7 @@ test.describe('A4-b 每拍 +1 点真实几何 · 末帧刻位不回跳 + 标签�
           const st = u._qbBeat;
           const sp = u.axes[0]._splits;
           const lv = u.axes[0]._values;
-          if (sp && sp.length && st && st.xN0 != null) {
+          if (sp && sp.length && st && st.anchor != null) {
             const xs = u.data[0];
             const sig = xs.length + '|' + xs[xs.length - 1];
             s.frames.push({
@@ -388,14 +395,14 @@ test.describe('A4-b 每拍 +1 点真实几何 · 末帧刻位不回跳 + 标签�
               // 持续性错位(freeze 旧病)必红, 单帧读数竞态不假红。
               commit: s.lastSig !== null && sig !== s.lastSig,
               sp0: sp[0], spN: sp[sp.length - 1], spCount: sp.length,
-              xN0: st.xN0, vMin: u.scales.x.min, vMax: u.scales.x.max,
+              anchor: st.anchor, vMin: u.scales.x.min, vMax: u.scales.x.max,
               lab0: lv && lv[0],
               expectLab0: vm._qbTickLabel(sp[0], vm.qbCurScope || 'torrent'),
               frozen: "_qbTickFreeze" in u || !!u._qbTickFreeze,
               pending: "_qbTickFreezePending" in u || !!u._qbTickFreezePending,
             });
             s.lastSig = sig;
-            s.xN0s.add(st.xN0);
+            s.xN0s.add(st.anchor);
             if (s.xN0s.size >= 12) s.done = true;
           }
         }

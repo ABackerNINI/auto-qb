@@ -19,5 +19,5 @@
 | [5](_index-5.md) | `hover-keynav-fight.md` … `kbd-tab-set-sync.md` | 14 |
 | [6](_index-6.md) | `layout-css.md` … `row-shadow-zeroed-by-rowlang.md` | 14 |
 | [7](_index-7.md) | `rowh-sig-and-transition-geometry.md` … `svg-chart-mapping.md` | 14 |
-| [8](_index-8.md) | `table-resizer-handle.md` … `vif-host-node-stale.md` | 14 |
-| [9](_index-9.md) | `vue-reactivity.md` … `wording-audit-surface.md` | 7 |
+| [8](_index-8.md) | `table-resizer-handle.md` … `variant-singleton-shadow.md` | 14 |
+| [9](_index-9.md) | `vif-host-node-stale.md` … `wording-audit-surface.md` | 8 |

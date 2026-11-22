@@ -5,6 +5,7 @@
 **Updated:** 2026-11-22
 **Summary:** 流量图打断拍视口继承(方向B): 摆回拍被对账GET打断零变化拍致补点滞留整列压缩 —— 修 26-11-21-1704(名义窗头部修剪)之后的残留压缩面: 视口/补点层
 **Topics:** webui-traffic-interrupt-inherit
+**Refs:** memory-bank/tasks/26-11-22-webui-traffic-anchor-viewport.md
 
 ## 本篇只回答
 
