@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>方案 · kb.nav 增加「正在处理区」(WORKING): 手动加入 + 终态自动退出</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-nav-working-zone">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-22-1742">
+<meta name="doc-updated" content="26-11-22-1742">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-22-memory-bank-kb-nav-working-zone.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: kb-nav-working-zone</div>
+<h1>方案 · kb.nav 增加「正在处理区」(WORKING): 手动加入 + 终态自动退出</h1>
+<p class="lede">本篇只回答: 怎么在 kb.nav 加一个「正在处理区」—— 手动加入、终态自动移出、位置在置顶区下方、入口在右键菜单, 并与置顶区互不干扰。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-22-1742 · <b>doc-updated</b> 26-11-22-1742 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户请求 + 三轮 grilling 拍板 (D1–D11, 见 §06); 前序只读调研见 §02
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>给 kb.nav 台账视图加一块「正在处理区」(WORKING), 让用户把当前手上在推的件手动收拢到眼前, 而这些件一旦进入终态就自动从工作集里消失。做成算成:</p>
+<ul>
+  <li>右键任一文档可「加入 / 移出正在处理」, 支持多选批量 (与 pin/hide 同款语言)。</li>
+  <li>专区在置顶区正下方, 与主表同栏 (克隆 thead + 共用 ledgerCells), 可折叠、空则隐藏、不受筛选/搜索影响。</li>
+  <li>主表成员用整行左色条标识; 不加第二个行内图标 (用户明确: pin 图标旁再加图标太凌乱)。</li>
+  <li>状态变 <code>Done / Dropped / Superseded</code> 即从 localStorage 工作集永久移除并落盘; 状态改回不自动回区。</li>
+</ul>
+<p><strong>不变量</strong>: 成员资格与文档状态 <code>In Progress</code> 解耦 (不按状态自动填充, 只按手动动作加入); 置顶区与工作专区两份状态独立, 同一件可同时在两区; 30s 轮询只读数据, 不重播种任何用户选择; 隐藏件不进任何内容视图; 数据层 / 服务层零改动。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>今天 kb.nav 台账已有图钉置顶区 (<code>置顶专区 / PINNED</code>, 26-10-04 拍板实施)、隐藏区、多选与右键批量菜单 (26-10-31)。置顶表达「总在眼前」, 隐藏表达「不想看」, 但没有表达「我正在推」的位置 —— 只能靠 <code>In Progress</code> 状态筛, 而状态是流程事实, 不是个人当前关注; 用户要的正是把这两者分开: 手动指定在推的件, 和在推的件一旦结束自动退场。</p>
+<p>调研确认的落点: 全部交互与状态集中在单文件壳 <code>.agents/skills/memory-bank/scripts/nav_page.html</code>, 数据层 (<code>nav_data.py</code> / <code>gen_doc_map.py</code>) 与服务层 (<code>nav_server.py</code>) 零改动。状态词表取自 <code>doc-status</code> / <code>issue-status</code> meta 与 task 的 <code>**Status:**</code>, 数据层统一成 <code>item.status</code>, 现库实际出现 <code>Open / In Progress / Done / Dropped / Superseded</code>。既有守阵见 <code>tests/test_kb_nav_shell.py</code> / <code>tests/test_kb_nav_interaction.py</code> (pin 专区 / 折叠 / 批量 / 隐藏 / 轮询不重播种)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>照 pin 专区的成熟骨架扩一份平行实现, 只在「状态来源」和「退出机制」两处不同: pin 是纯人工偏好, 永不自动退; working 是人工加入 + 终态自动退。拍板 D1–D11 见 §06。</p>
+<table>
+  <thead><tr><th>构件</th><th>做法</th><th>与 pin 的关系</th></tr></thead>
+  <tbody>
+    <tr><td>存储</td><td><code>WORKING_KEY = "mb-nav-working"</code> (link 数组, 顺序即加入序); 折叠态独立键 <code>mb-nav-working-collapsed</code>。只在 boot 装载一次, 读写 try/catch 兜底。</td><td>新增平行键, 不复用 <code>mb-nav-pins</code></td></tr>
+    <tr><td>专区</td><td><code>#workZone</code> 插在置顶区与账务表之间; 标题「处理中 · WORKING (n)」+ 闪电内联 SVG; 克隆主表 thead + 复用 <code>ledgerCells</code>; 折叠按钮仿 <code>pzToggle</code> (aria-expanded / aria-controls); 空则 hidden。</td><td>完全照置顶区 (D8/D11)</td></tr>
+    <tr><td>入口</td><td>右键菜单加 <code>data-act="working"</code>, 复用 <code>ctxTargets</code> 冻结快照、批量灰色 N 后缀、<code>toggleWorkingBatch(links)</code> 幂等分发 + <code>saveWorking()</code> 落盘。</td><td>完全对齐 pin (D7)</td></tr>
+    <tr><td>主表标识</td><td>工作成员整行加 <code>wip</code> 类, 左色条走暖橙 <code>--amber</code> 族 (壳内无 <code>--warn</code>, 真实令牌是 <code>--amber: #e2a55a</code> / <code>--amber-soft</code>); 与 <code>sel</code> / <code>msel</code> 同框时按「多选 &gt; 预览 &gt; 工作」层级让位。不加第二个行内图标。</td><td>有意不同 (D5/D6)</td></tr>
+    <tr><td>自动退出</td><td>boot 装载后 + 每次 <code>derive()</code> 末尾调 <code>pruneTerminalWorking()</code>: 仅对终态成员做删除并落盘, 不新增、不重新入选。</td><td>pin 无此机制 (D2/D3/D4)</td></tr>
+    <tr><td>隐藏件</td><td><code>workingZoneItems()</code> 与 <code>ledgerCells</code> 的 wip 标识都要挡 <code>isHidden(link)</code>, 与 pin 专区同款。</td><td>与 pin 一致</td></tr>
+  </tbody>
+</table>
+<p>范围只做台账视图 (D10): 控制台 / 卡片墙不加专区、不加入口、不加色条。落点仅壳单文件 + 守阵, 数据层与服务层零改动。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <thead><tr><th>步</th><th>内容</th><th>验收判据</th></tr></thead>
+  <tbody>
+    <tr><td>S1 结构与样式</td><td>DOM 插 <code>#workZone</code>; CSS 加 <code>.workzone</code> / <code>.workzone.collapsed</code> / 闪电 SVG / <code>#v-ledger tbody tr.wip</code> 左色条 (层级低于 <code>tr.sel</code> / <code>tr.msel</code>); 常量 <code>WORKING_KEY</code> / <code>WORKING_COLLAPSE_KEY</code> / <code>WORKING_SVG</code>; 全局 <code>S.working</code> / <code>S.workingCollapsed</code>; 工具函数 <code>loadWorking / saveWorking / isWorking / workingZoneItems / pruneTerminalWorking</code>。</td><td>空区整块隐藏; 色条在单选/多选态被正确盖住; 壳仍 dark、零外链、无 emoji 图标。</td></tr>
+    <tr><td>S2 渲染与接线</td><td><code>renderWorkingZone()</code> 画专区 (克隆主表 thead + <code>ledgerCells</code> + 折叠应用); <code>renderLedger()</code> 同时画主表与专区并挂 <code>wip</code>; <code>wire()</code> 右键菜单挂 working 项、专区委托点击 (条目 / 移除 / 折叠); <code>boot()</code> 装载 working 与折叠态各一次。</td><td>右键 / 批量加入退出即时反映到两处; 点闪电外的条目开抽屉链路与 pin 同; 点移除按钮不误开抽屉。</td></tr>
+    <tr><td>S3 终态自动退出</td><td><code>pruneTerminalWorking()</code> 在 boot 与 <code>derive()</code> 末尾各调一次: 取 <code>item.status</code> 命中 <code>Done / Dropped / Superseded</code> 者, 从 <code>S.working</code> 删除; 有变更才 <code>saveWorking()</code>; 同步把移出件剪出 <code>S.multi</code> (与批量隐藏同款边界)。<code>derive()</code> 不做装载、不做新增。</td><td>改状态后下一次 30s 刷新即从专区与主表色条退场, 并从存储里消失; 刷新页面也不回区; 轮询不把用户主动加入的件洗掉。</td></tr>
+    <tr><td>S4 守阵与收尾</td><td>在 <code>tests/test_kb_nav_shell.py</code> / <code>test_kb_nav_interaction.py</code> 头部 docstring「## 测试计划」清单同步新增条目, 并补守阵: 骨架/键/闪电内联 SVG; 装载点唯一且 <code>derive()</code> 只调 prune 不 load; 终态三词触发删除; 双区独立; 隐藏件退场; 色条层级; 折叠态持久化与焦点保留。跑 <code>commands run test.full</code> + <code>commands run kb.nav</code> 人工过一遍 (加入/移出/批量/终态退出/筛掉后专区仍在/30s 轮询/折叠)。</td><td>既有 kb-nav 守阵一条不红; 全绿见 kb.baseline; 新基线切片记录实测数字; 人工验收五项全过。</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 11 项决策已在立项 grilling 三轮中拍板 (D1–D11, 见 §06), 本计划按已拍板口径出稿, 无保留意见。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <thead><tr><th>#</th><th>决策点</th><th>结论</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>成员资格来源</td><td>手动加入; 不按文档状态 <code>In Progress</code> 自动填充</td></tr>
+    <tr><td>D2</td><td>退出语义</td><td>永久移除: 终态成员从 localStorage 工作集删除落盘; 状态改回也不自动回区</td></tr>
+    <tr><td>D3</td><td>终态范围</td><td><code>Done / Dropped / Superseded</code> 三者都退出</td></tr>
+    <tr><td>D4</td><td>检查时机</td><td>boot 一次 + 每次 30s 数据刷新; 刷新只读数据, 不重播种工作集</td></tr>
+    <tr><td>D5</td><td>主表标识</td><td>不加第二个行内图标; 工作成员整行左侧色条 (暖橙 <code>--amber</code> 族)</td></tr>
+    <tr><td>D6</td><td>色条优先级</td><td>多选 &gt; 单击预览 &gt; 工作; 交互态在时盖住工作色条, 退出后仍在</td></tr>
+    <tr><td>D7</td><td>批量处理</td><td>完全对齐 pin: 冻结快照 + 灰色 N + <code>toggleWorkingBatch</code> 幂等 + <code>saveWorking</code></td></tr>
+    <tr><td>D8</td><td>专区形态</td><td>完全照置顶区: 其正下方 / 同栏 / 可折叠持久化 / 空则隐藏 / 不受筛选搜索影响</td></tr>
+    <tr><td>D9</td><td>双区共存</td><td>pin 与 working 独立, 同一件可同时在两区, 取消一处不影响另一处</td></tr>
+    <tr><td>D10</td><td>作用范围</td><td>仅台账视图; 控制台 / 卡片墙不动</td></tr>
+    <tr><td>D11</td><td>标题与图标</td><td>「处理中 · WORKING (n)」+ 闪电内联 SVG (非 emoji, 暗色令牌)</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<ul>
+  <li><strong>轮询重播种</strong> (触发: <code>derive()</code> 里装载 / 新增工作集): 与 <code>pitfalls/web-ui/poll-reseed-filter.md</code> 同源。对策: 装载点全壳唯一且只在 boot; <code>derive()</code> 只调 <code>pruneTerminalWorking()</code> (只删不增), 守阵钉住「不出现 loadWorking / 不新增成员」。</li>
+  <li><strong>终态退出误删</strong> (触发: 状态词表漂移或字段缺失): 只认 <code>item.status</code> 严格等于三个终态词; 无状态 (NO_ST) 不删; 删除以 link 为键, 与加入时同一编码。</li>
+  <li><strong>隐藏件残留</strong> (触发: 加入工作区的件后来被隐藏): <code>workingZoneItems()</code> 与主表 wip 标识都挡 <code>isHidden</code>, 与 <code>test_hidden_items_excluded_from_views</code> 同款守阵扩面。</li>
+  <li><strong>色条层级打架</strong> (触发: 多选 / 预览与工作同框): 选择器特异性按 <code>wip &lt; sel &lt; msel</code> 排列, 组合态 <code>sel.msel</code> 仍胜出; 守阵钉三个选择器与顺序。</li>
+  <li><strong>折叠重画丢焦点</strong> (触发: 折叠走整表重渲染): 折叠只切 <code>collapsed</code> 类与 <code>hidden</code>, 仿 pin 的 <code>applyPinCollapse()</code> 模式新写 <code>applyWorkCollapse()</code>; 原生 button + aria 属性保留键盘操作。</li>
+  <li><strong>emoji / 外链回潮</strong> (触发: 闪电图用 emoji 或图标库): 闪电走内联 SVG 常量, 守阵同时钉 <code>test_shell_no_external_resources</code> 与「无 emoji」。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-22-1742</span> 初版: 用户请求 + 三轮 grilling 拍板 D1–D11; 零代码改动, 计划状态 Open, 待显式开工后实施。</li>
+</ul>
+
+</div>
+</body>
+</html>
