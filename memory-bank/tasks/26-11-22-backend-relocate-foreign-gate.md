@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-22
 **Updated:** 2026-11-22
-**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿) + 七件修复计划 26-11-22-1714 三批落地(c03f09e0/7e56f8c4/f1cd83bb)+ 接缝终审零发现 + 7 issue 翻 Done, 全绿见 kb.baseline; 真机 S4 复验五项待窗口
+**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿) + 七件修复计划 26-11-22-1714 三批落地(153d7c3e/4a51f60a/0a88e51a)+ 接缝终审零发现 + 7 issue 翻 Done, 全绿见 kb.baseline; 真机 S4 复验五项待窗口
 **Topics:** backend-relocate-foreign-gate
-**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html, memory-bank/testing/baselines/26-11-22-2035-backend-relocate-foreign-gate.md
+**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html, memory-bank/testing/baselines/26-11-22-2035-backend-relocate-foreign-gate.md, memory-bank/testing/baselines/26-11-22-2220-backend-relocate-foreign-gate.md
 
 ## 本篇只回答
 
@@ -84,16 +84,16 @@
 
 ### R3 · 七件修复落地 (2026-11-22)
 
-- **开工同步(硬性)**: 本轮会话开工同步行「已同步 839eb6e5(快进 f76cd450→839eb6e5)」+ 本地分支 fix/relocate-gate-closeout 全程本地态(基线 839eb6e5, 提交链 c03f09e0/213fbc9d/7e56f8c4/f1cd83bb)。
+- **开工同步(硬性)**: 本轮会话开工同步行「已同步 839eb6e5(快进 f76cd450→839eb6e5)」+ 本地分支 fix/relocate-gate-closeout 全程本地态(基线 839eb6e5, 提交链 153d7c3e/4a51f60a/0a88e51a 三笔; 原独立小提交, 后经 rebase 撤销 —— 同一修复已由远端 8763ca51 顺带落地)。
 - **三批落地**:
-  - 批1 c03f09e0(F1 等值面假依赖精判+刷屏去重+last_error 文案 + F7 content_root_of 副本收编; 评审 2 轮: 轮1 检 2/2 修 2[测试 scope 假构造 minor+注释表述 nit], 轮2 零 actionable; test.quick 6995P/0F/2S);
-  - 批2 7e56f8c4(F2 差集改累积游标 pending_added_diff+take_added_diff 消费即排空; 评审 2 轮: 轮1 唯一送检发现因 relevance 字段枚举非法被 review.check 机械 REFUTE 弃用[其所指架构附件旧名漂移由本轮总收尾回写消化], 轮2 零发现; 7000P/0F/2S);
-  - 批3 f1cd83bb(F3 daemon 三事件 INFO/F4 在账跳过 DEBUG/F5 回执预告/F6 武装行取 plan.form; 评审 2 轮零发现; 7003P/0F/2S);
+  - 批1 153d7c3e(F1 等值面假依赖精判+刷屏去重+last_error 文案 + F7 content_root_of 副本收编; 评审 2 轮: 轮1 检 2/2 修 2[测试 scope 假构造 minor+注释表述 nit], 轮2 零 actionable; test.quick 6995P/0F/2S);
+  - 批2 4a51f60a(F2 差集改累积游标 pending_added_diff+take_added_diff 消费即排空; 评审 2 轮: 轮1 唯一送检发现因 relevance 字段枚举非法被 review.check 机械 REFUTE 弃用[其所指架构附件旧名漂移由本轮总收尾回写消化], 轮2 零发现; 7000P/0F/2S);
+  - 批3 0a88e51a(F3 daemon 三事件 INFO/F4 在账跳过 DEBUG/F5 回执预告/F6 武装行取 plan.form; 评审 2 轮零发现; 7003P/0F/2S);
 - **接缝终审零发现放行**(四问: 无跨批漂移/无双套机制/测试面无重叠无漏钉/偏离合计守住设计底线);
 - **7 个 issue 全部翻 Done 并回填**实际修法/验证方式/测试数字;
 - **D3 对 0434 D12 的修订留痕**: 0434 拍板「last_added_diff 只读不排空」由本计划 D3 修订为「累积游标+消费即排空」(0434 历史 HTML 按计划 §01 底线 5 不改写, 以本档案为准);
-- **计划外事项**: 基线 839eb6e5 自身档案缺「## 子任务状态表」章节致命名守卫红(经用户拍板补章节, 独立小提交 213fbc9d); F7 实施发现旧副本对 save_path=None 的假值容忍单点没有(3 调用点补 str(x or "") 折假值, test_web_relocate 退化用例当场抓红验证);
+- **计划外事项**: 基线 839eb6e5 自身档案缺「## 子任务状态表」章节致命名守卫红(经用户拍板补章节, 原独立小提交, 后经 rebase 撤销 —— 同一修复已由远端 8763ca51 顺带落地); F7 实施发现旧副本对 save_path=None 的假值容忍单点没有(3 调用点补 str(x or "") 折假值, test_web_relocate 退化用例当场抓红验证);
 - **计划外事项(补覆盖小轮, 用户拍板)**: 总收尾 test.full 覆盖率闸红归因批2 池序依赖 —— relocate_foreign.py:434-436+434 True 臂为既有行, 覆盖确定性被 F2 改变(旧「每拍重算不排空」消失候选下拍必重入池覆盖恒定, F2 后只在消失候选恰留池尾执行, 池序 = frozenset 迭代序 hash 种子随机, 每轮 ~57% 覆盖/43% 缺失抖动); 修法 = test_relocate_foreign.py 新增 test_foreign_drain_vanish_pop_pool_order_independent(_foreign_enqueue 直控池序, 断言池清空+消失不记账+零 qB API 调用, 4/4 轮恒覆盖) + pytest.ini :19 注释对齐 conftest 单点(Windows 99.5/其余 99.0); 终验 rc=0 全绿 7000P/0F/6S(两次复验 148.4s/169.6s), test.quick 7004P/0F/2S。
 - **待办**: 真机 S4 复验清单五项(计划 §04 批3)待用户窗口, 完成后计划翻终态。
 
-- 2026-11-22 20:35 26-11-22-1714 七件修复三批落地(c03f09e0 判定面 F1+F7/7e56f8c4 差集累积游标 F2/f1cd83bb 观测性 F3-F6)+ 接缝终审零发现放行 + 7 issue 翻 Done 回填; 真机 S4 复验五项待窗口
+- 2026-11-22 20:35 26-11-22-1714 七件修复三批落地(153d7c3e 判定面 F1+F7/4a51f60a 差集累积游标 F2/0a88e51a 观测性 F3-F6)+ 接缝终审零发现放行 + 7 issue 翻 Done 回填; 真机 S4 复验五项待窗口

@@ -177,6 +177,9 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   单发不炸, 镜像态不翻动(全量补写面接管)
 - test_foreign_restore_location_only_b_entries: 空位回填只认 kind=B 条目 —— 场景 A hit
   不回填, 异物条目不炸
+- test_foreign_restore_location_guard_arms_no_overwrite: 空位回填守卫面钉测(818 守卫臂
+  三支)—— 回填只补空: 已有位置不被外来 hit 覆盖/场景 A hit 不回填/hit 无位置静默
+  (test.full 既有漂移行清偿)
 - test_foreign_publish_view_skips_non_dict_entries: 发布视图投影 —— notified 账异物条目
   (非 dict)跳过不炸, dict 条目照常投影
 - test_state_foreign_readers_tolerate_missing_state: state 上下文缺失(data 非 dict)——
@@ -1412,7 +1415,7 @@ def test_foreign_pending_vanish_skipped():
     for t in batch:
         client.files_map[t.hash] = _seed()
     store.refresh(batch)
-    mod.on_task_line()  # 预算 10, 池余 5(V10..V14)
+    mod.on_task_line()  # 预算 10, 池余 5(哪 5 条随差集 frozenset 迭代序漂移, 与编号无关)
     assert len(mod._foreign_pending) == 5
     store.refresh([t for t in batch if t.hash not in {"V10", "V11"}])  # 排队期间消失 2 条
     mod.on_task_line()  # 消失候选出队跳过, 其余入账
@@ -2028,6 +2031,35 @@ def test_foreign_restore_location_only_b_entries():
     mod._foreign_restore_location(entry_a, hit)
     assert entry_a["location"] == "", "非场景 B 条目不回填"
     mod._foreign_restore_location("garbage", hit)  # 账面异物: 不炸
+
+
+def test_foreign_restore_location_guard_arms_no_overwrite():
+    """空位回填守卫面钉测(818 守卫臂三支): 回填只补空, 非可回填形态一律静默不动
+
+    test.full 既有漂移行(relocate_foreign.py:818)定向清偿 —— 守卫三分支汇合同一 return:
+    - 条目已有位置: 已锁存的现位置不被外来 hit 覆盖(哪怕 hit.location 不同 —— 回填语义是
+      「补空」不是「刷新」, 刷新走呈现层换代);
+    - 非场景 B hit(场景 A): 不回填(B 条目不被活跃 job 的未核验 dst 遮蔽, docstring 口径);
+    - 场景 B hit 但 hit.location 为空: 无值可填, 静默。
+    判别力: 守卫若退化成无条件赋值, 臂1/臂2 的原值不变断言当场翻红。
+    """
+    mod, _store, _client = _env()
+    hit_b = rf.ForeignHit(
+        hash="RB", save_path=OLD, scenario="B", job_id="jd", phase="done", old_root=OLD, location="R:/elsewhere"
+    )
+    # 臂1: 条目已有位置 —— 不被外来 hit(位置不同)覆盖
+    entry = {"root": ru._norm(OLD), "kind": "B", "job_id": "jd", "phase": "done", "location": NEW, "first_seen": 1.0}
+    mod._foreign_restore_location(entry, hit_b)
+    assert entry["location"] == NEW, "已有位置: 回填不覆盖(只补空)"
+    # 臂2: 空位条目 + 场景 A hit —— 不回填
+    hit_a = _hit(job_id="ja", phase=ru.PHASE_ARMED)
+    entry_a_hit = dict(entry, location="")
+    mod._foreign_restore_location(entry_a_hit, hit_a)
+    assert entry_a_hit["location"] == "", "场景 A hit 不回填 B 条目"
+    # 臂3: 空位条目 + 场景 B hit 但 hit 无位置 —— 无值可填, 静默
+    entry_no_loc = dict(entry, location="")
+    mod._foreign_restore_location(entry_no_loc, replace(hit_b, location=""))
+    assert entry_no_loc["location"] == "", "hit 无位置: 静默不回填"
 
 
 def test_foreign_publish_view_skips_non_dict_entries():

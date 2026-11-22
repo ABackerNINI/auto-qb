@@ -6,7 +6,7 @@
 
 ## 验收数字
 
-`commands run test.full` 实测(2026-11-22, Windows, 终验 rc=0 两次复验 148.4s / 169.6s, 树 = f1cd83bb, 分支 fix/relocate-gate-closeout, 工作树含覆盖小轮未提交件 tests/test_relocate_foreign.py + pytest.ini 与本轮文档件):
+`commands run test.full` 实测(2026-11-22, Windows, 终验 rc=0 两次复验 148.4s / 169.6s, 树 = 0a88e51a[重放后同一树内容], 分支 fix/relocate-gate-closeout, 工作树含覆盖小轮未提交件 tests/test_relocate_foreign.py + pytest.ini 与本轮文档件):
 
 ```
 TOTAL                                                31412    109  11190     94    99%
@@ -14,7 +14,7 @@ TOTAL                                                31412    109  11190     94 
 Required test coverage of 99.5% reached. Total coverage: 99.50%
 ```
 
-全绿 rc=0(测试 7000P/0F/6S, 覆盖率 99.50% 过 Windows 线 99.5, tests/conftest.py `COVERAGE_FLOOR_WIN = 99.5`)。与上基线(26-11-22-1727, 树 = 9f158a3c, 6988P/6S)相比: 两树间 5 笔提交(839eb6e5 文档 / 213fbc9d 文档 / c03f09e0·7e56f8c4·f1cd83bb 三批代码)带入新代码与新测试面(TOTAL Stmts 31384→31412 / Branch 11180→11190), passed 6988→7000(批1-3 新测试面 + 覆盖小轮定向测试), Miss 110→109 / BrPart 94→94 持平, skipped 6→6 持平。passed/skipped 数字自本切片起以本切片为权威。
+全绿 rc=0(测试 7000P/0F/6S, 覆盖率 99.50% 过 Windows 线 99.5, tests/conftest.py `COVERAGE_FLOOR_WIN = 99.5`)。与上基线(26-11-22-1727, 树 = 9f158a3c, 6988P/6S)相比: 两树间 5 笔提交(839eb6e5 文档 / 独立小文档提交一笔[原独立小提交, 后经 rebase 撤销 —— 同一修复已由远端 8763ca51 顺带落地] / 153d7c3e·4a51f60a·0a88e51a 三批代码)带入新代码与新测试面(TOTAL Stmts 31384→31412 / Branch 11180→11190), passed 6988→7000(批1-3 新测试面 + 覆盖小轮定向测试), Miss 110→109 / BrPart 94→94 持平, skipped 6→6 持平。passed/skipped 数字自本切片起以本切片为权威。
 
 ### 覆盖率闸红旧记录的归因与处置(2026-11-22 补覆盖小轮, 用户拍板)
 
@@ -25,7 +25,7 @@ Required test coverage of 99.5% reached. Total coverage: 99.50%
 
 ## 本改动面
 
-本轮 = 计划 26-11-22-1714 总收尾(纯文档 + 测试跑面, 代码树 = f1cd83bb 未动):
+本轮 = 计划 26-11-22-1714 总收尾(纯文档 + 测试跑面, 代码树 = 0a88e51a[重放后同一树内容] 未动):
 
 - 档案 memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md: Summary 精修(修复轮完成态)+ 进度日志追加 R3 修复轮节(三批落地/接缝终审/D3 对 0434 D12 修订留痕/计划外事项/真机 S4 待办)。
 - 架构附件 memory-bank/architecture/attachments/relocate-foreign-torrent.md 侦测(D12)行改写现役口径: 字段 pending_added_diff、语义「累积游标 + take_added_diff 消费即排空」(F2 对 0434 D12「只读不排空」的修订); 历史件(计划 HTML/issue/档案历史轮次/基线快照)一律不改写。
