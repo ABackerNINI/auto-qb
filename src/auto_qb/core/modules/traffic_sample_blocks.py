@@ -390,7 +390,9 @@ class _SampleBlocksMixin:
         """flush 驱动(§3.3): handler 内计时, now - last_flush >= flush_interval -> 全系列
         批量 flush + 聚合封口 + 种子淘汰(§4.2/§4.5 时点)。进程首轮只记时不提前 flush
         (批量优先; 崩溃窗口 <= flush_interval 不变)。暂停期间 handler 不跑、缓冲滞留,
-        恢复后首轮补 flush —— 语义正确。"""
+        恢复后首轮补 flush —— 语义正确。S3 追加(plan 26-11-21-1546 D13): flush 时点末尾
+        过一遍 raw 保留窗清理的每日闸(跨日才 spawn daemon; 只加检查, flush 硬序不动 ——
+        raw 追加 -> agg 封口 -> acc 随批 -> 压实检查全部在 _flush_all_series 内原样)。"""
         if self._last_flush is None:
             self._last_flush = now  # 进程首轮: 只记时点不提前 flush(批量优先)
             return
@@ -399,3 +401,4 @@ class _SampleBlocksMixin:
         self._last_flush = now
         self._flush_all_series()
         self._maybe_evict(conf, now)
+        self._maybe_spawn_raw_prune(now)  # D13 每日闸: 跨日才 spawn 清理 daemon(每天至多一次)

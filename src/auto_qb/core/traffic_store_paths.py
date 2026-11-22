@@ -1,4 +1,8 @@
-"""traffic_store 拆分件: 日期窗口与按天目录/路径解析(R5 move-only, 计划 26-11-02-2342 §07)。"""
+"""traffic_store 拆分件: 日期窗口与按天目录/路径解析(R5 move-only, 计划 26-11-02-2342 §07)。
+
+S3 追加(plan 26-11-21-1546): raw 保留窗保留下界纯函数 v4_raw_keep_floor_date —— 清理
+删除半边的判据单点(公式与读侧对齐论证见其 docstring)。"""
+import math
 import os
 from datetime import datetime, timedelta
 from typing import Optional
@@ -89,6 +93,35 @@ def _validate_date(date_str: str) -> None:
     if not _V4_DATE_RE.fullmatch(date_str or ""):
         raise ValueError(f"非法日期串(须 YYYY-MM-DD): {date_str!r}")
     datetime.strptime(date_str, V4_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
+
+
+def v4_raw_keep_floor_date(now: float, raw_window: float) -> str:
+    """raw 保留窗保留下界(S3, plan 26-11-21-1546 §03.2/D14): 最早保留的本地日期串(含)。
+
+    公式: 保留天数 = ceil(raw_window / 86400) + 3, 保留下界 = date(now) - (保留天数 - 1)
+    = date(now) - ceil(raw_window / 86400) - 2; 删除判据 = 天文件日期串**严格早于**本下界
+    (边界日保留 —— TrafficV4Store.prune_raw_window_days 的唯一判据来源, 单点防漂移)。
+    默认 raw_window = 24H -> 保留 4 个天文件(今日 + 前 3 日, 与计划 §03.2 一致)。
+
+    与读侧的对齐论证(R7 守阵不变量: 保留下界 <= 读侧最大回看起点日期):
+    - 读侧 raw 段窗(WINDOW_NAMES 1m..24h)按天加载的读起点 = 样本分组装配消费下界
+      group_null_lo(t0, si) = t0 - si - 86400(单点在 traffic_group_assembly, 回看界
+      _V4_SEAM_LOOKBACK_S = 86400; 消费方 webui/server/traffic_qb._assemble_series_raw);
+      最大 raw 段窗 24h -> 最早读时刻 = now - 172800 - si(si = 生效采样间隔 =
+      multiplier x main_tick, 校验上界 600s —— 计划 26-11-10-0252 D6)。
+    - 最早读日期 = date(now - 172800 - si): now 当日已过秒数 tod < si 时恰好跨 3 个日界
+      -> 读侧边角 4 个天文件(date(now)-3 .. date(now)), 其余相位 3 个 —— 即计划
+      §03.2「常态 3 个 / t0 相位近日界边角至多 4 个」。
+    - 本下界 = date(now) - ceil - 2 <= date(now) - 3(raw_window >= 1h 恒 ceil >= 1,
+      validate_config 下界), 而 si < 86400 时读侧最早读日期 >= date(now) - 3 —— 下界
+      恒不晚于读侧最早读日期, 清理只删读侧不再需要的文件(守阵测试双面钉住)。
+    - 恢复读集(§04.3): 常态 = 水位日..今日 <= 2 个天文件, +3 余量盖住水位陈旧至
+      date(now) - 3 的重启形态; 且清理 daemon 只在启动恢复完成后 spawn(D13), 恢复
+      读集与删除目标年龄结构性不相交(R5)。
+    """
+    keep_days = math.ceil(raw_window / 86400.0) + 3
+    d = datetime.fromtimestamp(now).date() - timedelta(days=keep_days - 1)
+    return d.strftime(V4_DATE_FORMAT)
 
 
 def v4_date_str_epoch(date_str: str) -> int:

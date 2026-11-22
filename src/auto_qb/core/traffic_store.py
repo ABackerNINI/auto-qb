@@ -66,7 +66,9 @@ gap = 新块 B.start - 上一块末槽; gap <= interval_s + DRIFT_TOL -> 连续,
   用户); 头行门闩 v4, 不设双读。
 - rollup_window 两义合一: hour 行保留窗 + 系列淘汰龄(原「catch-up 补算窗口(= 天文件存活
   期)」一义已随 plan 26-10-12-2010 解耦 —— 启动恢复读集下界 = agg 水位所在日, 不由窗口
-  决定); raw_window 语义不变(raw 段 = 按天整文件存删)。
+  决定); raw_window = raw 段保留窗(S3, plan 26-11-21-1546: 删除半边已实现 ——
+  prune_raw_window_days 删早于保留下界(raw_window 天数 + 3 日界余量)的天文件, 边界日
+  保留; 清理 daemon 至多一天一次, D13)。
 - 淘汰: 系列最新天文件日期距 now 超 rollup_window -> 整目录删除(天文件 + agg.dat), 龄期
   由文件名日期直接算; frozen 照删; 全局结构性豁免。
 - catch-up(§04.3): 重启逐级补算(hour <- 读集内天文件 raw, 下界 = agg 水位所在日(plan
@@ -159,6 +161,7 @@ from .traffic_store_paths import (  # noqa: F401
     v4_epoch_date_str,
     v4_month_epoch,
     v4_next_month_epoch,
+    v4_raw_keep_floor_date,
     v4_rel_dir_to_key,
     v4_root_dir,
     v4_series_dir,
@@ -216,6 +219,12 @@ _BAD_LINE_WARN_GAP_S = 3600.0
 # 告警节流表(键 = 文件标识): 读侧被 Web 线程并发调用, 无锁 —— 竞态最坏多告一条, 无害;
 # 只增则在上界处整体重置(最坏重复告警一次), 不做精细 LRU(不值当)。
 _bad_line_warn_ts: dict = {}
+
+# raw 保留窗清理的删除失败告警节流表(S3, plan 26-11-21-1546; 键 = (data_dir, 系列键)):
+# 同系列恢复(成功删除其任一超窗文件)前只告警一次(_agg_warned 先例)。调用面 = 清理
+# daemon 线程(D13 每日闸至多一天一次), 无锁 —— 竞态最坏多告一条, 无害(与
+# _bad_line_warn_ts 同款模块级表先例)。
+_prune_warned: set = set()
 
 
 def _warn_bad_lines(source: str, bad_lines: int, data_lines: int, torn_tail: bool = False) -> None:
@@ -301,11 +310,16 @@ class TrafficV4Store:
     - trim_agg_hours: hour 行按 rollup_window 裁剪 —— 本层唯一的 tmp+fsync+os.replace
       原子重写点(§04.5, 常规写路径全是追加); 无到龄行零写(same_content 语义);
     - evict_expired_series: 超龄系列整目录删除(天文件 + agg.dat), 龄期由天文件名日期
-      直接算, frozen 照删, 全局豁免。淘汰/裁剪触发点都在采样模块的 flush 时点。
+      直接算, frozen 照删, 全局豁免。淘汰/裁剪触发点都在采样模块的 flush 时点;
+    - prune_raw_window_days: raw 保留窗按天删除(S3, plan 26-11-21-1546)—— 删早于
+      保留下界的天文件(边界日保留), 只删天文件不删目录; 触发点 = 清理 daemon 线程
+      (D13: 启动一次 + flush 时点每日闸, 至多一天一次)。
 
     rollup_window 语义(§06.1 扩一句): hour 行保留窗 + 系列淘汰龄 两义合一, 不再只是 v2 的
     hour 段保留窗(原「catch-up 补算窗口(= 天文件存活期)」一义已随 plan 26-10-12-2010 解耦
-    —— 启动恢复读集下界 = agg 水位所在日, 不由本窗口决定); raw_window 语义不变。
+    —— 启动恢复读集下界 = agg 水位所在日, 不由本窗口决定); raw_window = raw 段保留窗
+    (S3, plan 26-11-21-1546: 删除半边已实现 —— prune_raw_window_days, 口径单点见本文件头
+    「换代语义与保留窗」段)。
     day/month 行永久(D7 不设上限键); 注意 §04.5 淘汰口径是删整目录(天文件 + agg.dat),
     被淘汰系列的月行随目录一并消失 —— 「月行永久」指不按龄裁剪, 非目录删除后仍可读。
 
@@ -569,6 +583,54 @@ class TrafficV4Store:
                 continue
             evicted.append(TORRENT_KEY_PREFIX + name)
         return evicted
+
+    def prune_raw_window_days(self, now: float, raw_window: float) -> tuple:
+        """raw 保留窗清理(S3, plan 26-11-21-1546 D13/D14/D15): 逐系列一次 listdir, 删除
+        日期早于保留下界(v4_raw_keep_floor_date, raw_window 天数 + 3 日界余量)的天文件
+        (边界日保留)。补齐 raw_window 文档契约「按天整文件存删」的删除半边(§02.1 缺陷 4);
+        复用 raw_window 配置键不新增(D14/黄金法则 4)。
+
+        只删天文件: agg.dat / 根级 acc.dat / 非日期名文件一律不碰(v4_day_file_date 过滤,
+        真实日历日期校验含 2 月 30 日等形状陷阱); 天文件删光后目录**不删** —— 目录级删除
+        是 evict_expired_series 的职责, 本方法不复活不报错(evict 并发删净的目录 listdir
+        OSError 跳过)。判据宁可少删: 日期 >= 下界(含边界日)一律保留。
+
+        R5 写面隔离(结构性无锁): 删除目标 = 早于保留下界的天文件; 主线程写面 = 今日文件
+        (+00:00 硬切跨午夜的昨日文件) —— 年龄不相交; 与 Web 读侧(V4DayCache)的句柄竞态
+        = OSError/PermissionError 跳过该文件下一轮重试(R4, evict 删除同款先例)。
+
+        告警节流: 同系列恢复(成功删除其任一超窗文件)前只告警一次(_prune_warned 模块级
+        表, _agg_warned 先例); FileNotFoundError(并发双闸窄角重复删/evict 已删)计入删除
+        (目标态已达成, 幂等 —— 黄金法则 1)。返回 (deleted, skipped) 计数(埋点, 调用方
+        daemon 线程体日志)。调用面 = 清理 daemon 线程(D13: 启动一次 + flush 时点每日闸
+        跨日 spawn, 至多一天一次), 不在主循环线程直调(黄金法则 5)。"""
+        floor = v4_raw_keep_floor_date(now, raw_window)
+        deleted = 0
+        skipped = 0
+        for key in self.series_keys():
+            series_dir = v4_series_dir(self._data_dir, key)
+            try:
+                names = os.listdir(series_dir)
+            except OSError:
+                continue  # 目录消失(evict 并发删净/不可读): 本系列跳过, 不复活不报错
+            for name in names:
+                d = v4_day_file_date(name)
+                if d is None or d >= floor:
+                    continue  # 非日期名(agg.dat 等)与边界日/窗内文件: 不碰
+                try:
+                    os.remove(os.path.join(series_dir, name))
+                    deleted += 1
+                    _prune_warned.discard((self._data_dir, key))  # 恢复: 之后再失败重新告警一次
+                except FileNotFoundError:
+                    deleted += 1  # 并发窄角已被删(evict/双闸重叠): 目标态达成, 幂等
+                except OSError as exc:
+                    skipped += 1
+                    if (self._data_dir, key) not in _prune_warned:
+                        _prune_warned.add((self._data_dir, key))
+                        logger.warning(f"流量存储 | {key} 超保留窗天文件 {name} 删除失败"
+                                       "(读侧占用? 本轮跳过, 下一轮每日闸重试): "
+                                       f"{exc}")
+        return deleted, skipped
 
 
 #: 解析缓存默认字节预算(按天文件文本字节数计, LRU; S3a 实施期定约, §05.2): 解析产物

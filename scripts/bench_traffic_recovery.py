@@ -456,7 +456,11 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
     logging.getLogger().addHandler(fh)
 
     conf = QbTraffic()
-    conf.enabled = True  # 其余字段用配置缺省(rollup_window=30D / raw_window=24H / flush=600s)
+    conf.enabled = True  # 其余字段用配置缺省(rollup_window=30D / flush=600s)
+    # S3(plan 26-11-21-1546)后 start() 尾部 spawn 真 daemon 清理, raw_window 缺省 24H 的
+    # 保留下界 = 语料最旧日 + 0 余量 —— 语料是 harness 复用资产, 跨日复用时最旧语料日会被
+    # 静默删。放大到 30d(不新增键): 语料自身保留不受清理影响, 清理 daemon 照跑零删除。
+    conf.raw_window = 30 * 86400
     ctx = AppContext(SimpleNamespace(data_dir=corpus, qb_traffic=conf, main_tick=2.0))
     mod = TrafficSampleModule(ctx)
 

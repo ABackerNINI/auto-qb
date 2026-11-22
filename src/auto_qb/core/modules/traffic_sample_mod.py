@@ -145,6 +145,14 @@ qbmanager 的 finally 与 state.save 顺序不改。
   之间)或异常 = fallback 回放尾段。快照是加速器不承载正确性; crash 两向: raw 尾 <= 游标
   = 信用已在账本(agg 面比现状完整), raw 尾 > 游标 = 回放小尾段。fallback 重建系列标记
   dirty + 记忆重建游标(首轮 flush 补写账本行, 快路自愈)。
+- raw 保留窗清理(S3, plan 26-11-21-1546 D13/D14/D15): 补齐 raw_window「按天整文件存删」
+  的删除半边 —— 保留下界 = raw_window 天数 + 3 日界余量(单点 v4_raw_keep_floor_date,
+  盖读侧 24h 窗「常态 3 个/边角至多 4 个」天文件与恢复复读 <=2 文件, 不变量
+  「保留下界 <= 读侧最大回看起点」守阵钉住); 删除面 = prune_raw_window_days(逐系列
+  一次 listdir, 只删天文件, OSError 跳过下轮重试)。调度 = 启动恢复完成后 spawn 清理
+  daemon 一次 + flush 时点每日闸(_maybe_flush_all 末尾跨日检查内存日期标记, 每天至多
+  一次成功 spawn; dry_run 不 spawn); daemon 自终止不持共享结构, 与主线程写面年龄
+  结构性不相交(R5)。不新增配置键(D14 复用 raw_window)。
 - dry_run: 累计器与水位封口内存照常推进; agg append 与裁剪/淘汰写操作静默跳过;
   stop() 聚合封口随 dry_run 短路; start() 恢复(catch-up 有写)dry_run 整体跳过。
 
@@ -187,6 +195,7 @@ traffic_sample_events.py(plan 26-11-18-0037 阶段 2: per-tick 观测捕获 + �
 """
 import logging
 import math
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -289,6 +298,11 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
         self._agg_warned: set = set()
         # 种子按龄淘汰上次扫描时点(节流 EVICT_CHECK_INTERVAL_S, §4.5)
         self._last_evict_check: Optional[float] = None
+        # ---- raw 保留窗清理调度(S3, plan 26-11-21-1546 D13) ----
+        # 每日闸内存日期标记(最近一次成功 spawn 清理 daemon 的本地日期串; None = 本进程
+        # 尚未 spawn 过): 跨日才 spawn(D13 每天至多一次), 主循环线程独占(黄金法则 5);
+        # daemon 线程不读写本标记, 也不持其它共享结构(见 _maybe_spawn_raw_prune 的 R5 论证)
+        self._raw_prune_last_date: Optional[str] = None
         # ---- 恢复埋点(§4.3, plan 26-10-12-2010: 消除静默, 读集有界可机检) ----
         # 上次 _recover_aggregates 的读集计数: 逐系列 {key: {"day_dates": 读集日期串,
         #   "bound": 下界来源("watermark" 水位日 / "fallback" 保留窗兜底 / "ledger"
@@ -343,6 +357,70 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, _SampleEventsMixi
             # 聚合恢复 + catch-up(§4.3, 先于任何采样/flush; 含恢复末尾的 hour 裁剪 ——
             # 硬序: catch-up 先于裁剪)。dry_run 跳过(catch-up 有写, 恢复无内存意义)。
             self._recover_aggregates()
+            # D13(S3, plan 26-11-21-1546): 启动恢复完成后 spawn raw 保留窗清理一次
+            # (daemon 自终止; 每日闸标记同步置位 —— 当日 flush 时点不再重 spawn;
+            # spawn 恒在恢复之后 -> 恢复读集与删除目标年龄不相交, R5)
+            self._maybe_spawn_raw_prune()
+
+    # ---------- raw 保留窗清理调度(S3, D13: 启动一次 + flush 时点每日闸) ----------
+
+    def _maybe_spawn_raw_prune(self, now: Optional[float] = None) -> bool:
+        """每日闸(D13): 跨日才 spawn 清理 daemon(内存日期标记去重, 每天至多一次成功
+        spawn), 返回是否 spawn。调用面 = start() 尾部(启动恢复完成后一次)与 flush 时点
+        (_maybe_flush_all 末尾 —— 只加一次检查, flush 硬序 raw 追加 -> agg 封口 -> acc
+        随批 -> 压实检查原样不动)。
+
+        R5 论证(清理子线程写面隔离): daemon 只删早于保留下界的天文件
+        (v4_raw_keep_floor_date, 边界日保留), 主线程写面 = 今日文件(+00:00 硬切跨午夜
+        的昨日文件) —— 年龄结构性不相交, 无锁; daemon 不持任何共享内存结构(只读
+        config/data_dir 与 store 引用; store 在两个 spawn 调用点之前已由恢复/flush 在
+        主线程构造完 —— happens-before), 跑完自终止(relocate probe daemon 先例,
+        plan 26-11-10-2350)。
+
+        dry_run / 未启用 / data_dir 空: 不 spawn(黄金法则 2 保守默认 —— 清理属删除类
+        动作)。线程启动失败: 标记不动(未置位), 下轮 flush 重试 —— 启动成功才置标记。"""
+        if not self._persistence_on:
+            return False
+        conf = self._ctx.config.qb_traffic
+        if conf is None or not conf.enabled or not self._ctx.config.data_dir:
+            return False
+        now = self._clock.now() if now is None else now
+        today = v4_epoch_date_str(now)
+        if self._raw_prune_last_date == today:
+            return False  # 同日已 spawn: 每天至多一次(D13)
+        if not self._spawn_raw_prune(now):
+            return False
+        self._raw_prune_last_date = today
+        return True
+
+    def _spawn_raw_prune(self, now: float) -> bool:
+        """spawn 清理 daemon 线程(name 便于诊断; daemon 自终止, 优雅退出不 join)。
+        start 失败(OS 线程资源耗尽等)告警返回 False —— relocate-probe 同款口径(不收
+        BaseException: 本调用在主循环线程面, KeyboardInterrupt/SystemExit 原样传播)。"""
+        try:
+            threading.Thread(target=self._raw_prune_worker, args=(now, ), name="traffic-raw-prune", daemon=True).start()
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"流量采样 | raw 保留窗清理线程启动失败(下轮 flush 重试): {type(e).__name__}: {e}")
+            return False
+
+    def _raw_prune_worker(self, now: float) -> None:
+        """清理 daemon 线程体(D13): 保留下界用 spawn 时刻的 now 计算(不用线程内现取 ——
+        跨午夜窄角下与 gate 判据同源, 删除面不因线程调度相位前移)。线程内全 catch: 任何
+        异常只告警不上抛(daemon 线程异常不带进程), 下一轮每日闸重试。
+        prune_raw_window_days 只读 store 路径信息 + 删超窗天文件(R4/R5 论证见其 docstring),
+        不读写本模块任何内存结构(buffers/游程/累计器等全不触)。"""
+        try:
+            conf = self._ctx.config.qb_traffic
+            if conf is None or not conf.enabled or not self._ctx.config.data_dir:
+                return
+            deleted, skipped = self._get_v4_store().prune_raw_window_days(now, conf.raw_window)
+            if deleted or skipped:
+                logger.info(
+                    f"流量采样 | raw 保留窗清理: 删除超窗天文件 {deleted} 个" + (f", 读侧占用跳过 {skipped} 个(下一轮每日闸重试)" if skipped else "")
+                )
+        except Exception as e:  # noqa: BLE001 —— daemon 线程体全兜底(异常不带进程)
+            logger.warning(f"流量采样 | raw 保留窗清理线程异常(下一轮每日闸重试): {type(e).__name__}: {e}")
 
     # ---------- 时钟线(任务线节拍): 采样驱动 ----------
 
