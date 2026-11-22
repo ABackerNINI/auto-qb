@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="foreign 活到达差集漏接: 差集窗口与 2S relocate tick 拍频错位单事件漏接">
 <meta name="issue-summary" content="store.last_added_diff 每拍覆盖重算, 差集窗口=一个 sync 周期(1.5s), 消费在 2S relocate tick, 拍频错位单事件漏接约 1/4(S4 实测探针A两漏/探针B一中)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-22-0905-bug-relocate-foreign-added-diff-race-miss</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-22 09:05</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">S4 真机验收(计划 26-11-21-1600, 测试 qB 环境三窗)</div></div>
 </div>
 
@@ -119,7 +119,23 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-22 09:05 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充（2026-11-22 实施完成，计划 26-11-22-1714 批2）</h3>
+  <p><strong>实际修法</strong>：<code>store.py</code> 差集字段 <code>last_added_diff</code> 改名
+    <code>pending_added_diff</code> 且覆盖式窗口改累积游标 —— 拍首清空删除（零变化轮/早退轮不再抹账，
+    结构根因），轮末改 <code>pending | added</code> 累积（基线轮整体不计/断连清空/重连基线语义保留），
+    新方法 <code>take_added_diff</code> 返回并清空（主循环单线程内消费，黄金法则 5）；
+    <code>relocate_foreign</code> 消费点改 <code>take_added_diff</code>（getattr 防御形态保留，
+    替身无方法按空差集），docstring「只读不排空」改「消费即排空（D12 0434 拍板由计划
+    26-11-22-1714 D3 修订）」。</p>
+  <p><strong>验证方式</strong>：<code>tests/test_sync.py</code> 既有 5 条改名改语义（其中
+    <code>empty_on_zero_change</code> 断言翻转为累积保留 —— 语义修正非回归）+ 新增 5 条
+    （多拍累积 / take 排空后清空 / 断连清空 / 重连基线不计 / 拍频错位模拟两个 sync-only 轮夹一个
+    tick 事件不丢，对旧覆盖式实现必红）；评审 1 轮。</p>
+  <p><strong>验证数字</strong>：<code>commands run test.quick</code> = 7000 passed / 0 failed /
+    2 skipped（67.73s 实测）。</p>
 </section>
 
 <footer>

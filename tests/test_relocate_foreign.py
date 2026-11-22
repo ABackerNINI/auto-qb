@@ -1,6 +1,7 @@
 """外部旧路径种子侦测与处置面(ForeignMixin, 计划 26-11-20-0434; T2/S2 侦测, T3/S3 纳入, T5/S5 场景 B 通知)
 
-侦测 = 每拍消费同步层原始 added 差集(store.last_added_diff, T1 批地基: 未过 tracker 匹配门)
+侦测 = 每拍消费同步层原始 added 差集(store.pending_added_diff 经 take_added_diff 消费即排空,
+T1 批地基: 未过 tracker 匹配门)
 + 四时机全量兜底(启动首轮 / job arm / foreign_torrent 翻 true / qB 重连首轮), 无周期兜底(D13)。
 候选 = save_path 归一恰等活跃 job 旧根(场景 A)或终态账 done 直连边旧根(场景 B); 命中后
 比对文件清单(D4, 单点复用 _file_map/_plan_files 口径), **一致才记账分类, 不一致只告警**。
@@ -15,7 +16,8 @@
 WebUI 呈现出口 = foreign_notified_view 只读发布视图(内容不变不换代, 变化 mark_dirty(full))。
 
 环境口径: 裸 RelocateModule(仿 relocate_exec_support._bare_mod)+ 真 TorrentStore —— 差集
-语义(基线轮不算/first-seen/零变化轮清空)由 test_sync.py 的 S2a 五测承重, 本文件只消费。
+语义(基线轮不算/first-seen/零变化轮累积保留/take 消费即排空)由 test_sync.py 的 S2a+F2
+十测承重, 本文件只消费。
 job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱动(含相位机空转,
 无 job / 无 rt flag / pending_tag 空 = 零副作用, 与 test_relocate_exec_* 的裸模块同判)。
 
@@ -85,8 +87,8 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   与库内存量总数无关(结构性断言: spy 计数)
 - test_foreign_fifo_bounded_split_across_ticks: 单拍有界 FIFO —— 25 条候选按预算(10/拍)
   分三拍消化, 池内余量跨拍续; 逐拍「新入账 keys == 捕获池序最前一段」断言钉死「最老先
-  处理」(差集是散布序 frozenset, 池序跨拍消费才是 FIFO 承重面); 残值重入池的重复候选由
-  notified 去重兜住(零 API 成本)
+  处理」(差集是散布序 frozenset, 池序跨拍消费才是 FIFO 承重面); 游标消费即排空(F2),
+  无同差集残值重入, notified 去重兜底保留
 - test_foreign_pending_vanish_skipped: 池内候选排队期间消失 -> 出队跳过不炸
 - test_foreign_pending_cap_drops_oldest: 候选池上限钉测 —— _FOREIGN_PENDING_MAX 压到 3 灌
   5 候选: 池恒 <= 上限, 被丢的是插入序最老者, 逐条带 WARNING(T2 评审钉测)
@@ -416,8 +418,8 @@ def test_foreign_diff_consumes_unmatched_tracker_torrent():
     # 的 tracker 门在 tracker_conf 缺失时会跳过它, 但差集在门之前现算(T1), 侦测面照常消费)
     t = FakeTorrent(hash="NT", name="IYUU", save_path=OLD, category="iyuu", state="stoppedUP")
     client.files_map["NT"] = _seed()
-    added, _removed = store.refresh([t])  # 重连式全量: diff = {NT}
-    assert added == ["NT"] and store.last_added_diff == frozenset({"NT"})
+    added, _removed = store.refresh([t])  # 重连式全量: 游标累积 = {NT}
+    assert added == ["NT"] and store.pending_added_diff == frozenset({"NT"})
     mod.on_task_line()  # tick2: 差集 -> 池 -> 命中 -> 记账
     notified = mod._state_foreign_notified()
     assert notified["NT"]["kind"] == "B" and notified["NT"]["location"] == NEW
@@ -478,7 +480,7 @@ def test_foreign_forms_consistent_list_required():
         )
         assert "同内容根目录下内容不一致, 疑似外部工具重加了不同版本" in mx_msg
         assert "同目录异内容" not in mx_msg  # 旧口径字面退役
-        mod.on_task_line()  # 差集残值重入池: notified 去重, 不重告
+        mod.on_task_line()  # 游标已排空(F2 消费即排空): 无重入, notified 去重兜底保留, 不重告
         assert _mismatch_n() == 1 and _notice_n() == 1
         old_first_seen = notified["OK"]["first_seen"]
         store.refresh([])  # 种子全部消失
@@ -1338,7 +1340,7 @@ def test_foreign_diff_consumption_is_o_new():
 
 
 def test_foreign_fifo_bounded_split_across_ticks():
-    """单拍有界 FIFO: 25 条候选按预算分三拍消化, 池内余量跨拍续; 残值重入池由 notified 去重兜住
+    """单拍有界 FIFO: 25 条候选按预算分三拍消化, 池内余量跨拍续; 游标消费即排空(F2)无残值重入
 
     「最老先处理」钉法: 差集是 frozenset(散布序, 跨进程不定), 单批内的先后无业务语义 ——
     FIFO 的承重面是**池序跨拍消费**: 池(dict)保插入序, 每拍恰消费池序最前一段, 后进者
@@ -1358,10 +1360,10 @@ def test_foreign_fifo_bounded_split_across_ticks():
     processed2 = set(notified)
     remaining = list(mod._foreign_pending)  # 入池序去头后的余量(老->新, dict 保序)
     assert len(remaining) == 15 and not (processed2 & set(remaining))
-    mod.on_task_line()  # tick3: 残值重入池(dup 由去重兜住), 恰消费池序最前 10 条
+    mod.on_task_line()  # tick3: 游标已排空(F2), 池余量续消费恰池序最前 10 条
     new3 = set(notified) - processed2
     assert len(new3) == _FOREIGN_TICK_BUDGET and new3 == set(remaining[:_FOREIGN_TICK_BUDGET])
-    mod.on_task_line()  # tick4: 清尾(remaining[10:] 5 条真候选)+ 重入池 dup 免费出队
+    mod.on_task_line()  # tick4: 清尾(remaining[10:] 5 条真候选), 池清空
     assert set(notified) == processed2 | set(remaining) and not mod._foreign_pending
 
 

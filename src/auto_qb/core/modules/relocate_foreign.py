@@ -3,10 +3,11 @@
 IYUU 等外部工具按其缓存的旧 save_path 经 qB WEBUI 直接添加辅种种子 —— 整组迁移改过路径后,
 这些种子落在旧路径上但不是任何 job 的成员(§02 两类坏法)。本面只做**侦测与分类**:
 
-- 每拍消费同步层原始 added 差集(D12): store.last_added_diff 在 qbmanager tracker 匹配门
-  之前现算(T1 批地基), 未匹配 tracker 配置的新种子同样进入 —— 本面每拍读、入候选池,
-  判定成本 O(本拍新增), 与库内种子总数无关; 差集是「最近一拍」语义(每拍覆盖, 消费方只读
-  不排空, T1 已定口径), 多拍间被覆盖的差集属 R3 接受的漏消费边界(时机兜底自愈)。
+- 每拍消费同步层原始 added 差集(D12): store.pending_added_diff 在 qbmanager tracker 匹配门
+  之前现算(T1 批地基), 未匹配 tracker 配置的新种子同样进入 —— 本面每拍 take_added_diff
+  (消费即排空; D12 0434「只读不排空」口径由计划 26-11-22-1714 D3 修订)、入候选池,
+  判定成本 O(本拍新增), 与库内种子总数无关; 游标是「自上次消费以来累积」语义(累积游标 +
+  消费即排空), 拍频错位不再漏接(消费节拍之间的 sync-only 轮累积保留, 下次 take 一并取走)。
 - 四时机全量兜底(D12/D13, 无周期兜底):
   1. 启动首轮 / 2. foreign_torrent 开关翻 true —— 两者共用「侦测闸门激活」信号面: 本面
      每 tick 观测 enabled AND foreign_torrent, 假->真跳变置待扫位(基线轮在位后触发)。
@@ -192,8 +193,11 @@ class ForeignMixin:
         self._foreign_window = window
         if reasons:
             self._foreign_full_scan("+".join(reasons))
-        # 每拍消费差集(D12): 原始 added 差集入候选池(只读不排空 store, 池即本面的消费游标)
-        diff = getattr(store, "last_added_diff", None) or frozenset()
+        # 每拍消费差集(D12): 原始 added 差集入候选池(消费即排空 —— D12 0434「只读不排空」
+        # 由计划 26-11-22-1714 D3 修订; take_added_diff 返回并清空, 池即本面的消费游标)。
+        # getattr 防御形态保留: 替身 store(测试 SimpleNamespace)无该方法时按空差集处理
+        take = getattr(store, "take_added_diff", None)
+        diff = take() if callable(take) else frozenset()
         for h in diff:
             self._foreign_enqueue(h)
         self._foreign_drain()

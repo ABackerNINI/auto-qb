@@ -120,8 +120,9 @@ class TorrentStore:
       - dirty_groups:  需重算下载冲突的组 key(字段变化/成员增删/归组变化时登记)
       - last_added/last_removed: 本轮新增/删除种子清单快照(「最近一轮」语义, 供
         WebUI flush_views 脏行推导; 只读不排空, 每轮 _apply 覆盖)
-      - last_added_diff: 最近一拍新增 hash 差集(不含启动基线快照, 计划 26-11-20-0434 S2a;
-        与 last_added 的差异只在启动首轮 —— 语义与消费口径见字段注释)
+      - pending_added_diff: 新增 hash 差集累积游标(不含启动基线快照, 计划 26-11-20-0434
+        S2a 建基; 26-11-22-1714 F2 改「自上次消费以来累积 + 消费即排空」—— 语义与消费
+        口径见字段注释与 take_added_diff)
     参考种子集合(仅内存): verified_references
     全局缓存: all_tags() / all_categories()(写操作后 invalidate)
     """
@@ -194,21 +195,24 @@ class TorrentStore:
         # 供 WebUI flush_views 做脏行推导; 消费方只读不排空, 下轮 _apply 直接覆盖
         self.last_added: List[str] = []
         self.last_removed: List[str] = []
-        # 最近一拍新增 hash 差集(计划 26-11-20-0434 S2a, relocate 外部旧路径种子侦测地基):
-        # 同步层**原始** first-seen 差集 —— 在 qbmanager _refresh_torrents 的 tracker 匹配门
-        # (未匹配 tracker 配置的种子被 continue 跳过、进不了 matched_added)之前现算, 未匹配
-        # tracker 的新种子同样在内。口径(单点见 _apply 赋值区):
+        # 新增 hash 差集累积游标(计划 26-11-20-0434 S2a 建基; 26-11-22-1714 F2 改累积游标 +
+        # 消费即排空, relocate 外部旧路径种子侦测地基): 同步层**原始** first-seen 差集 —— 在
+        # qbmanager _refresh_torrents 的 tracker 匹配门(未匹配 tracker 配置的种子被 continue
+        # 跳过、进不了 matched_added)之前现算, 未匹配 tracker 的新种子同样在内。口径(单点见
+        # _apply 赋值区):
         #   - 「新增」= 本拍进入快照且上一拍快照没有该 hash(first-seen);
         #   - 启动基线不算: 进程首个成功应用轮(rounds_applied 0->1)建立的初始快照整体不进差集
         #     —— 那批是存量而非"新到", 启动首轮全量兜底扫描由时机触发方(relocate 侦测等)负责;
         #   - qB 断连重连: reset_sync 只失效 rid 不清 by_hash, 记录跨断连存活, 重连后的全量轮
         #     只有断连期间真新到的 hash 进差集(存量种子不重报); reset_sync 本身把差集清空
-        #     (断连期间无新拍, 不留旧值);
+        #     (断连期间无新拍, 累积游标不留旧值);
         #   - 种子消失后重新出现 = 重新 first-seen, 计入;
-        #   - 零变化轮/早退轮保持空 frozenset(不留上一拍残值)。
-        # 生命周期: 「最近一拍」语义 —— 每轮 _apply 覆盖, 消费方(每拍读)只读不排空、无清空
-        # 义务; 不可变(frozenset)防消费方误改, 主循环单写线程现算(黄金法则 5, 无新线程)。
-        self.last_added_diff: FrozenSet[str] = frozenset()
+        #   - 零变化轮/早退轮累积保留, 不抹账(拍首不再清空 —— 26-11-22-1714 结构根因修复:
+        #     旧「每拍覆盖重算」在拍频错位下漏接约 1/4 的单事件)。
+        # 生命周期: 「自上次消费以来累积」语义 —— 轮末 pending | added 并集累积, 消费方
+        # take_added_diff 消费即排空(返回并清空); 不可变(frozenset)防误改, 现算与排空都在
+        # 主循环单写线程(黄金法则 5, 无新线程)。
+        self.pending_added_diff: FrozenSet[str] = frozenset()
         self.external_tag_changes: Set[str] = set()
         self.self_caused_fields: Dict[str, Dict[str, Any]] = {}
         # 需重算下载冲突的组 key: 变化字段/成员增删/归组/自有停种打标时登记,
@@ -464,7 +468,7 @@ class TorrentStore:
         self.dirty_groups = set()
         self.last_added = []
         self.last_removed = []
-        self.last_added_diff = frozenset()  # 断连期间无新拍, 差集不留旧值(重连全量轮重算)
+        self.pending_added_diff = frozenset()  # 断连清空: 期间无新拍, 累积游标不留旧值(重连全量轮只计真新到)
 
     # 影响下载冲突判定的字段(分组 n_dl/n_done 的判定依据)
     _CONFLICT_FIELDS = frozenset(("state", "amount_left", "tags"))
@@ -478,16 +482,17 @@ class TorrentStore:
         """
         pending = self._pending_removed
         # 启动基线判据(计划 26-11-20-0434 S2a): 落库前 rounds_applied == 0 当且仅当本轮是
-        # 本进程首个成功应用轮 —— 该轮建立的初始快照是存量基线, 不进 last_added_diff
+        # 本进程首个成功应用轮 —— 该轮建立的初始快照是存量基线, 不进 pending_added_diff
         # (生产上首轮恒为全量: apply_sync 首调 rid=0 必得 full_update, 降级路径 refresh 亦
         # full=True; 但判据不依赖 full, 以"首个应用轮"为准, 语义见 __init__ 字段注释)。
         baseline_round = self.rounds_applied == 0
         self.rounds_applied += 1
         # 本轮新增/删除清单快照(plan 26-10-07-0414 S1): 先清空再走公共路径, 零变化早退轮
-        # 保持为空、不留上一轮残值; 正常路径在下方赋回区覆盖为本轮清单
+        # 保持为空、不留上一轮残值; 正常路径在下方赋回区覆盖为本轮清单。
+        # pending_added_diff 不在此清空(26-11-22-1714 F2): 零变化轮/早退轮累积保留 ——
+        # 拍首抹账正是拍频错位漏接的结构根因, 已删; 排空只在消费方 take_added_diff。
         self.last_added = []
         self.last_removed = []
-        self.last_added_diff = frozenset()
         # 增量轮无变化且无待报删除 -> 零成本早退; 全量轮即使 patches 为空也必须走完(需检测删除)
         if not full and not patches and not removed and not pending:
             self.delta_fields = {}
@@ -575,10 +580,12 @@ class TorrentStore:
         self.field_changed = field_changed
         self.last_added = added
         self.last_removed = changes
-        # 最近一拍新增差集(计划 26-11-20-0434 S2a): 基线轮(启动首个应用轮)整体不计,
-        # 其余轮 = 本拍 first-seen 的原始 hash 集(未过 tracker 匹配门); 与 last_added 的
-        # 唯一差异就在基线轮 —— 非基线轮两者逐元素相同, 只是容器语义(集合/不可变)不同
-        self.last_added_diff = frozenset() if baseline_round else frozenset(added)
+        # 新增差集累积游标(计划 26-11-20-0434 S2a 建基, 26-11-22-1714 F2 改累积): 基线轮
+        # (启动首个应用轮)整体不计(恒 frozenset()); 其余轮 = 上次消费以来的累积 ∪ 本拍
+        # first-seen 原始 hash 集(未过 tracker 匹配门)—— 零变化轮早退不经过此处, 累积自然
+        # 保留; 断连由 reset_sync 清空, 重连全量轮只计真新到(存量不重报, 重连基线语义保留);
+        # 消费方 take_added_diff 返回并清空(消费即排空, 唯一消费方 = relocate_foreign 侦测面)
+        self.pending_added_diff = (frozenset() if baseline_round else self.pending_added_diff | frozenset(added))
         if view_changed or added or changes:
             self.view_changed = True
         self._settle_expect()
@@ -589,6 +596,17 @@ class TorrentStore:
         changed = self.view_changed
         self.view_changed = False
         return changed
+
+    def take_added_diff(self) -> FrozenSet[str]:
+        """取走新增差集累积游标(消费即排空): 返回自上次消费以来的累积并清空
+
+        唯一消费方 = relocate_foreign 侦测面(每拍一次, 全仓已核实, 计划 26-11-22-1714 F2);
+        与 consume_view_changed 同款「读后即复位」语义 —— 排空发生在主循环单写线程内
+        (黄金法则 5), 不引入并发面; 返回 frozenset 不可变, 消费方改不动余账。
+        """
+        pending = self.pending_added_diff
+        self.pending_added_diff = frozenset()
+        return pending
 
     def get(self, hash: str) -> Optional[TorrentRecord]:
         return self.by_hash.get(hash)
