@@ -1,5 +1,7 @@
 # 交接文档: 流量图尾锚显式视口重构(计划 26-11-22-0858)
 
+> ⚠ 本档为 2026-11-22 会话中断时点的快照, 任务已收口(计划 26-11-22-0858 翻 Done): 现状以 memory-bank/tasks/26-11-22-webui-traffic-anchor-viewport.md 为准, 交接分支已 rebase 到本地 develop 顶待合流。下文「不要合入 develop」「ship.commit 未执行」「复评轮 4 未派」等表述均已过时, 仅作历史快照保留。
+
 > **交接时间**: 2026-11-22(会话 token 耗尽中断)
 > **分支**: `webui-traffic-anchor-viewport`(已推远端, commit = WIP 中间态; **不要合入 develop**, 重构验收完成后由用户拍板合流方式)
 > **基础**: develop @ 8ff76f0b(远端最新, 含 relocate 专题 S4 收尾)
@@ -56,7 +58,7 @@
 ## 3. 未完成事项(交接后按序做)
 
 1. **全量复跑**: `commands run test.quick` → `commands run test.full`(带覆盖率), 数字与基线切片 26-11-22-1117 比对, 变了就更新切片(数字只写切片一处)。
-2. **e2e 全流量终验**(修复轮 3 最后的注释清理后只跑过 2 spec): `npx playwright test e2e/traffic-grid-stability.spec.mjs e2e/traffic-fx-frames.spec.mjs e2e/traffic-stream.spec.mjs e2e/traffic-fx-anchor.spec.mjs e2e/traffic-fx-panel.spec.mjs e2e/traffic-source-switch.spec.mjs e2e/traffic-gap-zones.spec.mjs`(仓库根跑, e2e/ 子目录跑会缺 UI_HARNESS_PORT)。预期 69 passed。
+2. **e2e 全流量终验**(修复轮 3 最后的注释清理后只跑过 2 spec): `commands run dev.e2e`(全量集;spec 子集 = 同引擎按 spec 路径过滤的形态, e2e/ 子目录跑缺 UI_HARNESS_PORT 注入,baseUrl() 直接抛错、用例全红(必须仓库根跑))。本次子集 = traffic-grid-stability / fx-frames / stream / fx-anchor / fx-panel / source-switch / gap-zones 七 spec, 预期 69 passed。
 3. **复评轮 4**:`commands run review.pack`(先 `commands run my-commit-flow.sync` 齐平 + `commands run ship.gate` 预跑), 派只读子代理(分面档 2-3: 正确性/安全/测试缺口, **串行派遣** —— 并发会撞上限)。轮 3 复评的 10 条发现已全部修完(注释面), 轮 4 应零发现或仅剩吹毛求疵; 若新发现按 code-review skill ⑤ 处置循环。
 4. **archive/切片/计划状态翻正**: 任务档案子任务表行 4(提交)与 6(收尾)状态; `commands run kb.wrap --topic webui-traffic-anchor-viewport --did "..."` 抬切片。
 5. **真机冒烟**(计划 S3 项; qB 真执行类): `commands run dev.run -- config.yml --dry-run` 先干跑, 然后 dev.webui 或浏览器自动化开 1m 窗观察 ≥5 分钟(含 30s 对账撞拍、换窗对比 1m↔5m↔1m、切页往返), 验收 = 视口跨度恒等于名义窗、无压缩无左缺口。qB 离线则按 `testing/real-machine.md` 口径记豁免理由。
@@ -84,6 +86,6 @@
 
 ## 6. 环境备忘
 
-- e2e 必须**仓库根**跑 `npx playwright test e2e/<spec>`(e2e/ 子目录跑会缺 UI_HARNESS_PORT 注入); Docker 无 → test.linux 系改约。
+- e2e 必须**仓库根**跑(`commands run dev.e2e` 全量;spec 子集 = 同引擎按 spec 路径过滤的形态;e2e/ 子目录跑缺 UI_HARNESS_PORT 注入,baseUrl() 直接抛错、用例全红(必须仓库根跑)); Docker 无 → test.linux 系改约。
 - `dev.fmt` 只吃 .py(.js 是 grep 面); chart 文件禁圈号①②③(ascii_symbol_guard [circled] 冻结 0)。
 - 探针调试: `_NODE_STDIN_WRAPPER` 形态(node -e eval(stdin), chart 路径 = argv[1]); 直跑本地文件要把 argv 替换成路径字面量且 polling.js 联评的探针(如 STREAM_PROBE)不能只换一处。

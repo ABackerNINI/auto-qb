@@ -4742,7 +4742,7 @@ def test_frontend_qb_fx_panel_wiring_battery():
     b. ease 消费单点唯一: function _qbFxCurve 定义恰 1 + 调用恰 2(真拍 _qbBeatStart 与预览
        _qbPreviewBeat 两个判定帧)、cfg.ease 恰 2 处、S1 的帧循环预折算行
        `_qbFxEaseOut((a.clock` 已退场、L1 两轨经 _qbFxShown(track, p, a.easeF) 消费冻结曲线、
-       L0 每帧 dx 行恒 easeOut(经单点 _qbFxEaseOut(_qbBeatVpRem 内, a.clock / a.tl.shiftMs) —— 插值曲线只作用于数值收敛);
+       L0 每帧 dx 行恒 easeOut(经单点 _qbFxEaseOut(_qbAnimAnchorAt 内, a.clock / a.tl.shiftMs) —— 插值曲线只作用于数值收敛);
     c. shift 消费点: cfg.shift === "instant" 在 _qbBeatStart 判定帧(零消费字段补齐);
     d. 预览接缝: _qbBeatFrame 令牌失效门(a.preview !== st.previewToken) + 末帧分支
        _qbPreviewEnd(scope, u) 先于 _qbBeatConverge + 预览收口显式锚视口在位钉(_qbPreviewEnd
@@ -4789,7 +4789,7 @@ def test_frontend_qb_fx_panel_wiring_battery():
     assert "_qbFxShown(tr.up, p, a.easeF)" in js and "_qbFxShown(tr.dl, p, a.easeF)" in js, \
         "L1 两轨收敛必须消费判定帧冻结的 anim.easeF(拍内不换式 —— D21)"
     assert js.count("_qbFxEaseOut(a.clock / a.tl.shiftMs)") == 1, \
-        "L0 每帧 dx 行恒 easeOut 恰 1 处(单点 _qbBeatVpRem 内 —— 帧循环与打断继承重建共用," \
+        "L0 每帧 dx 行恒 easeOut 恰 1 处(单点 _qbAnimAnchorAt 内 —— 帧循环与打断捕获续滑共用," \
         " 第二处 easeOut 时钟行回潮即 rem 漂移/打断回潮; ease 只作用于数值收敛, L0 位移不随 ease 变 —— §05.3)"
     # —— c. shift 消费点(S3 补齐零消费字段; instant 判据随滑动门 _qbFxShiftGate 单点,
     #    消费仍在判定帧链路 —— 门内判据 + 判定帧调用双钉) ——
