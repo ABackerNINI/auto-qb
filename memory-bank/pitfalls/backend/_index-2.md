@@ -1,13 +1,14 @@
 # backend — 后端 / qB / 平台 · 卷 2/3
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `high-risk-ops.md` … `save-path-equality-sibling-trap.md`(共 20 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `gtm-total-baseline.md` … `ruamel-roundtrip-mask-pitfalls.md`(共 20 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [gtm-total-baseline.md](gtm-total-baseline.md) | 合计基线在过滤集收缩时被网卡生命周期累计污染 | GTM,采样,合计基线,网卡消失,断连恢复,当日流量虚高 |
 | [high-risk-ops.md](high-risk-ops.md) | 代码里已有防护的高风险动作 —— 改动时**不得削弱**这些防护; 删种重加、强制汇报、限速覆盖都属于这一类。 | 跳检, reannounce, qB 版本兼容, 删除种子, 限速, or 默认值, 死防御, 状态观测 |
 | [hot-reload-held-config.md](hot-reload-held-config.md) | 影响分级标 L0 只保证「新配置对象已被替换」; 若消费方(服务/线程)构造时把配置**按值**拷走, | 加配置键, 定热重载级别, impact, L0, 热重载, apply, 按值持有, 站点接入, 服务重建 |
 | [hot-reload-stale-bindings-derived-views.md](hot-reload-stale-bindings-derived-views.md) | 「换对象 ≠ 下游自动跟进」家族三段 —— ①存量 `TorrentRecord.tracker_conf` 仍指向旧 Config 的 `TrackerConfig`, 重绑只有 L2 结构重建与 full_round 补 None 两条路, 配置值类变更(如 `hr_check`)两条都不触发 ⇒ 判定/锚点/规则段读到旧值(修: 认领模块 apply 显式重绑, `tracker:rebound N`); ②HR 判定这类「非 store 快照字段」的派生值变化(取数线程发布新视图)没有置脏消费方 ⇒ WebUI 快照停在旧值(修: 新鲜度基线 + flush_views 比对置脏); ③L2 重建换新 TaskQueue 后种子级任务(内置维护 + interval 规则)随旧队列丢弃且 torrents_added 对存量不触发 ⇒ 维护面停摆到重启(修: 创建入口幂等 + rules 订阅 full_round 补建, issue 26-10-01-2147)。实报(2026-10-03): 热重载开启站点 HR 在线核实后 WebUI 恒显「本地·达标」, 重启进程才显「在线·已达标」。 | 热重载, apply, 重绑, tracker_conf, hr_check, hr 规则段, 判定不刷新, 本地·达标, WebUI 快照, 置脏, revision, 取数, rebuild_runtime, 种子级任务, 补建, has_task, 任务面, full_round |
@@ -27,4 +28,3 @@
 | [release-record-baseline.md](release-record-baseline.md) | 一份凭据(放行/授权/豁免记录)若靠「与签发时的状态快照比对」来判断是否失效, 快照就是 | 放行记录, verified, 签发, 锚点, 快照, 漂移, drift, 永续有效, 永久记录, 凭据, 三处写入点, 签发即作废 |
 | [relocate-restore-issued-marker.md](relocate-restore-issued-marker.md) | 「先落账、后下发」的恢复点若按相位一律置 issue=False, 崩溃窗口(外部系统从未收到指令)在两处现场上与「发了没动静」同形 ⇒ 静默等到停滞超时误判失败; 判据必须靠账上「已下发」位分流, 且两条下发路径都要落账 | 重启恢复, 崩溃恢复, 崩溃窗口, setLocation 补发, move_issued, 恢复判据, 账上事实, 下发路径, _load_jobs, recover_exec_phase, 死代码判据 |
 | [ruamel-roundtrip-mask-pitfalls.md](ruamel-roundtrip-mask-pitfalls.md) | ruamel round-trip 掩码/回填三坑: 异常文本泄敏 / 引号形态继承 / alias 爆炸面 | ruamel, CommentedMap, DuplicateKeyError, 掩码, 哨兵, unmask, 回填, 引号, PlainScalarString, alias, 锚点, 共享引用, mask_yaml_text, 异常文本, 泄敏, detail |
-| [save-path-equality-sibling-trap.md](save-path-equality-sibling-trap.md) | save_path 等值判据把同保存根兄弟目录种子当组内 | save_path 等值/前缀判据,内容根,兄弟目录,组内身份,foreign 候选门,删链门,假阳性 |

@@ -93,6 +93,10 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   处理」(差集是散布序 frozenset, 池序跨拍消费才是 FIFO 承重面); 游标消费即排空(F2),
   无同差集残值重入, notified 去重兜底保留
 - test_foreign_pending_vanish_skipped: 池内候选排队期间消失 -> 出队跳过不炸
+- test_foreign_drain_vanish_pop_pool_order_independent: 消失出队(rec None)分支确定性钉测 ——
+  _foreign_enqueue 直控池序, 绕开差集 frozenset 散布序(vanish_skipped 的消失候选是否留在
+  预算后池尾随进程 hash 种子漂移, 该分支覆盖随之轮间波动 —— 实测 99.50%/99.52% 覆盖率闸
+  抖动根因); 钉消失出队零记账零 qB API
 - test_foreign_pending_cap_drops_oldest: 候选池上限钉测 —— _FOREIGN_PENDING_MAX 压到 3 灌
   5 候选: 池恒 <= 上限, 被丢的是插入序最老者, 逐条带 WARNING(T2 评审钉测)
 - test_foreign_bad_candidate_isolated_and_retained: 单候选护栏 —— 畸形 plan.files 候选
@@ -1415,6 +1419,26 @@ def test_foreign_pending_vanish_skipped():
     notified = mod._state_foreign_notified()
     assert set(notified) == {t.hash for t in batch} - {"V10", "V11"}
     assert not mod._foreign_pending
+
+
+def test_foreign_drain_vanish_pop_pool_order_independent():
+    """消失出队(rec None)分支确定性钉测: 池序直控, 绕开差集 frozenset 散布序
+
+    差集消费入池序 = frozenset 迭代序(进程 hash 种子不定) —— test_foreign_pending_vanish_skipped
+    的消失候选(V10/V11)是否留在预算后的池尾随种子漂移, rec None 出队分支的覆盖随之轮间波动
+    (实测 99.50%/99.52% 覆盖率闸抖动根因; 该用例本体由 notified 清理兜底恒绿, 不受影响)。
+    本测 _foreign_enqueue 直控池序(与 pending_cap_drops_oldest 同款布局): 池内 hash 不在
+    store 即「排队期间消失」的 drain 输入态 —— 逐条必走 rec None 出队, 且零记账零 qB API。
+    """
+    mod, _store, client = _env()
+    _done_job(mod)
+    mod._foreign_enqueue("W1")
+    mod._foreign_enqueue("W2")
+    calls_before = list(client.calls)
+    mod.on_task_line()  # drain: W1/W2 均不在 store(rec None) -> 逐条消失出队, 池清空
+    assert not mod._foreign_pending
+    assert mod._state_foreign_notified() == {}  # 消失候选不记账(存活面由 notified 清理兜底)
+    assert client.calls == calls_before  # 消失出队零 qB API(文件表比对都不发生)
 
 
 def test_foreign_pending_cap_drops_oldest(monkeypatch):
