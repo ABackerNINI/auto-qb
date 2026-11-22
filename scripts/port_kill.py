@@ -51,6 +51,27 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # POSIX 实杀信号单点: Windows CPython 无 signal.SIGKILL 属性 -- 生产 nt 支永不评估它,
 # 但守阵把 os.name 钉成 posix 会在 nt 宿主激活本支, getattr 兜 9(SIGKILL 的 POSIX 数值)
 _SIGKILL = getattr(signal, "SIGKILL", 9)
+# nt 支 taskkill 输出的解码码页单点: mbcs = Windows 系统 ANSI 码页(中文 Windows cp936/GBK)。
+# 独立常量便于守阵在非 Windows 宿主上钉成 "gbk"(同码表)注入真字节跨平台验证。
+CONSOLE_CODEC = "mbcs"
+
+
+def _decode_console_text(raw) -> str:
+    """把 nt 原生命令输出按系统 ANSI 码页解成文本(收字节自己解, 不交给 text=True)。
+
+    taskkill 按系统 ANSI 码页输出(中文 Windows = cp936/GBK); 旧实现 text=True +
+    encoding="utf-8" 把 GBK 字节逐字节换成 U+FFFD, kill-failed 原因行不可读
+    (issue 26-11-23-0012)。这里收字节后按 mbcs 解, 与引擎侧「收字节再解」的先例同族
+    (memory-bank/pitfalls/ops/console-encoding.md)。已注入的 str(测试桩)原样返回。
+    """
+    if isinstance(raw, str):
+        return raw
+    try:
+        return raw.decode(CONSOLE_CODEC, errors="replace")
+    except LookupError:
+        # mbcs 仅 Windows 有; 非 Windows 宿主上守阵若漏钉 CONSOLE_CODEC, 兑底不让分支炸
+        # (生产 nt 支恒走上面的 mbcs, 此兜只服务跨平台测试桩)。
+        return raw.decode("utf-8", errors="replace")
 
 
 def listening_pids(port: int) -> set:
@@ -286,16 +307,15 @@ def _kill_pid(pid: int) -> tuple:
     detail 以 "kill-failed: " 开头并带可读原因(与旧 taskkill rc!=0 输出形态一致)。
     """
     if os.name == "nt":
+        # 收字节不收文本: taskkill 按系统 ANSI 码页出, text=True + utf-8 硬解 = mojibake
+        # (issue 26-11-23-0012); 解码交给 _decode_console_text 的 mbcs 单点。
         k = subprocess.run(
             ["taskkill", "/F", "/PID", str(pid)],
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
         )
         if k.returncode == 0:
             return True, "killed"
-        return False, "kill-failed: " + (k.stderr or k.stdout).strip()
+        return False, "kill-failed: " + _decode_console_text(k.stderr or k.stdout or b"").strip()
     try:
         os.kill(pid, _SIGKILL)
     except ProcessLookupError:

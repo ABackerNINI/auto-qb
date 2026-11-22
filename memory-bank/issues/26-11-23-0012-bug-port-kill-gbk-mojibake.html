@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="port-kill-gbk-mojibake">
 <meta name="doc-refs" content="memory-bank/pitfalls/ops/port-kill-prod-instance.md, memory-bank/pitfalls/ops/console-encoding.md, memory-bank/tasks/26-11-23-dev-clone-kill-tool.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="port_kill nt 支实杀失败原因行 GBK mojibake(中文 Windows taskkill 输出按 utf-8 解码)">
 <meta name="issue-summary" content="dev.port-kill/dev.clone-kill 共用的实杀单点 port_kill._kill_pid 在 nt 支按 encoding=utf-8 解 taskkill 输出, 中文 Windows 下 GBK 字节解成 mojibake, kill-failed 原因行不可读(rc/pid 面正常)">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-23-0012-bug-port-kill-gbk-mojibake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-23 00:12</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -142,11 +142,14 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-23 00:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-23 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-23 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-23 01:07 仍复现。锚点 <code>scripts/port_kill.py:293</code> 仍是 <code>text=True, encoding="utf-8", errors="replace"</code>；实测把 taskkill 中文原因行的 GBK 字节 <code>b4edcef33a20c3bbd3d0d5d2b5bdbdf8b3cc2022333433313222a1a3</code> 按 utf-8 解得一串 U+FFFD 占位符（中文全不可读），按 mbcs 解得原文「错误: 没有找到进程 "34312"。」；rc/pid 面正常，只原因行坏。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>实际修法：采纳建议①并略作收敛 —— <code>_kill_pid</code> 的 nt 支改为收字节（去掉 <code>text=True</code> 与 <code>encoding/errors</code>），新增 <code>CONSOLE_CODEC = "mbcs"</code> 与 <code>_decode_console_text</code> 单点，按 Windows 系统 ANSI 码页解码（中文 Windows = cp936/GBK），str 桩输入原样返回，非 Windows 宿主 mbcs 不存在时 utf-8 兜底防炸；POSIX 支零改动。码页提为模块常量，便于守阵在非 Windows 宿主上钉 <code>gbk</code> 注入真字节跨平台验证。未走建议② <code>encoding="locale"</code>：仓库守阵 <code>test_repo_text_subprocess_calls_pin_utf8</code> 钉死 text=True 必配字面量 utf-8，收字节路线与 <code>memory-bank/pitfalls/ops/console-encoding.md</code> 的引擎侧先例同族，且不碰守阵口径。</p>
+  <p>验证方式：在 <code>tests/test_legacy_review4_scripts.py</code> 既有 nt 失败面用例旁新增 <code>test_port_kill_nt_kill_failed_decodes_ansi_codepage</code> —— 钉原因行原文可读、无 U+FFFD、taskkill 调用为字节模式，并逐字重放旧 utf-8 解码做红验，另覆盖 str 桩透传与 mbcs 缺失兜底；16 条 port_kill 用例定向全绿。test.full 全绿（见 kb.baseline 最新切片）。<code>clone_kill</code> 经 import 复用同一实杀单点，自动同修，无第二份解码面。</p>
 </section>
 
 <footer>

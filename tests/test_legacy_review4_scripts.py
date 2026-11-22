@@ -68,6 +68,7 @@ on any host.
 - test_port_kill_main_posix_sigkill_gate (issue 26-11-13-0234): POSIX main 接线 -- python 监听免 --yes 一次 SIGKILL(归属行+回执不回归); 非 python 无 --yes 拒杀且零 os.kill; --yes 放行一次 SIGKILL; process_info 缺席 = verify-failed 拒杀且零 os.kill(两平台同闸)
 - test_port_kill_main_posix_kill_failure_faces (issue 26-11-13-0234): POSIX 实杀失败面 -- ProcessLookupError/PermissionError -> kill-failed 行 + rc!=0, 不崩栈不静默
 - test_port_kill_main_nt_kill_failed_rc (issue 26-11-13-0234): nt 支实杀失败面(与 posix 失败面对称) -- taskkill rc!=0 -> kill-failed 行透传原因 + rc 归一化非 0
+- test_port_kill_nt_kill_failed_decodes_ansi_codepage (issue 26-11-23-0012): nt 实杀失败原因行按系统 ANSI 码页解 -- 真 GBK 字节(CONSOLE_CODEC 钉 gbk 跨平台)解出可读中文且无 U+FFFD; taskkill 调用禁 text=True; 红验: 旧 utf-8 硬解同串字节必 mojibake
 - test_port_kill_listening_pids_nt_parses_stdout (issue 26-11-13-0234): nt 支平台无关钉住 -- Get-NetTCPConnection PS 串含端口且钉 -State Listen 过滤(posix 支 Listen-only 的对称钉), stdout 整数解析不回归、非整数 token 过滤
 - test_e2e_selfcheck_proc_info_reuses_port_kill (issue 26-11-13-0234): _proc_info 收编进 port_kill 单点 -- 静态钉 e2e_selfcheck 无 powershell/Win32_Process 字面量(第三处 powershell 位不许复活); nt 盘符/posix 绝对路径提示位、查不到占位、截 160 旧口径不回归
 - test_e2e_selfcheck_check_port_attribution_wiring (issue 26-11-13-0234): _check_port 归属显示链行为钉 -- 归属行格式 "pid <n> <名>: <摘要>", blocking 进 problems 带 NEXT: dev.port-kill, warn 进 notes 带人工桩提示(分流+格式双钉)
@@ -1031,6 +1032,47 @@ def test_port_kill_main_nt_kill_failed_rc(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc != 0, "taskkill 失败必须非 0 退出"
     assert "-> kill-failed" in out and "ERROR: The process not found." in out, f"失败原因透传: {out!r}"
+
+
+def test_port_kill_nt_kill_failed_decodes_ansi_codepage(monkeypatch, capsys):
+    """issue 26-11-23-0012: nt 实杀失败原因行按系统 ANSI 码页解, 中文 Windows 不再 mojibake。
+
+    taskkill 按 cp936/GBK 出, 旧实现 text=True + encoding="utf-8" + errors="replace"
+    把字节逐个换成 U+FFFD。守阵注入真 GBK 字节(CONSOLE_CODEC 钉 "gbk", 跨平台同码表),
+    钉: 原因行原文可读、无 U+FFFD、taskkill 调用走字节模式; 并逐字重放旧解码做红验。"""
+    mod_pk = _load_script("port_kill")
+    monkeypatch.setattr(mod_pk.os, "name", "nt")  # 钉 Windows 分派
+    monkeypatch.setattr(mod_pk, "CONSOLE_CODEC", "gbk")  # POSIX 宿主模拟中文 Windows cp936
+    monkeypatch.setattr(mod_pk, "listening_pids", lambda port: {34312})
+    monkeypatch.setattr(
+        mod_pk,
+        "process_info",
+        lambda pids: {34312: ("python.exe", f"python {mod_pk.REPO_ROOT / 'scripts/stub.py'}")},
+    )
+    reason = '错误: 没有找到进程 "34312"。'
+    seen = {}
+
+    def _fake_run(cmd, **kw):
+        seen["cmd"], seen["kwargs"] = cmd, kw
+        return SimpleNamespace(returncode=128, stdout=b"", stderr=reason.encode("gbk"))
+
+    monkeypatch.setattr(mod_pk.subprocess, "run", _fake_run)
+    rc = mod_pk.main(["8137"])
+    out = capsys.readouterr().out
+    assert rc != 0, "taskkill 失败必须非 0 退出"
+    assert "-> kill-failed" in out and reason in out, f"ANSI 原因行须可读: {out!r}"
+    assert "\ufffd" not in out, f"原因行不得留 U+FFFD mojibake: {out!r}"
+    assert seen["cmd"] == ["taskkill", "/F", "/PID", "34312"]
+    assert not seen["kwargs"].get("text"), "nt 实杀须收字节(旧 text=True + utf-8 即本 issue 根因)"
+
+    # 红验: 旧口径(utf-8 硬解)对同串字节解出 mojibake, 证明上面绿判据能区分新旧实现
+    old = reason.encode("gbk").decode("utf-8", "replace")
+    assert "\ufffd" in old and reason not in old, f"红验须成立: {old!r}"
+
+    # 兜底分支: 非 Windows 宿主若未钉 CONSOLE_CODEC, mbcs 不存在时兑底不炸(纯防御面)
+    monkeypatch.setattr(mod_pk, "CONSOLE_CODEC", "no-such-codec")
+    assert mod_pk._decode_console_text("ascii 原样") == "ascii 原样"
+    assert mod_pk._decode_console_text("中文".encode("utf-8")) == "中文"
 
 
 def test_port_kill_listening_pids_nt_parses_stdout(monkeypatch):
