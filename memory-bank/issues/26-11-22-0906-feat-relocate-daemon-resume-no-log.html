@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="收尾 daemon 重启后续任/接管无日志行, 续任事件零可观测性">
 <meta name="issue-summary" content="产品重启后老 daemon(pid 5924)续任、daemon.json 刷新, 无任何日志行(其 log 仅窗口事件); 建议续任/接管时补一条 INFO 改善可观测性">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-22-0906-feat-relocate-daemon-resume-no-log</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-22 09:06</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">S4 真机验收(计划 26-11-21-1600, 测试 qB 环境三窗)</div></div>
 </div>
 
@@ -118,7 +118,13 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-22 09:06 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充（2026-11-22 实施完成，计划 26-11-22-1714 批3）</h3>
+  <p><strong>实际修法</strong>：<code>recycle_daemon</code> <code>_Owner</code> 三处静默边界补 INFO(claim 让路「daemon.json 健康 watcher(pid X)在守, 本实例(pid Y)让路续任」/ claim 接管「接管 daemon.json: pid Y(旧 pid X / 无记录)」拆两形态 / beat 外来 pid 退位「检测到外来 pid X 持有 daemon.json, 本实例(pid Y)退位(绝不 taskkill)」), 行含场景+双方 pid, 前缀对齐模块既有风格; stale 判定仍全走 <code>daemon_stale</code> 单点, 新增 <code>read_daemon_state</code> 只为日志取数与写方同线程。</p>
+  <p><strong>验证方式</strong>：<code>test_recycle_daemon.py</code> 新增接管(无记录)/让路/接管(旧 pid)/退位四场景断言, 各恰一条 INFO 且判定行为零差; 评审 1 轮零发现。</p>
+  <p><strong>验证数字</strong>：<code>commands run test.quick</code> = 7003 passed / 0 failed / 2 skipped(实测)。</p>
 </section>
 
 <footer>

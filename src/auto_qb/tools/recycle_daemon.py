@@ -1126,18 +1126,40 @@ class _Owner:
         """pid 抢占: 现存记录是健康 watcher(心跳未过期且 pid 活, daemon_stale 判据单点)
         ⇒ already_running 让路(至多一个 watcher, D12);否则(无记录/记录 pid 已死/心跳
         过期)落自己的 pid 接管 —— 旧主(若还醒着)在下一次自检看见外来 pid 即退位自杀。
+        让路/接管两条边界各留一条 INFO(低频事件, 行含场景 + 双方 pid, 计划 26-11-22-1714 D6/D11):
+        「谁在守、何时接的棒」可观测; 判定仍全走 daemon_stale 单点, 读旧记录只为日志取数。
         """
         if not rj.daemon_stale(self.data_dir, self.key, max_age=max_age, now=now):
+            cur = rj.read_daemon_state(self.data_dir, self.key)
+            old_pid = int((cur or {}).get("pid") or 0) or "?"
+            logger.info(
+                f"recycle_daemon | instance {self.host}:{self.port}: daemon.json 健康 watcher"
+                f"(pid {old_pid})在守, 本实例(pid {self.pid})让路续任"
+            )
             return "already_running"
+        cur = rj.read_daemon_state(self.data_dir, self.key)
+        old_pid = int((cur or {}).get("pid") or 0)
         rj.write_daemon_state(self.data_dir, self.key, self.pid, host=self.host, port=self.port, ts=now)
         self._last_touch = now
+        if old_pid:
+            logger.info(
+                f"recycle_daemon | instance {self.host}:{self.port}: 接管 daemon.json: "
+                f"pid {self.pid}(旧 pid {old_pid})"
+            )
+        else:
+            logger.info(f"recycle_daemon | instance {self.host}:{self.port}: 接管 daemon.json: pid {self.pid}(无记录)")
         return "claimed"
 
     def beat(self, now: float) -> bool:
         """每拍归属自检 + 节流心跳 touch; False = 已被退位(记录 pid 非我)⇒ 调用方自杀退出。
-        记录缺失(异常消失)⇒ touch 重新落盘认主(daemon 不因账文件消失而白死)。"""
+        记录缺失(异常消失)⇒ touch 重新落盘认主(daemon 不因账文件消失而白死)。
+        退位边界留一条 INFO(低频事件, 行含场景 + 双方 pid, 计划 26-11-22-1714 D6/D11)。"""
         cur = rj.read_daemon_state(self.data_dir, self.key)
         if cur is not None and int(cur.get("pid") or 0) != self.pid:
+            logger.info(
+                f"recycle_daemon | instance {self.host}:{self.port}: 检测到外来 pid "
+                f"{int(cur.get('pid') or 0)} 持有 daemon.json, 本实例(pid {self.pid})退位(绝不 taskkill)"
+            )
             return False
         if self._last_touch is None or now - self._last_touch >= self.heartbeat:
             if not rj.touch_daemon_state(self.data_dir, self.key, self.pid, ts=now):

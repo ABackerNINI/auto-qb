@@ -219,8 +219,14 @@ class ForeignMixin:
         enqueued = 0
         for rec in store.all():
             h = rec.hash
-            if h in notified or h in members:
-                continue  # 已记录 / 相位机在管: 不入池(去重单点在 _foreign_drain 消费面)
+            if h in notified:
+                # 在账跳过留痕(F4, 计划 26-11-22-1714 D6): 逐条 DEBUG, 原因二分与预筛 DEBUG
+                # 同前缀纪律({h[:8]} 起头); 计数行不做(D6 既有拍板维持)。
+                logger.debug(f"relocate | foreign | {h[:8]} 已入账(notified), 全量兜底扫跳过不入池")
+                continue  # 已记录: 不入池(去重单点在 _foreign_drain 消费面)
+            if h in members:
+                logger.debug(f"relocate | foreign | {h[:8]} 相位机在管(members), 全量兜底扫跳过不入池")
+                continue  # 相位机在管: 不入池(去重单点在 _foreign_drain 消费面)
             try:
                 hit = self._foreign_classify(rec)
             except Exception as e:  # noqa: BLE001 - 单记录坏不得拖垮整次扫描(逐 job 护栏同款)

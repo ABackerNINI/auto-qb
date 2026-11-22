@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="武装收尾日志用内部 alias_kind 命名「形态 dir」, 与 plan/state 的 form=dir_alias 口径不一致">
 <meta name="issue-summary" content="武装行「已武装收尾(别名 1 条, 形态 dir)」取内部 alias_kind 命名, 与计划/state 的 form=dir_alias 不一致(auto-qb.log:34 vs :45); 建议统一取 plan.form">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-22 09:05</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">S4 真机验收(计划 26-11-21-1600, 测试 qB 环境三窗)</div></div>
 </div>
 
@@ -118,7 +118,13 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-22 09:05 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充（2026-11-22 实施完成，计划 26-11-22-1714 批3）</h3>
+  <p><strong>实际修法</strong>：武装行「形态」改取 <code>(armed.plan or {}).get("form")</code>, plan 缺失旧账按 alias_kind 反映射(file→file_links / dir→dir_alias, 新增 <code>_form_of_alias_kind</code> 与既有 <code>_alias_kind_of_form</code> 成映射对), direct 兜底; 内部名 alias_kind 不再进日志; <code>plan["form"]</code> 建账单点零改动。</p>
+  <p><strong>验证方式</strong>：<code>test_relocate_exec_misc.py</code> 新增 plan 取 form/dir 反映射/file 反映射/direct 兜底/form 压过 alias_kind 五断言; 评审 1 轮零发现。</p>
+  <p><strong>验证数字</strong>：同上 <code>commands run test.quick</code> = 7003 passed / 0 failed / 2 skipped(实测)。</p>
 </section>
 
 <footer>

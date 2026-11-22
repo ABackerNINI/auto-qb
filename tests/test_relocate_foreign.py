@@ -30,6 +30,9 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
 - test_foreign_arm_scan: 时机 3 —— 活跃 job 进收尾窗(armed)下一拍触发一次, 不重复
 - test_foreign_reconnect_scan_after_first_round: 时机 4 —— reset_sync(重连单点信号,
   store.sync_epoch)后待首个成功应用轮(rounds_applied 越锚)触发一次
+- test_foreign_full_scan_accounted_skip_debug_two_reasons: F4(计划 26-11-22-1714)—— 全量兜底
+  扫在账/在管跳过逐条 DEBUG, 原因二分(已入账 notified / 相位机在管 members)各恰一条,
+  前缀对齐预筛 DEBUG 纪律; 计数行不做(D6 既有拍板维持)
 - test_foreign_diff_consumes_unmatched_tracker_torrent: 原始差集直达 —— 无任何 tracker 配置的
   新种子经差集被侦测消费(侦测面不触 tracker 门, D6)
 - test_foreign_forms_all_detected: skip 形态(seq_dl/f_l_piece_prio 置位)/非 skip/stopped 状态/
@@ -403,6 +406,34 @@ def test_foreign_no_periodic_backstop():
     for _ in range(3):
         mod.on_task_line()
     assert seen == ["activation"]  # 仅启动首轮一次, 之后稳态零扫描
+
+
+def test_foreign_full_scan_accounted_skip_debug_two_reasons(tmp_path):
+    """F4(计划 26-11-22-1714): 全量兜底扫对在账/在管 hash 的静默 continue 补逐条 DEBUG,
+    原因二分(已入账 notified / 相位机在管 members)且各恰一条; 前缀对齐预筛 DEBUG 纪律,
+    计数行不做(D6 既有拍板维持)"""
+    mod, store, client = _env(data_dir=str(tmp_path))
+    _hold_phase_machine(mod)  # 裸环境同拍推进判失败会清 A 条目(B2), 本测只钉跳过留痕面
+    mod._jobs["ja"] = _job(
+        "ja", phase=ru.PHASE_MOVING, src=OLD, dst=NEW, hashes=("MEM", ), plan={"files": list(PLAN_FILES)}
+    )
+    client.files_map["MEM"] = _seed()
+    client.files_map["EXT"] = _seed()
+    store.refresh(
+        [
+            FakeTorrent(hash="MEM", name="member", save_path=OLD),  # 相位机在管(pre-arm 成员)
+            FakeTorrent(hash="EXT", name="foreign", save_path=OLD),
+        ]
+    )
+    mod.on_task_line()  # activation 全量扫: EXT 命中入账(notified), MEM 相位机在管跳过
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:  # logger 名单点在 relocate_common(沿用原模块名)
+        mod._foreign_full_scan("test")
+    dbg = [r.getMessage() for r in cap.records if r.levelno == logging.DEBUG]
+    notified_skips = [m for m in dbg if "已入账(notified)" in m]
+    member_skips = [m for m in dbg if "相位机在管(members)" in m]
+    assert len(notified_skips) == 1 and "EXT" in notified_skips[0], dbg
+    assert len(member_skips) == 1 and "MEM" in member_skips[0], dbg
+    assert all(m.startswith("relocate | foreign |") for m in notified_skips + member_skips), dbg
 
 
 # ---------- 侦测消费面(原始差集直达 + 各形态) ----------

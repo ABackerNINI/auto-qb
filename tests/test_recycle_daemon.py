@@ -40,6 +40,8 @@ daemon 主体:
   spec 不碰)/终态剔除/残缺 spec 剔除/翻相 flag
 - test_owner_beat_throttles_touch: 心跳 10s 节流(D12); 被退位自检在 touch 之前; 记录消失
   重新认主; touch 间隙被拒不炸
+- test_owner_claim_beat_boundary_events_logged: F3(计划 26-11-22-1714 D6/D11)—— claim 让路/
+  接管与 beat 退位三处静默边界各留恰一条 INFO(场景 + 双方 pid), 判定面行为与日志前零差
 - test_run_flips_settled_phase_without_window: 全员已收口(账在相位未翻)+ qB 在线 => 只补翻
   相位, 零改写零进窗(journal 写不限窗口, D13)
 - test_run_waits_for_stable_window_before_window: 进窗第三证(稳定窗)—— 下线未持续满
@@ -796,6 +798,46 @@ def test_owner_beat_throttles_touch(tmp_path, monkeypatch):
     # touch 被拒(退位落在自检读与落账写的微秒间隙)⇒ beat False(写侧闸兜底)
     monkeypatch.setattr(rd.rj, "touch_daemon_state", lambda *a, **k: False)
     assert owner.beat(1040.0) is False
+
+
+def test_owner_claim_beat_boundary_events_logged(tmp_path, monkeypatch):
+    """F3(计划 26-11-22-1714 D6/D11): claim 让路/接管与 beat 退位三处静默边界各留一条 INFO,
+    行含场景 + 双方 pid; 判定面行为与日志前零差(返回值/落账断言照旧)"""
+    d = str(tmp_path)
+    # 接管(无记录): claim 落 pid 7 + INFO 含「接管」与本实例 pid
+    owner = rd._Owner(d, "k", 7, heartbeat=10.0)
+    with capture_logs("auto_qb.tools.recycle_daemon") as cap:
+        assert owner.claim(1000.0, max_age=60.0) == "claimed"
+    takeovers = [
+        r.getMessage() for r in cap.records if r.levelno == logging.INFO and "接管 daemon.json" in r.getMessage()
+    ]
+    assert len(takeovers) == 1, cap.text
+    assert "pid 7" in takeovers[0] and "无记录" in takeovers[0], takeovers
+    # 让路续任: 健康 watcher(pid 99, 心跳未过期)在守 => already_running + INFO 双方 pid
+    rj.write_daemon_state(d, "k", 99, ts=1000.0)
+    monkeypatch.setattr(rj, "_alive", lambda pid: pid == 99)
+    with capture_logs("auto_qb.tools.recycle_daemon") as cap:
+        assert owner.claim(1005.0, max_age=60.0) == "already_running"
+    yields = [r.getMessage() for r in cap.records if r.levelno == logging.INFO and "让路续任" in r.getMessage()]
+    assert len(yields) == 1, cap.text
+    assert "pid 99" in yields[0] and "pid 7" in yields[0], yields
+    assert rj.read_daemon_state(d, "k")["pid"] == 99, "让路者零触碰(行为面不变)"
+    # 接管(旧账在, pid 已死): 抢占成功 + INFO 含旧 pid
+    monkeypatch.setattr(rj, "_alive", lambda pid: pid == 7)
+    with capture_logs("auto_qb.tools.recycle_daemon") as cap:
+        assert owner.claim(1010.0, max_age=60.0) == "claimed"
+    takeovers = [
+        r.getMessage() for r in cap.records if r.levelno == logging.INFO and "接管 daemon.json" in r.getMessage()
+    ]
+    assert len(takeovers) == 1, cap.text
+    assert "pid 7(旧 pid 99)" in takeovers[0], takeovers
+    # 退位: 外来 pid 55 写账后自检检出 => False + INFO 含外来 pid 与本实例 pid
+    rj.write_daemon_state(d, "k", 55, ts=1015.0)
+    with capture_logs("auto_qb.tools.recycle_daemon") as cap:
+        assert owner.beat(1020.0) is False
+    deposed = [r.getMessage() for r in cap.records if r.levelno == logging.INFO and "退位" in r.getMessage()]
+    assert len(deposed) == 1, cap.text
+    assert "外来 pid 55" in deposed[0] and "pid 7" in deposed[0], deposed
 
 
 def test_run_flips_settled_phase_without_window(tmp_path, monkeypatch):

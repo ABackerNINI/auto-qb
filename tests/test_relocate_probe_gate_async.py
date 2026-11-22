@@ -10,7 +10,9 @@
 「探测中」回执形态(S2 钉死, 2350 §05 实现细节非用户决策面): cls 仍 "blocked"(与
 evaluate_group blocked item 同形, 走 blocked 通道 —— 本轮零建账零 setLocation, D5 位置
 契约不破), item[PROBE_GATE_PROBING_KEY] is True 为机器判别键(reasons 元素 gate/cls/text
-同形, gate=same_fs), notes 追加「同机探测已入队」。T3 重放防自环/T4 web 两段回执按
+同形, gate=same_fs), notes 追加「同机探测已入队」。F5(计划 26-11-22-1714 D8)起 blocked
+text 与 note 各补预告「续跑重新过全闸链, 出现需确认态会再次询问(不代用户点头)」—— 重放
+不带 confirm 位是安全设计, 行为不改只改回执文案。T3 重放防自环/T4 web 两段回执按
 该键分流; 与闸内其余 blocked(缓存 failed / env=True 失败 / qb_conf 缺失, 均无此键)可区分。
 
 ## 测试计划(每个测试函数一条)
@@ -150,7 +152,11 @@ def test_probe_miss_enqueues_intent_and_kicks_delivers_verdict(monkeypatch):
     assert it[ru.PROBE_GATE_PROBING_KEY] is True, it
     assert it["reasons"][-1]["gate"] == "same_fs" and it["reasons"][-1]["cls"] == "blocked", it["reasons"]
     assert "同机探测已入队" in it["reasons"][-1]["text"], it["reasons"]
+    # F5(计划 26-11-22-1714 D8): 回执补预告 —— 重放重新过全闸链, 需确认态会再次询问
+    # (重放不带 confirm 位是安全设计, 行为不改只改文案; blocked text 与 note 两处都在)
+    assert "续跑重新过全闸链" in it["reasons"][-1]["text"] and "不代用户点头" in it["reasons"][-1]["text"], it["reasons"]
     assert any("同机探测已入队" in n for n in it["notes"]), it["notes"]
+    assert any("续跑重新过全闸链" in n and "不代用户点头" in n for n in it["notes"]), it["notes"]
     assert it["target"] == "R:/dst" and it["hashes"] == ["HA", "HB"], f"verdict 形态随散展开带出: {it}"
     # D5 位置契约: 「探测中」回执走 blocked 通道, 本轮零建账零 setLocation
     assert "job_id" not in it, it

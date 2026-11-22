@@ -888,9 +888,14 @@ class ExecMixin:
         self._write_arm_spec(armed)
         self._ensure_daemon(armed, rt)
         self._resume_members(armed)
+        # 武装行「形态」口径(计划 26-11-22-1714 D5): 统一取 plan.form(relocate_execute 建账
+        # plan 单点写入, replace/落账均保留), 与计划/state 的叫法一致; 缺失旧账按 alias_kind
+        # 反映射, direct 兜底 —— 内部名 alias_kind 不再进日志(同次运行两种叫法问题, issue
+        # 26-11-22-0905)。
+        armed_form = (armed.plan or {}).get("form") or self._form_of_alias_kind(armed.alias_kind)
         logger.info(
             f"relocate | job {armed.job_id}: 已武装收尾(别名 {len(armed.alias_paths)} 条, "
-            f"形态 {armed.alias_kind or 'direct'}) —— 回收 daemon 将在 qB 下线窗口改写 fastresume"
+            f"形态 {armed_form}) —— 回收 daemon 将在 qB 下线窗口改写 fastresume"
         )
 
     def _finish_direct(self, job: RelocateJob) -> None:
@@ -2347,11 +2352,17 @@ class ExecMixin:
                     {
                         "gate": ru.GATE_SAME_FS,
                         "cls": ru.CLS_BLOCKED,
-                        "text": "同机探测已入队(探测进行中或等位): 结论到达后自动续跑, 本轮未建账未下发 setLocation",
+                        # F5(计划 26-11-22-1714 D8): 补预告「续跑重新过全闸链, 需确认态会再问」
+                        # —— 重放不带 confirm 位是安全设计(relocate_execute confirm 缺省 False,
+                        # 「绝不代用户点头」), 行为不改只改回执文案, 免得第二次询问像凭空冒出。
+                        "text": "同机探测已入队(探测进行中或等位): 结论到达后自动续跑, 本轮未建账未下发 setLocation; "
+                                "续跑重新过全闸链, 出现需确认态会再次询问(不代用户点头)",
                     }
                 ],
             "notes":
-                list(verdict.get("notes") or []) + ["同机探测已入队: 同机强探测进行中, 迁移将在探测结论到达后自动续跑"],
+                list(verdict.get("notes") or []) +
+                ["同机探测已入队: 同机强探测进行中, 迁移将在探测结论到达后自动续跑"
+                 "(续跑重新过全闸链, 出现需确认态会再次询问, 不代用户点头)"],
         }
 
     def _carry_prev_state(self, job_id: str, job: RelocateJob) -> RelocateJob:
@@ -2626,6 +2637,14 @@ class ExecMixin:
     @staticmethod
     def _alias_kind_of_form(form: str) -> str:
         return {"file_links": "file", "dir_alias": "dir"}.get(form, "")
+
+    @staticmethod
+    def _form_of_alias_kind(alias_kind: str) -> str:
+        """alias_kind 内部名 -> 计划口径 form 名(计划 26-11-22-1714 D5 反查兜底):
+        武装行「形态」统一展示 form(file_links/dir_alias/direct), 内部名 alias_kind 不进日志;
+        只服务 plan.form 缺失的旧账(plan 建账恒存 form, replace 保留), 空/未知(direct 无别名)
+        归 direct。"""
+        return {"file": ru.FORM_FILE_LINKS, "dir": ru.FORM_DIR_ALIAS}.get(alias_kind or "", ru.FORM_DIRECT)
 
     # ---------- 撤销(D6 停手语义: 数据与下载器路径零触碰, 需显式确认) ----------
 

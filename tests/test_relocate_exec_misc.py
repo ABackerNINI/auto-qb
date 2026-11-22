@@ -42,6 +42,10 @@
   nlink 收敛形态), 路径不在不活
 - test_chain_gate_deps_dedup_across_surfaces: 删链门依赖扫描 —— 自有面与继承条目同锚时同一
   组外种子双面命中按 (hash, sp) 去重只计一笔
+覆盖率第四轮 F6 补测(26-11-22, 计划 26-11-22-1714 批3):
+- test_arm_log_form_from_plan_and_alias_kind_fallback: 武装行「形态」统一取 plan.form(D5,
+  内部名 alias_kind 不进日志); plan 缺失旧账按 alias_kind 反映射, direct 兜底; plan.form
+  在场压过 alias_kind
 """
 
 import os
@@ -492,6 +496,37 @@ def test_misc_low_contract_faces(monkeypatch):
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
         mod._remove_links(["R:/x"])
     assert any("删链接失败" in m for m in cap.messages), cap.messages
+
+
+def test_arm_log_form_from_plan_and_alias_kind_fallback(tmp_path, monkeypatch):
+    """武装行「形态」统一取 plan.form(D5, 计划 26-11-22-1714): 内部名 alias_kind 不进日志,
+    与计划/state 的 form 口径单一(同次运行两种叫法问题, issue 26-11-22-0905);
+    plan 缺失旧账按 alias_kind 反映射(file->file_links / dir->dir_alias), direct 兜底;
+    plan.form 在场时压过 alias_kind"""
+    def _armed_line(job):
+        mod = _bare_mod(data_dir=str(tmp_path))
+        monkeypatch.setattr(mod, "_write_arm_spec", lambda j: True)
+        monkeypatch.setattr(mod, "_ensure_daemon", lambda j, rt: None)
+        with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+            mod._arm(job, {})
+        lines = [m for m in cap.messages if "已武装收尾" in m]
+        assert len(lines) == 1, cap.messages
+        return lines[0]
+
+    # plan 在场(建账单点已存 form): 直接取 form
+    line = _armed_line(_job("jf", phase=ru.PHASE_MOVED, alias_kind="dir", plan={"form": "dir_alias"}))
+    assert "形态 dir_alias" in line, line
+    # plan 缺失旧账: 按 alias_kind 反映射出射
+    line = _armed_line(_job("jn", phase=ru.PHASE_MOVED, alias_kind="dir", plan={}))
+    assert "形态 dir_alias" in line, line
+    line = _armed_line(_job("jn2", phase=ru.PHASE_MOVED, alias_kind="file", plan={}))
+    assert "形态 file_links" in line, line
+    # direct 兜底(无别名无 form 的旧账)
+    line = _armed_line(_job("jd", phase=ru.PHASE_MOVED, alias_kind=""))
+    assert "形态 direct" in line, line
+    # plan.form 在场压过 alias_kind(两字段不一致时以计划口径为准)
+    line = _armed_line(_job("jp", phase=ru.PHASE_MOVED, alias_kind="dir", plan={"form": "file_links"}))
+    assert "形态 file_links" in line, line
 
 
 def test_precheck_receipt_contract_and_add_param(tmp_path, monkeypatch):
