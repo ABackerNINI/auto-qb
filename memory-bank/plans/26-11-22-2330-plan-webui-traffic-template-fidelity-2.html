@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 流量图动效模板保真二轮: A 类两回退 + B 类窗放宽 + C 类漂移全修</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-template-fidelity-2">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-22-2330">
+<meta name="doc-updated" content="26-11-22-2330">
+<meta name="doc-refs" content="memory-bank/plans/26-11-12-1139-plan-webui-traffic-beat-motion.html, memory-bank/plans/26-11-14-1313-plan-webui-traffic-beat-fidelity.html, memory-bank/conventions/attachments/webui-traffic-beat.md, memory-bank/tasks/26-11-22-webui-traffic-template-fidelity-2.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-template-fidelity-2</div>
+<h1>WEBUI 流量图动效模板保真二轮: A 类两回退 + B 类窗放宽 + C 类漂移全修</h1>
+<p class="lede">本篇只回答: <strong>生产 T6 节拍动效(<code>qb_traffic_chart.js</code>)与前序计划 26-11-12-1139 §04 模板 demo 之间盘点出的 20+ 处观感差异怎么修</strong>。差异已三类归因(A 已拍板落地适配 / B 生产守 I9 规格、模板 demo 违自己规格 / C 疑似真实漂移), 用户已拍板处置矩阵——A 类回退两项、B 类按模板观感放宽、C 类全修——本篇给出逐项修法、守阵改判面与文档回写面, 开工即照此实施不再二次设计。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-22-2330 · <b>doc-updated</b> 26-11-22-2330 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户 26-11-22 真机对照模板反馈「线条粗细 / 扫描线颜色变化 / 横向扫描线 / 方框旋转速度 / 爬升动画等很多差异」→ 只读盘点轮产出全量差异清单(20+ 项, 三类归因, 引文到行) → 用户拍板处置矩阵「A类 的这两项回退模板实现 / B类 按模板观感放宽 / C类 全修」→ 本计划立项。<br>
+  <b>本轮动作边界</b> 仅新建本计划文件; 不改生产代码、不入池 issue、不认领 issue、不 commit/push。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>一轮保真(计划 26-11-14-1313)修掉了「动效几乎不出现 / 缺常驻菱形 / 0 流量零动效 / x 轴抖动 / 裁剪」五类缺陷, 但生产实现与模板 demo(26-11-12-1139 §04 内嵌实验台)在<strong>参数与元素形态</strong>上仍有大量出入。本轮只读盘点逐项对照(模板 demo 行号 vs 生产行号, 全清单见 §02), 归因三类:</p>
+<ul>
+  <li><strong>A 类(有拍板/注释记录的落地适配, 5 项)</strong>: 保真计划 F1/P9/D2/F5/S2-b 等有记录的刻意改动——用户点名只回退其中两项(曲线描边与辉光、束宽感与回声 full 档), 其余不动。</li>
+  <li><strong>B 类(生产守规格、模板违规格, 4+1 项)</strong>: 计划 I9 明文「t &gt; 0.55×beat 冲击类叠加层(粒子/扫描束/光带/环)零绘制」, 模板 demo 自己画到 0.6~1.0×beat——生产合规、模板越窗。用户拍板<strong>按模板观感放宽</strong>, 即 I9 该判据随拍板改判(修订见下表), 属「规格跟拍板走」, 不是缺陷修复。</li>
+  <li><strong>C 类(疑似真实漂移, 13 项)</strong>: 无拍板记录、或记录与事实不符——最典型是方框旋转: 保真计划 F2 写「CSS keyframes 420ms(模板 t/420 <em>同拍</em>)」, 实为<strong>单位误读</strong>(模板 <code>rot = t/420</code> 是弧度/ms, 一圈 2π×420 ≈ 2639ms; 生产 420ms 一圈, 快 6.3 倍)。其余为元素缺失(全高冲击闪光/次区余晖线)与形态漂移(环不旋转/切片默认档消失/次区圆点/锚辉光变形等)。</li>
+</ul>
+
+<h3>目标(做到什么程度算成)</h3>
+<ul>
+  <li><strong>G1 点名五项对齐</strong>: 方框旋转速度 / 横向扫描线 / 爬升动画 / 线条粗细 / 扫描线颜色变化, 逐项与模板观感一致(判据见 §04 各步验收)。</li>
+  <li><strong>G2 C 类修复</strong>: 表 C C1–C11 按模板实现修复(C8 内喷射角子面按 D2 保留); 判定线小菱形(表 A/A5 域)按 D3 不补; C12/C13 两项查无拍板记录的漂移按预拍板 D8 保留生产口径待改判。</li>
+  <li><strong>G3 A 类精确回退</strong>: 只回退点名两项; 其余 A 类适配(P3 环心钳制 / F2 DOM 常驻锚 / F1 恒 Lv.1 门 / P9 Lv.1 发粒子 / I9 辉光让位的 ringOuter/bandHalo 结构)一行不动; C12/C13 按预拍板 D8 保留(非经用户改判不扩范围)。</li>
+  <li><strong>G4 放宽落三处面</strong>: B 类改判同步落到<strong>实现 + 本计划 I9 修订记录 + 守阵(e2e/电池)改判红绿</strong>, 不出现「实现改了守阵没改」或反向。</li>
+  <li><strong>G5 不回归</strong>: I3 不闪(零 destroy/空态/回跳) / I8 左移连续 / I10 双轨语义色 / I7 降级(reduce 全关) / G7 背景静态零铺色全部保持; 指令预算不抬(束体 ≤23 / 束+切片 ≤28 / 横向细线 ≤12 原样), 仅 blur 与装饰指令按 §03 修订表改判。</li>
+</ul>
+
+<h3>设计不变量修订表(随本轮拍板改判, 其余 I1–I11 不动)</h3>
+<table>
+  <tr><th>条目</th><th>原口径</th><th>新口径(本轮拍板后)</th><th>守阵改判面</th></tr>
+  <tr><td>I9 冲击类窗</td><td>t &gt; 0.55×beat 冲击类(粒子/束/光带/环)零绘制</td><td><strong>逐元素窗</strong>: 粒子 0.55(不动) / 切片 0.25×beat / 环 0.6×beat / 束体+彗尾+梳齿 0.7×beat / 光带 0.7×beat(顶门)内画、alpha 0.6×beat 后自然归零(与模板「画到 beat」视觉等效); 顶层门改 0.7×beat</td><td>视觉引擎电池「0.55 后 null」、scan 电池「0.55×beat 后 0」、e2e traffic-fx-frames :811 注释措辞(0.55 零绘制在 e2e 仅注释, 无断言面)</td></tr>
+  <tr><td>I9 回声淡晕</td><td>alpha ≤ 0.20</td><td>9px 淡晕 <code>0.34×fall</code>(模板口径; 1px 包络核仍 <code>≤0.20×fall×a0</code>)</td><td>scan 电池「回声 alpha ≤0.20」断言式</td></tr>
+  <tr><td>I9 辉光预算</td><td>同帧 blur 描边 ≤3(环外圈 ≤2 + bandHalo 1)</td><td><strong>≤5</strong>(环外圈 ≤2 + bandHalo 1 + <strong>曲线辉光 2</strong>(A 类回退)); calm 档上限 0 仍全零</td><td>视觉引擎/scan_band 电池 blur 计数断言</td></tr>
+  <tr><td>I9 装饰指令</td><td>束体 ≤23 / 束+切片 ≤28 / 横线 ≤12</td><td>不抬; <strong>新增冲击闪光 +1 stroke(仅 impact 窗内)</strong>、次区余晖线 +1 stroke(仅 tail 窗), 记修订注记</td><td>记账 ctx 电池(计数面加两项白名单)</td></tr>
+  <tr><td>I9 次区光点</td><td>每轨 ≤2 沿末段 6 桶缓动, alpha ≤0.35</td><td>每轨 ≤2 <strong>全宽巡回循环</strong>(模板口径), alpha 0.3×(1−qt) ≤0.3; <code>_QB_FX_TAIL_SPAN_BUCKETS</code> 退役</td><td>视觉引擎电池「末段 6 桶/alpha ≤0.35 位置」断言</td></tr>
+  <tr><td>converge 窗</td><td>0.12–0.60×beat(impact 窗 shown 钉 prev)</td><td><strong>0–0.60×beat</strong>(爬升起步 t=0, 模板口径; ease 越界夹取机制不变, 单调无 overshoot I4 仍守)</td><td>节拍内核电池「converge [0.12,0.6]」、帧循环 impact 窗 shown=prev 断言</td></tr>
+  <tr><td>I11 例外注记</td><td>白名单元素挂 neon 门</td><td>三项<strong>非 N 局部装饰不挂 neon 门</strong>(模板口径): 判定帧全高冲击闪光 / 次区余晖线 / lvBadge(常显); 色走 Lv 表(grade 联动), 记 I11 例外注记</td><td>视觉引擎电池「neon=false 零白名单落笔」断言面收窄(fillText/闪光/余晖移出门)</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点(全量差异清单, 模板 = 26-11-12-1139 §04 demo 行号 / 生产 = qb_traffic_chart.js 行号)</h2>
+
+<h3>表 A · 已拍板适配(处置: 两项回退, 其余不动)</h3>
+<table>
+  <tr><th>#</th><th>项</th><th>模板</th><th>生产现状</th><th>处置</th></tr>
+  <tr><td>A1</td><td>曲线描边与辉光</td><td>宽 <strong>2.4px</strong>(calm 2)+ level&gt;0 时曲线辉光 <code>shadowBlur=P.blur×(lead||both?1:0.45)</code> (demo:1407-1409)</td><td>宽 2 纯描边零 blur (:4017/:4023; S2-b 让预算注 :882)</td><td><span class="wr">回退</span> D4</td></tr>
+  <tr><td>A2</td><td>束宽感分级 + 回声 full 档</td><td>无宽度感系数; echoSpan <code>full</code> = 整幅(demo:1152-1158)</td><td>六层晕 ×(0.9/1/1.1) (:917/:3137); <code>full</code> 降格 auto (:1103-1115)</td><td><span class="wr">回退</span></td></tr>
+  <tr><td>A3</td><td>F1 恒 Lv.1 门</td><td>Δ≈0 → Lv.0 整拍静默(demo:866)</td><td>值&gt;0 恒 ≥Lv.1 (:806-813)——静默拍也出蓝束, 「颜色变化」感知被稀释</td><td>不动(P9/F1 拍板; 已向用户说明此项是「扫描线颜色变化」感知差的成因之一)</td></tr>
+  <tr><td>A4</td><td>环心钳制 / 粒子底缘镜像</td><td>无(demo 被裁剪)</td><td>P3/F5 拍板 (:2969-2973/:3010)</td><td>不动</td></tr>
+  <tr><td>A5</td><td>F2 DOM 常驻锚钉判定线</td><td>大菱形随 xEnd 滑动+判定线小菱形(demo:1420-1421)</td><td>DOM 方块恒钉判定线 x (:3283)</td><td>本体不动(F2/D2 拍板); C7 只对齐画布辉光</td></tr>
+</table>
+
+<h3>表 B · 窗与寿命(处置: 按模板观感放宽, I9 修订)</h3>
+<table>
+  <tr><th>#</th><th>项</th><th>模板</th><th>生产现状</th><th>改判</th></tr>
+  <tr><td>B1</td><td>T2 光带窗</td><td>t &lt; beat(demo:1349)</td><td>0.55×beat 顶门 (:2871)——且 0.55~0.6×beat 最后一段收敛无光带伴随</td><td>顶门 0.7×beat 内画, alpha 0.6×beat 后自然归零(与模板「画到 beat」视觉等效)</td></tr>
+  <tr><td>B2</td><td>束寿命</td><td><code>fade=(1−t/(0.7beat))^1.4</code> (demo:1173-1176)</td><td>0.55×beat (:3097/:3116)——束/彗尾/梳齿整体提前消失</td><td>0.7×beat</td></tr>
+  <tr><td>B3</td><td>环寿命</td><td>0.6×beat(demo:1294)</td><td>0.55×beat (:2871/:1010)</td><td>0.6×beat</td></tr>
+  <tr><td>B4</td><td>回声淡晕</td><td>9px 晕 <code>0.34×fall</code> (demo:1246)</td><td>0.20×fall (:3208, 合规)</td><td>0.34×fall(模板口径; 1px 核不变)</td></tr>
+  <tr><td>B5</td><td>爬升起步</td><td>数值插值从 t=0 起(demo:1324/:1338)</td><td>impact 窗(0-0.12beat)shown 钉 prev, 0.12 才起步(:3629-3641)</td><td>converge [0, 0.6×beat](D1)</td></tr>
+</table>
+
+<h3>表 C · 疑似漂移(处置: C1–C11 按模板修, C12/C13 预拍板 D8 保留)</h3>
+<table>
+  <tr><th>#</th><th>项</th><th>模板</th><th>生产现状</th><th>修法</th></tr>
+  <tr><td>C1</td><td><strong>方框旋转速度</strong></td><td><code>rot=t/420</code> → 一圈 ≈2639ms(demo:1420)</td><td>CSS <code>420ms linear infinite</code> (:4182/:4184)——一圈 420ms, 快 6.3×; F2 记录「模板 t/420 同拍」(26-11-14-1313:159)系单位误读</td><td>CSS 改 2639ms(D6); 修三处注释(:85/:3220/:4157)</td></tr>
+  <tr><td>C2</td><td><strong>横向撕裂切片</strong></td><td>fusion 在 <strong>Lv≥2 即画</strong>(不限配色, demo:1088); 厚 1.5px(Lv.3 2.0; fixed 3, demo:1096); 窗 0.25×beat; alpha (0.10+0.08Lv)×q×impact; x 向 ±3q 抖动(demo:1106)</td><td>门 <code>palette==="glitch"</code> 唯一(:3029)→ 默认霓虹档永不出现; 厚 1px(:3035); 窗 0.55(ens); alpha 无 impact 耦合; 仅 y 向正弦微震</td><td>门改 <code>glitch || lv≥2</code>; 厚 1.5(Lv.3 2.0)/3; 窗 0.25(q); alpha 联 impact; 微震回模板 x 向 ±3q(dy0/ph 退役, D3)</td></tr>
+  <tr><td>C3</td><td>几何环不旋转 + 形态</td><td>rot t/300(外圈 +0.4); 半径 4+24×pf×r(both 半套 ×0.5); alpha 0.85×(1−pf)×impact×r; lw2; 外圈独立扩张 9+31×pf(demo:1294-1300)</td><td>rot=0(:2979/:2992); rMax=(14+5Lv)×gapScale(:2784); alpha 1−t/T 无 impact; lw1.5; 外圈恒 +3px(:2992)</td><td>全按模板式重写(:1010 <code>_qbFxRingAt</code> + 绘制段); 环心钳制/ gapScale(D4)保留(A4/D4)</td></tr>
+  <tr><td>C4</td><td>判定帧全高冲击闪光缺失</td><td>impact 窗内判定线全高 lw2 <code>0.75×(1−pImp)×impact</code>(demo:1373-1377)</td><td>无(judgeFlash 白名单槽位被 ±10px 短亮段占用)</td><td>_qbDrawFx 装饰段补回(+1 stroke, 不挂 neon 门 D7)</td></tr>
+  <tr><td>C5</td><td><strong>次区光点形态/轨迹</strong></td><td>4 边菱形 r2.2 rot t/500; <strong>全宽巡回循环</strong>(ph=t/1000×0.12+i/2+轨偏移); alpha 0.3×(1−qt)(demo:1115-1130)</td><td>圆点 arc r2(:2860); 末 6 桶单次扫过不循环(:3683-3730); alpha 0.35 包络</td><td>菱形化+全宽巡回+0.3 线性衰减; 1px 量化去重与资格门保留; 6 桶常量退役</td></tr>
+  <tr><td>C6</td><td>次区判定线余晖缺失</td><td>tail 段 lw1 <code>0.14×(1−qt)</code> 全高(demo:1395-1399)</td><td>无(tail 相位只画光点 :2850-2865)</td><td>tail 分支补回(+1 stroke, D7)</td></tr>
+  <tr><td>C7</td><td>N 锚辉光变形</td><td>6 边环 r=7+4qn / rot t/320 / alpha 0.5qn×impact / 画在 xEnd 随末点滑动(demo:1422-1425)</td><td>4 边 r9 / rot 每拍一圈(:3346) / 0.35q / 恒钉判定线(:3376-3390)</td><td>按模板全改; 位置改 xEnd——L0 期与 DOM 锚短暂分离(F2 本体不动, 记观感差异)</td></tr>
+  <tr><td>C8</td><td>粒子自旋/alpha/尺寸/基数</td><td>自旋 <code>t/260+i</code> 匀速单向; alpha 0.78×life×impact; 尺寸 1.6–4.2; 基数 6+7Lv(demo:943/:1073/:911)</td><td>随机 vr ±0.015 双向(:1053); alpha 1−t/T 无 impact(:1032); 1.5–3.5; 基数 16/24/32(:976)</td><td>自旋/alpha/尺寸/基数按模板(基数对齐保留 Lv.1 发射, D5); 喷射角保留 270° 左弧(D2)</td></tr>
+  <tr><td>C9</td><td>Lv 徽标</td><td>「Lv.X · lead 上传/下载」11px <strong>常显</strong>不淡出(demo:1446-1449)</td><td>「Lv.X」9px, 0.85q 0.33beat 内淡出(:3051-3057)</td><td>文案/字号/常显按模板; 位置保持右对齐; 移出 neon 门(D7)</td></tr>
+  <tr><td>C10</td><td>判定线 N 小菱形缺失</td><td><code>poly(xJudge,y,2.2q+1,4,t/300)</code> alpha 0.7q×impact(demo:1053)</td><td>无</td><td>照补(neon 门内, 模板同门); 大半被 DOM 锚覆盖属预期(D3)</td></tr>
+  <tr><td>C11</td><td>梳齿 fixed 档条数</td><td>fixed 恒 7(demo:1212)</td><td>fixed 只冻结随机源, 条数仍 3/5/7(:2827)</td><td>fixed 档 n=7(仅对照档观感)</td></tr>
+  <tr><td>C12</td><td>N 短亮段 lw/alpha(查无拍板记录, 评审轮重分类)</td><td>lw3 / alpha 0.55×q×impact(demo:1050)</td><td>lw2 / alpha q 无 impact 耦合(:3040-3042)</td><td>预拍板 D8 保留生产口径(盘点呈报时按 A 类、用户拍板未覆盖; 严格按 C 类判据归此待改判)</td></tr>
+  <tr><td>C13</td><td>从属轨加亮(查无拍板记录, 评审轮重分类)</td><td>无对应物(D3-a 模板只跳过从属轨, demo:1387)</td><td>lw3.5 末段加亮(:3348-3374, 生产新增)</td><td>同 D8 保留待改判</td></tr>
+</table>
+<p class="aside">另有两项盘点记录、不属本轮修法: ① 哈希函数模板带符号移位版分布失真, 生产已修(Math.imul, :1069-1072 注释)——模板错、生产对, 不回退; ② 模板回声淡晕 0.34 超其自身 I9 ≤0.20——本轮拍板跟模板, I9 修订表已记, 不当缺陷。</p>
+
+<h2><span class="no">§03</span>方案总览(按落点)</h2>
+
+<h3>3.1 常量与纯函数面(全部 node 电池可断言)</h3>
+<table>
+  <tr><th>落点</th><th>改法</th></tr>
+  <tr><td><code>_QB_FX_BEAM_WSCALE</code> / <code>_qbFxBeamWScale</code> (:917/:1099)</td><td><strong>退役</strong>(A2): 六层晕恒 <code>hw[0]</code>; scan 电池 T5 联动面删 beamWScale 断言(lvColor 联动保留)</td></tr>
+  <tr><td><code>_qbFxEchoSpan</code> (:1105-1115)</td><td><code>full</code> 恢复整幅 <code>s = w</code>(A2); 注释「生产降格 auto」删; QB_FX_ENUMS 注与面板提示行同步(full 标「对照」不改枚举)</td></tr>
+  <tr><td><code>_qbFxRingAt</code> (:1010-1014)</td><td>重写为模板式(C3+B3): <code>pf = t/(0.6beat)</code>, <code>r = (4+24×pf)×rScale×gapScale</code>(线性), <code>alpha = 0.85×(1−pf)×impact×rScale×gapScale</code>, pf≥1 → null; rScale = both 0.5 / lead 1 / merge 1(模板 demo:1388-1390); 近底钳制改吃环终态半径(4+24)×rScale×gapScale</td></tr>
+  <tr><td><code>_qbFxParticleAt</code> (:1021-1036)</td><td>alpha 改 <code>0.78×(1−t/T)×impact</code>; rot 改 <code>t/260 + i</code>(rot0/vr 字段退役, C8); 位移三阶段/闭式速度不动</td></tr>
+  <tr><td><code>_qbFxSpawnSpecs</code> (:1042-1057)</td><td>size <code>1.6+rnd×2.6</code>; 喷射角保持 270° 左弧(D2); vr/rot0 删</td></tr>
+  <tr><td><code>_qbFxPartCap</code> (:973-978)</td><td>基数改 <code>6+7×lv</code>(13/20/27), Lv.1 仍发射(D5, P9 兼容); clamp 32 不变</td></tr>
+  <tr><td><code>_qbFxTearSlices</code> (:1158-1176)</td><td>alpha 改 <code>(0.10+0.08×lv)×q×impact</code>(q 由绘制侧传); dy0/ph 字段退役, 改 <code>offX = (rnd×2−1)×3×q</code>(C2); y 钳/长度/缩进/色池不动</td></tr>
+  <tr><td><code>_qbFxComb</code> 调用 (:2827)</td><td>fixed 档 n=7(C11): <code>mode==="fixed" ? 7 : _QB_FX_COMB_COUNT[lv]</code></td></tr>
+  <tr><td><code>_QB_FX_TAIL_SPAN_BUCKETS</code> (:901)</td><td>退役(C5); <code>_qbTailFrame</code> 改全宽巡回(见 3.4)</td></tr>
+  <tr><td>旋转常量(新增)</td><td><code>_QB_FX_ANCHOR_SPIN_MS = 2639</code>(2π×420 取整, D6)驱动 CSS 注入与注释单点</td></tr>
+</table>
+
+<h3>3.2 装饰绘制面(_qbDrawFx / _qbDrawFxScan)</h3>
+<table>
+  <tr><th>落点</th><th>改法</th></tr>
+  <tr><td>顶层门 (:2871/:3097/:3324)</td><td><code>t &lt; beatMs×0.55</code> → <code>t &lt; beatMs×0.7</code>(B 类最大窗); 粒子(0.55)/N(0.33)/切片(0.25)各自保留独立窗检查; 光带无独立窗(顶门 0.7 内画, alpha 0.6 后自然归零)——顶门只做「最大窗」粗滤, 逐元素窗在各自块内</td></tr>
+  <tr><td>环 (:2964-2997)</td><td>半径/alpha/lw2/窗 0.6 按 3.1 新式; <strong>rot = t/300, 外圈 rot+0.4</strong>(C3); 外圈半径改 <code>9+31×pf</code> 独立扩张、alpha 0.55×(1−pPulse)×impact×r(C3); blur 辉光结构不动(A 类 ringOuter)</td></tr>
+  <tr><td>冲击闪光(新增, C4)</td><td>装饰段内(切片后、束调用前): <code>t &lt; impactMs</code> 时判定线全高 stroke, lw2, <code>rgba(lvColor, 0.75×(1−t/impactMs)×impact)</code>; 不挂 neon 门(D7); +1 stroke 记修订</td></tr>
+  <tr><td>切片 (:3029-3037)</td><td>门改 <code>cfg.palette==="glitch" || fx.lv≥2</code>(C2); 厚 1.5(Lv.3 2.0; fixed 3); 窗 0.25×beat 独立 q; alpha 联 impact; x 向 ±3q(替换 y 正弦); <code>_drawerAnimRaf</code> 让位门保留</td></tr>
+  <tr><td>束体 (_qbDrawFxScan)</td><td>fade 窗 0.7×beat(B2); wScale 退役(A2); 其余(六层晕/硬核/色散/彗尾/梳齿/回声)结构不动; 回声 9px 晕 <code>0.34×fall</code>(B4); 梳齿 fixed n=7(C11)</td></tr>
+  <tr><td>N 小菱形(新增, C10)</td><td>neon 块内每活性轨: <code>poly(L+W, y, 2.2×q+1, 4, t/300)</code> fill <code>rgba(lvColor, 0.7×q×impact)</code>(模板 demo:1053 同式; 大半被 DOM 锚覆盖属预期)</td></tr>
+  <tr><td>lvBadge (:3051-3057)</td><td>移出 neon 块; 文案 <code>"Lv."+lv+" · lead "+(lead==="up"?"上传":"下载")</code>; 11px; alpha 常显(0.85 恒定, 无 q 衰减); 门 = cfg.on 且 fx 在场(C9/D7)</td></tr>
+</table>
+
+<h3>3.3 曲线 / 锚面(_qbDrawFxAnchor + CSS)</h3>
+<table>
+  <tr><th>落点</th><th>改法</th></tr>
+  <tr><td>曲线宽 (:4017/:4023)</td><td><code>width: 2.4</code>(D4: calm 档 2)——palette 切换经 <code>_qbFxCfgSync</code> 现写 <code>u.series[1/2].width</code> + redraw(uPlot 每帧读 series.width, 无需重建)</td></tr>
+  <tr><td>曲线辉光(新增回退, A1)</td><td>_qbDrawFxAnchor 内(draw 钩子, 系列之上): <code>t &lt; beat</code> 且该轨 level&gt;0 时按 <code>u.data[1/2]</code> 全曲线重描一遍, <code>shadowColor=trackCol</code>, <code>shadowBlur = blurCap×(lead||both ? 1 : 0.45)</code>; calm(blurCap 0)自然退化; 缺口段 <code>spanGaps:false</code> 断段重 moveTo 同从属轨加亮先例; 性能妥协档见 §07 R1</td></tr>
+  <tr><td>N 锚辉光 (:3376-3390)</td><td>6 边环 <code>r=7+4qn</code> / rot <code>t/320</code> / alpha <code>0.5×qn×impact</code> / 位置改 <code>tipX</code>(随末点滑动, C7); role/gapScale 系数随模板式并入 rScale×gapScale</td></tr>
+  <tr><td>CSS (:4182/:4184)</td><td><code>420ms</code> → <code>2639ms</code>(C1/D6); 注释三处(:85/:3220/:4157)同步改写(记录单位误读史); keyframes 本体不变</td></tr>
+  <tr><td>判定线小菱形</td><td>不补(D3): 模板 r2.6 小菱形(demo:1421)与生产 DOM 常驻锚(8px)同位, 补了恒被覆盖</td></tr>
+</table>
+
+<h3>3.4 次区面(_qbDrawFx tail 分支 + _qbTailFrame)</h3>
+<table>
+  <tr><th>落点</th><th>改法</th></tr>
+  <tr><td>光点 (:2850-2865/:3683-3730)</td><td>圆点改 4 边菱形 <code>r2.2, rot=t/500</code>(C5); 轨迹改全宽巡回 <code>ph=(t/1000×0.12+i/2+轨偏移) mod 1</code> 映射整条曲线(模板 demo:1124); alpha <code>0.3×(1−qt)</code> 线性衰减; 每轨 ≤2 错峰不变; 1px 量化 sig 去重与资格门(live && level&gt;0)保留; 不循环改循环(模板口径)</td></tr>
+  <tr><td>余晖线(新增, C6)</td><td>tail 分支补: 判定线全高 stroke lw1 <code>rgba(lvColor, 0.14×(1−qt))</code>(D7); +1 stroke 记修订</td></tr>
+</table>
+
+<h3>3.5 调度面 + 守阵 + 文档</h3>
+<table>
+  <tr><th>落点</th><th>改法</th></tr>
+  <tr><td>converge 起步 (:3629-3654)</td><td><code>p = clock/convergeMs</code>(convergeMs = 0.6×beat), impact 窗不再钉 prev(B5/D1); ease 越界夹取机制不变; 「装饰帧保障」分支保留(零 Δ 拍仍需); 注释与 I4 叙述同步</td></tr>
+  <tr><td>电池改判(红绿双验)</td><td>节拍内核(converge [0,0.6]) / 视觉引擎(I9 常量行、环、粒子、切片、partCap、6 桶、blur ≤5、neon=false 断言收窄) / scan_band(0.7 窗、full、回声 0.34、beamWScale 删、指令计数白名单 +2) / 锚电池(CSS 2639ms + C7 两断言改钉: 「<code>_qbFxPolyPath(ctx, tipX</code>」禁用钉放行、辉光调用串改钉新式 tipX/6 边/7+4qn —— test_webui_static_dom_panel_traffic.py:7382-7385 现钉恰与此对立) / panel_wiring(预览同预算窗口径)</td></tr>
+  <tr><td>e2e 改判</td><td>traffic-fx-frames: <strong>无 0.55 断言面</strong>(0.55 零绘制在 e2e 仅 :811 注释, 逐元素窗断言落电池面), 仅同步该注释措辞; 回声行程探针默认档仍 ≤200, full 档单独变体; traffic-fx-anchor: 旋转断言速度无关不动, CSS 逐字钉同步</td></tr>
+  <tr><td>文档回写</td><td>本计划 I9 修订表即权威改判记录; <code>conventions/attachments/webui-traffic-beat.md</code> 动效节追加「模板保真二轮收口(2026-11-22)」节(逐条列新口径); 代码注释(:85/:3220/:4157/:879-883/:2889-2906/:3068-3086/:928/:1103)同步; 历史计划 26-11-12-1139/26-11-14-1313 不改写(史件), 矛盾处以本计划+附件收口节为准</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>常量与纯函数面(3.1 全表) + 对应 node 电池红绿(先改电池断言红, 再改实现绿)</td><td>电池全绿: 环新式/粒子 alpha+rot/尺寸/基数 13-20-27/切片 alpha 式/full 整幅/beamWScale 无残留; <code>test.quick</code> 过</td></tr>
+  <tr><td>S2</td><td>装饰绘制面(3.2): 顶门 0.7/环旋转与新形态/冲击闪光/切片门+厚+窗+抖动/束 0.7+回声 0.34/梳齿 fixed 7/N 小菱形/lvBadge 常显</td><td>scan_band+视觉引擎电池红绿全绿; 记账 ctx 指令计数(束 ≤23/束+切片 ≤28/横线 ≤12/blur ≤5)逐帧扫过; calm 档束体仍零绘制</td></tr>
+  <tr><td>S3</td><td>曲线/锚面(3.3): 宽 2.4+palette 联动/曲线辉光/锚辉光 6 边新式/CSS 2639ms+注释三处</td><td>锚电池红绿全绿(CSS 逐字钉 + 辉光两断言改钉); blur ≤5 计数过; <code>traffic-fx-anchor.spec</code> 绿</td></tr>
+  <tr><td>S4</td><td>次区面(3.4): 菱形化+全宽巡回+0.3 衰减/余晖线</td><td>视觉引擎电池次区面改判红绿; 1px 量化去重仍零空转; tail 窗尽收尾不变</td></tr>
+  <tr><td>S5</td><td>调度面(3.5): converge 起步 t=0 + e2e 探针改判</td><td>节拍内核电池红绿; I4 单调无 overshoot 全域扫仍过; I1 animEnd ≤ beat 不变; <code>traffic-fx-frames.spec</code> 全绿</td></tr>
+  <tr><td>S6</td><td>文档回写(附件收口节/代码注释)+ <code>test.full</code> + 新基线切片 + 真机冒烟(五项点名观感逐条对照模板确认)</td><td>全绿基线切片入库; 真机五项: 转速目测≈2.6s/圈、霓虹档 Lv≥2 见切片、爬升全程有带、曲线变粗有辉光、束色随等级变化</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单(已按本轮用户口径预拍板为默认值, 开工前可改判)</h2>
+<table>
+  <tr><th>D</th><th>项</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>B 类是否含「爬升起步 t=0」</td><td>含(「爬升动画」行标注 B 类, 用户 blanket 放宽)</td><td>仅四条窗放宽, converge 起步维持 0.12×beat(删 S5 对应改判)</td></tr>
+  <tr><td>D2</td><td>粒子喷射角</td><td>保留 270° 左弧(右向碎片贴判定线外裁剪, 收益低; 代码有刻意注记)</td><td>360° 全向对齐模板</td></tr>
+  <tr><td>D3</td><td>两处小菱形与微震语义</td><td>判定线小菱形(r2.6)不补(DOM 锚覆盖); N 小菱形(2.2q+1)照补; 切片微震回模板 x 向 ±3q(y 正弦退役)</td><td>全部照模板补/保留正弦</td></tr>
+  <tr><td>D4</td><td>曲线宽与辉光窗</td><td>宽 2.4(calm 2); 辉光窗收敛到拍内 t&lt;beat(模板为 level&gt;0 全程常驻——防长窗 blur 常驻成本)</td><td>辉光全程常驻(严格模板)</td></tr>
+  <tr><td>D5</td><td>粒子基数</td><td>对齐模板 6+7Lv(13/20/27), 保留 P9 的 Lv.1 发射</td><td>严格模板(Lv.1 零粒子, 推翻 P9)</td></tr>
+  <tr><td>D6</td><td>旋转周期取值</td><td>2639ms(2π×420 精确取整)</td><td>2640ms(整百好读; 视觉无差)</td></tr>
+  <tr><td>D7</td><td>闪光/余晖/徽标的门与色</td><td>不挂 neon 门、色走 Lv 表(calm 档亦显, 模板口径); I11 记例外注记</td><td>挂 neon 门保 I11 严格性(N 关时三元素熄灭)</td></tr>
+  <tr><td>D8</td><td>C12/C13 两项查无拍板记录漂移(短亮段 lw3→2/去 impact 耦合、从属轨加亮)的处置</td><td>保留生产口径(盘点呈报时按 A 类、用户拍板矩阵未覆盖; 评审轮按判据重分类入 C, 待改判)</td><td>按模板对齐(短亮段 lw3+impact 耦合; 移除从属轨加亮)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>日期</th><th>结论</th></tr>
+  <tr><td>D0</td><td>26-11-22</td><td>用户处置矩阵(原话): 「A类 的这两项回退模板实现: 曲线 2.4→2 + 辉光移除 / 扫描束宽度感 ×0.9/1/1.1; 回声 full 档降格 auto」; 「B类 按模板观感放宽」; 「C类 全修」——A 类其余项、P3/F2/F1/P9 等拍板面不在回退范围。</td></tr>
+  <tr><td>D1–D8</td><td>—</td><td>待用户确认或默许默认值(§05); 拍板后回填。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>R1</td><td>全曲线 blur 辉光性能(≤2880 点 × 2 轨, 拍内每帧)</td><td>真机长窗(24h)拍内掉帧 / 基线帧耗时超阈值</td><td>妥协档: 末段 N 点(如 24 点)加亮替代全曲线重描, 或 blur 窗收窄到 0.6×beat; 实测数字进基线切片, 二选一记录</td></tr>
+  <tr><td>R2</td><td>闪烁同族回归(全高闪光/余晖线是新增整高元素)</td><td>低 alpha 整高线被读成「闪」</td><td>均为线性回落、零铺色、窗有界(impact 0.12beat / tail 衰减); e2e frames 探针全绿 + 「静音看节奏」自检; 不触碰 I11 背景黑名单</td></tr>
+  <tr><td>R3</td><td>守阵红面清单遗漏(实现改了守阵没改)</td><td>电池/e2e 红了才想起来改判</td><td>§01 修订表逐行列出改判面, S1–S5 每步先红后绿双验; 收口跑 <code>test.full</code>+新基线</td></tr>
+  <tr><td>R4</td><td>full 档恢复整幅=回潮 R5 前旧观感</td><td>用户切到 full 对照档</td><td>默认 auto 不变; full 仅面板「对照」档, 提示行标注; e2e 默认档断言不受影响</td></tr>
+  <tr><td>R5</td><td>模板自身违规格项被当缺陷「修回去」</td><td>回声淡晕 0.34 超 I9 ≤0.20 等</td><td>按拍板跟模板, I9 修订表记录改判; 哈希分布失真一项模板错、生产对, 不回退(§02 aside)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-22-2330</span> 初版: 用户真机对照模板报五类观感差异 → 只读盘点轮产出 20+ 项差异全量清单(模板 demo 行号 vs 生产行号, 三类归因 A/B/C) → 用户拍板处置矩阵(A 类回退两项 / B 类按模板观感放宽 / C 类全修) → 本计划立项。要点: I9 四处改判(逐元素窗/回声淡晕/辉光 ≤5/次区光点)+ converge 起步 t=0 + C 类修法落点 + 守阵改判面五电池两 e2e + 文档回写面(附件收口节); 待拍板 D1–D8 均给默认值。</li>
+</ul>
+
+</div>
+</body>
+</html>
