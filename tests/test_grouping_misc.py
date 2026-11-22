@@ -27,6 +27,8 @@
 - test_guard_dry_run_post_no_side_effect: post 相位 dry-run 零真实副作用(po2/3/5/7/8/10/12+sp43/46/56)
 - test_guard_content_root_flat: 单文件平铺种子内容根=save_path 本身(cr18 平铺早退丢失)
 - test_guard_content_root_nested_first_segment: 嵌套内容根取首段(cr30 rsplit/cr35 恒 join)
+- 注记(26-11-22-1714 F7 收编): grouping_mod._content_root_of 副本已删, cr18/cr30/cr35 两守阵改指
+  relocate_units.content_root_of 单点(拼接恒正斜杠, os.path.join 形态断言随之收口), 不新增用例
 - test_guard_within_scope_contract: 作用域判定契约(含等于/子路径/尾斜杠 scope/POSIX 绝对路径)(ws1/3/9/10/14)
 - test_guard_syscall_path_mapping: 容器映射命中必须返回映射路径(sy2 映射丢失)
 - test_guard_third_party_link_probe_and_discard: 第三方链接探测对象=代表文件(mk20)+判非链接必须消除标记(mk35)
@@ -493,28 +495,28 @@ def test_guard_dry_run_post_no_side_effect():
 def test_guard_content_root_flat():
     """守阵(W9a cr18): 单文件平铺种子(常态)内容根 = save_path 本身 —— or→and 吞掉「全平铺早退」
     会让内容根塌成 save_path/文件名, 组键物理解析失真(组裂)"""
-    from auto_qb.core.modules.grouping_mod import _content_root_of
+    from auto_qb.core.modules.relocate_units import content_root_of
 
-    assert _content_root_of("R:/D", ["movie.mkv"]) == "R:/D", "平铺单文件必须早退返回 save_path"
-    assert _content_root_of("R:/D", ["/movie.mkv"]) == "R:/D", "首斜杠包裹的平铺文件名归一后仍须早退"
-    assert _content_root_of("R:/D", []) == "R:/D", "空文件表同样早退"
-    assert _content_root_of("", ["a.mkv"]) == "", "空 save_path 同样早退"
+    assert content_root_of("R:/D", ["movie.mkv"]) == "R:/D", "平铺单文件必须早退返回 save_path"
+    assert content_root_of("R:/D", ["/movie.mkv"]) == "R:/D", "首斜杠包裹的平铺文件名归一后仍须早退"
+    assert content_root_of("R:/D", []) == "R:/D", "空文件表同样早退"
+    assert content_root_of("", ["a.mkv"]) == "", "空 save_path 同样早退"
 
 
 def test_guard_content_root_nested_first_segment():
     """守阵(W9a cr30/cr35): 嵌套内容根 = save_path/唯一顶层段; 多顶层段回退 save_path ——
     rsplit 取末段/恒走 join 都会让目录别名作用域断裂"""
-    from auto_qb.core.modules.grouping_mod import _content_root_of
+    from auto_qb.core.modules.relocate_units import content_root_of
 
-    assert _content_root_of("R:/D", ["sub/deep/a.mkv", "sub/deep/b.mkv"]) == os.path.join("R:/D", "sub"), \
+    assert content_root_of("R:/D", ["sub/deep/a.mkv", "sub/deep/b.mkv"]) == "R:/D/sub", \
         "唯一顶层段必须是首段(不是末段, 二层嵌套区分 split/rsplit)"
-    assert _content_root_of("R:/D", ["sub\\deep\\a.mkv", "sub\\deep\\b.mkv"]) == os.path.join("R:/D", "sub"), \
+    assert content_root_of("R:/D", ["sub\\deep\\a.mkv", "sub\\deep\\b.mkv"]) == "R:/D/sub", \
         "反斜杠文件名必须归一为正斜杠后再判顶层段"
-    assert _content_root_of("R:/D", ["/sub/deep/a.mkv", "sub/deep/b.mkv"]) == os.path.join("R:/D", "sub"), \
+    assert content_root_of("R:/D", ["/sub/deep/a.mkv", "sub/deep/b.mkv"]) == "R:/D/sub", \
         "首尾斜杠剥离后同顶层段必须合并(不剥离会裂成空首段)"
-    assert _content_root_of("R:/D", ["/sub/a.mkv", ""]) == os.path.join("R:/D", "sub"), \
+    assert content_root_of("R:/D", ["/sub/a.mkv", ""]) == "R:/D/sub", \
         "空文件名段必须在归一阶段被过滤(否则顶层段集合被空串污染而回退)"
-    assert _content_root_of("R:/D", ["a/x.mkv", "b/y.mkv"]) == "R:/D", "多顶层段必须回退 save_path"
+    assert content_root_of("R:/D", ["a/x.mkv", "b/y.mkv"]) == "R:/D", "多顶层段必须回退 save_path"
 
 
 def test_guard_within_scope_contract():

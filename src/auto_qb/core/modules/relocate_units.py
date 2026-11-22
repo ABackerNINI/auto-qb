@@ -2164,8 +2164,11 @@ def chain_gate_hits(
     R2 形态感知(计划 26-11-13-0448 §03 R2): 本函数是**候选面**(scope 前缀 + src 等值面
     预过滤, 便宜)—— 文件级 job(alias_kind="file")的最终 verdict 由消费侧(_chain_gate_deps)
     按「文件清单 x alias_paths 交集」谓词(file_alias_intersects)精判(祖先格命中同样过该
-    精判 —— 复用既有谓词, 不造新口径); 目录级维持命中即依赖(祖先格命中 = 内容根恰覆盖
-    旧根, 数据落 junction 树, 真依赖; 嵌套 scope 形态下按覆盖面偏保守, 宁拦勿漏)。
+    精判 —— 复用既有谓词, 不造新口径); 目录级等值面命中(sp 归一恰等旧根)由消费侧补
+    per-file scope 落点精判(F1, 计划 26-11-22-1714 §03 —— 同根兄弟假依赖豁免面; 删链门
+    判定侧 D16 消费(qbapi)自带 R3 交集豁免, 等值面在其冗余, 不做本精判), 其余命中维持
+    命中即依赖(祖先格命中 = 内容根恰覆盖旧根, 数据落 junction 树, 真依赖; 嵌套 scope
+    形态下按覆盖面偏保守, 宁拦勿漏)。
     0535 祖先方向候选格: 组外种子 save_path 为 equal_root(旧根)的**严格祖先**且其内容根
     恰覆盖旧根(content_root_of(save_path, files) == equal_root)—— 该形态两头(前缀/等值)
     都不命中(生产布局 R:\\Download\\PTing 直接挂下载根下真实可达), 修复前误清零导致

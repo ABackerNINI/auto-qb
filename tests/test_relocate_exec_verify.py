@@ -45,8 +45,18 @@
 - test_chain_gate_deps_file_kind_intersection_verdict: 文件级 job verdict 换「文件清单 x
   alias_paths 交集」—— 相交(同名撞链接路径/等值面平铺同名 E3 形态) = 依赖 / 不相交
   (组外异名, 等值面+前缀面候选) = 豁免(误拦1 修正面) / 不可得(取数抛错/空清单) =
-  保守计依赖(宁拦勿漏 E8) / 目录级命中即依赖原样 / direct 自有面短路(0711b) / 本组 hash
-  豁免不变
+  保守计依赖(宁拦勿漏 E8) / 目录级前缀面命中即依赖、等值面随 F1 改 per-file 精判(完整
+  三态面在 F1 用例) / direct 自有面短路(0711b) / 本组 hash 豁免不变
+### 删链门目录级等值面 per-file scope 落点精判(F1, 计划 26-11-22-1714 §03, issue 0905 自锁修)
+- test_chain_gate_deps_dir_equal_face_per_file_scope_precision: 等值面命中(sp 归一恰等
+  旧根)且 scope 在场 -> 逐记录按「任一文件落 scope 下」判别 —— 兄弟假依赖豁免(文件全在
+  scope 外, 0905 自锁修) / 纯落进保留(全在 junction 内) / 混合布局保留(部分落内, 宁拦
+  勿漏向) / 清单不可得/空保守计依赖(D10) / scope 前缀面几何即真依赖不精判 / scope 缺失
+  旧账不精判维持保守 / 继承条目同款精判 / file job 维持既有 R2 交集精判行为不变
+- test_step_verify_chain_deps_retry_info_dedup: 删链门重试 INFO 去重(D4)—— 同依赖签名
+  只 INFO 一次, 签名变化再 INFO, 未变降 DEBUG(INFO 可见性保留不整体降级)
+- test_step_verify_chain_deps_last_error_wording_scoped_equal_face: last_error 文案(8)
+  —— 目录级措辞补「且数据经别名落进作用域」限定, 豁免面生效后指引不再误导
 ### 删链门 0535 祖先方向候选格(issue 26-11-13-0535, 计划 26-11-15-2340 刀2)
 - test_chain_gate_deps_ancestor_savepath_grid: 组外种子 save_path 为 job.src 严格祖先且
   内容根恰覆盖旧根 -> 计入依赖(文件级过 file_alias_intersects 精判 / 目录级命中即依赖 /
@@ -584,10 +594,12 @@ def test_chain_gate_deps_file_kind_intersection_verdict(tmp_path):
     assert _deps(fjob, [("HZ", _rec_files("HZ", "R:/src", ()))]) == ["HZ"], "空清单 = 保守计依赖"
     # 本组豁免不变: 成员 hash 即使清单不相交也先按 hash 豁免(身份语义, 与路径无关)
     assert _deps(fjob, [("HA", _rec_files("HA", "R:/src", ("other.bin", )))]) == [], "成员 hash 豁免承重"
-    # 目录级零变化: 命中即依赖, 不看文件清单(异名也拦, D16 契约面)
+    # 目录级前缀面命中即依赖(几何即真依赖, 不精判); 等值面自 F1 起由消费侧补 per-file
+    # scope 落点精判 —— 完整三态面(兄弟豁免/纯落进/混合/不可得)在 F1 专测
     djob = _job("j2", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="dir", scope="R:/src/Show")
-    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "目录级命中即依赖"
-    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src", ("other.bin", )))]) == ["HZ"], "目录级等值面保留"
+    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src/Show", ("other.bin", )))]) == ["HZ"], "目录级前缀面命中即依赖"
+    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src", ("Show/e00.mkv", )))]) == ["HZ"], "目录级等值面落进保留(F1)"
+    assert _deps(djob, [("HZ", _rec_files("HZ", "R:/src", ("other.bin", )))]) == [], "目录级等值面兄弟假依赖豁免(F1)"
     # direct 自有面短路(0711 修法 b, 计划 26-11-15-2340 刀2): 无别名 job 无链可删,
     # 组外落点(等值/前缀)不再顶进依赖集 —— 旧口径下该形态收尾恒悬挂 REASON_CHAIN_DEPS
     # 且文案「维持别名」失实(direct 根本没有别名); 放行扩张如实钉扎(R4)
@@ -644,6 +656,108 @@ def test_chain_gate_deps_ancestor_savepath_grid(tmp_path):
     assert _deps(fjob, [_rec_files("HZ", "R:/Download", ())]) == [], "清单不可得: 候选面不猜, 该格不命中"
 
 
+def test_chain_gate_deps_dir_equal_face_per_file_scope_precision(tmp_path):
+    """F1 目录级等值面 per-file scope 落点精判(计划 26-11-22-1714 §03, issue 0905 自锁修)
+
+    等值面命中(sp 归一恰等旧根)且 scope 在场 -> 逐记录取文件清单按「任一文件落 scope 下」
+    判别(per-file 统一覆盖三态, 不做内容根相等判别 —— 混合布局也是真依赖):
+    - 1) 兄弟假依赖豁免: sp==src 而文件全落 scope 外(数据不经别名) -> 不再顶进依赖集
+      (0905 实测: deps 恒非零收尾自锁不可自愈);
+    - 2) 纯落进保留: 文件全落 junction 内 -> 依赖保留(D16 契约真依赖, 2076c889 拦截意图不动);
+    - 3) 混合布局保留: 部分落内部分落外 -> 依赖保留(宁拦勿漏向);
+    - 4) 清单不可得/空: 保守计依赖(D10, 与 E8/file_alias_intersects None 契约同口径);
+    - 范围限定: scope 前缀面几何即真依赖不精判 / scope 缺失旧账(5)不精判维持保守;
+    - 6) 继承条目同款精判按面生效; file job 维持既有 R2 交集精判(行为不变)。
+    """
+    mod = _bare_mod(data_dir=str(tmp_path / "data"))
+
+    def _deps(job, records):
+        mod._ctx.store = types.SimpleNamespace(by_hash={r.hash: r for r in records})
+        return [h for h, _sp in mod._chain_gate_deps(job)]
+
+    # 生产 0905 形态: src = 下载根, scope = 内容根(junction 落点), 同根兄弟种子账面
+    # save_path 恰等 src 但数据落真实兄弟目录(不经别名)
+    djob = _job("j1", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="dir", scope="R:/src/Show")
+    assert _deps(djob, [_rec_files("HZ", "R:/src", ("OtherMovie/f.bin", ))]) == [], "1) 兄弟假依赖豁免(0905 自锁修)"
+    assert _deps(djob, [_rec_files("HZ", "R:/src", ("Show/e00.mkv", ))]) == ["HZ"], "2) 纯落进保留"
+    assert _deps(djob, [_rec_files("HZ", "R:/src", ("Show/e00.mkv", "OtherMovie/f.bin"))]) == ["HZ"], \
+        "3) 混合布局保留(任一文件落 scope 下即依赖)"
+    assert _deps(djob, [_rec_files("HZ", "R:/src", ())]) == ["HZ"], "4) 空清单 = 保守计依赖(D10)"
+    assert _deps(djob, [_rec_files("HZ", "R:/src", files_error=True)]) == ["HZ"], "4) 取数失败 = 保守计依赖(D10)"
+    assert _deps(djob, [_rec_files("HZ", "R:/src/Show/g2", ("other.bin", ))]) == ["HZ"], "范围限定: 前缀面几何即真依赖不精判"
+    # 5) scope 缺失旧账: replace 显式清空 scope(_job helper 的 scope=scope or src 会把空串
+    # 回落为 src, 须绕过才真给 scope_present=False), anchor 回落 src, 等值面命中不精判维持
+    # 保守(与旧锚同口径; replace 既有先例 test_step_verify_direct_no_alias_finalizes)
+    legacy = replace(_job("j2", phase=ru.PHASE_REWRITTEN, hashes=("HA", ), alias_kind="dir"), scope="")
+    assert _deps(legacy, [_rec_files("HZ", "R:/src", ("OtherMovie/f.bin", ))]) == ["HZ"], "5) scope 缺失旧账保守(行为同旧)"
+    # 6) 继承条目: 条目面等值命中同款 per-file 精判(兄弟豁免/落进保留)
+    inh = _job(
+        "j3",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=("HA", ),
+        alias_kind="dir",
+        scope="R:/src/Show",
+        plan={
+            "inherited":
+                [
+                    {
+                        "job_id": "prev",
+                        "src": "R:/prev",
+                        "scope": "R:/prev/Show",
+                        "alias_kind": "dir",
+                        "alias_paths": ["R:/prev/Show/l"],
+                    }
+                ]
+        },
+    )
+    assert _deps(inh, [_rec_files("HZ", "R:/prev", ("OtherMovie/f.bin", ))]) == [], "6) 继承条目兄弟假依赖豁免"
+    assert _deps(inh, [_rec_files("HZ", "R:/prev", ("Show/e00.mkv", ))]) == ["HZ"], "6) 继承条目纯落进保留"
+    # 6) file job 行为不变: 等值面命中照走既有 R2 交集精判(相交依赖/不相交豁免), 不进本精判面
+    fjob = _job(
+        "j4",
+        phase=ru.PHASE_REWRITTEN,
+        hashes=("HA", ),
+        alias_kind="file",
+        alias_paths=("R:/src/Show/e00.mkv", ),
+        scope="R:/src/Show",
+    )
+    assert _deps(fjob, [_rec_files("HZ", "R:/src", ("Show/e00.mkv", ))]) == ["HZ"], "6) file job 相交依赖不变"
+    assert _deps(fjob, [_rec_files("HZ", "R:/src", ("other.bin", ))]) == [], "6) file job 不相交豁免不变"
+
+
+def test_step_verify_chain_deps_retry_info_dedup(tmp_path):
+    """F1 删链门重试 INFO 去重(7, 拍板 D4): 同依赖签名只 INFO 一次, 签名变化再 INFO,
+    未变降 DEBUG(0905 实测 INFO 每 2s 一行 138 行/4.6min; INFO 可见性保留不整体降级);
+    键残留无行为, 不做清理面(计划 §04 批1 明文)"""
+    mod, job, rt, _removed = _rewritten_env(tmp_path, [("HA", "R:/dst")], extra=[("HZ", "R:/src")])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._step_verify(job, rt)  # 首次进入 chain_deps: INFO
+        mod._step_verify(mod.get_job("j1"), rt)  # 同签名重入: DEBUG
+        mod._step_verify(mod.get_job("j1"), rt)  # 仍同签名: 继续 DEBUG
+    infos = [r for r in cap.records if r.levelname == "INFO" and "删链门依赖未清" in r.getMessage()]
+    debugs = [r for r in cap.records if r.levelname == "DEBUG" and "依赖集未变" in r.getMessage()]
+    assert len(infos) == 1, cap.messages
+    assert len(debugs) == 2, cap.messages
+    mod._ctx.store.by_hash["HZ2"] = _rec("HZ2", r"R:\src\g2")  # 依赖集变化 -> 签名变化
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod._step_verify(mod.get_job("j1"), rt)
+    infos2 = [r for r in cap2.records if r.levelname == "INFO" and "删链门依赖未清" in r.getMessage()]
+    assert len(infos2) == 1, cap2.messages
+    assert "2 个" in infos2[0].getMessage(), infos2[0].getMessage()
+
+
+def test_step_verify_chain_deps_last_error_wording_scoped_equal_face(tmp_path):
+    """F1 last_error 文案(8, 计划 26-11-22-1714): 目录级措辞补「且数据经别名落进作用域」
+    限定 —— 等值面自精判起不再是「恰在旧根即依赖」的无条件面, 豁免后指引不再误导
+    (0905 实测: 按旧指引删的 3 条全是自造 real-fake)"""
+    mod, job, rt, _removed = _rewritten_env(tmp_path, [("HA", "R:/dst")], extra=[("HZ", "R:/src")])
+    mod._step_verify(job, rt)
+    saved = mod.get_job("j1")
+    assert saved.reason == ru.REASON_CHAIN_DEPS, saved.reason
+    assert "恰在旧根 R:/src(等值且数据经别名落进作用域)" in saved.last_error, saved.last_error
+    assert "迁移到新位置或删除后自动重判" in saved.last_error, saved.last_error
+
+
 def test_step_verify_direct_no_alias_finalizes(tmp_path):
     """0711 修法 b(issue 26-11-13-0711, 计划 26-11-15-2340 刀2): direct(无别名)收尾窗
     组外种子落旧根前缀/等值面 -> 删链门自有面短路, 核验通过即收尾 —— 修复前该形态
@@ -686,10 +800,11 @@ def test_chain_deps_text_form_aware_wording(tmp_path):
     assert "迁移到新位置或删除后自动重判" in ftext, ftext
     assert "依赖清零即自动收尾, 也可用「立即收尾」按钮加速收尾" in ftext, ftext
     assert "保存路径在别名作用域" not in ftext, "文件级不再用 save_path 面措辞"
-    # 目录级: 现行面原样(scope 前缀 + src 等值), 无立即收尾句
+    # 目录级: 现行面(scope 前缀 + src 等值), 等值面带「数据经别名落进作用域」限定(F1),
+    # 无立即收尾句
     djob = _job("j2", phase=ru.PHASE_REWRITTEN, alias_kind="dir", scope="R:/src/Show")
     dtext = mod._chain_deps_text(djob, deps)
-    assert "4 个种子的保存路径在别名作用域 R:/src/Show 之下或恰在旧根 R:/src(等值) 等共 4 个" in dtext, dtext
+    assert "4 个种子的保存路径在别名作用域 R:/src/Show 之下或恰在旧根 R:/src(等值且数据经别名落进作用域) 等共 4 个" in dtext, dtext
     assert "迁移到新位置或删除后自动重判" in dtext and "立即收尾" not in dtext, dtext
     # direct: 与目录级同一文案(判据面零变化, 不造第二份格式)
     direct = _job("j3", phase=ru.PHASE_REWRITTEN, alias_kind="", scope="R:/src/Show")

@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="删链门等值面假依赖: dir_alias 同根兄弟种子判为别名依赖致收尾自锁">
 <meta name="issue-summary" content="chain_gate_hits 等值面 _norm(sp)==eq 不查内容根, dir_alias 作业把 save_path 恰等旧根的同根兄弟种子判为别名依赖(数据不经 junction=假依赖), deps 恒非零致收尾自锁, INFO 每 2s 刷屏且 last_error 指引误导">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· bug</div>
+<div class="kicker">计划外问题（已修）· bug</div>
 <h1>删链门等值面假依赖: dir_alias 同根兄弟种子判为别名依赖致收尾自锁</h1>
 <p class="lede">chain_gate_hits 等值面 _norm(sp)==eq 不查内容根, dir_alias 作业把 save_path 恰等旧根的同根兄弟种子判为别名依赖(数据不经 junction=假依赖), deps 恒非零致收尾自锁, INFO 每 2s 刷屏且 last_error 指引误导</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-22 09:05</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">backend/relocate</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">S4 真机验收(计划 26-11-21-1600, 测试 qB 环境三窗)</div></div>
 </div>
@@ -159,11 +159,15 @@ if under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq):
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-22 09:05 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-22 认领开工按锚点重定位 —— <code>chain_gate_hits</code> 等值面判据与 §02 取证逐字一致（<code>under_alias_root(sp, (root, )) is not None or (eq and _norm(sp) == eq)</code>），自锁形态在位：目录级 job 等值面命中即依赖、无精判（旧断言「目录级等值面保留」钉的就是该旧行为，修复随本件语义更新）。重定位后行号 2183 → 2183（当日无漂移）。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法（= 建议修法 1+2+3，计划 26-11-22-1714 批1 F1）</strong>：<code>relocate_exec._chain_gate_deps</code> surfaces 四元组加第 5 元「scope 在场」标志（<code>bool(job.scope)</code> / 继承条目 <code>bool(e.scope)</code>），目录级等值面命中（scope 在场且非 scope 前缀面）补 per-file 精判 —— 逐记录取文件清单，任一文件落 scope 下（<code>ru.under_alias_root</code> 命中）= 依赖保留；全不命中 = 同根兄弟假依赖豁免；清单不可得/空 = 保守计依赖（D10 宁拦勿漏）。混合布局（部分落 junction 部分落真实兄弟）经 per-file 判别保留依赖，不做内容根相等判别；scope 前缀面按几何即真依赖不精判、祖先格候选面已带内容根覆盖判别不重复、file job 维持既有 R2 交集精判。per-file 拼接用 <code>ru._join</code> 单点（与 <code>file_alias_intersects</code> 口径一致，判定面零 <code>os.path.join</code>）。<code>_chain_deps_text</code> 目录级措辞补「等值且数据经别名落进作用域」限定（豁免后指引不再误导）；<code>_step_verify</code> 重试 INFO 去重（D4）：deps 签名 <code>tuple(sorted(deps))</code> 按 job_id 记实例 dict，签名变化才 INFO、未变降 DEBUG（键残留至多吞同 job_id 重发首轮的一次 INFO，仅观测面无账面行为，不做清理面）；<code>relocate_units.chain_gate_hits</code> docstring 同步改述（「目录级等值面命中由消费侧补 per-file scope 落点精判」），候选面本体与 qbapi D16 消费零改动（D16 自带 R3 交集豁免，等值面在其冗余）。</p>
+  <p><strong>验证方式</strong>：<code>tests/test_relocate_exec_verify.py</code> 新增 3 用例（计划 §04 批1 测试清单 ①-⑧）钉 per-file 精判三态（兄弟假依赖豁免 / 纯落进保留 / 混合布局保留）+ 清单不可得/空保守（D10）+ scope 缺失旧账不精判（<code>dataclasses.replace</code> 真实构造 scope_present=False，评审轮1 修正假构造）+ file job 与继承条目行为不变 + 刷屏去重（同 deps 只 INFO 一次、变化再 INFO、未变 DEBUG）+ last_error 文案。评审 2 轮：轮1 抓出测试5) scope 回落假构造（minor，已改 replace 真实进链）与 <code>_chain_deps_sig</code> 注释表述（nit，已改述残留至多吞重发首轮 INFO），轮2 复评闭环。</p>
+  <p><strong>验证与测试数字</strong>（2026-11-22 实测）：<code>commands run test.quick</code> = <strong>6995 passed / 0 failed / 2 skipped</strong>（66.95s）；新增 3 用例全 PASSED，所在测试文件全文件 38 passed。</p>
 </section>
 
 <footer>

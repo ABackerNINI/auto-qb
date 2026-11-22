@@ -102,6 +102,11 @@ class ExecMixin:
     _probe_inline: bool = False
     _probe_runner: Optional[ProbeRunner] = None
 
+    # 删链门重试 INFO 去重(D4, 计划 26-11-22-1714): job_id -> 依赖签名 tuple(sorted(deps))。
+    # 惰性建实例 dict(类属性 None 只是声明位); job_id 是 mover|src|dst 幂等摘要(job_id_for),
+    # 键残留至多吞同 job_id 重发首轮的一次 INFO(仅观测面, 无账面行为), 不做清理面(D4 拍板)。
+    _chain_deps_sig: Optional[dict] = None
+
     # ---------- verdict 消费与 pending 恢复(S3, 计划 26-11-10-2350 §03 落点段「verdict 消费」
     # / §04 S3 / §06 D9/D7 / §07 风险表; 并轨 26-11-15-2340 刀4) ----------
     # 消费面只在主循环线程(黄金法则#5): on_task_line 每 tick 调一次 _consume_probe_verdict
@@ -1543,7 +1548,17 @@ class ExecMixin:
             text = self._chain_deps_text(job, deps)
             if job.reason != ru.REASON_CHAIN_DEPS or job.last_error != text:
                 self._set_job(replace(job, reason=ru.REASON_CHAIN_DEPS, last_error=text))
-            logger.info(f"relocate | job {job.job_id}: 删链门依赖未清({len(deps)} 个), 维持别名等依赖消失")
+            # 重试 INFO 去重(D4): 依赖集不变不重复刷(0905 实测 INFO 每 2s 一行, 138 行/4.6min)
+            # —— 签名变化才 INFO, 未变降 DEBUG; INFO 可见性保留不整体降级。
+            sig = tuple(sorted(deps))
+            sig_map = getattr(self, "_chain_deps_sig", None)
+            if sig_map is None:
+                sig_map = self._chain_deps_sig = {}
+            if sig_map.get(job.job_id) == sig:
+                logger.debug(f"relocate | job {job.job_id}: 删链门依赖未清({len(deps)} 个), 维持别名等依赖消失(依赖集未变)")
+            else:
+                sig_map[job.job_id] = sig
+                logger.info(f"relocate | job {job.job_id}: 删链门依赖未清({len(deps)} 个), 维持别名等依赖消失")
             return
         self._finalize_verified(job)
 
@@ -1761,7 +1776,14 @@ class ExecMixin:
         目录不经别名) = 豁免, 清单不可得(取数失败/空表/client 缺席) = 保守计依赖(宁拦
         勿漏, E8 口径); 取数走 PlanMixin._file_map 既有缓存单点(TorrentRecord.files 惰性
         缓存; 本类与 PlanMixin 同属 RelocateModule 的 MRO, self._file_map 即该方法本体,
-        无第二份取数口径)。目录级维持命中即依赖原样。
+        无第二份取数口径)。目录级命中即依赖, 惟等值面(sp 归一恰等旧根)由消费侧补 per-file
+        scope 落点精判(F1, 计划 26-11-22-1714 §03): 逐记录取文件清单按「任一文件落 scope 下」
+        判别 —— 任一命中 = 经别名的真依赖保留; 全不命中 = 同根兄弟假依赖豁免(数据不经别名,
+        0905 实测 deps 恒非零收尾自锁); 清单不可得/空 = 保守计依赖(宁拦勿漏, D10)。混合布局
+        (部分文件落 junction、部分落真实兄弟目录)也是真依赖 —— per-file 判别统一覆盖纯落进/
+        混合/兄弟三态, 不做内容根相等判别。范围限定: scope 前缀面命中按几何即真依赖(数据落
+        junction 树)不精判; 祖先格命中在候选面内已带内容根覆盖判别不重复; scope 缺失旧账
+        (anchor 回落 src)不精判维持保守(与旧锚同口径)。
         direct 自有面短路(0711 修法 b, issue 26-11-13-0711 §06; 计划 26-11-15-2340 刀2):
         alias_kind 为空(单成员组直搬, 无别名)即无链可删, deps 判据对 direct 无意义 ——
         旧口径下组外种子落旧根前缀/等值面会把 direct 收尾恒悬挂 REASON_CHAIN_DEPS, 文案
@@ -1771,7 +1793,8 @@ class ExecMixin:
         继承条目(前任的门)不受影响。
         0535 祖先方向候选格(issue 26-11-13-0535): chain_gate_hits 经 files_of 取数回调
         启用祖先格(组外种子 save_path 为旧根严格祖先且内容根恰覆盖旧根); 文件级命中
-        照走交集精判, 目录级命中即依赖(数据落 junction 树)。
+        照走交集精判, 目录级命中即依赖(数据落 junction 树; 祖先格在候选面已判内容根
+        覆盖, 消费侧不再重复精判)。
         单活任务模型(D4)追加**继承面**: 接管的前任作用域(移交条目)各自作为独立的门
         扫一遍(前任收官为历史后不再有自己的门)—— 旧根上的组外种子/未改写成员账面
         同样是依赖, 依赖清零前移交别名不删(前任的门由活任务承接)。
@@ -1780,11 +1803,14 @@ class ExecMixin:
         records = list(self._ctx.store.by_hash.values())
         save_paths = [getattr(r, "save_path", "") or "" for r in records]
         # direct 自有面短路(0711b): 自有面只在确有别名形态时开门; 继承条目同滤
-        # (无别名条目同样无链可删, 别名形态缺失 = 直搬前任, 不开门)。
+        # (无别名条目同样无链可删, 别名形态缺失 = 直搬前任, 不开门)。第 5 元「scope 在场」
+        # 标志(F1): 旧账 scope 缺失(anchor 回落 src)不精判维持保守 —— 与旧锚同口径。
         surfaces = []
         if job.alias_kind:
-            surfaces.append((job.scope or job.src, job.src, job.alias_kind, job.alias_paths))
-        surfaces += [(e.scope or e.src, e.src, e.alias_kind, e.alias_paths) for e in job.inherited if e.alias_kind]
+            surfaces.append((job.scope or job.src, job.src, job.alias_kind, job.alias_paths, bool(job.scope)))
+        surfaces += [
+            (e.scope or e.src, e.src, e.alias_kind, e.alias_paths, bool(e.scope)) for e in job.inherited if e.alias_kind
+        ]
         api = getattr(self._ctx, "api", None)
         client = getattr(api, "client", None) if api is not None else None
         # 0535 祖先格取数回调: 只对「save_path 为旧根严格祖先」的候选被 chain_gate_hits
@@ -1803,11 +1829,12 @@ class ExecMixin:
 
         deps = []
         seen = set()
-        for anchor, equal_root, kind, alias_paths in surfaces:
+        for anchor, equal_root, kind, alias_paths, scope_present in surfaces:
             hits = set(ru.chain_gate_hits(save_paths, anchor, equal_root=equal_root, files_of=_ancestor_files_of))
             if not hits:
                 continue
             file_job = kind == "file"
+            eq = ru._norm(equal_root)
             for r, sp in zip(records, save_paths):
                 if sp not in hits or r.hash in members:
                     continue
@@ -1815,6 +1842,17 @@ class ExecMixin:
                     fmap = self._file_map(r, client)
                     if ru.file_alias_intersects(sp, list(fmap.keys()), alias_paths) is False:
                         continue  # R2 交集豁免: 组外异名种子数据不经别名, 不是删链门依赖
+                elif scope_present and ru.under_alias_root(sp, (anchor, )) is None and ru._norm(sp) == eq:
+                    # 等值面精判(F1, 计划 26-11-22-1714 §03): 目录级 job 命中恰等旧根的并列面时
+                    # 「命中即依赖」会顶进同根兄弟假依赖(数据不经别名, 0905 收尾自锁)—— 逐记录
+                    # 取文件清单按「任一文件落 scope 下」判别: 任一命中 = 经别名的真依赖保留;
+                    # 全不命中 = 兄弟假依赖豁免; 清单不可得/空(fmap 空) = 保守计依赖(宁拦勿漏,
+                    # D10)。其余命中不进本支: scope 前缀面按几何即真依赖(数据落 junction 树);
+                    # 祖先格在候选面已带内容根覆盖判别; scope 缺失旧账(scope_present=False)
+                    # 维持保守(与旧锚同口径)。
+                    fmap = self._file_map(r, client)
+                    if fmap and not any(ru.under_alias_root(ru._join(sp, rel), (anchor, )) for rel in fmap):
+                        continue
                 key = (r.hash, sp)
                 if key not in seen:
                     seen.add(key)
@@ -1826,8 +1864,10 @@ class ExecMixin:
 
         文件级 job 随 R2 语义改措辞(依赖谓词 = 文件清单 x alias_paths 交集, 计划
         26-11-13-0448 §03 R2/R5): 「N 个种子的文件与别名链接重叠」+ 出路带「立即收尾」
-        加速器(依赖清零即自动收尾); 目录级/direct 保留现行 save_path 面措辞
-        (scope 前缀 + src 等值面语义仍真)。分流按 job.alias_kind, 同一格式不造第二份。
+        加速器(依赖清零即自动收尾); 目录级/direct 保留现行 save_path 面措辞(scope 前缀 +
+        src 等值面语义仍真 —— 等值面自 F1 精判起带「数据经别名落进作用域」限定, 兄弟假
+        依赖已在判定侧豁免, 措辞不再把该面说成无条件依赖)。分流按 job.alias_kind,
+        同一格式不造第二份。
         """
         samples = ", ".join(h[:8] for h, _sp in deps[:3])
         more = f" 等共 {len(deps)} 个" if len(deps) > 3 else ""
@@ -1840,7 +1880,7 @@ class ExecMixin:
         anchor = job.scope or job.src
         return (
             f"仍有 {len(deps)} 个种子的保存路径在别名作用域 {anchor} 之下或恰在旧根 {job.src}"
-            f"(等值){more}({samples}): "
+            f"(等值且数据经别名落进作用域){more}({samples}): "
             "别名删除会让它们找不到数据 —— 请把这些种子迁移到新位置或删除后自动重判"
         )
 

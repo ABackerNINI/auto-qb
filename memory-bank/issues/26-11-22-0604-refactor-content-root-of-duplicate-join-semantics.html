@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="grouping_mod._content_root_of 与 relocate_units.content_root_of 副本拼接口径不一致(Windows)">
 <meta name="issue-summary" content="归组侧副本用 os.path.join 产反斜杠, 判定单点用 _join 恒正斜杠, 两副本同语义异输出形态">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-22-0604-refactor-content-root-of-duplicate-join-semantics</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-22 06:04</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -118,7 +118,13 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-22 06:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-22 — 状态 In Progress → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充</h3>
+  <p><strong>实际修法</strong>（计划 26-11-22-1714 批1 F7，拍板 D9）：<code>grouping_mod</code> 删本地副本 <code>_content_root_of</code> 改 import <code>relocate_units.content_root_of</code> 判定单点（D9: 不下沉 infra, 循环依赖已核实不存在）；3 调用点换名并补 <code>str(x or "")</code> 折假值 —— 计划外发现: 旧副本对 <code>save_path=None</code> 有假值容忍而单点 <code>_join</code> 会 <code>AttributeError</code>（有 <code>test_web_relocate</code> 退化用例当场抓红）, 折假值与同模块 <code>_physical_dir</code> 既有惯例同款；分隔符面勘察确认 3 消费点全部经 <code>path_normalize</code>/<code>_norm</code> 归一无分隔符契约；<code>tests/test_grouping_misc.py</code> 两守阵 import 改指单点+4 处断言改正斜杠字面量（副本删除后必要的机械面）。</p>
+  <p><strong>验证方式</strong>：grouping 面既有测试回归零行为差（计划测试清单⑨）；评审 1 轮零发现。</p>
+  <p><strong>验证数字</strong>（2026-11-22 实测）：<code>commands run test.quick</code> = <strong>6995 passed / 0 failed / 2 skipped</strong>（66.08s）。</p>
 </section>
 
 <footer>

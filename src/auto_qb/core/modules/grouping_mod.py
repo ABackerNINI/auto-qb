@@ -28,6 +28,14 @@ from typing import Any, Dict, Tuple
 from ...infra import alias_fs, file_access, utils
 from ...torrents import TorrentRecord
 from ..module import AppContext, BaseModule, PhaseEvent, PhaseRegistry
+# 内容根判定直接 import relocate_units 单点(plan 26-11-22-1714 F7/D9: 原 _content_root_of
+# 副本已删, 副本 docstring「不引入第二套语义」的承诺由单点本身兑现 —— 归组与闸门同用
+# 一份「文件表 -> 唯一顶层段」规则, 不下沉 infra, 循环依赖已核实不存在)。
+# !单点契约 save_path 为 str: store 记录可带 None(字段异常旧账, 守阵
+# test_relocate_module_classify_entries_degenerate 钉住「单条不炸」), 调用点一律
+# str(x or "") 折假值再入(与 _physical_dir 同款容忍, 旧副本 str(save_path or "") 的
+# 容忍面由调用点保留)。
+from .relocate_units import content_root_of
 
 logger = logging.getLogger(__name__)
 
@@ -47,20 +55,6 @@ def group_key_of(save_path: str, file_map: Mapping[str, int]) -> Tuple[str, Tupl
     纯函数, 无状态, 不读 self; 行为与抽取前完全一致。
     """
     return (utils.path_normalize(save_path), tuple(sorted(file_map.keys())))
-
-
-def _content_root_of(save_path: str, files: Iterable[str]) -> str:
-    """内容根路径(目录别名的作用域; 平铺/多顶层段 = save_path 本身)
-
-    与 relocate_units.content_root_of 同口径(那边是纯函数层给闸门用, 这里给归组用 ——
-    两处都是「文件表 -> 唯一顶层段」这同一条规则, 不引入第二套语义)。
-    """
-    sp = str(save_path or "")
-    segs = [str(f).replace("\\", "/").strip("/") for f in files if str(f).strip("/")]
-    if not sp or not segs or all("/" not in s for s in segs):
-        return sp
-    firsts = {s.split("/", 1)[0] for s in segs}
-    return os.path.join(sp, next(iter(firsts))) if len(firsts) == 1 else sp
 
 
 def _within_scope(scope: str, path: str) -> bool:
@@ -278,7 +272,7 @@ class GroupingModule(BaseModule):
                 continue
             if not fmap:
                 continue
-            root = _content_root_of(rec.save_path, list(fmap.keys()))
+            root = content_root_of(str(rec.save_path or ""), list(fmap.keys()))
             if not mine and not _within_scope(scope, root):
                 continue
             self._assign_to_group(rec, fmap)
@@ -311,7 +305,7 @@ class GroupingModule(BaseModule):
             if not old_map:
                 continue  # 无缓存文件映射, 无从重归组与扫描(维持原行为)
             # 比较同样走物理解析: 别名在场的成员 save_path 仍是 S, 但它的组键首元已是解析结果
-            cur_root = _content_root_of(torrent.save_path, list(old_map.keys()))
+            cur_root = content_root_of(str(torrent.save_path or ""), list(old_map.keys()))
             if utils.path_normalize(self._physical_dir(torrent.save_path, cur_root)) == key[0]:
                 continue
             remain_key = self._leave_group(h)  # 移出原组(成员索引 O(1)); 组空则返回 None
@@ -409,7 +403,7 @@ class GroupingModule(BaseModule):
             return
         store = self._ctx.store
         # 组键首元走**物理位置解析**(§3.4): 别名在场时仍指向 S 的成员与已到 T 的 mover 同组
-        root = _content_root_of(torrent.save_path, list(file_map.keys()))
+        root = content_root_of(str(torrent.save_path or ""), list(file_map.keys()))
         key = group_key_of(self._physical_dir(torrent.save_path, root), file_map)
         self._leave_group(torrent.hash)  # 幂等: 移出旧组(可能因 save_path 变化被重归组), 不触发扫描
         store.groups.setdefault(key, []).append(torrent.hash)
