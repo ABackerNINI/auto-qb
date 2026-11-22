@@ -262,6 +262,10 @@
   #v-ledger tbody td { padding: 7px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
   #v-ledger tbody tr { cursor: pointer; }
   #v-ledger tbody tr:hover { background: var(--paper-2); }
+  /* 正在处理行 (wip, 计划 26-11-22-1742 D5/D6): 整行左侧色条, 暖橙 --amber 族 (壳内真实令牌,
+     没有 --warn —— 别编)。必须写在 tr.sel / tr.msel **之前**: 同特异性靠源序, 让交互态盖过
+     工作色条; 组合态 sel.msel 由更高特异性的既有规则胜出。只加色条, 不加第二个行内图标。 */
+  #v-ledger tbody tr.wip { box-shadow: inset 2px 0 0 var(--amber); }
   #v-ledger tbody tr.sel { background: var(--cyan-soft); box-shadow: inset 2px 0 0 var(--cyan); }
   td.idx { font-family: var(--mono); font-size: 10.5px; color: var(--faint); text-align: right; width: 34px; padding-top: 9px; }
   td.stamp { font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; width: 96px; }
@@ -344,6 +348,58 @@
     stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   }
   .pinbtn.on svg { fill: currentColor; }
+
+  /* ============ 视图 A: 正在处理 (working) 专区 ============
+     照置顶专区骨架 (计划 26-11-22-1742 D8/D11): 同栏、置顶区正下方、可折叠持久化、空则隐藏、
+     不受筛选搜索影响。强调色走暖橙 --amber (与 pin 的 cyan 分家); 闪电内联 SVG, 非 emoji / 非外链。 */
+  .workzone {
+    flex: none; background: var(--paper-2); border-bottom: 1px solid var(--hair-2);
+    max-height: 42vh; overflow-y: auto; scrollbar-gutter: stable;
+    box-shadow: inset 3px 0 0 var(--amber);
+  }
+  .workzone[hidden] { display: none; }
+  .wzhead {
+    position: sticky; top: 0; z-index: 3; height: 28px;
+    display: flex; align-items: center; gap: 8px; padding: 0 20px;
+    background: var(--paper-2); border-bottom: 1px solid var(--hair);
+    font-family: var(--disp); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--amber);
+  }
+  .wzhead b { font-weight: 600; }
+  .wzhead .wzhint {
+    margin-left: auto; font-family: var(--sans); font-size: 11px;
+    letter-spacing: 0; text-transform: none; color: var(--faint);
+  }
+  /* 闪电标记: 内联 SVG 常量 WORKING_SVG (非 emoji / 非外链), 走暗色 --amber 令牌 */
+  .wzhead .wzmark { display: inline-flex; align-items: center; line-height: 0; color: var(--amber); }
+  .wzhead .wzmark svg { width: 13px; height: 13px; fill: currentColor; stroke: currentColor; stroke-width: 1.3; }
+  /* 工作专区折叠按钮: 同置顶区 .pztoggle 口径, 见 applyWorkCollapse —— 原生 button + aria 保留键盘操作 */
+  .wztoggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; padding: 0; flex: none;
+    border: none; background: none; cursor: pointer; color: var(--amber); border-radius: 3px;
+  }
+  .wztoggle:hover { background: var(--amber-soft); }
+  .wztoggle:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .wztoggle svg {
+    width: 13px; height: 13px; display: block; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    transition: transform .15s ease;
+  }
+  .workzone.collapsed .wztoggle svg { transform: rotate(-90deg); }
+  /* 专区表头同主表表头 (--chrome), 与置顶 / 隐藏专区同款 */
+  #v-ledger .workzone thead th { position: sticky; top: 28px; z-index: 2; background: var(--chrome); }
+  /* # 栏「移出正在处理」按钮 (可点交互, 非静态标记); 点击早退, 不冒泡开抽屉 */
+  .wzremove {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px;
+    width: 18px; height: 18px; padding: 0; flex: none;
+    border: none; background: none; cursor: pointer; color: var(--faint); border-radius: 3px;
+  }
+  .wzremove:hover { color: var(--amber); background: var(--amber-soft); }
+  .wzremove svg {
+    width: 13px; height: 13px; display: block; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
 
   /* ============ 视图 A: 隐藏 (hide) 专区 + 工具栏开关 ============ */
   /* 隐藏区与置顶专区同构 (克隆主表 thead + 复用 ledgerCells), 但三处刻意不同:
@@ -734,6 +790,9 @@
         <button class="hidebtn" id="hidBtn" hidden title="展开 / 收起隐藏区 (隐藏的条目只在这里可见)">隐藏区</button>
       </div>
       <div class="pinzone" id="pinZone" hidden></div>
+      <!-- 正在处理区 (WORKING, 计划 26-11-22-1742): 照置顶专区骨架, 位于置顶区正下方 / 主表之前;
+           手动加入 + 终态自动退出; 空则整块 hidden, 不受筛选搜索影响 -->
+      <div class="workzone" id="workZone" hidden></div>
       <div class="ledgerwrap">
         <!-- 列宽/列序单点 (守阵 test_pin_zone_reuses_ledger_columns): 全壳只有这一处表头;
              置顶专区在 renderPinZone 里**克隆本 thead**, 两表逐栏对齐靠它 —— 别在别处再写一份列定义 -->
@@ -849,6 +908,8 @@ const ACTIVE_ST = new Set(["Open", "In Progress"]);
 const VIEW_KEY = "mb-nav-view";
 const PINS_KEY = "mb-nav-pins";
 const PIN_COLLAPSE_KEY = "mb-nav-pin-collapsed";   // 置顶区折叠态 (纯前端偏好, 同 PINS_KEY): "1" = 收起
+const WORKING_KEY = "mb-nav-working";   // 正在处理区 (纯前端偏好, 同 PINS_KEY): link 数组, 顺序即加入序
+const WORKING_COLLAPSE_KEY = "mb-nav-working-collapsed";   // 工作区折叠态: "1" = 收起
 const HIDDEN_KEY = "mb-nav-hidden";   // 隐藏条目 (纯前端偏好, 同 pin): 隐藏区数据落点
 const FILTERS_KEY = "mb-nav-filters";   // 筛选器 / 选择类状态 (纯前端偏好, 刷新后不丢)
 /* 排序键 (2026-11-10 用户要求加更新时间序): updated = doc-updated (数据层 enrich, md 档案回落
@@ -859,7 +920,11 @@ const PULL_HEADER = "X-Nav-Action";   // 拉取的 CSRF 自定义头: 跨站 fet
 const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 /* 恢复 (unhide) 图标 = 逆时针回转, 内联 SVG 同图钉口径 */
 const UNHIDE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
-/* 折叠箭头 (置顶区标题行): 朝下 = 展开; 收起态靠 CSS 旋转 -90 度朝右 (状态可见) */
+/* 闪电图标 (正在处理区标题, 计划 D11): 内联 SVG, 非 emoji / 非外链图标库; 暗色令牌 --amber 由 CSS 上色 */
+const WORKING_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>';
+/* 移出正在处理 (工作专区 # 栏按钮): 内联 SVG 叉号, 同图钉 / 恢复图标口径 */
+const UNWORK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+/* 折叠箭头 (置顶 / 工作专区标题行): 朝下 = 展开; 收起态靠 CSS 旋转 -90 度朝右 (状态可见) */
 const CHEV_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
 let DATA = null;
@@ -887,6 +952,12 @@ const S = {
   /* 置顶区折叠态: 纯前端偏好, 落 PIN_COLLAPSE_KEY (同 PINS_KEY 口径) —— 只在 boot() 装载一次,
      derive() 不碰; 收起时只藏表格主体, 标题行与展开入口始终可见 (2026-11-03 用户要求)。 */
   pinCollapsed: false,
+  /* 正在处理 (working): 纯前端偏好, 数组顺序即加入序 (最近加入的在前)。只在 boot() 装载一次;
+     derive() 绝不装载 / 绝不新增 (P2 只在其末尾调 pruneTerminalWorking 做终态只删不增) —— 否则
+     30s 轮询会把用户主动加入的件洗掉 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。 */
+  working: [],
+  /* 工作区折叠态: 落 WORKING_COLLAPSE_KEY, 同 pinCollapsed 口径 —— 只在 boot() 装载一次, derive 不碰 */
+  workingCollapsed: false,
   /* 隐藏 (hide): 纯前端偏好, 同 pin —— 只在 boot() 装载一次, derive() 只读 (把隐藏条目挡在
      各视图之外) 绝不写, 否则 30s 轮询会洗掉用户的隐藏 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。
      showHidden = 隐藏区展开开关, 会话态不落盘 (需求口径: 点按钮才能查看)。 */
@@ -956,6 +1027,69 @@ function pinZoneItems() {
     seen.add(x.link);
     return true;
   });
+}
+
+/* ---- 正在处理 (working): 纯前端偏好, 落 localStorage (与 PINS_KEY 同款); 读写一律 try/catch 兜底。
+   与 pin 两份状态独立 —— 同一件可同时在两区, 取消一处不影响另一处 (拍板 D9)。 ---- */
+function loadWorking() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(WORKING_KEY) || "[]");
+    return Array.isArray(arr) ? arr.filter(x => typeof x === "string") : [];
+  } catch (e) { return []; }
+}
+function saveWorking() { try { localStorage.setItem(WORKING_KEY, JSON.stringify(S.working)); } catch (e) { /* file:// 下静默降级为会话内存态 */ } }
+/* 工作区折叠态: 与 PIN_COLLAPSE_KEY 同款纯前端偏好, 读写一律 try/catch 兜底;
+   装载点全壳唯一 (boot), derive 不碰 —— 否则 30s 轮询会把用户收起的工作区又展开 */
+function loadWorkingCollapsed() {
+  try { return localStorage.getItem(WORKING_COLLAPSE_KEY) === "1"; } catch (e) { return false; }
+}
+function saveWorkingCollapsed() { try { localStorage.setItem(WORKING_COLLAPSE_KEY, S.workingCollapsed ? "1" : "0"); } catch (e) { /* 静默降级 */ } }
+/* 折叠应用单点: 渲染末尾与按钮点击共用; 只动类 / aria-expanded / [hidden], **不整表重渲染**
+   —— 重建 innerHTML 会把焦点从按钮丢回 body, 键盘用户点完就掉了焦点 (同 applyPinCollapse) */
+function applyWorkCollapse() {
+  const zone = $("workZone"), btn = $("wzToggle"), body = $("wzBody");
+  if (!zone) return;
+  zone.classList.toggle("collapsed", !!S.workingCollapsed);
+  if (btn) btn.setAttribute("aria-expanded", S.workingCollapsed ? "false" : "true");
+  if (body) body.hidden = !!S.workingCollapsed;
+}
+function toggleWorkingCollapsed() {
+  S.workingCollapsed = !S.workingCollapsed;
+  saveWorkingCollapsed();
+  applyWorkCollapse();
+}
+const isWorking = link => S.working.includes(link);
+function toggleWorking(link) {
+  const at = S.working.indexOf(link);
+  if (at >= 0) S.working.splice(at, 1); else S.working.unshift(link);
+  saveWorking();
+  renderLedger();
+}
+/* 专区条目: 按加入序取 DATA 中仍存在者, 过滤失效 link (件被删 / 改名) 与重复;
+   隐藏件不进工作专区 —— 「隐藏」= 从所有内容视图退场, 恢复后 working 关系原样回来 (同 pinZoneItems) */
+function workingZoneItems() {
+  const seen = new Set();
+  return S.working.map(l => byLink.get(l)).filter(x => {
+    if (!x || seen.has(x.link) || isHidden(x.link)) return false;
+    seen.add(x.link);
+    return true;
+  });
+}
+/* 终态自动退出 (计划 S3, 拍板 D2/D3/D4): 仅对 strict 命中 Done / Dropped / Superseded 的成员
+   删除并落盘; 不新增 / 不重新入选; 无状态 (NO_ST) 不删; 以 link 为键 (与加入时同一编码)。
+   有变更才 saveWorking; 同步把移出件剪出 S.multi (与批量隐藏同款边界)。
+   **调用接线留给 P2**: 本轮只写函数体, boot() / derive() 都不调用 —— 避免两轮打架。 */
+function pruneTerminalWorking() {
+  const terminal = ["Done", "Dropped", "Superseded"];
+  const gone = S.working.filter(l => {
+    const it = byLink.get(l);
+    return it && terminal.includes(stOf(it));
+  });
+  if (!gone.length) return;
+  S.working = S.working.filter(l => !gone.includes(l));
+  saveWorking();
+  S.multi = S.multi.filter(l => !gone.includes(l));
+  syncMultiChip();
 }
 
 /* ---- 隐藏 (hide): 纯前端偏好, 落 localStorage (与 PINS_KEY 同款); 读写一律 try/catch 兜底。
@@ -1043,6 +1177,19 @@ function togglePinBatch(links) {
     for (let k = fresh.length - 1; k >= 0; k--) S.pins.unshift(fresh[k]);   /* 逆序 unshift = 保持 links 序 */
   }
   savePins();
+  renderLedger();
+}
+/* 正在处理批量 (计划 D7): 与 togglePinBatch 同款 —— 冻结快照 + 全达态反向前缀, 幂等;
+   移出不剪 S.multi (working 成员仍在内容视图里, 不像隐藏件会退场) */
+function toggleWorkingBatch(links) {
+  const remove = links.every(isWorking);   /* 全已在处理 -> 批量移出; 否则把未加入的全加入 */
+  if (remove) {
+    S.working = S.working.filter(l => !links.includes(l));
+  } else {
+    const fresh = links.filter(l => !isWorking(l));
+    for (let k = fresh.length - 1; k >= 0; k--) S.working.unshift(fresh[k]);   /* 逆序 unshift = 保持 links 序 */
+  }
+  saveWorking();
   renderLedger();
 }
 function toggleHideBatch(links) {
@@ -1319,12 +1466,15 @@ function aFiltered() {
 /* 台账行单元格: 主表与置顶专区共用同一份栏序/栏宽单点 —— 2026-10-05 用户要求「专区与主区同栏,
    只置顶展示 + 强调」, 两处共用本函数, 从结构上排除栏漂移。pinMark=true 时 # 栏显示实心图钉标记
    (置顶专区用), 否则显示行号。hidMark=true 时为隐藏区行: # 栏换成「恢复」按钮, 标题栏不放图钉
-   (隐藏中的件不进置顶专区)。栏序 # 时间戳 形态 状态 类型 标题 专题 链 由守阵
-   test_ledger_status_column_between_form_and_title 钉死。 */
-function ledgerCells(i, n, pinMark, hidMark) {
+   (隐藏中的件不进置顶专区)。workMark=true 时为工作专区行: # 栏换成「移出正在处理」按钮
+   (点击早退, 不误开抽屉), 标题栏仍留图钉以表达 pin 独立态 (拍板 D9)。栏序 # 时间戳 形态 状态
+   类型 标题 专题 链 由守阵 test_ledger_status_column_between_form_and_title 钉死。 */
+function ledgerCells(i, n, pinMark, hidMark, workMark) {
   const idx = hidMark
     ? '<button class="unhidebtn" data-unhide="' + esc(i.link) + '" title="恢复到列表 (取消隐藏)">' + UNHIDE_SVG + "</button>"
-    : (pinMark ? '<span class="pin-mark" title="已置顶">' + PIN_SVG + "</span>" : n + 1);
+    : (workMark
+      ? '<button class="wzremove" data-unwork="' + esc(i.link) + '" title="移出正在处理">' + UNWORK_SVG + "</button>"
+      : (pinMark ? '<span class="pin-mark" title="已置顶">' + PIN_SVG + "</span>" : n + 1));
   const pinned = isPinned(i.link);
   /* 时间戳列跟随排序档 (2026-11-10): 更新时间序下显 doc-updated (缺回落 stamp), 否则列与排序
      对不上看起来像 bug; 创建戳挪进 title 不丢信息 */
@@ -1365,15 +1515,24 @@ function renderLedger() {
     v => { if (v === "live") S.aLive = !S.aLive; else S.aChain = !S.aChain; saveFilters(); renderLedger(); });
 
   renderPinZone();
+  renderWorkingZone();
   renderHiddenZone();
 
   const list = aFiltered();
   const nHid = hiddenZoneItems().length;
   $("aCount").innerHTML = "<b>" + list.length + "</b> / " + (DATA.items.length - nHid) + " 件" +
     (nHid ? " · 已隐藏 " + nHid : "");
-  /* 多选行挂 msel (拍板 D13): 状态在 S.multi, DOM 重建时重挂 —— 30s 轮询 re-render 选区天然存活 */
+  /* 多选行挂 msel (拍板 D13): 状态在 S.multi, DOM 重建时重挂 —— 30s 轮询 re-render 选区天然存活。
+     工作成员挂 wip (计划 D5/D6): 与 sel/msel 同框时两态都挂, 由 CSS 源序 wip < sel < msel 让位;
+     隐藏件挡在 wip 之外 (与 workingZoneItems 同款) */
   const ms = multiSet();
-  const rowCls = i => ((S.sel === i.link ? "sel " : "") + (ms.has(i.link) ? "msel" : "")).trim();
+  const rowCls = i => {
+    const c = [];
+    if (isWorking(i.link) && !isHidden(i.link)) c.push("wip");
+    if (S.sel === i.link) c.push("sel");
+    if (ms.has(i.link)) c.push("msel");
+    return c.join(" ");
+  };
   $("aRows").innerHTML = list.map((i, n) => `<tr data-link="${esc(i.link)}"${rowCls(i) ? ' class="' + rowCls(i) + '"' : ""}>${ledgerCells(i, n)}</tr>`).join("");
 
   if (S.sel) { if (byLink.has(S.sel)) renderDrawer(S.sel); else closeDrawer(); }
@@ -1403,6 +1562,30 @@ function renderPinZone() {
   applyPinCollapse();
 }
 
+/* 正在处理专区: 与置顶专区同构 (克隆主表 thead + 行复用 ledgerCells), 位于置顶区正下方;
+   手动加入 + 终态自动退 (后者 P2 接线), 不受筛选搜索影响, 空则整块隐藏 (计划 S2) */
+function renderWorkingZone() {
+  const zone = $("workZone");
+  const items = workingZoneItems();
+  if (!items.length) { zone.hidden = true; zone.innerHTML = ""; return; }
+  zone.hidden = false;
+  /* 列头/列宽单点 = 主表 thead: 直接克隆, 两表逐栏对齐由结构保证 (别在别处再写一份列定义) */
+  const thead = document.querySelector("#v-ledger .ledgerwrap thead");
+  const head = thead ? thead.outerHTML : "";
+  const ms = multiSet();
+  zone.innerHTML =
+    '<div class="wzhead">' +
+    '<button class="wztoggle" id="wzToggle" type="button" aria-expanded="' + (S.workingCollapsed ? "false" : "true") +
+    '" aria-controls="wzBody" aria-label="展开 / 收起正在处理区" title="展开 / 收起正在处理区">' + CHEV_SVG + "</button>" +
+    '<span class="wzmark" title="正在处理">' + WORKING_SVG + "</span>" +
+    "处理中 · WORKING <b>(" + items.length + ")</b>" +
+    '<span class="wzhint">右键移出 · 点行看详情</span></div>' +
+    '<div class="wzbody" id="wzBody"><table class="wztable">' + head + "<tbody>" +
+    items.map(i => `<tr class="wip-row${ms.has(i.link) ? " msel" : ""}" data-link="${esc(i.link)}">${ledgerCells(i, 0, false, false, true)}</tr>`).join("") +
+    "</tbody></table></div>";
+  applyWorkCollapse();
+}
+
 /* 隐藏区: 与置顶专区同构 (克隆主表 thead + 行复用 ledgerCells hidMark 路径), 但默认折叠 ——
    点工具栏「隐藏区」按钮 (有隐藏条目才出现) 才展开; 停在主表下方, 不与内容区抢位置 */
 function renderHiddenZone() {
@@ -1425,12 +1608,12 @@ function renderHiddenZone() {
     "</tbody></table>";
 }
 
-/* 明细打开单点 (主表与置顶专区共用): 普通单击 = 单选高亮 + 右侧抽屉, 同一套 renderDrawer;
-   置顶件双向显示, 两区同 link 的行都挂 sel。图钉 / 多选早退分支留在各自 click 委托里 (不在这里) */
+/* 明细打开单点 (主表 / 置顶 / 正在处理专区共用): 普通单击 = 单选高亮 + 右侧抽屉, 同一套 renderDrawer;
+   跨区同 link 的行都挂 sel (置顶件双向显示, 工作件同理)。图钉 / 移出 / 多选早退分支留在各自 click 委托里 (不在这里) */
 function openRowDetail(link) {
   S.sel = link;
-  document.querySelectorAll("#aRows tr.sel, #pinZone tr.sel").forEach(r => r.classList.remove("sel"));
-  document.querySelectorAll("#aRows tr[data-link], #pinZone tbody tr[data-link]").forEach(r => {
+  document.querySelectorAll("#aRows tr.sel, #pinZone tr.sel, #workZone tr.sel").forEach(r => r.classList.remove("sel"));
+  document.querySelectorAll("#aRows tr[data-link], #pinZone tbody tr[data-link], #workZone tbody tr[data-link]").forEach(r => {
     if (r.dataset.link === link) r.classList.add("sel");
   });
   renderDrawer(link);
@@ -1570,9 +1753,11 @@ function openCtx(x, y, link) {
   const n = links.length > 1 ? ' <span class="n">· ' + links.length + "</span>" : "";
   /* 动态单项 (拍板 D6): 全达态 → 反向文案 (批量取消), 否则正向 (未达态成员全置上, 幂等) */
   const allPinned = links.every(isPinned);
+  const allWorking = links.every(isWorking);
   const allHidden = links.every(isHidden);
   m.innerHTML =
     '<button class="ctxitem" data-act="pin">' + (allPinned ? "取消置顶" : "置顶到专区") + n + "</button>" +
+    '<button class="ctxitem" data-act="working">' + (allWorking ? "移出正在处理" : "加入正在处理") + n + "</button>" +
     '<button class="ctxitem" data-act="hide">' + (allHidden ? "取消隐藏" : "隐藏条目") + n + "</button>" +
     '<button class="ctxitem" data-act="open">打开原文' + n + "</button>" +
     '<button class="ctxitem" data-act="copy">复制仓库路径' + n + "</button>";
@@ -1845,6 +2030,8 @@ function wire() {
   for (const id of ["aRows", "pinZone"]) {
     $(id).addEventListener("mousedown", e => { if (e.shiftKey) e.preventDefault(); });
   }
+  /* 工作专区同款 shift 守卫 (单独挂, 不并入上面的数组 —— 守阵按字面量钉住该 for 循环) */
+  $("workZone").addEventListener("mousedown", e => { if (e.shiftKey) e.preventDefault(); });
   $("aRows").addEventListener("click", e => {
     const pb = e.target.closest(".pinbtn");
     if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 免得图钉冒泡又弹详情抽屉 */
@@ -1884,6 +2071,28 @@ function wire() {
     e.preventDefault();
     openCtx(e.clientX, e.clientY, row.dataset.link);
   });
+  /* 正在处理专区: 委托点击 (折叠 / 移出按钮 / 图钉 / 条目打开) 与右键 —— 与置顶专区同款交互。
+     移出 / 图钉都早退, 免得冒泡又开抽屉 (计划 S2 验收判据)。 */
+  $("workZone").addEventListener("click", e => {
+    const tb = e.target.closest(".wztoggle");
+    if (tb) { toggleWorkingCollapsed(); return; }   /* 折叠 = 只切工作区可见性, 不动选区 / 抽屉 */
+    const ub = e.target.closest(".wzremove");
+    if (ub) { toggleWorking(ub.dataset.unwork); return; }   /* 移出 = 早退, 不误开抽屉 */
+    const pb = e.target.closest(".pinbtn");
+    if (pb) { togglePin(pb.dataset.pin); return; }   /* pin 独立态: 早退, 不误开抽屉 */
+    const row = e.target.closest("tr.wip-row");
+    if (!row) return;
+    if (e.ctrlKey || e.metaKey) { toggleMulti(row.dataset.link); return; }
+    if (e.shiftKey) { e.preventDefault(); shiftMulti(row.dataset.link); return; }
+    S.multiAnchor = row.dataset.link;
+    openRowDetail(row.dataset.link);   /* 普通单击 = 与置顶 / 主表同一单点 */
+  });
+  $("workZone").addEventListener("contextmenu", e => {
+    const row = e.target.closest("tr.wip-row");
+    if (!row) return;
+    e.preventDefault();
+    openCtx(e.clientX, e.clientY, row.dataset.link);
+  });
   /* 隐藏区开关: 展开 / 收起底部隐藏区 (会话态, 不落盘 —— 需求口径: 点按钮才能查看) */
   $("hidBtn").addEventListener("click", () => { S.showHidden = !S.showHidden; renderLedger(); });
   /* 隐藏区: 委托点击 (恢复单条 / 全部恢复 / 条目打开) 与右键 —— 交互口径同置顶专区 */
@@ -1908,6 +2117,7 @@ function wire() {
     try { links = JSON.parse($("ctxMenu").dataset.links || "[]"); } catch (err) { /* 畸形快照: 放弃本动作 */ }
     if (links.length) {
       if (it.dataset.act === "pin") togglePinBatch(links);
+      else if (it.dataset.act === "working") toggleWorkingBatch(links);
       else if (it.dataset.act === "hide") toggleHideBatch(links);
       else if (it.dataset.act === "open") openLinks(links);
       else if (it.dataset.act === "copy") copyPaths(links);
@@ -2109,6 +2319,8 @@ function boot() {
   if (STATIC_MODE || location.protocol === "file:") $("pullBtn").hidden = true;   /* 静态 / file 模式无服务端可拉 */
   S.pins = loadPins();   /* 全壳唯一装载点 (derive 绝不触碰): 守阵 test_pin_state_not_reseeded_by_derive */
   S.pinCollapsed = loadPinCollapsed();   /* 折叠态同款: 全壳唯一装载点 (derive 不碰) */
+  S.working = loadWorking();   /* 全壳唯一装载点 (derive 不装载 / 不新增; P2 只在末尾调 pruneTerminalWorking) */
+  S.workingCollapsed = loadWorkingCollapsed();   /* 折叠态同款: 全壳唯一装载点 (derive 不碰) */
   S.hidden = loadHidden();   /* 隐藏同款: 全壳唯一装载点 (derive 只读不写), 守阵 test_hidden_state_not_reseeded_by_derive */
   S.view = loadView();
   restoreFilters();      /* 全壳唯一装载点 (derive 绝不触碰): 刷新后筛选器不丢 */
