@@ -1315,8 +1315,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
   ok("S2 每个 x 提交都成对补 y(x 后紧跟 y; impact 首帧装饰帧保障允许一笔无 x 的独立 y 钉 ——"
     + " 成对面钉的是「x 不单独出现」; 收敛帧末笔显式重申也成对钉 —— 终态不吃锚窗可视重推)",
     u.setScaleLog.every((r, i) => r[0] === "x"
-      ? ((i + 1 < u.setScaleLog.length && u.setScaleLog[i + 1][0] === "y")
-        || i === u.setScaleLog.length - 1) : true)
+      ? (i + 1 < u.setScaleLog.length && u.setScaleLog[i + 1][0] === "y") : true)
     && u.setScaleLog.filter((r) => r[0] === "y").length >= xLog.length - 1);
   ok("S2 收敛: setData 真值写回 + 显式锚视口重申 [1030,1150](auto 全列宽被覆盖 —— 不变量(1))"
     + " + 锚记账落位 1150", u._qbBeat.anim === null && u.setDataCount === 1
@@ -1829,7 +1828,7 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 //          同形拦不住) ——
 {
   const u = mkU([1000].concat(XS1), [0, 0, 0, 0, 0, 30], [0, 0, 0, 0, 0, 60]);
-  u._qbBeat = mkBeat(1120, 30, SPAN1, 0, 0);   // 锚 1120, 尾 1150 -> delta=30 平移; 双轨零变化(纯 L0)
+  u._qbBeat = mkBeat(1120, 30, SPAN1, 0, 0);   // 锚 1120, 尾 1150 -> delta=30 平移; 双轨有收敛面(shown=0 vs 尾值 30/60 经 _qbFxTrackNext -> needsTail=true), 断言面不变
   self._qbCharts = { global: u };
   self._qbBeatStart("global", u);
   ok("S20b 起拍: 视口落滑动起点 [1000,1120](余量点 1000 恰贴视口左缘 —— 左缘裁剪数据在位)",

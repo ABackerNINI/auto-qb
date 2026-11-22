@@ -45,6 +45,9 @@ config:
     # 同步间隔保持 1.5s: 界面数据新鲜度靠它(与 qB 自带 WebUI 同量级)
     sync_interval: 1.5S
     max_tasks_per_tick: 20
+    # 数据目录必须显式钉到 temp: 不写的话默认值是相对路径 "auto-qb-data",
+    # 启动迁移备份(config.yml.v*.bak)会落进仓库 auto-qb-data(红线目录)
+    data_dir: "{data_dir}"
     state_file: "{state_file}"
     # ---- 关掉的自动行为 ----
     remove_similar_tags: false
@@ -140,6 +143,7 @@ def main() -> int:
     cfg_path = os.path.join(data_dir, "config.yml")
     text = CONFIG_TMPL.format(
         main_tick=args.main_tick,
+        data_dir=data_dir.replace("\\", "/"),
         state_file=os.path.join(data_dir, "state.json").replace("\\", "/"),
         log_file=os.path.join(data_dir, "auto-qb.log").replace("\\", "/"),
         qb_host=args.qb_host,

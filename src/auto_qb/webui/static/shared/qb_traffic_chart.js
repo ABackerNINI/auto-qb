@@ -3223,7 +3223,7 @@ window.AQB_QB_TRAFFIC = {
      * 显示面换算, 公式与画布 yOf 同源; 动画期 yMax 读 anim.yMax 与画布钉档一致, 静止期读当前
      * y 轴档 —— I4: 显示面与钉档换算恒同一把尺)。同步点收敛四处(R3):
      *   1 判定帧  _qbBeatStart(轨道推进后同帧写 —— 覆盖零变化拍/早退拍, 锚位不落旧值)
-     *   2 收敛帧  _qbBeatConverge(setData 交还 auto 后写终值)
+     *   2 收敛帧  _qbBeatConverge(setData 交还 auto 后 x 重申锚视口 + y 成对钉档)
      *   3 锚钩子  _qbDrawFxAnchor 顶部(每次画布提交顺路重写 —— L0 左移/L1 收敛的逐帧位置与
      *     提交帧对齐; 挂钩子顶部而非门后, 无拍间隙的重绘也能带上锚)
      *   4 ResizeObserver(宿主尺寸变 -> 判定线 x 与绘图区几何变, u.setSize 后立即重写)
