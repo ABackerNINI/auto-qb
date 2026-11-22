@@ -70,8 +70,8 @@ commands run env.sync # 首次/依赖变更后同步依赖
 
 ## 🔴进程安全:禁止一切taskkill
 
-- 豁免(用户拍板 2026-11-07): `scripts/port_kill.py`(经 dev.port-kill; 杀前核验监听进程归属, 非 python 监听者须显式 --yes)与 `scripts/hr_fetch_experiment.py`(专用 profile 浏览器, 按 cmdline 过滤后对 PID 定点)两处**脚本内部**定点杀。
-- 依据/边界: 二者正是「先核身份再定点杀」的对策面(`memory-bank/pitfalls/ops/taskkill-image-name-ban.md`、`port-kill-prod-instance.md`); AI 代理在 shell 直接执行 taskkill 仍一律禁止。
+- 豁免(用户拍板 2026-11-07; 26-11-22 追加): `scripts/port_kill.py`(经 dev.port-kill; 杀前核验监听进程归属, 非 python 监听者须显式 --yes)、`scripts/hr_fetch_experiment.py`(专用 profile 浏览器, 按 cmdline 过滤后对 PID 定点)、`scripts/clone_kill.py`(经 dev.clone-kill; clone 域定点清残留, 杀须 --match+--yes 双闸, 自身/祖先硬排除)三处**脚本内部**定点杀。
+- 依据/边界: 三者正是「先核身份再定点杀」的对策面(`memory-bank/pitfalls/ops/taskkill-image-name-ban.md`、`port-kill-prod-instance.md`、`dev-run-dry-run-daemon-orphan.md`); AI 代理在 shell 直接执行 taskkill 仍一律禁止。
 
 ## 🔴 Skill 代码禁读
 

@@ -2,6 +2,7 @@
 
 > 摘要: 起 dev 桩时 18788(生产发现端点默认端口)绑不上, netstat 看到陌生 pid LISTENING, **没查它是什么程序**就跑 `commands run dev.port-kill -- 18788` 强杀 —— 杀掉的是用户的生产 auto-qb 主程序。三条纪律: 杀进程前必须能说出 pid 对应什么程序; port_kill 只清「本次会话起过又确认残留」的进程; dev 桩不得默认占用生产端口。(2026-11-17 追加: 多 clone 并存时端口归属不能靠"我起过 dev.run"推断 —— port_kill 已加 clone 域硬闸, 非 clone 域监听 `--yes` 也拒杀。)
 > 触发: 端口绑不上, WinError 10013, 端口被占, port_kill, 杀进程, dev 桩起不来, 残留清理, 生产实例, 发现端点 18788, 核实进程身份, 多 clone 并存, 误杀其它 clone, outside-repo, webui 38080, 38081, --yes 越权
+**Refs:** memory-bank/issues/26-11-23-0012-bug-port-kill-gbk-mojibake.html
 
 ## 事故形态(2026-10-16, hr-ext-connect-ui S4–S6 收尾 · 验收桩启动时)
 

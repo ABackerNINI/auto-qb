@@ -83,3 +83,10 @@ timeout = 900
 when    = "shard 轮转后串行补跑 CPU 敏感量具 spec(perf/drawer-content-perf/traffic-fx-frames), 与 shard 相加==全量; 单跑量具验证也用它"
 note    = "必须经 e2e/perf-serial.mjs: 固定串行口径跑三份量具 spec + E2E_TORRENTS 默认抬 600(perf.spec.mjs 行窗口化用例按 >500 门控, 默认 300 档整组 skip, 600 档才真跑; 已显式设则尊重现值) + 显式 delete E2E_SHARD_TOTAL(残留会让 config 把这三份 spec 又 ignore 掉=白跑); drawer-content-perf 用 page.route 自造千文件树, 不受该档影响; 桩由 webServer 自动起, 端口 OS 分配"
 doc     = "../../memory-bank/plans/26-11-05-0118-plan-flaky-test-governance.html"
+
+[tasks."dev.clone-kill"]
+run     = ["uv run python scripts/clone_kill.py <args>"]
+when    = "本 clone 后台进程残留要定点清理时(dev.run 干跑探针/孤儿 python 持锁等; port-kill 只管监听端口, 管不到非监听残留); 无参先只列, 杀须 --match + --yes"
+note    = "杀必须 --match + --yes 双闸(--yes 单独给 rc=2 拒跑): clone 域候选混有 bash 瞬态与并发会话活体, 无 match 的「杀全部」不是合法表达。判据/实杀单点 import 复用 port_kill(in_clone_domain cmdline 归属 fail-closed + _kill_pid); uv 相对 cmdline 包装杀不到是已接受盲区(子死后自退); 自身与祖先链硬排除, 后代连坐但逐个过闸。--dry-run 残留=守护循环孤儿(见 doc), 本脚本是 AGENTS taskkill 红线第三处脚本内豁免, shell 直跑 taskkill 仍禁"
+doc     = "../../memory-bank/pitfalls/ops/dev-run-dry-run-daemon-orphan.md"
+timeout = 60

@@ -5,7 +5,7 @@
 [domains]
 # 任务档案领域枚举 (文件名首段; `kb.new task --topic <领域>-<专题>` 按**最长前缀**匹配, 枚举项可含短横线)。
 # 不足用先扩枚举再建档 (口径见 SKILL.md「任务档案规范」); 改这里即生效, 不触代码。
-values = ["webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config"]
+values = ["webui", "backend", "rule", "memory-bank", "docs", "test", "deps", "config", "dev"]
 
 [siblings]
 # 跨 clone 档案查重的兄弟工作区目录名**显式列表** (只读 ls 各自的 memory-bank/tasks/, 忽略日期前缀
