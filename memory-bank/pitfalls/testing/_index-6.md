@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 6/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `parallel-run.md` … `redverify-anchor-lineendings.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `node-guards-silent-skip.md` … `red-verify-must-hit-behavior.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, 出生即红, 新电池真跑, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, test_webui_static_r4_node_batteries, |
 | [parallel-run.md](parallel-run.md) | **已设为默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 `-n 4` 上调) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失。⚠ `-n 0` 曾对**包脚本那批真实临时仓库用例**挂住 —— 根因是 **Windows `subprocess` 无限挂死**(非仓库逻辑), 2026-10-03 用 `_pipeline.run_capture` 看门狗修复(见下节); 覆盖率分支 partial 与串行差 1。**并行甜点= -n 8, 不是 `-n auto`**(32 worker 打满机器, `test.pkg` 会 2 failed + 16 errors) —— 见下节「甜点随笔例体量与负载形态变」。 | 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess, 聚合脚本, bundle_file, 空文件, node 电池, 共享实例根, 截断 |
 | [patching.md](patching.md) | 「Windows 全绿 / Linux 全红」的**多类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 最隐蔽的两类: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**(2026-10-11 一条坏的相对链接连过三道本机防线、只在 Linux CI 红), 与**给 `os.stat` 打桩在 Windows 对 C 内建的 `os.path.exists` 无效**(2026-11-07 两条预检用例 Linux 上被判「源文件缺失」抢拦); 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。 | CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, exists, 坏链, 省略号占位, os.stat 桩, os.path.exists, C 内建, nt._path_exists, posixpath, exist_ok |
 | [perf-measurement.md](perf-measurement.md) | 本机每次文件操作的**固定过路费**(初始 写 20ms / 删 43ms, 与数据量无关)曾支配全量耗时 —— **已由系统层排除项治好(全量 75s → 19.4s, 并行 5.0s)**; 另记"判断单项优化收益不能看全量总时"与"并发污染下的数字一律是假的"两条度量纪律。 | 测试慢, 耗时, 性能, 优化收益, 归因, 全量多久, 跑得慢, durations, 度量, 并发跑, 白名单, 排除项, 杀软, 沙箱 |
@@ -23,4 +24,3 @@
 | [real-probe-rid-window.md](real-probe-rid-window.md) | 真机探针增量窗口: trigger 后重置 rid 会把窗口内事件被全量冲掉(假阴性) | 真机探针, 增量窗口, rid 重置, 全量冲掉, 假阴性, sync/maindata, torrents_removed, 删后重加, 探针方法论 |
 | [real-suite-cascade-skip.md](real-suite-cascade-skip.md) | 真机 suite 一条用例失败后的收尾恢复只等 WEB 可达, libtorrent connect 滞后窗内**按字母序下一个模块**的模块闸 `check_online` 单发探测撞窗 → 整模块成块 SKIP —— **跨文件级联**的环境级假红形态; skip 必须单跑核真实三态, 不能当 BLOCKED 记账。 | 真机 suite, 级联 skip, 整模块 skip, check_online, qb_up, libtorrent 滞后窗, 环境级假红, RM04 级联, suite skip 成块 |
 | [red-verify-must-hit-behavior.md](red-verify-must-hit-behavior.md) | 红绿双验的「红」若只把实现**换个写法**(改变量名 / 挪声明位置)而不改变可观测行为或几何, 守阵会**绿着放行假修复**——因为守阵钉的是结果(对齐 ±1px / 计数相等 / 节点身份), 不是代码形态。红验设计纪律: 写守阵前先回答「这条断言在什么**行为破坏**下会红」, 然后真把那个行为改坏一次; 若守阵不红, 是守阵错了不是破坏错了。同类陷阱: 量具自身的口径错误(把原始字节数当格式化文案断言 / 对错弹层元素断言)也会造成「假红」, 修量具 ≠ 修实现, 两者要在报告里分开记。**另一同源形态(2026-10-16 新增)**: 被钉分支与**防御性兜底分支**在同一输入上同结果时, 删掉被钉分支的突变会逃过守阵 —— 用例必须选「只有被钉分支能决定结果」的输入。 | 红绿双验, 红验, 改坏实现, 守阵没红, 假修复, 假红, 量具写错, 守阵测什么, 行为回归用例, 几何守阵, 兜底分支掩盖, 突变逃过守阵, 分支顶替, 同结果输入, 防御性回退, 选输入 |
-| [redverify-anchor-lineendings.md](redverify-anchor-lineendings.md) | 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。 | 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转, dump 行块, 函数相对行号, hunk 头, qualname, 分隔符字形, docstring 续行, 子进程超时, 解释器漂移, venv 解释器, sys.executable, 假红, 环境坏, 基线复跑, TimeoutExpired, 超时未接住, 脚本崩在中途, 收尾自证被跳过, 守阵挂起, 挂起也算红, 死锁, 非重入锁 |

@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 7/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `redverify-pycache-stale-verdict.md` … `sim-root-sentinel.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `redverify-anchor-lineendings.md` … `sidefx-import-time-temp-roots.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [redverify-anchor-lineendings.md](redverify-anchor-lineendings.md) | 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。 | 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转, dump 行块, 函数相对行号, hunk 头, qualname, 分隔符字形, docstring 续行, 子进程超时, 解释器漂移, venv 解释器, sys.executable, 假红, 环境坏, 基线复跑, TimeoutExpired, 超时未接住, 脚本崩在中途, 收尾自证被跳过, 守阵挂起, 挂起也算红, 死锁, 非重入锁 |
 | [redverify-pycache-stale-verdict.md](redverify-pycache-stale-verdict.md) | 红验/`mutants.verify` 这类「逐条 apply 变异体 → 跑 pytest → 还原」的循环里，同一条源码行若被**等长替换**（如 `get(None, view.channel_state)` ↔ `get(view.channel_state, None)`），且相邻两条的 apply/跑/还原在**同一秒内**完成，则 Python 的 `.pyc` 缓存判据 `(源文件 mtime, size)` **两条都相同**（mtime 秒级精度 + size 因为等长也相同）⇒ 子进程 import 时**直接复用上一条变异体编译出的字节码**，实际跑的还是上一轮的代码。后果：本该被守阵杀掉的变异报 **SURVIVED**（假存活），且**没有任何报错**；在同一份 dump 上重复跑还会**稳定复现**同一批假存活（不是偶发抖动）。与 [mutants-mirror-dirty-worktree](mutants-mirror-dirty-worktree.md) 同族（同是「等长替换让缓存比对失效」，那档是 git stat 缓存判净，本条是 Python 字节码缓存判新）。判别: 同一条变异**单跑 KILLED、全量跑 SURVIVED**（或反之）就要怀疑缓存；实测 hr display 轮 `_print_site m23/m24`（`CHANNEL_TEXTS.get` 的两个实参互换，等长）稳定假 SURVIVED。处置: 跑测试的子进程加 `-B` / `PYTHONDONTWRITEBYTECODE=1` **并**开工前清 `__pycache__`（`PYTHONDONTWRITEBYTECODE` 只禁写新缓存，**已有的旧 `.pyc` 仍会被读**）；`.pytest_cache` 由 `-p no:cacheprovider` 另管，与本条无关。 | 红验, 变异测试, mutmut, apply, 同构变异, 假存活, 假 SURVIVED, pyc, pycache, __pycache__, 字节码缓存, 缓存未失效, mtime 秒级, size 相同, 等长替换, 同长度替换, PYTHONDONTWRITEBYTECODE, python -B, importlib 缓存, 单跑 KILLED 全量 SURVIVED |
 | [relocate-window-machine-roster.md](relocate-window-machine-roster.md) | 真机 relocate 收尾实验: daemon 全机名册判据遇生产实例在跑, 离线窗永不开(测试接缝旁路需授权) | 收尾窗, 离线窗, daemon 开窗, 全机名册, _spawn_daemon, 测试接缝, relocate 真机, 生产实例在跑, 旁路授权 |
 | [repo-snapshot-in-tree.md](repo-snapshot-in-tree.md) | 做只读评审要导出整棵仓库快照时, 快照必须放仓库**外** —— 树内的副本会让"单点定义"守卫扫到散落实现, `test.full` 直接红两条, 而快照目录明明已 gitignore。 | 快照, snapshot, git archive, 只读评审, review.lane.start, 批量评审, test-results 放快照, 单点守卫红, test_free_port, test_tmp_bootstrap, 散落 |
@@ -23,4 +24,3 @@
 | [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例, 与肇事者无关 | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
-| [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 sim 都撞 `B1: --root 已存在且非空, 但缺哨兵`。 | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |

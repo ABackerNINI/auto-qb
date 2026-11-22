@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 5/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `manager-builder-single-point.md` … `node-guards-silent-skip.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `longtask-redverify-page-task.md` … `node-e-cmdline-limit.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [longtask-redverify-page-task.md](longtask-redverify-page-task.md) | 给 longtask 预算断言做红验(注入长任务证必红)时, Playwright `page.evaluate` 里直跑忙等 | longtask, 长任务, 红验, 红绿双验, 注入, 忙等, evaluate, PerformanceObserver, 量具, 预算断言 |
 | [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
 | [manager-connect-stub.md](manager-connect-stub.md) | QbManager.run() 主循环用例里把 `connect` mock 成 `return True` 却不给 `mgr.client` 落值, 在断连稳态守卫(26-10-31-1029)生效后会让请求线被整段静默跳过 —— 用例不报错, 断言以「线没跑」的形态假红/假绿。 | 写或改 run() 主循环测试, mock/替换 connect; 或改断连守卫判据后跑主循环用例 |
 | [monotonic-warn-sentinel.md](monotonic-warn-sentinel.md) | `time.monotonic()` 的 0 点是**机器开机时刻**(Linux `CLOCK_MONOTONIC` / Windows `GetTickCount64`), 不是"很久以前" —— 拿 `0.0` 当「从未告警」哨兵时, 节流判据 `now - 0.0 >= 3600` 在**开机不满 1 小时**的机器上判假, **首次告警被静默吞掉**。dev 机 uptime 常达数十小时故恒绿, 只有 CI 全新 VM 会红; 失败签名与"caplog 没采到"完全一样, 极易误判成 caplog 的坑。2026-10-12 流量图限速历史 W1 的两条 caplog 断言(GitHub CI 红 2 条)正是此因。 | CI 红, 本机绿, 平台无关的 CI 红, caplog 断言 False, 告警没打出来, 首次告警被吞, 节流, throttle, 哨兵, sentinel, time.monotonic, uptime, 全新 VM, 日志断言, 重启后翻转, 退避, backoff, 开机窗口, 重建被跳过 |
@@ -23,4 +24,3 @@
 | [nested-pytest-config.md](nested-pytest-config.md) | 仓库内子目录独立包(自带 pyproject+venv)内 `uv run pytest` 会向上拾取仓库根 pytest.ini, rootdir 上移, 根 ini 的 addopts(-n/--cov 等)在子包 venv 不可用 → unrecognized arguments 直接报错 | 在 tools/ 下「仓库内嵌套、自带 pyproject 与 venv 的独立子包」内跑 pytest |
 | [no-uv-fallback.md](no-uv-fallback.md) | 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任务在第一行就失败(`'uv' is not recognized`), 闸门同理; `.commands/test/config.toml` 的 `TMPDIR=R:/Temp/auto-qb/tests` 指向的 **R: 盘本机也不存在**。首选处置 = **本次调用前把该目录前置进 PATH**(包内 task/闸门全线恢复, 实测), 次选 = 用仓库 venv 的 python 直跑 pytest + `TMPDIR` 指到 C 盘临时区。 | 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE, basetemp |
 | [node-e-cmdline-limit.md](node-e-cmdline-limit.md) | `node -e <整段探针脚本>` 在 Windows 触顶 CreateProcess 32k 命令行上限(WinError 206 文件名或扩展名太长), 探针越长越接近实爆 —— 电池脚本改走 stdin(固定小 `-e` 包装器 + `input=探针`), argv 形状保持不变。 | node 探针, node -e, WinError 206, 文件名或扩展名太长, CreateProcess, 命令行上限, node 电池, 测试探针, subprocess.run, 追加用例后突然全 battery 红 |
-| [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, 出生即红, 新电池真跑, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, test_webui_static_r4_node_batteries, |

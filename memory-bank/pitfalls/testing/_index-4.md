@@ -1,7 +1,7 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `gz-plaintext-assertion.md` … `longtask-redverify-page-task.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `gz-plaintext-assertion.md` … `long-task-background-checkpoint.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -23,4 +23,4 @@
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
 | [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted, ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接')` —— 0 端口无抢号问题(fixed-port / free-port TOCTOU 两族都不沾), 是**已建立的连接被本机中止**。被测行为的主断言往往此时已全过, 红在末段"机制自证/红验"的对照组; 单跑绿 + 复跑全量绿即定性偶发, 别当回归去修测试。 | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服, 真客户端, 对照组, 红验回放, 机制自证, xdist, 并行高载, 偶发红, 单跑绿, urlopen, urllib3 |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
-| [longtask-redverify-page-task.md](longtask-redverify-page-task.md) | 给 longtask 预算断言做红验(注入长任务证必红)时, Playwright `page.evaluate` 里直跑忙等 | longtask, 长任务, 红验, 红绿双验, 注入, 忙等, evaluate, PerformanceObserver, 量具, 预算断言 |
+| [long-task-background-checkpoint.md](long-task-background-checkpoint.md) | 前台跑 >10min 无输出的长任务(基准矩阵/语料生成/全量回归)会被宿主按「无输出」切断, 模型配额也可能中途夭折 —— 两者都保留已落盘产出但丢未落盘进度; 委派长任务必须后台 + 分批落盘 + 幂等可续跑。 | 长任务, 后台, 宿主切断, 无输出超时, 配额耗尽, 中途夭折, 分批落盘, checkpoint, 可续跑, 幂等重跑, 基准矩阵, 语料生成, run_in_background, 子代理, 委派 |

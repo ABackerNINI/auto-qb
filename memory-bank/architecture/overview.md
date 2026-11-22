@@ -31,7 +31,7 @@ auto-qb 是 qBittorrent 的规则驱动管理守护进程: 周期同步 qB 种�
 |------|------|
 | overview.md(本篇) | 全局: 定位/不变量/黄金法则/组合根装配, 不进单包细节 |
 | main-loop-queue.md | 主循环节拍与每轮数据流 + 任务队列模型 + 落盘时机(`core/qbmanager.py`, `core/taskqueue.py`, `core/state.py` 落盘面) |
-| data-state.md | 种子数据层与增量同步 + QbApi 门面 + 配置加载校验 + state_file 结构(`torrents/`, `config/`, `core/qbapi.py`, `core/state.py`) |
+| data-state.md | 种子数据层与增量同步 + QbApi 门面 + 配置加载校验 + state_file 结构 + 流量采样 v4 存储与启动恢复(`torrents/`, `config/`, `core/qbapi.py`, `core/state.py`, `core/modules/traffic_sample_*`, `traffic_store*`) |
 | rule-engine.md | 规则引擎: 条件/动作插件 registry、断点续跑决策链(`rules/`, `core/modules/rules_mod.py`) |
 | hr-groups.md | HR 站点对接(`hr/`)与分组、种子迁移(`core/modules/grouping_mod.py`, `core/modules/relocate_*`) |
 | webui.md | Web 表现层: server/runtime/static、视图发布、truth 通道、表格几何单点(dt_table.layout, `webui/`, `manager.web` 门面) |
