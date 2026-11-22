@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-22
 **Updated:** 2026-11-22
-**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿), 全绿见 kb.baseline
+**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿) + 七件修复计划立案 26-11-22-1714(修复轮待实施), 全绿见 kb.baseline
 **Topics:** backend-relocate-foreign-gate
-**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html
+**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html
 
 ## 本篇只回答
 
@@ -77,3 +77,7 @@
 - 2026-11-22 08:55 S4 真机验收完成(测试 qB 环境环境2 三窗): 判据终态 ①PARTIAL(侦测三时机 PASS/删链门腿=F3 扩展读法)/②③④⑤ PASS(④ L2 腿未触发/⑤ 双清理路径注)/⑥ 全绿基线 26-11-22-0821; 两发现 F1(活到达差集漏接, 0434 既有边界)/F3(删链门等值面假依赖自锁, 2076c889 引入)待拍板入池; 评审 3 轮 actionable 0; 详见档案 R2 与计划 R2
 
 - 2026-11-22 09:06 S4 发现入池收尾(用户拍板, 只建件未认领): 六件入池 —— F3 删链门等值面假依赖自锁(bug·标准档, 建议认领修复)/F1 活到达差集漏接(bug·便签档)/观察项四便签(T2 confirm 流 question/武装行文案 refactor/在账跳过 DEBUG feat/daemon 续任 INFO feat), 时间戳 slug 见上方 R2 两发现与观察项条目; 六件 doc-refs ↔ 档案 Refs/计划 doc-refs 双向声明由 kb.new 自动补链
+
+- 2026-11-22 17:42 七件修复计划立案轮(grilling 两轮 12 问全按推荐拍板 + 计划 26-11-22-1714 立案)评审收尾: 批 217 行纯文档, 3 轮零 actionable —— 首轮检 2/2 全过(2 minor 当场修: 批2/批3 测试步骤补 tests 头部「测试计划」docstring 同步说明、store.py :205-210 生命周期注释块改述入列); 复评轮 1 nit(计划内 store 注释「」转写非逐字)当场逐字化修掉, 第 3 轮 byte 级核验零发现; 该 nit 因修复后引文失效机检 REFUTE 不进修数(非幻觉, 处置留痕于计划件批2 store.py 步骤现文); Review trailer 基 17708c855224; test.full 全绿基线切片 26-11-22-1727, 本批随本专题入库
+
+- 2026-11-22 17:27 grilling 两轮 12 问拍板(全按推荐)+ 七件修复计划立案 26-11-22-1714(等值面假依赖精判/差集累积游标/观测性文案/副本收编, 三批切分), 修复轮待实施

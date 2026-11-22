@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 收尾簇七件修复: 等值面假依赖自锁/差集拍频漏接/观测性文案/副本收编</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-foreign-gate">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-22-1714">
+<meta name="doc-updated" content="26-11-22-1714">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-foreign-gate</div>
+<h1>relocate 收尾簇七件修复: 等值面假依赖自锁/差集拍频漏接/观测性文案/副本收编</h1>
+<p class="lede">本篇只回答: S4 真机验收与勘察面发现的 relocate 收尾簇 7 个入池 issue(2 bug / 2 feat / 2 refactor / 1 question)怎么修、按什么批次提交与验收 —— 七件一簇一份计划, 修法均经代码勘察落锚。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-22-1714 · <b>doc-updated</b> 26-11-22-1714 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话 2026-11-22(两轮 12 问, 全部按推荐落定, 见 §06)+ 7 个入池 issue(S4 真机验收计划 26-11-21-1600 × 6、勘察面 × 1)+ 只读代码勘察(等值面/游标消费面/confirm 强探测/续任判定/循环依赖, 行号取证 2026-11-22)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>为什么做</h3>
+<p>7 件同属 relocate-foreign-gate 收尾簇: 2 件 bug 是生产必现面(dir_alias + 同根兄弟布局的删链门假依赖自锁不可自愈; 差集窗口与 2S tick 拍频错位致 foreign 活到达漏接约 1/4), 4 件观测性/交互问题是 S4 排障断链的直接原因(daemon 续任零日志、在账扫描零痕迹、confirm 三步交互无预告、武装行内部命名泄漏), 1 件收编兑现归组副本 docstring「不引入第二套语义」的既有承诺。</p>
+<h3>做到什么程度算成</h3>
+<ul>
+  <li>3 批全部 ship(每批独立 code-review + 提交, 批间互不阻塞);</li>
+  <li>判定/游标/文案面全部单测钉住, 既有全量无回归;</li>
+  <li>真机 S4 复验清单(§04 批3)五项通过(用户跑);</li>
+  <li>7 个 issue 翻转 Closed 并回填实际修法/验证方式/测试数字; 档案 26-11-22-backend-relocate-foreign-gate.md 追加 R3 修复轮节;</li>
+  <li>收尾按会话协议: test.full + 新基线切片(数字实测誊写)。</li>
+</ul>
+<h3>设计底线/不变量</h3>
+<ol>
+  <li><strong>不动 chain_gate_hits 候选面本体与 qbapi D16 消费</strong> —— 精判落点在 relocate_exec._chain_gate_deps 消费侧; D16 调用形态 root==equal_root, 等值面在其冗余, 且自带 R3 交集豁免(qbapi.py:316-320);</li>
+  <li>黄金法则不破: 消费即排空发生在主循环单线程内; 无新配置键; 保守默认(清单不可得宁拦勿漏);</li>
+  <li>D13「无周期兜底」拍板维持 —— 不新增 arm 等待期周期扫描;</li>
+  <li>重放不带 confirm 位的安全语义(「绝不代用户点头」, relocate_exec.py:130-131)不改行为, 只改回执文案预告;</li>
+  <li>历史计划 HTML(0434 等)不改写 —— 口径以档案 R2/R3 为准(档案已记录 0434 R3 行成因注记不准的修正)。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <tr><th>件</th><th>类型</th><th>痛点</th><th>锚点(行号取证 2026-11-22)</th></tr>
+  <tr><td>0905-bug<br>chain-gate-eq-false-dep</td><td>bug·标准</td><td>删链门等值面(<code>_norm(sp)==eq</code>)只比路径字符串不查内容根; 目录级 job「命中即依赖」无精判 → 同根兄弟种子(数据不经 junction)判为依赖, deps 恒非零收尾自锁; INFO 每 2s 刷屏 138 行/4.6min; last_error 指引误导(按指引删的 3 条全是自造 real-fake)</td><td><code>relocate_units.py:2183</code> 等值面; <code>relocate_exec.py:1810-1817</code> 目录级无精判(file job 已有 R2 交集精判); <code>:1546</code> 重试 INFO 无去重</td></tr>
+  <tr><td>0905-bug<br>added-diff-race-miss</td><td>bug·便签</td><td><code>last_added_diff</code> 每拍覆盖重算(含零变化轮), 差集窗口=1 个 sync 周期(1.5s), 消费在 2S tick —— 拍频错位单事件漏接约 1/4(探针A两漏/探针B一中); 零变化早退轮(<code>store.py:492</code>)也会抹掉未消费差集</td><td><code>store.py:490</code> 拍首清空 / <code>:581</code> 轮末覆盖; <code>relocate_foreign.py:196</code> 只读消费(不排空)</td></tr>
+  <tr><td>0906-feat<br>daemon-resume-no-log</td><td>feat·便签</td><td>daemon 续任/接管/退位三处边界均零日志(claim 让路 already_running、claim 接管写 pid、beat 察觉外来 pid 退位自杀), 「谁在守、何时接的棒」不可观测</td><td><code>recycle_daemon.py:1125-1134</code> claim / <code>:1136-1146</code> beat / <code>:1460-1461</code> run 入口</td></tr>
+  <tr><td>0905-feat<br>accounted-skip-debug-log</td><td>feat·便签</td><td>foreign 全量兜底扫对在账/在管 hash 静默 continue, activation 带账扫描零痕迹</td><td><code>relocate_foreign.py:216-219</code> 静默 continue</td></tr>
+  <tr><td>0905-question<br>confirm-probe-reask</td><td>question·便签</td><td>首次迁移三步交互: 重放(自动续跑)故意不带 confirm 位 → 撞上需确认态再问一次, 回执无预告(实测 stdout.log:24-32); 勘察定性: 「一次性」指强探测指纹缓存(D3), 重放缺 confirm 位是 docstring 明文的安全设计(「绝不代用户点头」:130-131)</td><td><code>relocate_exec.py:2310</code> blocked text / <code>:2314</code> note(「同机探测已入队」两处)</td></tr>
+  <tr><td>0905-refactor<br>armed-log-alias-kind</td><td>refactor·便签</td><td>武装收尾行「形态 dir」取内部 alias_kind 映射名, 与计划/state 的 form=dir_alias 口径并存, 同次运行两种叫法(auto-qb.log:34 vs :45)</td><td><code>relocate_exec.py:886-889</code> 文案单点; <code>:2530-2532</code> plan["form"] 建账已存(replace 保留)</td></tr>
+  <tr><td>0604-refactor<br>content-root-of-duplicate</td><td>refactor·便签</td><td>同一「唯一顶层段=内容根」语义两份实现: 归组副本 <code>os.path.join</code>(Windows 反斜杠) vs 判定单点 <code>_join</code>(恒正斜杠); 勘察已核实语义同构、消费面 3 处均 path_normalize 后比较(无分隔符契约)、双向无循环依赖</td><td><code>grouping_mod.py:52-63</code> 副本 / <code>relocate_units.py:468-484</code> layout_of 同规则 / <code>:1731-1734</code> 单点</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线 = 三批分期(拍板 D2), 每批一个主题面, 独立评审与提交。修法编号 F1-F7 对应 7 个 issue。</p>
+<table>
+  <tr><th>批</th><th>主题</th><th>内容</th><th>落点</th><th>拍板</th></tr>
+  <tr><td>批1(最重)</td><td>判定面</td><td>F1 等值面假依赖精判 + 刷屏去重 + last_error 文案校正; F7 content_root_of 副本收编(同「内容根口径」面一起动)</td><td>relocate_exec._chain_gate_deps / _chain_deps_text / :1546; grouping_mod</td><td>D4 D9 D10</td></tr>
+  <tr><td>批2</td><td>差集窗口</td><td>F2 覆盖式窗口 → 累积游标 + 消费即排空(D12 0434 拍板「只读不排空」修订)</td><td>store.py(改名 pending_added_diff)/ relocate_foreign.py:196</td><td>D3</td></tr>
+  <tr><td>批3(最轻)</td><td>观测性/文案</td><td>F3 daemon 三事件 INFO; F4 在账跳过 DEBUG; F5 回执预告第二次确认; F6 武装行取 plan.form</td><td>recycle_daemon.py / relocate_foreign.py:216 / relocate_exec.py:2310,2314,886</td><td>D5 D6 D8 D11</td></tr>
+</table>
+<h3>F1 判别口径(本计划核心一句)</h3>
+<p>目录级 job 的<strong>等值面命中</strong>(<code>_norm(sp) == _norm(equal_root)</code>)且 scope 在场 → 逐记录取文件清单, 按「<strong>任一文件落 scope 下</strong>」判别: <code>ru.under_alias_root(os.path.join(sp, rel), (anchor,))</code> 任一命中 = 依赖保留; 全不命中 = 兄弟假依赖豁免; 清单不可得/空 = 保守计依赖(宁拦勿漏, D10)。</p>
+<div class="aside">为什么用 per-file「任一文件落 scope 下」而非「内容根 == scope」: 混合布局(部分文件落 junction、部分落真实兄弟目录)也是真依赖, 内容根判别会误豁免; per-file 判别统一覆盖纯落进/混合/兄弟三态。等值面原意(chain_gate_hits docstring :2158-2163)是拦「经别名落进作用域的组外种子(save_path 恰等 job.src)」的真依赖 —— 本精判只豁免可证明不经别名的兄弟, 真落进与混合全部保留, 2076c889 的拦截意图不动。</div>
+<p>范围限定: 精判只作用于等值面命中(sp 归一恰等 equal_root)—— scope 前缀面命中按几何即真依赖(数据落 junction 树)不精判; 祖先格命中在 chain_gate_hits 内已带内容根覆盖判别不重复; file job 维持既有 R2 交集精判; scope 缺失旧账(anchor 回落 src)不精判维持保守(与旧锚同口径)。</p>
+<h3>F2 游标口径</h3>
+<p>store 侧「自上次消费以来累积」: 拍首清空行删除(零变化轮不再抹账 —— 结构根因), 轮末改 <code>pending | added</code> 累积(基线轮整体不计、断连清空、重连基线语义保留); 字段改名 <code>last_added_diff → pending_added_diff</code>(名字不再撒谎); 新方法 <code>take_added_diff()</code> 返回并清空, relocate_foreign 消费即排空。已核实全仓唯一消费方, 排空不偷数据。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>批1 —— 判定面(F1 + F7)</h3>
+<p><strong>代码</strong>(锚点行号取证 2026-11-22, 实施时以符号重定位):</p>
+<ul>
+  <li><code>relocate_exec.py</code> <code>_chain_gate_deps</code>(:1784-1787 surfaces 构造 / :1804-1822 deps 循环): surfaces 元组加第 5 元「scope 在场」标志; deps 循环目录级分支补等值面精判(判别口径见 §03); docstring :1757-1764「目录级维持命中即依赖原样」同步改述;</li>
+  <li><code>relocate_exec.py</code> <code>_chain_deps_text</code>(:1840-1845): 目录级措辞「恰在旧根 {src}(等值)」补「且数据经别名落进作用域」限定, 豁免后指引不再误导;</li>
+  <li><code>relocate_exec.py</code> :1546 删链门重试 INFO 去重: deps 签名 <code>tuple(sorted(deps))</code> 按 job_id 记实例 dict, 签名变化才 INFO, 未变降 DEBUG(拍板 D4); 键残留无行为, 不做清理面;</li>
+  <li><code>grouping_mod.py</code>: 删 <code>_content_root_of</code>(:52-63), 改 import <code>relocate_units.content_root_of</code>, 3 调用点(:281-282 / :314-315 / :412-413)换名(拍板 D9; 副本 docstring 的「同口径」承诺改注释指向单点);</li>
+  <li><code>relocate_units.py</code> <code>chain_gate_hits</code> docstring(:2164-2168): 「目录级维持命中即依赖」改述为「目录级等值面命中由消费侧补 per-file scope 落点精判」。</li>
+</ul>
+<p><strong>测试</strong>(新增同步所在 tests 文件头部「测试计划」docstring): ①兄弟假依赖豁免(sp==src, 文件全在 scope 外); ②纯落进保留(文件全在 junction 内); ③混合布局保留(部分落内, 宁拦勿漏向); ④清单不可得/空保留(D10); ⑤scope 缺失旧账不精判(行为同旧); ⑥file job 与继承条目行为不变; ⑦刷屏去重(同 deps 只 INFO 一次, 变化再 INFO, 未变 DEBUG); ⑧last_error 文案断言; ⑨grouping 既有行为测试回归(副本删除后零行为差)。</p>
+<h3>批2 —— 差集窗口(F2)</h3>
+<p><strong>代码</strong>:</p>
+<ul>
+  <li><code>store.py</code>: 字段改名 <code>pending_added_diff</code>(:123 docstring / :211 init); <strong>:205-210 字段生命周期注释块同步改述</strong>(:208「零变化轮/早退轮保持空 frozenset(不留上一拍残值)」与 :209-:210「消费方(每拍读)只读不排空、无清空义务」两句被本语义翻转直接作废, 改述为「零变化轮/早退轮累积保留, 不抹账」+「消费方 take_added_diff 消费即排空」); :467 断连清空保留; :490 拍首清空行<strong>删除</strong>; :581 改「基线轮 frozenset() / 其余 pending | added 累积」; 新方法 <code>take_added_diff() -&gt; FrozenSet[str]</code>(返回并清空);</li>
+  <li><code>relocate_foreign.py</code>: :196 消费改 <code>take_added_diff()</code>(getattr 防御形态保留), 模块 docstring :6 与 :195「只读不排空」注释改「消费即排空(D12 修订, 本计划 D3)」。</li>
+</ul>
+<p><strong>测试</strong>(改名/新增测试同步所在 tests 文件头部「测试计划」docstring —— test_sync.py 头部 :42-50 现列这 5 条测试名, 与改名一并更新): 既有 5 条 <code>test_store_last_added_diff_*</code>(test_sync.py :438-:518)改语义 + 改名 —— 其中 <code>empty_on_zero_change</code>(:482)<strong>断言翻转</strong>(零变化轮累积保留, 不再清空); 新增: 多拍累积 / take 排空后清空 / 断连清空 / 重连基线轮不计 / 拍频错位模拟(两个 sync-only 轮夹一个 tick, 事件不丢); <code>test_relocate_foreign.py</code> :420 同步改名。</p>
+<h3>批3 —— 观测性/文案(F3 + F4 + F5 + F6)</h3>
+<p><strong>代码</strong>:</p>
+<ul>
+  <li><code>recycle_daemon.py</code>: claim 让路分支(:1125-1134)补 INFO「daemon.json 健康 watcher(pid X)在守, 本实例(pid Y)让路续任」; claim 接管(write_daemon_state 后)补 INFO「接管 daemon.json: pid Y(旧 pid X / 无记录)」; beat 外来 pid 检出(:1136-1146)补 INFO「检测到外来 pid X 持有 daemon.json, 本实例(pid Y)退位(绝不 taskkill)」(拍板 D6/D11);</li>
+  <li><code>relocate_foreign.py</code> :216-219: continue 前逐条 <code>logger.debug</code>, 区分已入账(notified)/相位机在管(members)两种原因, 样式对齐 D6 预筛 DEBUG(:445-448 前缀纪律); 计数行不做(D6 既有拍板维持);</li>
+  <li><code>relocate_exec.py</code> :2310 blocked text 与 :2314 note: 补预告「续跑重新过全闸链, 出现需确认态会再次询问(不代用户点头)」(措辞可微调, 语义不变; 拍板 D8);</li>
+  <li><code>relocate_exec.py</code> :886-889 武装行: 形态改取 <code>(armed.plan or {}).get("form")</code>, plan 缺失旧账按 alias_kind 反映射(file→file_links / dir→dir_alias), direct 兜底(拍板 D5)。</li>
+</ul>
+<p><strong>测试</strong>(新增测试同步所在 tests 文件头部「测试计划」docstring): caplog 断言三事件 INFO 各一条(含 pid 与场景); 在账跳过 DEBUG 逐条且原因区分; 回执两处文案断言; 武装行「形态 dir_alias」断言。</p>
+<p><strong>真机 S4 复验清单</strong>(用户跑, 测试 qB 三窗): ①窗2 同款 dir_alias + 同根兄弟布局重放 → 删链门不锁、兄弟不入依赖、收尾完成逐字命中; ②foreign 活到达探针 A/B → 无漏接; ③产品重启 → daemon 续任三事件日志在档; ④首次迁移 confirm 流 → 回执预告第二次确认; ⑤武装行「形态 dir_alias」。</p>
+<h3>每批收尾与总收尾</h3>
+<ul>
+  <li>每批: dev.fmt → test.quick → code-review skill → ship.commit(Review: trailer); 开工 flip 对应 issue → In Progress, 完成回填实际修法/验证/数字 → Closed(kb.status);</li>
+  <li>总收尾: 档案 26-11-22-backend-relocate-foreign-gate.md 追加 R3 修复轮节(含 D3 对 0434 D12 的修订留痕); 7 个 issue 全部翻转; pitfalls 评估(等值面「候选面命中即依赖对目录级不精判会自锁」是否立条); <code>commands run test.full</code> → <code>kb.new baseline</code>(数字实测誊写)。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 全部 12 项决策已于 2026-11-22 拍板(§06 D1-D12, 用户逐项「按推荐」)。实施中若撞出新的决策点, 按 scope-guard 停手入池/请示, 不在本计划内扩权。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>主题</th><th>结论</th></tr>
+  <tr><td>D1</td><td>修复范围</td><td>7 件全部纳入本计划, 认领随批次推进, 修复完成逐个翻转回填</td></tr>
+  <tr><td>D2</td><td>批次切分</td><td>3 批: 判定面(F1+F7)/ 差集窗口(F2)/ 观测性文案(F3-F6); 批间互不阻塞</td></tr>
+  <tr><td>D3</td><td>issue 3 方向</td><td>差集改累积游标(消费即排空推进), <strong>不新增</strong> arm 等待期周期兜底扫(D13「无周期兜底」维持); 含对 0434 D12「只读不排空」的修订</td></tr>
+  <tr><td>D4</td><td>刷屏治理</td><td>依赖集不变不重复刷(签名变化才 INFO, 未变降 DEBUG), 保留 INFO 可见性不整体降级</td></tr>
+  <tr><td>D5</td><td>issue 6 口径</td><td>武装行「形态」统一取 plan.form, 内部名 alias_kind 不进日志(缺失旧账反映射兜底)</td></tr>
+  <tr><td>D6</td><td>issue 1 级别</td><td>续任/接管/退位事件用 INFO(低频事件), 行含场景 + 双方 pid</td></tr>
+  <tr><td>D7</td><td>测试分工</td><td>单测钉住全部判定/游标/文案面(触发布局可完全模拟); 真机 S4 只做端到端复验五项</td></tr>
+  <tr><td>D8</td><td>issue 5 拍板</td><td><strong>有意</strong> —— 重放不带 confirm 位是「绝不代用户点头」的安全设计(D6 不存快照, 继承无法核对确认对象), 维持行为不改, 只改回执文案预告第二次确认</td></tr>
+  <tr><td>D9</td><td>issue 7 方向</td><td>归组面直接 import <code>relocate_units.content_root_of</code> 删副本, 不下沉 infra(无循环依赖, layout_of 同规则已核实)</td></tr>
+  <tr><td>D10</td><td>精判保守面</td><td>清单不可得/空 → 维持计依赖(宁拦勿漏, 与 E8 口径、file_alias_intersects None 契约一致)</td></tr>
+  <tr><td>D11</td><td>issue 1 范围</td><td>三处静默边界都补日志: claim 让路续任 / claim 接管 / beat 退位自杀</td></tr>
+  <tr><td>D12</td><td>计划建件</td><td>确认新建本计划件(kb.new 26-11-22-1714 生成, refs 双向补链档案+7 issue)</td></tr>
+</table>
+<p class="hint">拍板日期统一 2026-11-22, 会话内两轮问答, 用户逐项「按推荐」。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>精判取数开销</td><td>等值面命中记录数大时逐记录调 _file_map</td><td>命中面通常个位数(save_path 恰等旧根), 且 TorrentRecord.files 惰性缓存单点已有; 实施时实测等待窗扫描耗时</td></tr>
+  <tr><td>scope 缺失旧账仍可自锁</td><td>dir job 无 scope(anchor 回落 src)且兄弟在场</td><td>该面不精判维持保守(与旧锚同口径); 建账面 scope 为 content_root_of 既有产物恒在, 旧账缺失面极窄; 真遇到另立 issue 不扩权</td></tr>
+  <tr><td>混合布局误豁免</td><td>种子文件部分落 junction、部分落真实目录</td><td>判别用 per-file「任一文件落 scope 下」而非内容根相等(§03 F1), 混合态保留依赖</td></tr>
+  <tr><td>D12 修订(消费即排空)影响他面</td><td>存在未知的第二消费方</td><td>已核实全仓唯一消费方 relocate_foreign.py:196; 改名后 grep 可穷尽引用(src 2 文件 + tests 2 文件)</td></tr>
+  <tr><td>pending_added_diff 无界增长</td><td>relocate 面整体停用(无人排空)且持续新增种子</td><td>增长与新增种子数线性(单 hash 数十字节, 万级 ≈ MB 级); 面启用时消费节拍 2S 有界; 如需硬顶另拍板不入本计划</td></tr>
+  <tr><td>改名波及既有测试语义</td><td>test_sync.py 零变化轮用例断言翻转</td><td>批2 测试步骤已列明翻转点(:482), 非回归而是语义修正, 提交信息注明</td></tr>
+  <tr><td>F5 只改文案漂移回执断言</td><td>既有回执文案测试钉旧句</td><td>实施时 grep「同机探测已入队」测试断言同步更新</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-22-1714</span> 初版。来源: grilling 两轮 12 问(全部按推荐落定, D1-D12)+ 7 个入池 issue + 只读代码勘察。要点: F1 判别口径定为 per-file「任一文件落 scope 下」(覆盖纯落进/混合/兄弟三态, 混合态宁拦勿漏); F2 定为累积游标 + 消费即排空并改名 pending_added_diff(修订 0434 D12); 批次 D2 三分; 真机复验清单五项列 §04 批3。</li>
+</ul>
+
+</div>
+</body>
+</html>
