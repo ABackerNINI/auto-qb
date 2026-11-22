@@ -1,7 +1,7 @@
 # tests-real 手工压测的 qB WebAPI 陷阱集
 
-> 摘要: 手工压测/relocate 取证直接打 qB WebAPI 时的五类坑 —— 短 hash 静默 200、renameFolder 账面级假成功(ENOENT 也算成功且零日志)、addTrackers 参数是单数 hash、FakeTracker 的 peer 表是构造时静态注入、lib/bencode.decode 返回 (值, pos) 元组
-> 触发: tests-real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内存盘, R 盘
+> 摘要: 手工压测/relocate 取证直接打 qB WebAPI 时的十类坑 —— 短 hash 静默 200、renameFolder 账面级假成功(ENOENT 也算成功且零日志)、addTrackers 参数是单数 hash、FakeTracker 的 peer 表是构造时静态注入、lib/bencode.decode 返回 (值, pos) 元组、preferences 无 free_space_on_disk 键、/torrents/main 不存在、content_path 报文件路径非内容根、real.seed 子命令已被 task 内置、.torrent 默认落 .work/seeds/
+> 触发: tests-real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内存盘, R 盘, 端点漂移, free_space_on_disk, sync/maindata, torrents/main, content_path, real.seed, .torrent 落点, --out
 **Refs:** memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html
 
 ### 短 hash 调 WebAPI 被静默忽略(HTTP 200 零效果)
@@ -33,3 +33,33 @@
 - **触发**: 拿 `decode(raw)` 当纯值用(如 `dict(decode(raw))` 改 .torrent 的 announce 字段)。
 - **判别**: `TypeError: 'tuple' object does not support item assignment` 或 `dictionary update sequence element #0 has length 1`。
 - **处置**: 用 `decode_all(raw)`(返回纯值);元数据注入类操作记得外层 dict 是可变的,内层嵌套结构仍是共享引用,改前 deepcopy。
+
+### preferences 无 free_space_on_disk 键,盘空间走 /sync/maindata
+
+- **触发**: 从 `/app/preferences` 的返回里读 `free_space_on_disk`(qB 5.2.3 测试实例,S4 实测)。
+- **判别**: 返回 JSON 里**没有这个键**(不是值为 0)—— preferences 不携带盘空间。
+- **处置**: 盘空间走 `/sync/maindata` 的 `server_state`。
+
+### `/torrents/main` 端点不存在
+
+- **触发**: 手拼 `/torrents/main` 想拉全库种子列表。
+- **判别**: 404 —— 该端点在 qB 5.2.3 不存在。
+- **处置**: 全库种子列表用 `/torrents/info`。
+
+### 单文件多种子时 content_path 报的是文件路径,不是内容根
+
+- **触发**: 用 `torrents/info` 的 `content_path` 推内容根 —— 单文件种子且同目录下有多种子时。
+- **判别**: `content_path` 直接指到**文件本身**(带文件名),不是所在目录/内容根。
+- **处置**: 内容根判定不能盲取 content_path,按 content_root_of 的 layout 口径现算。
+
+### real.seed 的 CLI 子命令已被 task run 内置,再传一层报 unrecognized arguments
+
+- **触发**: `commands run real.seed -- list --port 56590` —— task run 展开已带 `add` 首参,再传 `list` 等子命令被 argparse 拒。
+- **判别**: `error: unrecognized arguments: list`(S4 实测)。
+- **处置**: list/rm/clean 各走自己的 task id: `real.seed.list` / `real.seed.rm` / `real.seed.clean`。
+
+### real.seed add 的 .torrent 默认落 .work/seeds/,用例目录要用 --out 钉回
+
+- **触发**: 在 rmNN 用例目录里造种子不给 `--out` —— .torrent 落到 `tests-real/.work/seeds/<stem>.torrent`,与用例取证分离。
+- **判别**: 用例目录里找不到 .torrent,产物全在 .work/seeds/ 下。
+- **处置**: add 时 `--out` 显式指回用例目录。

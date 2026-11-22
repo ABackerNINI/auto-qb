@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-11-22
 **Updated:** 2026-11-22
-**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档, 全绿见 kb.baseline
+**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿), 全绿见 kb.baseline
 **Topics:** backend-relocate-foreign-gate
 **Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md
 
@@ -41,7 +41,7 @@
 | S3 | B3 前端(WEBUI 行三态+保存路径+e2e 四皮肤) | Done(2026-11-22) |
 | 接缝 | 终审 3 轮零 actionable + 拍板 a 钉档批 | Done(2026-11-22) |
 | 收尾 | 文档回写+基线切片+issue 翻 Done+推送 | Done(2026-11-22) |
-| S4 | 真机验收(完整整组迁移全链复验, 计划验收⑤六条) | Open |
+| S4 | 真机验收(完整整组迁移全链复验, 计划验收⑤六条) | Done(2026-11-22, 测试 qB 环境环境2; 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿; F1/F3 两发现待拍板入池, 见进度日志 R2) |
 
 ## 进度日志
 
@@ -52,3 +52,24 @@
 - 范围外发现 2 条(grouping_mod._content_root_of 副本口径差 / core/curves.py:53 存量 SyntaxWarning)按用户指令转正入池(issues 池, 时间戳 slug 可 grep)。
 
 - 2026-11-22 05:36 计划 26-11-21-1600 S1-S3 五批落地(预筛/终态清理+文案/daemon日志+流程行/WEBUI行三态)+接缝终审3轮钉档, 全绿见 kb.baseline; 真机 S4 待窗口
+
+### R2 · S4 真机验收完成 (2026-11-22)
+
+- **环境拍板改判**: 用户拍板 S4 走测试 qB 环境(环境2 副实例 56590, real.up 拉起)而非生产实例; 物理步骤(挪目录/停启 qB/探针添加)全部由子代理代执行; 外部种子走模拟(real.seed + add_multi 配方)。
+- **三窗执行史**:
+  - 窗1: T5① 场景A探针活到达两次未纳入(分组面收编为第3组成员) → F1 停手。
+  - 窗2: 事故同款 activation 带账扫描一次全中(兄弟×2 预筛丢弃 / 探针A 场景A纳入三连 job 2→3 / mm1 mismatch 新文案落账) → 窗口链 T7-T10 全 PASS(进窗 L1 恰一条 / 逐成员改写 2 落盘+1 幂等 / 相位合并 armed→rewritten / WEBUI await_window→await_recheck) → F3 删链门自锁停手。
+  - 窗3: 按产品 last_error 指引定向删 3 依赖(全是自造 real-fake) → 依赖清零 → 别名删除 → 收尾完成逐字命中 → job done(finalized) → 场景B探针 kind=B 全中 → 重启 done 账面候选 0、探针B 跨重启持久。
+- **判据终态(计划 §04 S4 六条)**:
+  - ① PARTIAL —— 侦测扫描腿全 PASS(计划字面①只覆盖侦测扫描); 删链门腿自锁 = F3, 删链门是执行者语义扩展(更近②「删链正常」), 本档案按扩展读法记 PARTIAL 并注明。
+  - ② PASS —— 探针A 场景A纳入三连 job 2→3。
+  - ③ PASS —— 窗口链 T7-T10: qB 下线→改写→回连→收尾完成全程日志 + WEBUI 行同步可见。
+  - ④ PASS —— L1 即时进窗恰一条实证; L2 兜底腿真机未触发(qB 优雅下线即 L1, 单测守阵覆盖)。
+  - ⑤ PASS —— mm1 mismatch 条目走「种子消失」清理先于终态(两条清理路径各有逐字 DEBUG 行), 终态 B2 只清 kind=A 1 条(计划「清 2 条」是运行手册预期, 计划 §04 字面「条目已清」达成); 场景B探针 kind=B 全中保留; mismatch 新文案呈现正确。
+  - ⑥ PASS —— test.full 6789 passed / 6 skipped 覆盖率 99%, 基线切片 26-11-22-0821。
+  - 口径注: timeline 末节把⑥标成「PASS(等效形态)」属标注漂移, 以本档案为准(⑥ = 全量 + 基线切片, 已跑)。
+- **两发现(只记录, 待用户拍板入池)**:
+  - **F1 活到达差集漏接**: store.last_added_diff 每轮覆盖重算(含零变化轮, store.py:490)+ 窗口 1.5s vs 2S relocate tick 拍频错位, 单事件漏接约 1/4(探针A两漏/探针B一中实证); 0434 D12/D13 既有边界, 非本计划引入; 修法方向 = 累积游标或 arm 等待期低频兜底扫。
+  - **F3 删链门收尾自锁**: chain_gate_hits 等值面(_norm(sp)==eq, relocate_units.py:2183)不查内容根 —— 该等值面是 2076c889(11-08)评审 blocker 有意加回的, 把 save_path 恰等旧根的同根兄弟判为依赖(数据不经 junction = 假依赖), deps 恒非零 → 别名永不删 → 收尾永不完成; 触发布局 = dir_alias + 多成员 + 同根兄弟; 保守向不丢数据但不可自愈, INFO 每 2s 刷屏无去重(138 行/4.5min)+ last_error 指引误导; 修法方向 = 等值面命中加内容根/文件交集判别(复用 content_root_of/file_alias_intersects)。11-21 事故未自锁的原因已查实: 事故 job 自有形态非 dir_alias(direct 短路或 file_links+R2 文件交集豁免), 「等值面在位 + 收尾完成 + 60 兄弟恰等旧根」三实证强制推出。
+- **观察项处置(不入池, 建议便签档, 待用户逐项拍板)**: T2 confirm 强探测消费 confirm 位致三步交互 / 武装行「形态 dir」内部命名泄漏 / 在账跳过无日志行(relocate_foreign.py:218 静默 continue)/ daemon 续任无日志 —— 四项; journal 命名与 daemon 0 字节属行为正确, 不入池。
+- **证据**: tests-real/.work/rm04_s4/evidence/(gitignored, 三窗 timeline + 日志 + 账面 + api 快照)。
