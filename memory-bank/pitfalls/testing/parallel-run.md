@@ -127,13 +127,4 @@
   `test_runtime_discovery_bind_failure_keeps_data_endpoint`, 改动面(skill 脚本+测试)零交集, 单跑绿判偶发;
   为什么没命中: 闸门预跑前没查 pitfalls/testing(路由没到), 且重蹈「只截 tail、traceback 没落盘」覆辙。
 
-### 共享实例根下的聚合脚本: `open("w")` 截断窗让 node 读到 0 字节(2026-11-08, 已修)
-
-- **触发**: `-n 8` 下多 worker 同跑一域 node 电池(`bundle_file` 等临时聚合脚本); Linux CI 偶发
-  `TypeError: Cannot read properties of undefined (reading 'methods')` @ `window.AQB_SHORTCUTS.methods`,
-  单跑恒绿。
-- **判别**: 栈里 `<anonymous>:5:34` ⇔ `new Function(src + …)` 的 **src 是空串**(100 行 src 报
-  `:104:34`) ⇒ node 读到 0 字节。根因: worker 共用实例根 `TMPDIR` + 固定文件名, `open(…, "w")`
-  截断写时另一 worker 的 node 正在读。
-- **处置**: 落点掺 `os.getpid()`; **别用 `os.replace`**(Windows 替换被打开的目标会 `PermissionError`)。
-  守阵 `test_bundle_file_is_process_private` 与 `test_background_bundle_is_process_private`。
+> 已外迁: 共享实例根下的聚合脚本(node 读到 0 字节的截断窗 · process-private 落点) → [attachments/parallel-run-shared-tmpdir-aggregate.md](attachments/parallel-run-shared-tmpdir-aggregate.md)(2026-11-22 cap 清零)
