@@ -561,6 +561,80 @@ for (const skin of SKINS) {
         await expect(page.locator('.ctx-menu')).toHaveCount(0);
       });
 
+      /* CTX-reopen(issue 26-11-20-0321): 菜单已开且 flyout 展开时右键另一行 =
+       * visible true->true 对象替换, state.js 的 menu.visible 关层 watcher 不触发; 旧实现把
+       * subMenu/subFlip/subTop 与挂起计时器带进新菜单 —— 新菜单直接挂着旧面板, 钳位按旧
+       * 父项位置算, hover 前不自愈。两支入口各测一次: 组行走 openMenu(flyout=转移到),
+       * 单种子行走 openMemberMenu(flyout=更多操作)。首开用真实右键手势, 重开派合成
+       * contextmenu 走真实 Vue handler(理由见用例内), 两处都不直接调 vm 方法。 */
+      test('CTX-reopen 行菜单重开: 旧 flyout 与旧钳位不残留 @fast', async ({ page }) => {
+        await openApp(page, skin);
+        const reopen = async (/** @type {string} */ sel, /** @type {string} */ subItem) => {
+          await expect(page.locator(sel).first()).toBeVisible({ timeout: 30_000 });
+          // 首开落点从真实 DOM 量(不借 vm 造菜单); 重开另在同一次 evaluate 内派发,
+          // 赶在 CTX-05 的 180ms 计时器前 —— 否则旧实现也自愈, 失去判别力。
+          const first = /** @type {{x: number, y: number, id: string}} */ (await page.evaluate((selector) => {
+            const guard = [...document.querySelectorAll('.sticky-head')]
+              .reduce((mx, h) => Math.max(mx, h.getBoundingClientRect().bottom), 0);
+            for (const el of document.querySelectorAll(selector)) {
+              const r = el.getBoundingClientRect();
+              const x = r.left + 8, y = r.top + 8;
+              if (r.top >= guard + 8 && r.bottom <= window.innerHeight - 8) {
+                const hit = document.elementFromPoint(x, y);
+                if (hit && el.contains(hit)) {
+                  return { x, y, id: el.getAttribute('data-key') || el.getAttribute('data-hash') || '' };
+                }
+              }
+            }
+            return null;
+          }, sel));
+          expect(first, `${sel}: 视口内找到可右键行`).toBeTruthy();
+          await page.mouse.click(first.x, first.y, { button: 'right' });
+          const menu = page.locator('.ctx-menu');
+          await expect(menu).toBeVisible({ timeout: 5_000 });
+          await page.locator(`.ctx-menu > .ctx-item.has-sub[data-item="${subItem}"]`).hover();
+          await expect(page.locator('.ctx-menu .ctx-sub')).toBeVisible({ timeout: 3_000 });
+          /* 重开这一下走**合成 contextmenu**(派在真实行元素上, 不绕 Vue handler): (1)必须赶在
+           * CTX-05 的 180ms 收起计时器之前重开, 否则旧实现也自愈、守阵失去判别力; (2)菜单从
+           * 首行向下展开会盖住邻近行, 坐标落点会打在旧菜单上(实测右键命中了第三行)。本文件
+           * CTX-fit 左缘支同款先例: 真实手势结构上不可达时用 dispatchEvent 走真实链路。 */
+          const secondId = await page.evaluate((selector) => {
+            const rows = [...document.querySelectorAll(selector)];
+            for (const el of rows.slice(3)) {
+              const r = el.getBoundingClientRect();
+              const id = el.getAttribute('data-key') || el.getAttribute('data-hash') || '';
+              if (!id) continue;
+              el.dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true,
+                clientX: r.left + 8, clientY: r.top + 8,
+              }));
+              return id;
+            }
+            return '';
+          }, sel);
+          expect(secondId, `${sel}: 找到第二行并派发重开`).toBeTruthy();
+          await expect(menu, '重开后新菜单应在').toBeVisible({ timeout: 5_000 });
+          // 目标必须真的换到第二行: 否则重开没走 openMenu, 下面三项断言在旧实现上也绿
+          const targetKey = await readInst(page, sel.startsWith('.group-row') ? 'vm.menu.key' : 'vm.menu.hash');
+          expect(targetKey, '重开应命中另一行的上下文对象').toBe(secondId);
+
+          expect(await readInst(page, 'vm.subMenu'), 'vm.subMenu').toBe('');
+          expect(await readInst(page, 'vm.subFlip'), 'vm.subFlip').toBe(false);
+          expect(await readInst(page, 'vm.subTop'), 'vm.subTop').toBe(-6);
+          await expect(page.locator('.ctx-menu .ctx-sub'), '旧 flyout 不得挂在新菜单上').toHaveCount(0);
+          // 清链后 hover 仍可正常展开新面板(不是把 flyout 功能一并弄坏)
+          await page.locator(`.ctx-menu > .ctx-item.has-sub[data-item="${subItem}"]`).hover();
+          await expect(page.locator('.ctx-menu .ctx-sub')).toBeVisible({ timeout: 3_000 });
+          await page.keyboard.press('Escape');
+          await expect(menu).toHaveCount(0);
+        };
+        // openMenu: 组行(默认视图)的次级入口是「转移到」(member 支才另有「更多操作」)
+        await reopen('.group-row[data-table="group"]', 'transfer');
+        // openMemberMenu: 单种子行的次级入口「更多操作」
+        await tab(page, 'torrents').click();
+        await reopen('.torrent-row', 'sub-more');
+      });
+
       /* 菜单键帽(计划 26-11-12-0344 S2): 键帽文本由注册表渲染层经 kbShortcutDisplay 现算
        * (kbSerialWithDraft ⊕ kbDisplayName, 菜单项 key 字段引用 shortcuts 注册表 shortcut id),
        * 断言面 = 有键位项出键帽 / danger 项照常(D5) / 不映射项(limits)与空位项(share-limits,

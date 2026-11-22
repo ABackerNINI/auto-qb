@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 次级入口由注册表声明、渲染层计数(「更多操作」+「转移到」, 模板骨架单份; 原 CTX-06 单入口断言随「转移到」入口过期, R5#30)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
+- test_frontend_row_menu_reopen_clears_flyout: 行菜单重开清链守阵(issue 26-11-20-0321) —— 菜单已开(flyout 展开)时右键另一行 = visible true→true 对象替换, 关层 watcher 不触发; openMenu / openMemberMenu(含 virtual 委派)开层必须撤挂起收起计时器并复位 subMenu/subFlip/subTop, 与表头菜单同款。node 电池直跑三入口, 任一漏清即红
 - test_frontend_reannounce_inactive_gate_wiring: 非活跃种子禁强制汇报(qB 口径)入口接线守阵(2026-10-10; 2026-10-17 扩段删除链, issue 26-10-17-1703) —— qB 的 Force reannounce 仅在种子活跃时可用(commit aa189a7 关闭 issue #12080: isPaused/isChecking/isQueued 时 setEnabled(false)), 本项目沿用同一判据(暂停/停止·排队·校验中·错误/文件丢失): 1. 判定单点 decorate.js 的 REANNOUNCE_BLOCKED_STATES 必含 paused*/stopped*/queued*/checking*/error/missingFiles/**moving** 且**读 qB 原始 state**(kind 现 7 档, 排队仍被归进 downloading/seeding ⇒ 单看 kind 判不出排队; moving 虽自成第 7 档, 后端却不在任何 state_enum 谓词集合里 ⇒ 后端同须判 state 串); 2. 右键菜单 ctx-menus.html 四支(多选/整集/单种子/单组)的强制汇报项都挂 reannounceMenuGate(); 3. 行为层两道 —— _actCore 的 reannounce 前置闸门(早于乐观补丁/POST) + _kbAct 的 reannounce 分支先于 confirmDialog("先问确定再回不行"是坏体感); 4. 详情面板 tracker 页签 04/05/06 三个变体的 data-act=report 钮挂 drawerReannounceGate() + 各变体 .is-gated CSS(压过 base :hover, 含 05 失败区 .dt05-fail 的 (0,4,0) 覆盖) + drawer.js torrentCmd 兜底; 5. 投递收敛 —— 闸门(集合级全有全无, 与 qB oneCanForceReannounce 一致)只管「允不允许」, 放行后「发给谁」由 reannouncePlan 单点收敛为活跃子集(混选时 qB 引擎对非活跃目标静默空转, 照集合全量投递会让 tracker 确认层白等 item deadline 后落假「未确认」, 把一次干净的成功报成部分失败), 回执体现跳过数, 空投递必须显式收口(不得落成功分支报「成功 0 个目标」), 且前后端判据表(REANNOUNCE_BLOCKED_STATES)逐项同表; 6. 删除链(唯一漏接入口的修复) —— _deleteFlow 按 reannouncePlan 收敛 + 全非活跃时闸门禁用复选框(popovers.html is-gated 类/标题/点击短路三件 + .opt-pill.is-gated 三套 CSS 成套压过 :hover)+ _reannounceAll 的 skip 桶(非活跃 warn 降级为跳过不挡删除, 推迟中/error 维持不放行)+ 后端 REANNOUNCE_INACTIVE_SKIP 文案含「非活跃」(前端文本判据锚点)。行为语义由同批 node 电池真跑(判定表 + 投递计划 + 删除闸门 + skip 桶分型)。键盘与详情面板是右键之外的两条绕行路径, 任一入口被摘除即红
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: 1. 常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); 2. fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); 3. AbortError 必须翻译(超时/取消分型 + timeout 标记); 4. `finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: 1. 单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); 2. **裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); 3. boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); 4. 四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
 - test_frontend_boot_concurrent_load: boot.js 静态资源并发装载守阵(plan 26-11-20-0727 P1-1/P1-2) —— 分片 Promise.all 并发 fetch + 按清单 index 归位拼接, 脚本 link rel=preload as=script 并发预取 + 全部成功后按清单序批量插入 async=false; 静态锚(Promise.all / preload / insertAll / async=false) + node 电池三型(乱序兑现仍按清单归位且 4 片各独立 10s 定时器; 分片 404 零注入零预取; 预取 404 在插入任何脚本前 fail), 无 fetch 预取、脚本 URL 无 ?v=
@@ -485,6 +486,78 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
     assert "_subCloseTimer: 0," in app, "app.js data 必须声明 _subCloseTimer(未声明的属性不进响应式, 且易漂移)"
     assert re.search(r'"menu\.visible"\(v\) \{\n(?:.*\n){0,4}?.*this\.keepSub\(\);',
                      app), ("menu.visible 关闭时必须 keepSub() 撤掉挂起的收起 —— 否则一级关掉后定时器还会再触发一次")
+
+
+# 行菜单重开清链电池(issue 26-11-20-0321): 直接加载真实 menu.js, 用最小 vm 桩跑两个开层入口
+# —— 菜单已开且有 flyout 时右键另一行 = visible true->true 对象替换, state.js 的 menu.visible
+# watcher 不触发; 开层不清 subMenu/subFlip/subTop 与挂起计时器就会把旧面板和旧钳位带进新菜单。
+# 无 node 静默跳过(与本文件其它 node 电池同口径)。
+_NODE_MENU_REOPEN_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));   // menu.js(清链单点)
+const M = window.AQB_MENU.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const ev = (x, y) => ({ preventDefault() {}, stopPropagation() {}, clientX: x, clientY: y });
+/* 菜单已开 + flyout 展开 + 挂起收起计时器在 = 复现现场; keepSub 用真实实现(须真撤计时器) */
+const fresh = () => ({
+  menu: { visible: true, key: "old", hash: null, multi: false },
+  subMenu: "advanced", subFlip: true, subTop: -137, _subCloseTimer: 4242,
+  _markCtxSource() {},
+  _menuPos(e) { return { x: e.clientX, y: e.clientY }; },
+  _ctxMulti() { return false; },
+  keepSub: M.keepSub,
+  openMemberMenu: M.openMemberMenu,   // virtual 组行走委派
+});
+const assertCleared = (vm, label) => {
+  ok(label + ": 挂起收起计时器撤销", vm._subCloseTimer === 0);
+  ok(label + ": subMenu 清空", vm.subMenu === "");
+  ok(label + ": subFlip 复位", vm.subFlip === false);
+  ok(label + ": subTop 回 CSS 默认", vm.subTop === -6);
+};
+const g = fresh();
+M.openMenu.call(g, ev(111, 222), { key: "new-group" });
+assertCleared(g, "openMenu");
+ok("openMenu: 新菜单可见且在取位点/新目标", g.menu.visible === true && g.menu.x === 111 && g.menu.y === 222 && g.menu.key === "new-group");
+const m = fresh();
+M.openMemberMenu.call(m, ev(333, 444), { hash: "new-hash" });
+assertCleared(m, "openMemberMenu");
+ok("openMemberMenu: 新菜单可见且切到 hash 目标", m.menu.visible === true && m.menu.x === 333 && m.menu.hash === "new-hash" && m.menu.key === null);
+const v = fresh();
+M.openMenu.call(v, ev(555, 666), { virtual: true, members: [{ hash: "virtual-hash" }] });
+assertCleared(v, "openMenu(virtual->openMemberMenu)");
+ok("openMenu(virtual): 委派到单种子菜单", v.menu.hash === "virtual-hash");
+console.log(JSON.stringify({
+  ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+}));
+"""
+
+
+def test_frontend_row_menu_reopen_clears_flyout():
+    """行菜单重开路径的 flyout 清链守阵(issue 26-11-20-0321, 表头菜单同款修复的欠账)。
+
+    根因: 菜单开着时再右键另一行 = `this.menu = {…}` 对象替换, visible 仍为 true ⇒
+    state.js 的 `menu.visible` 关层 watcher 不触发, 旧 subMenu / subFlip / subTop 与
+    keepSub 挂起的收起计时器一并留在新菜单里 —— 新菜单直接展开着旧 flyout, 钳位偏移
+    还按旧父项位置算。表头菜单已在计划 26-11-20-0009 S2 同款修复, 行菜单两入口补上。
+    """
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_MENU_REOPEN_PROBE,
+         os.path.join(STATIC_ROOT, "shared", "menu.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"行菜单重开清链 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], \
+        f"行菜单重开清链 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 # node 单测探针(issue 26-10-16-0954 方案 #1): 加载真实 auth.js, 用**桩 fetch + 手动触发定时器**跑

@@ -11,9 +11,9 @@
 <meta name="doc-topic" content="row-menu-flyout-reopen-residue">
 <meta name="doc-refs" content="memory-bank/plans/26-11-20-0009-plan-webui-column-style.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="行菜单重开路径 flyout 状态残留">
-<meta name="issue-summary" content="openMenu/openMemberMenu 重开(visible true→true 不触发 watcher)时 subMenu/subTop/subFlip 残留, 新菜单带展开的旧 flyout 与旧钳位偏移; 表头菜单同款已在本批修复, 行菜单两入口仍是既有行为">
+<meta name="issue-summary" content="openMenu/openMemberMenu 重开(visible true→true 不触发 watcher)时 subMenu/subTop/subFlip 残留, 新菜单带展开的旧 flyout 与旧钳位偏移; 已按 openHeadMenu 同款开层清链修复并补双入口守阵">
 <style>
   :root {
     --bg: #10151a;
@@ -84,21 +84,21 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· bug</div>
+<div class="kicker">计划外问题（已修）· bug</div>
 <h1>行菜单重开路径 flyout 状态残留</h1>
-<p class="lede">openMenu/openMemberMenu 重开(visible true→true 不触发 watcher)时 subMenu/subTop/subFlip 残留, 新菜单带展开的旧 flyout 与旧钳位偏移; 表头菜单同款已在本批修复, 行菜单两入口仍是既有行为</p>
+<p class="lede">openMenu/openMemberMenu 重开(visible true→true 不触发 watcher)时 subMenu/subTop/subFlip 残留, 新菜单带展开的旧 flyout 与旧钳位偏移; 已按 openHeadMenu 同款开层清链修复并补双入口守阵</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0321-bug-row-menu-flyout-reopen-residue</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 03:21</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
 <section id="s1">
   <h2><span class="no">§01</span>现象与发现场景</h2>
-  <p>WEBUI 列风格切换任务(计划 26-11-20-0009)S2 表头菜单面批次的安全+测试缺口评审(2026-11-20)发现: 表头菜单开着维度 flyout 时右键另一列表头重开, 旧 flyout 状态残留。同构排查证实行菜单两个入口(<code>openMenu</code> / <code>openMemberMenu</code>)存在<strong>同款既有行为</strong>——先于本任务存在, 非本批引入; 表头菜单一条已在该批修复(开层清链), 行菜单两入口按范围守恒未动、入池。</p>
+  <p>WEBUI 列风格切换任务(计划 26-11-20-0009)S2 表头菜单面批次的安全+测试缺口评审(2026-11-20)发现: 表头菜单开着维度 flyout 时右键另一列表头重开, 旧 flyout 状态残留。同构排查证实行菜单两个入口(<code>openMenu</code> / <code>openMemberMenu</code>)存在<strong>同款既有行为</strong>——先于本任务存在, 非本批引入; 表头菜单一条已在该批修复(开层清链), 行菜单两入口当时按范围守恒未动、入池, 本次已按同款范式补齐。</p>
 </section>
 
 <section id="s2">
@@ -146,11 +146,14 @@
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-20 03:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-22 修复前仍复现 —— Node 电池直跑 <code>openMenu</code> / <code>openMemberMenu</code> / virtual 委派三入口，12 项清链断言全红；prism / atlas 双皮肤真浏览器在 flyout 展开时重开另一行，读到 <code>vm.subMenu = "transfer"</code>，旧面板仍挂在新菜单上。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>：与 §06 建议一致，两处各 4 行（<code>keepSub(); this.subMenu = ""; this.subFlip = false; this.subTop = -6;</code>）插在取位之后、上下文对象替换之前；virtual 组行走 <code>openMemberMenu</code> 委派，不再单独插一份。次序保持 keepSub 先撤挂起的收起计时器。</p>
+  <p><strong>验证方式</strong>：① Node 电池加载真实 <code>menu.js</code> 直跑三入口，先红后绿；② <code>e2e/menus.spec.mjs</code> 新增双入口双皮肤用例，flyout 展开时重开另一行后断言 <code>subMenu/subFlip/subTop</code> 复位、旧面板不在场、新面板仍可正常展开；③ fast 门禁全绿。真机轨不适用（纯前端状态清链，桩 + 真浏览器双皮肤已覆盖）。</p>
+  <p><strong>测试数字</strong>：全量全绿（见 <code>commands run kb.baseline</code> 最新切片 26-11-22-1159-row-menu-flyout-reopen-residue）；fast 门禁 542 passed / 5 skipped。</p>
 </section>
 
 <footer>

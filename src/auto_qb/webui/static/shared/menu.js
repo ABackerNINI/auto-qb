@@ -38,7 +38,7 @@ window.AQB_MENU = {
        * watcher 不触发 —— 不在这里清链, 旧 flyout 会原样挂进新菜单(subMenu 残留 = 新菜单
        * 直接展开着旧面板, subFlip/subTop 残留 = 钳位按旧父项位置算)。开层即收干净(keepSub
        * 先撤挂起收起, 与 state.js menu.visible 关层清链对偶); 行菜单 openMenu/openMemberMenu
-       * 的同范式重开残留是既有行为, 不在本批顺手改。 */
+       * 的同范式残留已按 issue 26-11-20-0321 同款补齐, 三处开层共用这一口径。 */
       this.keepSub();
       this.subMenu = "";
       this.subFlip = false;
@@ -247,9 +247,17 @@ window.AQB_MENU = {
       this._markCtxSource(event);
       if (group.virtual) {
         // 虚拟行(未归组命中种子): 无真实组 key(组级路由会解析失败), 退化为该种子的单种子菜单
+        // (清链在 openMemberMenu 里做, 这条委派路径同款覆盖)
         this.openMemberMenu(event, group.members[0]);
         return;
       }
+      /* 菜单已开且 flyout 展开时右键另一行 = visible true->true 的对象替换, menu.visible
+       * 关层 watcher 不触发 —— 与 openHeadMenu 同款开层清链(issue 26-11-20-0321):
+       * keepSub 先撤挂起的收起计时器, 再清 subMenu/subFlip/subTop, 次序承重。 */
+      this.keepSub();
+      this.subMenu = "";
+      this.subFlip = false;
+      this.subTop = -6;
       // 仅弹菜单, **不展开明细**(用户需要看明细时自己左键点行)
       this.menu = {
         visible: true,
@@ -263,6 +271,12 @@ window.AQB_MENU = {
       event.preventDefault();
       event.stopPropagation();
       this._markCtxSource(event);
+      /* 与 openMenu / openHeadMenu 同款开层清链(issue 26-11-20-0321): true->true 重开
+       * 时 watcher 不触发, 不清就把旧 flyout 和按旧父项算的钳位带进新菜单。 */
+      this.keepSub();
+      this.subMenu = "";
+      this.subFlip = false;
+      this.subTop = -6;
       this.menu = {
         visible: true,
         ...this._menuPos(event),
