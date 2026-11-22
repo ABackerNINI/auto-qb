@@ -1078,7 +1078,8 @@ function workingZoneItems() {
 /* 终态自动退出 (计划 S3, 拍板 D2/D3/D4): 仅对 strict 命中 Done / Dropped / Superseded 的成员
    删除并落盘; 不新增 / 不重新入选; 无状态 (NO_ST) 不删; 以 link 为键 (与加入时同一编码)。
    有变更才 saveWorking; 同步把移出件剪出 S.multi (与批量隐藏同款边界)。
-   **调用接线留给 P2**: 本轮只写函数体, boot() / derive() 都不调用 —— 避免两轮打架。 */
+   调用点 (P2): boot() 装载 working 后一次 + derive() 末尾一次 (含 30s 轮询)。本函数只删不增,
+   绝不 load / 重新入选; 自身不重绘 —— 由 applyData() 末尾 renderCurrent() 统一覆盖。 */
 function pruneTerminalWorking() {
   const terminal = ["Done", "Dropped", "Superseded"];
   const gone = S.working.filter(l => {
@@ -1283,6 +1284,10 @@ function derive() {
     S.aStatuses.add(s);
     S.cStatuses.add(s);
   }
+  /* 终态自动退出 (S3/D4): 末尾只调 prune, 绝不 loadWorking / 不新增成员 —— 30s 轮询只读数据,
+     不能把用户主动加入的件洗掉。prune 自身不重绘; applyData() 在 derive() 之后 renderCurrent()
+     (ledger 视图 = renderLedger, 同时重画专区与主表 wip 色条), 故此处不再重复重绘以免抖动/丢焦。 */
+  pruneTerminalWorking();
 }
 function liveOf(key) { const t = topicInfo.get(key); return t ? !!t.live : false; }
 
@@ -2321,6 +2326,7 @@ function boot() {
   S.pinCollapsed = loadPinCollapsed();   /* 折叠态同款: 全壳唯一装载点 (derive 不碰) */
   S.working = loadWorking();   /* 全壳唯一装载点 (derive 不装载 / 不新增; P2 只在末尾调 pruneTerminalWorking) */
   S.workingCollapsed = loadWorkingCollapsed();   /* 折叠态同款: 全壳唯一装载点 (derive 不碰) */
+  pruneTerminalWorking();   /* 装载后立刻剪一次终态 (S3/D4): byLink 此时未就绪则无-op, 真正剪除由随后 derive() 完成 */
   S.hidden = loadHidden();   /* 隐藏同款: 全壳唯一装载点 (derive 只读不写), 守阵 test_hidden_state_not_reseeded_by_derive */
   S.view = loadView();
   restoreFilters();      /* 全壳唯一装载点 (derive 绝不触碰): 刷新后筛选器不丢 */
