@@ -5,7 +5,7 @@
 **Updated:** 2026-11-22
 **Summary:** 流量采样启动恢复机制改造: 游程级重建重写+acc快照账本+raw保留窗清理
 **Topics:** backend-traffic-recovery
-**Refs:** memory-bank/plans/26-11-21-1546-plan-traffic-recovery.html, memory-bank/pitfalls/testing/long-task-background-checkpoint.md, memory-bank/pitfalls/testing/stub-interface-rename-sweep.md, memory-bank/testing/baselines/26-11-22-1224-traffic-recovery.md
+**Refs:** memory-bank/plans/26-11-21-1546-plan-traffic-recovery.html, memory-bank/pitfalls/testing/long-task-background-checkpoint.md, memory-bank/pitfalls/testing/stub-interface-rename-sweep.md, memory-bank/testing/baselines/26-11-22-1224-traffic-recovery.md, memory-bank/issues/26-11-22-1548-feat-traffic-acc-evict-residue.html
 
 ## 本篇只回答
 
