@@ -58,8 +58,16 @@
 - 修复轮落地: 预览收口显式视口重申(chart)+ e2e 三 spec 换代(grid-stability 三桩补 span_s + A4 点数有界化 + 首刻位细化凹口容差 + fx-frames 采样器锚位移/shift 过滤/flipB 双缘签名 + A2 桩 span_s)+ 摘要 schema 门(agg 回落全列)+ 活节注/wiring/SSE doc 修剪线换代 + retain 边界点 + L9b 锚优先电池(锚领先尾时修剪线按锚 —— e2e A2-24h 实证 G-B 左缺口回潮路径, 数据面修剪线锚视口化)+ 入池 1(瞬态左缺口边角: 锚领先尾超 2 组距的连续滑动段, 间歇自愈, e2e A2-24h 曾实证)。
 - 复跑: test.quick 6793P / e2e 流量系 69P 全绿。教训: e2e 绿结论必须核对逐用例名(采样门空转 = 断言全死的假绿)。
 
+### R3 · S3 真机冒烟 (2026-11-22)
+
+- 真机面: 生产 config.yml 干跑探针确认 qB 在线(主循环连真 qB 跑通; 规则动作 dry_run 桩零副作用, checking.py:110 显式短路实证)。观察面 = 测试实例 36595(real.env 环境1, connection_status=firewalled 合格态, 免鉴权零凭据)——生产 WebUI 凭据面在 config.yml(红线不读), 按 real-machine.md 真机轨口径连白名单测试实例。WebUI 经 dev.run + 自写最小派生配置(H:/Temp/agent-smoke-config, data_dir 显式钉 temp, qb_traffic.enabled=true, 全自动任务关零凭据)。
+- 协议(playwright chromium 真浏览器; 全局流量图走 Ctrl+\ 键盘入口——qb_traffic 缺省关时状态栏入口不渲染): 1m 连续观察 344s(覆盖约 11 次 30s 对账撞拍)→ 换 5m 停 46s → 回 1m 停 46s → 切页往返(设置页往返, 抽屉保持打开经 drawerVisible 补拉恢复)再观察 45s; 2s/拍采样读 uPlot scales.x.min/max + _qbBeat.anchor + 数据列头尾。
+- 验收判据(231 个稳定样本, 1m×210 + 5m×21): **视口跨度恒等于名义窗——spanDev 全零**(60s/300s 逐样本分毫不差); **无压缩**(压缩 0 / 越界 0); **无左缺口**(0 次, 已知瞬态 issue 26-11-22-1401 形态未复现); tail 全程 == anchor(锚领先尾未出现); 零 console/page 运行期错误。三不变量真机面全部成立。
+- 记账: ① dev.webui 启动迁移备份落仓库 auto-qb-data/config.yml.v1.bak(21:05 前一次 20:58 覆盖写; 内容 = temp dev 配置备份无凭据, 已 grep 核验; 根因 = dev_webui.py CONFIG_TMPL 未设 data_dir, 默认相对 "auto-qb-data"(models.py:583)所致, 与其头注「不碰仓库 auto-qb-data」相悖)——脚本缺口非本次手写, 范围外不入修, 建议主会话入池; ② 干跑探针进程(15624/36312)父控制台已消亡无法投递 Ctrl-C, taskkill 红线禁强杀, 留用户手动关闭(持生产 state 锁; dry-run 语义零 qB 变更)。
+
 ### R0 · 立档 (2026-11-22)
 
 用户第三轮报障(只读分析轮)→ 全链仿真取证定位换窗竞态(stale 判据不含窗口名, 端到端复现 299.5s 视口)→ 用户拍板重构(「不要再打补丁了」)→ 计划 26-11-22-0858 经 grilling(D1 动画语义拍板整体平移)与 ExitPlanMode 批准 → 计划与档案入库, 双向补链两前档案。S1 待显式开工。
 
 - 2026-11-22 11:18 S1+S2 落地: 三不变量几何核心+电池换代+e2e零适配全绿+回写四面; 待评审与提交
+- 2026-11-22 21:17 S3 真机冒烟完成: 231 稳定样本 spanDev 全零(1m/5m 名义窗恒等), 无压缩无左缺口, issue 26-11-22-1401 形态未复现; 三不变量真机面成立(详见 R3)
