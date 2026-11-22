@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="relocate-foreign-gate">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-21-1600">
-<meta name="doc-updated" content="26-11-22-0834">
-<meta name="doc-refs" content="memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md">
+<meta name="doc-updated" content="26-11-22-0942">
+<meta name="doc-refs" content="memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>foreign 判定门内容根收窄与收尾进展同步呈现修复计划</h1>
 <p class="lede">本篇只回答: 怎么修 foreign 侦测面把同保存路径兄弟目录种子误标「旧路径外部种子」的洪泛(issue 1500), 并让收尾窗进展在日志与 WEBUI 种子行同步可见 —— 不回答 daemon 下线窗口判据本身的任何改动(维持 26-11-10-0318 拍板: L1 即时进窗、30s 稳定期仅弱证据兜底)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-21-1600 · <b>doc-updated</b> 26-11-22-0834 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-21-1600 · <b>doc-updated</b> 26-11-22-0942 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 真机报障取证会话(2026-11-21 14:11 整组迁移) + grilling 两轮 D1-D9 拍板 + issue 26-11-21-1500 / 26-11-21-1326
 </div>
 
@@ -137,7 +137,8 @@
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
-  <li><span class="tag">R2 · 26-11-22-0834</span> S4 真机验收完成(用户拍板改判走测试 qB 环境, 环境2 副实例 56590, 外部种子走 real.seed + add_multi 配方模拟): 判据终态 ①PARTIAL(侦测扫描腿全 PASS, 删链门腿自锁=F3; 删链门腿=执行者语义扩展读法, 详见档案 26-11-22-backend-relocate-foreign-gate)/②③ PASS/④ PASS(L2 腿真机未触发, 单测守阵, 档案注明)/⑤ PASS(双清理路径实测, 档案注明)/⑥ 全绿(test.full 6789 passed/6 skipped 覆盖率99%, 基线切片 26-11-22-0821); 两发现 F1 活到达差集漏接 + F3 删链门等值面假依赖自锁, 待拍板入池; F1/F3 属既有边界, 不阻本计划收口</li>
+  <li><span class="tag">R3 · 26-11-22-0942</span> 六件 S4 发现入池(bug·标准档 1 + 便签 5)+ doc-refs 补链, 指针回写(详见档案 26-11-22-backend-relocate-foreign-gate R2)</li>
+  <li><span class="tag">R2 · 26-11-22-0834</span> S4 真机验收完成(用户拍板改判走测试 qB 环境, 环境2 副实例 56590, 外部种子走 real.seed + add_multi 配方模拟): 判据终态 ①PARTIAL(侦测扫描腿全 PASS, 删链门腿自锁=F3; 删链门腿=执行者语义扩展读法, 详见档案 26-11-22-backend-relocate-foreign-gate)/②③ PASS/④ PASS(L2 腿真机未触发, 单测守阵, 档案注明)/⑤ PASS(双清理路径实测, 档案注明)/⑥ 全绿(test.full 6789 passed/6 skipped 覆盖率99%, 基线切片 26-11-22-0821); 两发现 F1 活到达差集漏接 + F3 删链门等值面假依赖自锁, 已入池(六件,见档案 R2); F1/F3 属既有边界, 不阻本计划收口</li>
   <li><span class="tag">R1 · 26-11-22-0521</span> S1-S3 全部落地(5 批本地提交 rebase 进 develop, 档案 26-11-22-backend-relocate-foreign-gate): S1 预筛/终态清理/文案/daemon 日志+流程行/WEBUI 行三态 + 接缝终审 3 轮零 actionable; mismatch 重判语义与 D4 措辞出入经用户拍板 a) 接受现状+钉档(语义单点 relocate_foreign docstring); 评审 5 批 11 轮检 16/16 修 16 零 blocker; 全绿见 kb.baseline; <strong>S4 真机验收仍 Open</strong>(需真机窗口, 验收判据 §04 不变)</li>
   <li><span class="tag">R0 · 26-11-21-1600</span> 初版: 真机报障取证(2026-11-21 14:11 会话, 61 候选 60 误标)+ grilling 两轮 D1-D9 拍板; 主线 = 判定门内容根预筛 + 终态账面清理 + 可观测性/WEBUI 行同步三批, 真机全链验收收口; 认领 issue 26-11-21-1500 与 26-11-21-1326, 关联计划 26-11-20-0434</li>
 </ul>

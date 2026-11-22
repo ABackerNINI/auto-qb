@@ -5,7 +5,7 @@
 **Updated:** 2026-11-22
 **Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿), 全绿见 kb.baseline
 **Topics:** backend-relocate-foreign-gate
-**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md
+**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html
 
 ## 本篇只回答
 
@@ -41,7 +41,7 @@
 | S3 | B3 前端(WEBUI 行三态+保存路径+e2e 四皮肤) | Done(2026-11-22) |
 | 接缝 | 终审 3 轮零 actionable + 拍板 a 钉档批 | Done(2026-11-22) |
 | 收尾 | 文档回写+基线切片+issue 翻 Done+推送 | Done(2026-11-22) |
-| S4 | 真机验收(完整整组迁移全链复验, 计划验收⑤六条) | Done(2026-11-22, 测试 qB 环境环境2; 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿; F1/F3 两发现待拍板入池, 见进度日志 R2) |
+| S4 | 真机验收(完整整组迁移全链复验, 计划验收⑤六条) | Done(2026-11-22, 测试 qB 环境环境2; 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿; F1/F3 两发现已入池, 见进度日志 R2) |
 
 ## 进度日志
 
@@ -68,10 +68,12 @@
   - ⑤ PASS —— mm1 mismatch 条目走「种子消失」清理先于终态(两条清理路径各有逐字 DEBUG 行), 终态 B2 只清 kind=A 1 条(计划「清 2 条」是运行手册预期, 计划 §04 字面「条目已清」达成); 场景B探针 kind=B 全中保留; mismatch 新文案呈现正确。
   - ⑥ PASS —— test.full 6789 passed / 6 skipped 覆盖率 99%, 基线切片 26-11-22-0821。
   - 口径注: timeline 末节把⑥标成「PASS(等效形态)」属标注漂移, 以本档案为准(⑥ = 全量 + 基线切片, 已跑)。
-- **两发现(只记录, 待用户拍板入池)**:
-  - **F1 活到达差集漏接**: store.last_added_diff 每轮覆盖重算(含零变化轮, store.py:490)+ 窗口 1.5s vs 2S relocate tick 拍频错位, 单事件漏接约 1/4(探针A两漏/探针B一中实证); 0434 D12/D13 既有边界, 非本计划引入; 修法方向 = 累积游标或 arm 等待期低频兜底扫。
-  - **F3 删链门收尾自锁**: chain_gate_hits 等值面(_norm(sp)==eq, relocate_units.py:2183)不查内容根 —— 该等值面是 2076c889(11-08)评审 blocker 有意加回的, 把 save_path 恰等旧根的同根兄弟判为依赖(数据不经 junction = 假依赖), deps 恒非零 → 别名永不删 → 收尾永不完成; 触发布局 = dir_alias + 多成员 + 同根兄弟; 保守向不丢数据但不可自愈, INFO 每 2s 刷屏无去重(138 行/4.5min)+ last_error 指引误导; 修法方向 = 等值面命中加内容根/文件交集判别(复用 content_root_of/file_alias_intersects)。11-21 事故未自锁的原因已查实: 事故 job 自有形态非 dir_alias(direct 短路或 file_links+R2 文件交集豁免), 「等值面在位 + 收尾完成 + 60 兄弟恰等旧根」三实证强制推出。
-- **观察项处置(不入池, 建议便签档, 待用户逐项拍板)**: T2 confirm 强探测消费 confirm 位致三步交互 / 武装行「形态 dir」内部命名泄漏 / 在账跳过无日志行(relocate_foreign.py:218 静默 continue)/ daemon 续任无日志 —— 四项; journal 命名与 daemon 0 字节属行为正确, 不入池。
+- **两发现(已拍板入池, 2026-11-22, 只建件未认领)**:
+  - **F1 活到达差集漏接**: store.last_added_diff 每轮覆盖重算(含零变化轮, store.py:490)+ 窗口 1.5s vs 2S relocate tick 拍频错位, 单事件漏接约 1/4(探针A两漏/探针B一中实证); 0434 D12/D13 既有边界, 非本计划引入; 修法方向 = 累积游标或 arm 等待期低频兜底扫。已入池: `26-11-22-0905-bug-relocate-foreign-added-diff-race-miss`(bug·便签档)。
+  - **F3 删链门收尾自锁**: chain_gate_hits 等值面(_norm(sp)==eq, relocate_units.py:2183)不查内容根 —— 该等值面是 2076c889(11-08)评审 blocker 有意加回的, 把 save_path 恰等旧根的同根兄弟判为依赖(数据不经 junction = 假依赖), deps 恒非零 → 别名永不删 → 收尾永不完成; 触发布局 = dir_alias + 多成员 + 同根兄弟; 保守向不丢数据但不可自愈, INFO 每 2s 刷屏无去重(138 行/4.5min)+ last_error 指引误导; 修法方向 = 等值面命中加内容根/文件交集判别(复用 content_root_of/file_alias_intersects)。11-21 事故未自锁的原因已查实: 事故 job 自有形态非 dir_alias(direct 短路或 file_links+R2 文件交集豁免), 「等值面在位 + 收尾完成 + 60 兄弟恰等旧根」三实证强制推出。已入池: `26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock`(bug·标准档, 建议认领修复)。
+- **观察项处置(四件已拍板入池便签, 2026-11-22)**: T2 confirm 强探测消费 confirm 位致三步交互(`26-11-22-0905-question-relocate-confirm-probe-reask-three-step`)/ 武装行「形态 dir」内部命名泄漏(`26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming`)/ 在账跳过无日志行(relocate_foreign.py:218 静默 continue, `26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log`)/ daemon 续任无日志(`26-11-22-0906-feat-relocate-daemon-resume-no-log`) —— 四件便签档; journal 命名与 daemon 0 字节属行为正确, 不入池。
 - **证据**: tests-real/.work/rm04_s4/evidence/(gitignored, 三窗 timeline + 日志 + 账面 + api 快照)。
 
 - 2026-11-22 08:55 S4 真机验收完成(测试 qB 环境环境2 三窗): 判据终态 ①PARTIAL(侦测三时机 PASS/删链门腿=F3 扩展读法)/②③④⑤ PASS(④ L2 腿未触发/⑤ 双清理路径注)/⑥ 全绿基线 26-11-22-0821; 两发现 F1(活到达差集漏接, 0434 既有边界)/F3(删链门等值面假依赖自锁, 2076c889 引入)待拍板入池; 评审 3 轮 actionable 0; 详见档案 R2 与计划 R2
+
+- 2026-11-22 09:06 S4 发现入池收尾(用户拍板, 只建件未认领): 六件入池 —— F3 删链门等值面假依赖自锁(bug·标准档, 建议认领修复)/F1 活到达差集漏接(bug·便签档)/观察项四便签(T2 confirm 流 question/武装行文案 refactor/在账跳过 DEBUG feat/daemon 续任 INFO feat), 时间戳 slug 见上方 R2 两发现与观察项条目; 六件 doc-refs ↔ 档案 Refs/计划 doc-refs 双向声明由 kb.new 自动补链
