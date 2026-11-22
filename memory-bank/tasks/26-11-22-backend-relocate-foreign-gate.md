@@ -73,3 +73,5 @@
   - **F3 删链门收尾自锁**: chain_gate_hits 等值面(_norm(sp)==eq, relocate_units.py:2183)不查内容根 —— 该等值面是 2076c889(11-08)评审 blocker 有意加回的, 把 save_path 恰等旧根的同根兄弟判为依赖(数据不经 junction = 假依赖), deps 恒非零 → 别名永不删 → 收尾永不完成; 触发布局 = dir_alias + 多成员 + 同根兄弟; 保守向不丢数据但不可自愈, INFO 每 2s 刷屏无去重(138 行/4.5min)+ last_error 指引误导; 修法方向 = 等值面命中加内容根/文件交集判别(复用 content_root_of/file_alias_intersects)。11-21 事故未自锁的原因已查实: 事故 job 自有形态非 dir_alias(direct 短路或 file_links+R2 文件交集豁免), 「等值面在位 + 收尾完成 + 60 兄弟恰等旧根」三实证强制推出。
 - **观察项处置(不入池, 建议便签档, 待用户逐项拍板)**: T2 confirm 强探测消费 confirm 位致三步交互 / 武装行「形态 dir」内部命名泄漏 / 在账跳过无日志行(relocate_foreign.py:218 静默 continue)/ daemon 续任无日志 —— 四项; journal 命名与 daemon 0 字节属行为正确, 不入池。
 - **证据**: tests-real/.work/rm04_s4/evidence/(gitignored, 三窗 timeline + 日志 + 账面 + api 快照)。
+
+- 2026-11-22 08:55 S4 真机验收完成(测试 qB 环境环境2 三窗): 判据终态 ①PARTIAL(侦测三时机 PASS/删链门腿=F3 扩展读法)/②③④⑤ PASS(④ L2 腿未触发/⑤ 双清理路径注)/⑥ 全绿基线 26-11-22-0821; 两发现 F1(活到达差集漏接, 0434 既有边界)/F3(删链门等值面假依赖自锁, 2076c889 引入)待拍板入池; 评审 3 轮 actionable 0; 详见档案 R2 与计划 R2
