@@ -7,9 +7,9 @@
 <title>流量图尾锚显式视口重构(结构性消除压缩类问题)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-traffic-anchor-viewport">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-22-0858">
-<meta name="doc-updated" content="26-11-22-0858">
+<meta name="doc-updated" content="26-11-22-2124">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-webui-traffic-anchor-viewport.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>流量图尾锚显式视口重构(结构性消除压缩类问题)</h1>
 <p class="lede">本篇只回答: 流量图 x 向压缩为何三轮修复仍有残留, 以及如何用「尾锚显式视口」三不变量从结构上彻底消除此类问题 —— 重构主线、落点、分期与验收。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-22-0858 · <b>doc-updated</b> 26-11-22-0858 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-22-0858 · <b>doc-updated</b> 26-11-22-2124 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话第三轮报障分析(只读取证 + 全链仿真) + 用户拍板「不要再打补丁了，需要重构」 + ExitPlanMode 批准(2026-11-22); 前序轮次: 26-11-21-1704(数据面修剪) / 26-11-22-0626(打断继承)
 </div>
 
@@ -156,6 +156,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-22-0858</span> 初版: 第三轮报障分析(全链仿真取证 + 换窗竞态端到端复现)后用户拍板重构; 方案 = 尾锚显式视口三不变量; D1 动画语义拍板整体平移; S0-S3 分期待开工。</li>
+  <li><span class="tag">R1 · 26-11-22-2124</span> S0-S3 全部落地收口: 复评轮4-8闭环(送检50/过检49, 48条发现全修, blocker 0, 累计入池1 26-11-22-1401 保持 Open) + 真机冒烟三判据全过(231 稳定样本 spanDev 全零, 见任务档案 R3) + 收口提交 284b152f(本地未推送); doc-status 翻 Done</li>
 </ul>
 
 </div>
