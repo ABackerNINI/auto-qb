@@ -266,7 +266,8 @@ const QB_FX_DEFAULTS = {
   layers: { band: true, particles: true, scan: true, grade: true },
 };
 /* 枚举白名单(读校验用; select 面板候选拿同一份防止两处漂移)。echoSpan 的 "full" 是 R5 整幅
- * 旧观感对照档(NOT FOR SHIP) —— 白名单放行存储面, 观感降格语义在 S2 动效引擎里区分。 */
+ * 旧观感对照档(模板保真二轮 A2 回退恢复整幅口径 —— 模板 demo:1152-1158; 面板提示行标
+ * 「旧观感对照」, 枚举面不改)。 */
 const QB_FX_ENUMS = {
   ease: ["out", "linear"],
   palette: ["neon", "calm", "glitch"],
@@ -885,6 +886,11 @@ const _QB_FX_BLUR_CAPS = { neon: 10, glitch: 14, calm: 0 };
 /* V2 冲击环边数映射(由 lead 等级决定): Lv.1 三边 / Lv.2 六边 / Lv.3 八边 */
 const _QB_FX_RING_SIDES = { 1: 3, 2: 6, 3: 8 };
 
+/* C1/D6 常驻菱形锚旋转周期(2π×420 取整 —— 模板 rot=t/420 是弧度/ms, 一圈 = 2π×420 ≈ 2639ms;
+ * 旧 CSS 420ms/圈系单位误读, 快 6.3 倍)。本常量为 CSS 注入与注释的单点来源(接线改判在
+ * 后续阶段接 —— 本阶段只立常量, CSS 仍 420ms)。 */
+const _QB_FX_ANCHOR_SPIN_MS = 2639;
+
 /* I9 视觉预算常量(R3: 全部按 up + dl 两轨合计, 不每轨各配一套): 粒子 ≤32 / 每轨半套 ≤16 /
  * N 层 ≤0.33×beat 回落 / 粒子活跃窗 ≤0.55×beat(扫描束/光带同窗零绘制 —— R5/R6) / 末点 y
  * 间距 <26px 反馈按比例缩小(下限 0.4 —— 不合并不取消, D4) / glitch 切片 ≤5 条(R6)且微震
@@ -893,6 +899,8 @@ const _QB_FX_PART_MAX = 32;
 const _QB_FX_SHARD_MAX = 16;
 const _QB_FX_NEON_RATIO = 0.33;
 const _QB_FX_PART_RATIO = 0.55;
+/* 冲击环窗(B3 模板保真二轮): 0.6×beat(模板 demo:1294; 粒子仍 0.55 不动 —— I9 逐元素窗改判) */
+const _QB_FX_RING_RATIO = 0.6;
 const _QB_FX_Y_GAP_PX = 26;
 const _QB_FX_Y_GAP_MIN_SCALE = 0.4;
 const _QB_FX_SLICES_MAX = 5;
@@ -905,16 +913,13 @@ const _QB_FX_TAIL_SPAN_BUCKETS = 6;
  * —— 横向细线条合计 ≤12 条/帧(I9-R6: 切片 ≤5 + 梳齿 ≤7), 束体+切片合计 ≤28 条/帧 */
 const _QB_FX_TEAR_COUNT = { 1: 2, 2: 3, 3: 5 };
 const _QB_FX_COMB_COUNT = { 1: 3, 2: 5, 3: 7 };
-/* 撕裂切片 alpha 按等级(R6): Lv.1 0.18 / Lv.2 0.26 / Lv.3 0.34 */
-const _QB_FX_TEAR_ALPHA = { 1: 0.18, 2: 0.26, 3: 0.34 };
 /* 撕裂切片配色池(色序 = Lv 色 / 品红 / lead 语义色, 约 45%/35%/20% —— 故障色为主, 语义色为主
  * 会与 lead 曲线同色隐身, §03 R6 色义行; 品红同时是扫描束色散第二色, 共用一常量) */
 const _QB_FX_TEAR_MAGENTA = "#FF4D9D";
-/* T4 束体六层晕(宽 -> 窄递进, 低 alpha 叠层逼近高斯 —— R5 重做束; 宽 px × 晕 alpha) */
+/* T4 束体六层晕(宽 -> 窄递进, 低 alpha 叠层逼近高斯 —— R5 重做束; 宽 px × 晕 alpha)。
+ * 模板保真二轮(A2 回退): 束「宽度感」等级系数(Lv.1 0.9/Lv.2 1/Lv.3 1.1)退役 —— 模板无
+ * 宽度感系数, 六层晕恒按表内宽度落笔; T5 分级联动只剩色相(lvColor)与梳齿条数。 */
 const _QB_FX_BEAM_HALO = [[34, 0.035], [24, 0.05], [16, 0.08], [10, 0.13], [5, 0.22], [2.5, 0.38]];
-/* T5 分级联动「宽度感」: 六层晕宽度 × 等级系数(Lv.1 0.9 / Lv.2 1 / Lv.3 1.1; 梳齿条数 3/5/7
- * 同为宽度感的一部分); grade 层关恒取 Lv.1 系数 */
-const _QB_FX_BEAM_WSCALE = { 1: 0.9, 2: 1, 3: 1.1 };
 /* T6 内束强度 ×0.78(R5 D17: 与 T2/T3/T5/T1 共享同一判定帧, 五层叠加需守合计预算), 再乘
  * cfg.impact 滑杆(面板冲击强度 0-1, 本参数的引擎消费面自 S2-b 起在束上) */
 const _QB_FX_BEAM_INTENSITY = 0.78;
@@ -969,11 +974,12 @@ function _qbFxLead(up, dl) {
 }
 
 /* partCap(lead 等级 + 密度参数 cfg.particles): 两轨合计上限 = min(32, round(基数 × density)),
- * 基数按等级 16/24/32(Lv.1/Lv.2/Lv.3); density ≤ 0 或非法 = 0 粒子(密度关到底即无粒子)。 */
+ * 基数按等级 6+7×lv = 13/20/27(D5 模板保真二轮: 模板 demo:911 同式; Lv.1 仍发射 —— P9 拍板
+ * 兼容; clamp 32 预算保留, 基数 27 触顶); density ≤ 0 或非法 = 0 粒子(密度关到底即无粒子)。 */
 function _qbFxPartCap(level, particles) {
   const d = Number(particles);
   if (!(level >= 1) || !Number.isFinite(d) || d <= 0) return 0;
-  const base = level >= 3 ? 32 : level === 2 ? 24 : 16;
+  const base = 6 + 7 * Math.min(3, level);
   return Math.min(_QB_FX_PART_MAX, Math.round(base * Math.min(1, d)));
 }
 
@@ -1005,20 +1011,29 @@ function _qbFxNeonQ(t, beat) {
   return 1 - t / end;
 }
 
-/* 冲击扩张环状态(V2): r(t) = rMax × easeOut(t/0.55beat) 快速扩张, alpha ∝ (1 − t/0.55beat);
- * t ≥ 0.55×beat -> null(零绘制 —— I9 冲击类叠加层窗)。 */
-function _qbFxRingAt(t, beat, rMax) {
-  const T = beat * _QB_FX_PART_RATIO;
+/* 冲击扩张环(V2 -> 模板保真二轮 C3+B3 重写): pf = t/(0.6×beat) 线性推进(不 easeOut —— 模板
+ * demo:1294 同式), r = (4+24×pf)×rScale×gapScale(起步半径 4 线性扩到 28), alpha =
+ * 0.85×(1−pf)×impact×rScale×gapScale; pf ≥ 1 -> null(环窗 0.6×beat —— B3 放宽)。
+ * rScale = 半套系数(both 0.5 各轨半套 / lead 1 / merge 1 —— 模板 demo:1388-1390);
+ * gapScale = D4 y 间距缩小(生产保留, 模板无); impact = cfg.impact 面板冲击强度(模板
+ * S.impact 同源)。返回 { r, alpha, pf } —— pf 供绘制侧外圈独立扩张(S2 接线)复用。 */
+function _qbFxRingAt(t, beat, rScale, gapScale, impact) {
+  const T = beat * _QB_FX_RING_RATIO;
   if (!(t >= 0) || !(t < T)) return null;
-  return { r: rMax * _qbFxEaseOut(Math.min(t / T, 1)), alpha: 1 - t / T };
+  const pf = t / T;
+  const s = Math.max(0, Number(rScale) || 0) * Math.max(0, Number(gapScale) || 0);
+  const imp = Math.min(1, Math.max(0, Number(impact) || 0));
+  return { r: (4 + 24 * pf) * s, alpha: 0.85 * (1 - pf) * imp * s, pf };
 }
 
 /* V3 粒子三阶段运动/亮度(纯函数): 爆发期 [0, burstMs) 速度 ×4.5(= impact 窗), 拖尾期
  * [burstMs, 0.55×beat) 名义速度 ×1 并 easeOut 减速; t ≥ 0.55×beat -> null(零绘制)。
- * 速度 v 由末态行程反解: 4.5v×burstMs + v×trailMs = dist(easeOut(1)=1); 亮度 ∝ (1 − t/T),
- * t=0 首帧最亮(与判定线闪光同帧 —— I9); carryPx = L0 视口回摆带来的末点位移(粒子随末点滑动,
- * 与曲线不脱钩)。 */
-function _qbFxParticleAt(t, beat, burstMs, spec, carryPx) {
+ * 速度 v 由末态行程反解: 4.5v×burstMs + v×trailMs = dist(easeOut(1)=1)。亮度(C8 模板式)
+ * 0.78×(1 − t/T)×impact(模板 demo:1073 同式, t=0 首帧最亮与判定线闪光同帧 —— I9); 自旋
+ * t/260+idx 匀速单向(模板同式; rot0/vr 伪随机双向自旋字段退役 —— C8); carryPx = L0 视口
+ * 回摆带来的末点位移(粒子随末点滑动, 与曲线不脱钩); idx = 粒子在清单中的序号(绘制侧
+ * specs[i] 的 i, 自旋相位的唯一来源)。 */
+function _qbFxParticleAt(t, beat, burstMs, spec, carryPx, idx, impact) {
   const T = beat * _QB_FX_PART_RATIO;
   if (!(t >= 0) || !(t < T)) return null;
   const trailMs = Math.max(T - burstMs, 1e-9);
@@ -1026,19 +1041,21 @@ function _qbFxParticleAt(t, beat, burstMs, spec, carryPx) {
   const d = t <= burstMs
     ? 4.5 * v * t
     : 4.5 * v * burstMs + v * trailMs * _qbFxEaseOut((t - burstMs) / trailMs);
+  const imp = Math.min(1, Math.max(0, Number(impact) || 0));
   return {
     x: spec.x0 + Math.cos(spec.ang) * d + carryPx,
     y: spec.y0 + Math.sin(spec.ang) * d,
-    alpha: 1 - t / T,
+    alpha: 0.78 * (1 - t / T) * imp,
     d,
-    rot: spec.rot0 + spec.vr * t,
+    rot: t / 260 + (idx | 0),
   };
 }
 
 /* 粒子喷射清单(V3): n 个三/四/五边多边形碎片(非圆点 —— Beat Saber 碎片/Phigros 几何碎片),
  * 喷射角均匀铺满左向 270° 弧(45°..315°, 0°=+x 指向右缘外 —— 末点贴判定线, 右向碎片全被绘图
- * 区裁剪白费)加 ±5° 抖动, 尺寸 1.5-3.5px / 行程 1.1-1.6 × 环最大半径 / 自旋伪随机。
- * 确定性: 同种子恒同清单(node 电池真跑)。 */
+ * 区裁剪白费; D2 拍板保留左弧)加 ±5° 抖动, 尺寸 1.6-4.2px(C8 模板式 1.6+rnd×2.6)/ 行程
+ * 1.1-1.6 × 环最大半径。自旋不进清单: rot = t/260+idx 绘制侧现算(C8 匀速单向, rot0/vr
+ * 伪随机双向自旋字段退役)。确定性: 同种子恒同清单(node 电池真跑)。 */
 function _qbFxSpawnSpecs(n, x0, y0, rMax, seed) {
   const rnd = _qbFxRand(seed);
   const out = [];
@@ -1047,10 +1064,8 @@ function _qbFxSpawnSpecs(n, x0, y0, rMax, seed) {
     out.push({
       x0, y0, ang,
       sides: 3 + Math.floor(rnd() * 3),
-      size: 1.5 + rnd() * 2,
+      size: 1.6 + rnd() * 2.6,
       dist: rMax * (1.1 + 0.5 * rnd()),
-      rot0: rnd() * Math.PI * 2,
-      vr: (rnd() - 0.5) * 0.03,
     });
   }
   return out;
@@ -1095,18 +1110,16 @@ function _qbFxLvColor(lv, gradeOn) {
   if (gradeOn !== true) return _QB_FX_LV_COLORS[1];
   return _QB_FX_LV_COLORS[lv] || _QB_FX_LV_COLORS[3];
 }
-/* T5 分级联动束宽度感: 六层晕宽度 × 等级系数(0.9/1/1.1); grade 关恒 Lv.1 系数 */
-function _qbFxBeamWScale(lv, gradeOn) {
-  if (gradeOn !== true) return _QB_FX_BEAM_WSCALE[1];
-  return _QB_FX_BEAM_WSCALE[lv] || _QB_FX_BEAM_WSCALE[3];
-}
 /* 回声行程(R7/D19): span = clamp(0.22 × 绘图宽, 100, 200) px 且不超绘图宽; echoSpan="full"
- * (R5 整幅扫掠对照档, 存储白名单放行)在生产降格为 auto —— 观感降格语义(QB_FX_ENUMS 注)。 */
+ * (R5 整幅扫掠对照档, 存储白名单放行)恢复模板口径整幅 s=w(模板 demo:1152-1158; 面板标
+ * 「旧观感对照」, 仅对照档观感 —— QB_FX_ENUMS 注)。 */
 function _qbFxEchoSpan(mode, plotW) {
   const w = Number(plotW);
   if (!Number.isFinite(w) || !(w > 0)) return _QB_FX_ECHO_SPAN_MIN;
   let s;
-  if (mode === "100" || mode === "150" || mode === "200") {
+  if (mode === "full") {
+    s = w;   // A2 回退: 整幅对照档恢复模板口径(降格 auto 语义退役 —— 模板 demo:1152-1158)
+  } else if (mode === "100" || mode === "150" || mode === "200") {
     s = Number(mode);
   } else {
     s = Math.min(_QB_FX_ECHO_SPAN_MAX, Math.max(_QB_FX_ECHO_SPAN_MIN, w * _QB_FX_ECHO_SPAN_RATIO));
@@ -1147,17 +1160,19 @@ function _qbFxBeamStops(lo, hi) {
   pts.sort((x, y) => x.p - y.p);
   return pts;
 }
-/* R6 撕裂切片清单(plan §03 R6 节/D18): n = 2/3/5 按 lead 等级(≤ _QB_FX_SLICES_MAX); 撕裂带
- * 中心 yCenter(lead 末点 y; merge 取中点/缺口退 lead —— spawn 侧已仲裁), 半带宽 = (0.08 +
- * 0.30 × min(1, Δ/0.5)) × 绘图高(Δ 小 ≈末点一道裂纹, Δ 大 ≈整片拉开); 长度 10–80px 随 Δ;
- * alpha 0.18/0.26/0.34 按等级; 右端 0–18px 伪随机缩进(否则一排平齐「信号柱」而非撕裂); 层内
- * 相位 = strat(i,n,r) × hash01(拍序号, 槽位)(每拍不重复、不聚集、可复现); ci 配色池 0=Lv 色
- * (约45%) / 1=品红(约35%) / 2=lead 语义色(约20%) —— 故障色为主(语义色为主会与曲线同色隐身);
- * dy0/ph = ±3px 正弦微震幅值与相位(I9 ≤5px; 绘制侧施力, 抽屉入场期间暂停)。判定帧一次生成,
- * 同拍逐像素冻结(只判定帧重算 —— §03 R6 冻结纪律)。 */
+/* R6 撕裂切片清单(plan §03 R6 节/D18; 模板保真二轮 C2/D3 改判): n = 2/3/5 按 lead 等级
+ * (≤ _QB_FX_SLICES_MAX); 撕裂带中心 yCenter(lead 末点 y; merge 取中点/缺口退 lead —— spawn
+ * 侧已仲裁), 半带宽 = (0.08 + 0.30 × min(1, Δ/0.5)) × 绘图高(Δ 小 ≈末点一道裂纹, Δ 大 ≈整片
+ * 拉开); 长度 10–80px 随 Δ; alpha = 0.10+0.08×lv(C2 线性式, Lv.1/2/3 = 0.18/0.26/0.34;
+ * q×impact 由绘制侧逐帧乘 —— 冻结清单不含逐帧因子, 拍内改 impact 下一帧生效); 右端 0–18px
+ * 伪随机缩进(否则一排平齐「信号柱」而非撕裂); 层内相位 = strat(i,n,r) × hash01(拍序号,
+ * 槽位)(每拍不重复、不聚集、可复现); ci 配色池 0=Lv 色(约45%) / 1=品红(约35%) / 2=lead
+ * 语义色(约20%) —— 故障色为主(语义色为主会与曲线同色隐身); offX = ±3px x 向微震方向
+ * (C2/D3 模板式: offX×q 绘制侧乘 —— 替换旧 y 向正弦 dy0/ph, 幅值 ≤5px I9; 抽屉入场期间
+ * 暂停)。判定帧一次生成, 同拍逐像素冻结(只判定帧重算 —— §03 R6 冻结纪律)。 */
 function _qbFxTearSlices(lv, yCenter, halfBand, powD, bi, mode, tTop, tBot) {
   const n = Math.min(_QB_FX_SLICES_MAX, _QB_FX_TEAR_COUNT[lv] || 2);
-  const alpha = _QB_FX_TEAR_ALPHA[lv] || _QB_FX_TEAR_ALPHA[1];
+  const alpha = 0.10 + 0.08 * lv;
   const out = [];
   for (let i = 0; i < n; i++) {
     const r = _qbFxTearRnd(mode, bi, i * 13 + 3);
@@ -1168,8 +1183,7 @@ function _qbFxTearSlices(lv, yCenter, halfBand, powD, bi, mode, tTop, tBot) {
       inset: mode === "fixed" ? 0 : 18 * _qbFxTearRnd(mode, bi, i * 17 + 9),
       ci: r < 0.45 ? 0 : (r < 0.8 ? 1 : 2),
       alpha,
-      dy0: (_qbFxTearRnd(mode, bi, i * 5 + 1) * 2 - 1) * _QB_FX_SLICE_SHAKE_PX,
-      ph: _qbFxTearRnd(mode, bi, i * 19 + 7) * Math.PI * 2,
+      offX: (_qbFxTearRnd(mode, bi, i * 5 + 1) * 2 - 1) * _QB_FX_SLICE_SHAKE_PX,
     });
   }
   return out;
@@ -2824,7 +2838,8 @@ window.AQB_QB_TRAFFIC = {
         cLo = cm - 14;
         cHi = cm + 14;
       }
-      const comb = _qbFxComb(_QB_FX_COMB_COUNT[lv] || 3, cLo, cHi, powD, seed, tearMode, g.T, g.T + g.H);
+      const comb = _qbFxComb(tearMode === "fixed" ? 7 : (_QB_FX_COMB_COUNT[lv] || 3),
+        cLo, cHi, powD, seed, tearMode, g.T, g.T + g.H);   // C11: fixed 对照档恒 7(模板 demo:1212)
       // 次区光点资格(每轨: live 且 level ≥ 1 —— 真 0/缺口轨零装饰, I10/D2; 值>0 恒 ≥Lv.1 后
       // 资格行自动满足, 无需改判据 —— F1 消费面核查结论 26-11-14-1313)
       const tail = [];
@@ -2961,14 +2976,21 @@ window.AQB_QB_TRAFFIC = {
         if (fx.act.dl) spots.push({ y: yDl, color: tk.down, specs: fx.specs.dl, n: eff.dl });
       }
       const sides = _QB_FX_RING_SIDES[fx.lv] || _QB_FX_RING_SIDES[3];
-      const ringT = _qbFxRingAt(t, fx.beatMs, fx.rMax);
-      // —— 几何环(V2: 多边形扩张环, 边数 = lead 等级 3/6/8; 环心跟随末点; 轨道语义色) ——
-      // 近底/近顶钳制(P3 拍板, F5): 环心 y clamp 进 [T+rMax, T+H-rMax] —— 环完整可见,
-      // 允许与末点轻微分离; 钳的是绘制面, 菱形锚(数据标记)仍走真位。rMax 用 spawn 冻结值
-      // (不用随帧生长的 ringT.r)避免环心在扩张期抖动; 绘图区过矮(上下界反转)退中点。
+      // C3 模板半套系数(rScale): both 各轨半套 0.5 / lead 1 / merge 1(模板 demo:1388-1390);
+      // 未知策略回落 both 同 alloc 口径(D3-b) -> 0.5。imp = 面板冲击强度(环 alpha 与切片共用)。
+      const ringScale = cfg.dual === "lead" || cfg.dual === "merge" ? 1 : 0.5;
+      const imp = Math.min(1, Math.max(0, Number(cfg.impact)));
+      const ringT = _qbFxRingAt(t, fx.beatMs, ringScale, fx.gapScale, imp);
+      // —— 几何环(C3 模板式: 线性扩张 r=(4+24pf)×rScale×gapScale, alpha 联 impact; 旋转
+      //     绘制面(rot=t/300)与外圈独立扩张属 S2 接线, 本阶段半径/alpha 先按模板式) ——
+      // 近底/近顶钳制(P3 拍板, F5): 环心 y clamp 进 [T+终态半径, T+H-终态半径], 终态半径 =
+      // (4+24)×rScale×gapScale(保真二轮: 半径源由 rMax 改环终态值) —— 环完整可见, 允许与
+      // 末点轻微分离; 钳的是绘制面, 菱形锚(数据标记)仍走真位。终态值冻结现算(不随帧生长)
+      // 避免环心在扩张期抖动; 绘图区过矮(上下界反转)退中点。
+      const ringRMax = 28 * ringScale * fx.gapScale;
       const ringY = (sp) => {
-        const yLo = T + fx.rMax;
-        const yHi = T + H - fx.rMax;
+        const yLo = T + ringRMax;
+        const yHi = T + H - ringRMax;
         return yHi > yLo ? Math.min(Math.max(sp.y, yLo), yHi) : T + H / 2;
       };
       if (ringT && ringT.r > 0) {
@@ -3005,7 +3027,7 @@ window.AQB_QB_TRAFFIC = {
           if (!sp.specs || !(sp.n > 0)) continue;
           const m = Math.min(sp.specs.length, sp.n);
           for (let i = 0; i < m; i++) {
-            const ps = _qbFxParticleAt(t, fx.beatMs, fx.burstMs, sp.specs[i], carry);
+            const ps = _qbFxParticleAt(t, fx.beatMs, fx.burstMs, sp.specs[i], carry, i, imp);
             if (!ps || !(ps.alpha > 0)) continue;
             const py = ps.y > yFloor ? 2 * yFloor - ps.y : ps.y;
             ctx.globalAlpha = ps.alpha;
@@ -3029,10 +3051,11 @@ window.AQB_QB_TRAFFIC = {
       if (fx.slices && fx.slices.length && cfg.palette === "glitch" && ens > 0 && !this._drawerAnimRaf) {
         const pool = [lvColor, _QB_FX_TEAR_MAGENTA, fx.lead === "up" ? tk.up : tk.down];
         for (const sl of fx.slices) {
-          ctx.globalAlpha = sl.alpha * ens;
+          // C2 模板式 alpha 联 impact + 窗因子 q(本阶段 q = ens, 独立 0.25×beat 窗与切片门/
+          // 厚度改判留后续阶段); x 向 ±3q 微震(C2/D3, 替换旧 y 正弦)。
+          ctx.globalAlpha = sl.alpha * ens * imp;
           ctx.fillStyle = pool[sl.ci] || pool[0];
-          ctx.fillRect(L + W - sl.len - sl.inset,
-            sl.y + sl.dy0 * Math.sin(t / 45 + sl.ph), sl.len, 1);
+          ctx.fillRect(L + W - sl.len - sl.inset + sl.offX * ens, sl.y, sl.len, 1);
         }
       }
       // —— N 判定线短亮段(白名单 judgeFlash: 活性轨末点 y ±10px; ≤0.33×beat 回落) ——
@@ -3070,8 +3093,8 @@ window.AQB_QB_TRAFFIC = {
      * 相位 B 亮束钉在判定线按幂 fade 衰减, 回声(1px 包络核 + 淡晕双笔)在 0.18–0.45beat 匀速
      * 越线 span = clamp(0.22×绘图宽, 100, 200) px, 按 pow(1 − d/span, 0.85) 距离衰减, d ≥ span
      * 几何硬停(该帧零回声指令, 不是把 alpha 压到看不见 —— D19; 束体仍在)。束体结构(R5):
-     * 亚像素 1px 硬核(x+0.5 对齐) + 34/24/16/10/5/2.5px 六层晕(低 alpha 叠层逼近高斯, 宽度感
-     * 按 lead 等级 ×0.9/1/1.1 —— T5 联动) + 双侧 ±1.6px 青/品红色散(仅前 0.5beat) + 5 段非
+     * 亚像素 1px 硬核(x+0.5 对齐) + 34/24/16/10/5/2.5px 六层晕(低 alpha 叠层逼近高斯; 宽度感
+     * 分级已退役 A2 —— 恒按表) + 双侧 ±1.6px 青/品红色散(仅前 0.5beat) + 5 段非
      * 对称彗尾(只在来向=右拖) + 梳齿 3/5/7 条(R6, spawn 冻结清单); 纵向亮度按两轨末点 y 包络
      * 起落(渐变, 峰贴近 <0.08 合并单峰; 缺口轨退 lead 末点 y)。T6 内束强度 = cfg.impact ×
      * 0.78(R5 D17), 双轨共享同一道束。色相走 T5 联动单点(grade 关恒 Lv.1 色)。
@@ -3125,16 +3148,16 @@ window.AQB_QB_TRAFFIC = {
       for (const s2 of stops) {
         env.addColorStop(s2.p, _qbFxFade(lvColor, Math.min(1, s2.a * envPeak)));
       }
-      const wScale = _qbFxBeamWScale(fx.lv, cfg.layers.grade === true);
       ctx.save();
       ctx.scale(px, px);   // 自含 CSS px 坐标系(与 _qbCanvasScale 同式; 不嵌调用方状态 —— 调用点已 restore)
       ctx.beginPath();
       ctx.rect(L, T, Math.max(W, canvasW - L), H);   // 放宽到画布右缘(评审 blocker 修复 —— 见方法头注)
       ctx.clip();
-      // —— 六层晕(宽 -> 窄): 低 alpha 多层叠加逼近高斯衰减, 避免「一道硬边光条」 ——
+      // —— 六层晕(宽 -> 窄): 低 alpha 多层叠加逼近高斯衰减, 避免「一道硬边光条」;
+      //     宽度恒按表(A2 回退: 束宽度感分级退役 —— 模板无宽度感系数) ——
       ctx.strokeStyle = env;
       for (const hw of _QB_FX_BEAM_HALO) {
-        ctx.lineWidth = hw[0] * wScale;
+        ctx.lineWidth = hw[0];
         ctx.globalAlpha = hw[1];
         ctx.beginPath();
         ctx.moveTo(x0, T);
