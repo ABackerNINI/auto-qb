@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="traffic-recovery">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-21-1546">
-<meta name="doc-updated" content="26-11-21-1657">
+<meta name="doc-updated" content="26-11-22-1159">
 <meta name="doc-refs" content="memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/tasks/26-11-21-backend-traffic-recovery.md, memory-bank/reports/26-11-21-1650-report-traffic-recovery-s0.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>重启流量恢复11.7s挡首份数据(过滤后置+游程逐槽展开+累计器不落盘): 游程级重建重写+acc快照账本+raw保留窗清理</h1>
 <p class="lede">本篇只回答: 重启后启动期流量恢复 ~11.7s 挡住主循环首轮同步与 WebUI 首份数据怎么修 —— 根因在<b>重建机制</b>(水位过滤后置 + 游程逐槽展开 + 累计器不落盘)而非文件组织, 修法 = <b>游程级重建重写 + acc 快照账本(追加+压实) + raw 保留窗清理</b>, 5000 系列规模优雅/崩溃重启恢复 ≤2s, 文件格式零换代零迁移。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-21-1546 · <b>doc-updated</b> 26-11-21-1657 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-21-1546 · <b>doc-updated</b> 26-11-22-1159 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话「auto-qb 重启后 WEBUI 骨架快了但种子出现慢」问答轮取证(2026-11-21, 生产日志 11.72s + 本地合成基准) + 用户指令「该思考的是文件组织/读取/数据重建机制是否有问题, 而非挪位置」+ 四轮 grilling D1-D17 拍板(2026-11-21) + 用户指令「grilling然后出一个修改方案」
 </div>
 
@@ -109,15 +109,15 @@
   <tr><td>逐槽展开+入账(现行)</td><td class="bad">8.34s</td><td class="bad">11.23s</td><td class="bad">11.00s</td></tr>
   <tr><td>游程级入账(候选 B2)</td><td>3.94s</td><td class="good">0.009s</td><td>0.66s</td></tr>
 </table>
-<p>结论: 盘不是瓶颈(SSD 直觉正确); 槽位展开+入账是主犯(与总槽数线性); 解析随 r 行数线性, 由 B1(字节级块定位 + 只解析开放段)收敛。B1+B2 组合实测相位样本(水位陈旧约 4-5h —— 当日 19-20h 相位, 重建仅尾段约 1/5 日; 全天活跃; 236 规模)端到端 2.89s, 对照同场景全量 18.5s —— 相位依赖如实披露, 水位陈旧至昨日的真最坏值留 S0 钉死。</p>
-<h3>02.3 5000 规模外推(S0 会钉死)</h3>
+<p>结论: 盘不是瓶颈(SSD 直觉正确); 槽位展开+入账是主犯(与总槽数线性); 解析随 r 行数线性, 由 B1(字节级块定位 + 只解析开放段)收敛。B1+B2 组合实测相位样本(水位陈旧约 4-5h —— 当日 19-20h 相位, 重建仅尾段约 1/5 日; 全天活跃; 236 规模)端到端 2.89s, 对照同场景全量 18.5s —— 相位依赖如实披露, 水位陈旧至昨日的真最坏值已由 S0/S5 钉死: 5000 系列陈旧至昨日 23:00 实测 mixed 102.8 / zheavy 41.7 / rheavy 309.9s(26-11-21-1546 S5, 见 §02.3 注记)。</p>
+<h3>02.3 5000 规模外推(S0 会钉死; S5 实测回填)</h3>
 <table>
   <tr><th>形态(5000 系列)</th><th>现行机制</th><th>仅 B1+B2</th><th>B1+B2+快照</th></tr>
-  <tr><td>优雅重启(水位新鲜)</td><td class="bad">~250s</td><td class="wr">~4-12s</td><td class="good">≤2s</td></tr>
-  <tr><td>崩溃重启</td><td class="bad">~250s</td><td class="wr">同左</td><td class="good">≤2s(快照含缓冲信用, 回放≈0)</td></tr>
-  <tr><td>fallback(无快照+水位陈旧+全天活跃)</td><td class="bad">~250-500s</td><td class="wr">~60-300s</td><td class="wr">同左(罕见, 诚实记录)</td></tr>
+  <tr><td>优雅重启(水位新鲜)</td><td class="bad">~250s(S0 实测 243.8s 中位)</td><td class="wr">43.2-56.6s(S5 harness 实测 3 形态; 主导 = 既有 30d 裁剪重写批 ≈38s)</td><td class="good">真机 5001 系列中位 1.45s(判据 ≤2s 过); harness 5000 系列 2.1-3.3s(纯快路 5000/5000)</td></tr>
+  <tr><td>崩溃重启</td><td class="bad">~250s(S0 实测 243.0s 中位)</td><td class="wr">同左</td><td class="good">真机 5001 系列中位 1.45s(判据 ≤2s 过, port-kill 崩溃后重启)</td></tr>
+  <tr><td>fallback(无快照+水位陈旧+全天活跃)</td><td class="bad">~250-500s</td><td class="wr">10.8-1297.7s(S5 harness 实测 3 形态: zheavy 10.8 / mixed 260.0 / rheavy 1297.7; 口径标签 = harness 无水位全量兜底 cell(D5), 严于行标签的水位陈旧场景; 陈旧口径见注记③与真机 e1 27.36s)</td><td class="wr">同左(罕见, 诚实记录)</td></tr>
 </table>
-<p>5000 规模下快照从「一步到位的可选项」变为承重结构 —— 这是 D1 用户改判(选 (b) 一步到位)的依据。</p>
+<p>S5 实测回填(2026-11-22): B1+B2 与 +快照 两列由 harness 5000 系列 20 cell(12 s123 + 8 s123-snap)+ 真机 5001 系列四判据实测替换估计值,「现行」列保留 S0 取证口径。三个如实注记: ① fresh 场景主导成本是<b>既有 30d hour 裁剪重写批</b>(≈7.6ms/系列 ≈38s/5000 系列, 本计划未改动的生产行为, 计划外推 ~4-12s 未计)—— 不含裁剪面的 fallback(zheavy 10.8s)才是纯 B1+B2 读+入账成本; ② 快照列全部纯快路(fastpath 5000/5000, 零读零槽); ③ 水位陈旧(stale)实测 mixed 102.8 / zheavy 41.7 / rheavy 309.9s, prod236 对照 fresh 10.222→1.809→0.127s(现行→B1+B2→快照), 全表见报告 26-11-21-1650 §05。5000 规模下快照从「一步到位的可选项」变为承重结构 —— 这是 D1 用户改判(选 (b) 一步到位)的依据, 实测成立。</p>
 
 <h2><span class="no">§03</span>方案总览</h2>
 <p><b>四件套</b>: <b>B1</b> 水位过滤前移(字节级 <code>\nB,</code> 块定位, 封口块跳过解析与入账, 只处理开放小时尾段) + <b>B2</b> 游程级闭合式入账(z/n 游程按小时段 O(段) 记账, r 行逐行; 前向记账边界/跨块 tail 上下文/形态 D ramp 忠实移植) + <b>A</b> acc 快照账本(折叠态落盘, 恢复零重算) + <b>C</b> raw 保留窗清理(补齐 raw_window 删除半边, 5000 规模尺寸预算达标)。分期见 §04。</p>
@@ -220,6 +220,8 @@
 <ul>
   <li><span class="tag">R0 · 26-11-21-1546</span> 初版: 会话问答轮取证(生产日志 11.72s + 本地合成基准三构成 + 5000 外推) → 用户指令「审视文件组织/读取/重建机制本身, 最不济才考虑挪线程, grilling 出方案」→ 四轮 grilling 17 问拍板(D1/D8/D12/D13 用户改判) → 计划入库 Open。S0-S6 待显式开工。</li>
   <li><span class="tag">R1 · 26-11-21-1657</span> S0 实测回填 §03.2 预算表(新列 S0 实测): 生产快照 48 系列/25.09MB/42 天/5974 万槽/1.5s 档实测构成折算 0.22-0.38GiB 达标, r-heavy 实测 14.48GiB 达标, 1.5s 全活跃实测 39.75GiB 超限同判; 48-vs-236 规模差异披露见报告 26-11-21-1650</li>
+  <li><span class="tag">R2 · 26-11-22-1137</span> S5 实测回填 §02.2/§02.3: B1+B2 与 +快照 两列换实测(harness 5000 系列 20 cell = 12 s123 + 8 s123-snap + 真机 5001 系列四判据), 「现行」列保留; 优雅/崩溃真机中位 1.45s ≤2s 过, fallback 12.68s ≤15s 过, 极端 27.36s 诚实记录; 如实注记 fresh 主导成本 = 既有 30d 裁剪重写批(计划外推未计)</li>
+  <li><span class="tag">R3 · 26-11-22-1159</span> P5a 评审 3 处修正: cell 计数 15→20(12 s123 + 8 s123-snap, 计划 L120 注记与 R2 行); fallback 行补口径标签(harness 数字 = 无水位全量兜底 D5 cell, 严于行标签的陈旧场景, 陈旧见注记③/真机 e1)</li>
 </ul>
 
 </div>
