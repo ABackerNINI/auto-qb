@@ -1,7 +1,7 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 2/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `columns-persist.md` … `ctx-sub-clamp-host-settle.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `columns-persist.md` … `ctx-menu-item-state-tip.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
@@ -16,9 +16,9 @@
 | [css-comment-terminator.md](css-comment-terminator.md) | CSS 注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `s-*/member-row`)会把注释提前砍断, 尾巴落成代码态垃圾, 浏览器按错误恢复把**紧跟的那条规则整条静默丢弃**, 无任何报错。 | 写 CSS 注释, 注释里出现 星号斜杠, 进度条不显示, 样式规则不生效, display 没生效, 控制台皮肤, m-progress |
 | [css-file-line-cap.md](css-file-line-cap.md) | 单 CSS 文件 700 行体量上限(atlas/flux components.css 双双卡满零余量) —— 任何净增行的编辑(连注释、连改值带补注)都红; 改动必须压缩式写(行内注记/零净增行解法) | 追加 CSS 规则, 改值补注释, 任何净增行, 三套皮肤成对改, 四皮肤, atlas 卡满, flux 卡满, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假余量, 702 行 |
 | [css-perf-parity.md](css-perf-parity.md) | 「星图卡、棱镜不卡」这类单边性能问题的定位路径 —— 差异只在 CSS(JS 是共享层), 且两套 CSS 里唯一有实质差异的昂贵属性是 backdrop-filter; 嵌套毛玻璃的成本与摘法。 | 卡顿, 掉帧, 不跟手, 两套 UI 性能差, 一边卡一边不卡, 毛玻璃, backdrop-filter, 弹层卡, 改 CSS 后变慢, 星图卡 |
+| [css-specificity-vs-source-order.md](css-specificity-vs-source-order.md) | 数值档位色(`.tone-low`/`.tone-high`)写在状态色规则**之后**并不自动胜出 —— 状态色 `.group-row.s-* .g-stat:not(.zero)` 是 (0,4,0), 裸 tone `.group-row .g-stat.tone-*` 只有 (0,3,0), 低特异度者无论源顺序多靠后都被压住。issue 26-11-20-0404 根因即「注释误判为写后即覆盖」, 种子/组行状态行上 numTone 两档恒不生效; 修法是用单条 `:is()` 举齐状态把 tone 提到 (0,4,0), 保留裸选择器兜无状态行, 写在状态规则之后靠源序胜出(显式档位 (0,4,1) 仍压 tone)。 | CSS 级联, 特异度, 源顺序, tone 色阶, numTone, 状态文字色, group-row, 计算色, :is(), 静态守阵 |
 | [css-var-substitution-level.md](css-var-substitution-level.md) | 把「配方颜色」当供给槽在 :root/preset 层算死(如 `--fx-glow-c: color-mix(... var(--accent-ink) ...)` 写在 html 的 preset 块), 再指望组件层重挂原料令牌(`.bt.danger { --fx-glow-ink: var(--error) }`)换色 —— **必然落空**: var() 的代入发生在**声明该属性的元素**上, --fx-glow-c 在 <html> 层就替换成了 accent 色, 后代元素继承的是**算好的计算值**, 自己重挂 --fx-glow-ink 改变不了任何已算死的下游令牌(2026-11-04 fx 辉光四轮修实测: danger-solid 悬停仍发 accent 青光, getComputedStyle 看 ink=红而 boxShadow=青)。定稿修法: 配色公式从 :root/preset 挪到 `*` 通用层 —— 每个元素用自己的原料令牌现算, preset 只供标量(半径/ink/alpha), 组件层按变体重挂 ink 即时生效。 | 主题换色, 按变体换色, danger 换红, 皮肤令牌, preset 配方, 重挂令牌, ink 钩子, getComputedStyle 不一致, 计算值不更新, color-mix 变量, --fx-glow, fx-presets, 组件配方换色 |
 | [css-zoom-coordinate-space.md](css-zoom-coordinate-space.md) | html{zoom!=1}(分数布局)下窗口化几何输入 window.scrollY / scrollHeight / getBoundingClientRect 全按**视觉空间**(缩放后)报数, 而占位件 style.height / getComputedStyle().height / computed rowGap 是**布局空间**(缩放前) —— 前缀和(视觉)直接写进 style 会再被 zoom 缩一遍, pad 恒短 (1-z) 倍, 贴文档底后 padTop 差约 (1-z)×视觉总高(flux 实测 ~1900px), 渲染行整体落在视口上方全不可见。窗口选行与前缀和在视觉空间内自洽, pad 是唯一不闭环出口, 所以错位只在文档底附近爆发、scrollBy ±1 跟随但不自愈。 | zoom 0.9, 分数布局, DPR 1.25, 窗口化错位, 行全在视口上方, 贴文档底, pad 短一截, getBoundingClientRect 视觉空间, offsetHeight 取整, computed zoom 不继承, style.height 布局空间, rowGap 布局 |
 | [ctx-menu-branch-parity.md](ctx-menu-branch-parity.md) | `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」(不报错、不白屏, 纯"菜单里没这个选项")。 | 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项 |
 | [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
 | [ctx-menu-item-state-tip.md](ctx-menu-item-state-tip.md) | 抽屉右键菜单「合并页签」项的勾误绑「该项是否出现」的形态判据(种子详情恒真)⇒勾永远在; 同项的 `:title` 经 .aq-tip 委托层(z90)自绘后恒被 .ctx-menu(z100)盖住⇒看不见的提示。两条都不报错、静态锚全绿, 只有用户看得见。 | 合并页签, 勾一直是勾选状态, 勾选态不随状态变, ctx-tick, dtMenuMergeOn, dtMergeOn, 被右键菜单覆盖的 tooltip, 被遮挡的提示, .aq-tip, .ctx-menu |
-| [ctx-sub-clamp-host-settle.md](ctx-sub-clamp-host-settle.md) | 嵌套浮层单次钳位会被宿主二次收口搬移失效——子面板钳位必须带同款有界复核, e2e 读盒须等收敛 | 嵌套浮层, 子面板, .ctx-sub, 钳位, 二次收口, _menuFitRefit, _subFitRefit, settle, 锚点搬移, vh-8 契约, clampAxis, e2e 读盒时机, subTop 收敛, currentTarget, 复制哈希被裁 |

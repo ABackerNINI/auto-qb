@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-11-20
-**Updated:** 2026-11-20
-**Summary:** WEBUI 列风格切换五维(进度条样式/进度条颜色/速度色阶/数值列色阶/单位色组)收口: S1-S6 七批落地(colstyle.v1 引擎+表头菜单+进度/速度/数值/单位四渲染面+node 电池/静态守阵/e2e 测试面), 计划 26-11-20-0009 Done; 五维默认=现状零视觉变化, 配置侧零改动, 计划外发现 2 条入池。
+**Updated:** 2026-11-22
+**Summary:** WEBUI 列风格切换五维(进度条样式/进度条颜色/速度色阶/数值列色阶/单位色组)收口: S1-S6 七批落地(colstyle.v1 引擎+表头菜单+进度/速度/数值/单位四渲染面+node 电池/静态守阵/e2e 测试面), 计划 26-11-20-0009 Done; 五维默认=现状零视觉变化, 配置侧零改动, 计划外发现 2 条入池。2026-11-22 续修入池件 26-11-20-0404: 四皮肤 tone 两档经 :is() 提特异度在状态行真生效, prism member 半边同修, 静态守阵+四皮肤 e2e 回归, issue Done。
 **Topics:** webui-column-style
-**Refs:** memory-bank/plans/26-11-20-0009-plan-webui-column-style.html
+**Refs:** memory-bank/plans/26-11-20-0009-plan-webui-column-style.html, memory-bank/testing/baselines/26-11-22-1136-tone-cascade-specificity.md, memory-bank/pitfalls/web-ui/css-specificity-vs-source-order.md
 
 ## 本篇只回答
 
@@ -69,3 +69,5 @@
 - 接缝终审 2 minor(菜单字面量↔枚举配对守阵/色样修饰类入守阵)已修, nit 1(e2e 引擎面 SKINS 双皮肤口径)留痕
 
 - 2026-11-20 23:52 R3(2026-11-20): 实施收口完成 —— 八批流水 S1-S6b+B7 全提交(158384b6/e3420f00/2587c27a/94066579/725becb2/a4254294/4ff09f16/69a42d27), 接缝终审收敛+两守阵补缝(87e54022); 档案/计划翻 Done, 基线 26-11-20-0839; 两坑档记复发(js-comment-terminator +2/free-port-toctou +1); 待用户提交指令后推送
+
+- 2026-11-22 11:36 issue 26-11-20-0404 修复: 四皮肤 tone 规则用 :is() 举齐状态提至 (0,4,0) 后置胜出, prism member 半边同修, atlas 误判注释纠正; 静态守阵红绿双验 + e2e 四皮肤计算色过 + test.full 全绿; issue 翻 Done

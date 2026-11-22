@@ -807,3 +807,96 @@ def _sb_spd_target(sel, tail):
     """
     pat = re.compile(rf"\.sb-spd\S*(?:\s+|\s*[>+~]\s*){re.escape(tail)}(?=$|[\s:,(])")
     return any(pat.search(part) for part in sel.split(","))
+
+
+def _css_class_spec(selector):
+    """选择器 class-level 特异度(本守阵只需 b 位): :is()/:not()/:has() 按内部最高计一档,
+    :where() 计 0 —— `.group-row:is(.s-*) .g-stat.tone-low` 与 `.group-row.s-* .g-stat:not(.zero)`
+    同为 (0,4,0), 靠后置源序胜出; 漏算 :not(.zero) 会把修复误判成低特异度。"""
+    norm = re.sub(r":(?:is|not|has|matches)\([^)]*\)", ".c", selector)
+    norm = re.sub(r":where\([^)]*\)", "", norm)
+    return len(re.findall(r"\.[\w-]+|\[[^\]]+\]|:[\w-]+", norm))
+
+
+def _split_css_selectors(selector):
+    """逗号拆选择器, 但保留 :is(.a, .b) 括号内的逗号(括号深度感知)。"""
+    parts, buf, depth = [], "", 0
+    for ch in selector:
+        if ch == "(":
+            depth += 1
+            buf += ch
+        elif ch == ")":
+            depth -= 1
+            buf += ch
+        elif ch == "," and depth == 0:
+            if buf.strip():
+                parts.append(buf.strip())
+            buf = ""
+        else:
+            buf += ch
+    if buf.strip():
+        parts.append(buf.strip())
+    return parts
+
+
+def _scan_tone_cascade(problems):
+    """numTone 两档在状态行上必须真胜出(issue 26-11-20-0404): 四皮肤状态文字色规则
+    `.group-row.s-* .g-stat:not(.zero)` = (0,4,0), 旧 tone 规则 `.group-row .g-stat.tone-*`
+    = (0,3,0) —— 源顺序只在同特异度时生效, 原 atlas :347 注释「写在状态色之后(源顺序胜出)」
+    是误判。守阵按**每皮肤最终生效级联面**(_ui_css_effective, link 序)钉三件事:
+    1. 状态色规则仍在(判据锚点不失效); 2. tone 基础规则仍在(无状态行的兜底不丢);
+    3. 状态行上有一条 `:is()` 举齐**全部 7 状态**(集合取自 _STATE_TOKEN_EXPECT 单点)、特异度
+       >= 状态色且**后置**的 tone 规则, 颜色精确是 var(--fg-muted)/var(--accent-hi);
+       prism 成员行半边同钉(仅 prism 有 member tone 规则)。
+    删高特异度选择器 / 漏一个状态令牌 / 把它搬到状态规则之前 / 改错令牌(全名精确比),
+    四种回归都当场红 —— 少一个状态会让该状态行重新被压制, e2e 只采样两种状态兜不住。"""
+    for ui in _UI_ALL:
+        text = re.sub(r"/\*.*?\*/", "", _ui_css_effective(ui), flags=re.S)
+        rules = [(m.start(), m.group(1), m.group(2)) for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", text)]
+        faces = [("种子/组行", re.compile(r"\.group-row\.s-[\w-]+.*?\.g-stat:not\(\.zero\)", re.S), ".g-stat")]
+        if ui == "prism":
+            faces.append(("成员行", re.compile(r"\.member-row\.[\w-]+.*?\.m-stat:not\(\.zero\)", re.S), ".m-stat"))
+        for face, state_re, cell in faces:
+            state = [
+                (pos, _css_class_spec(one)) for pos, sel, _body in rules
+                for one in _split_css_selectors(sel) if state_re.search(one)
+            ]
+            if not state:
+                problems.append(f"{ui} {face} 状态文字色规则缺失 —— tone 级联判据失去锚点")
+                continue
+            last_state = max(pos for pos, _spec in state)
+            state_spec = max(spec for _pos, spec in state)
+            want_states = {"s-" + k for k in _STATE_TOKEN_EXPECT} if cell == ".g-stat" else set(_STATE_TOKEN_EXPECT)
+            for tier, token in (("low", "--fg-muted"), ("high", "--accent-hi")):
+                has_base = False
+                has_override = False
+                has_full_override = False
+                token_use = re.compile(r"var\(\s*" + re.escape(token) + r"\s*\)")
+                for pos, sel, body in rules:
+                    if "color" not in body or not token_use.search(body):
+                        continue
+                    for one in _split_css_selectors(sel):
+                        if cell + ".tone-" + tier not in one:
+                            continue
+                        spec = _css_class_spec(one)
+                        has_base = has_base or spec == 3
+                        if pos > last_state and spec >= state_spec:
+                            has_override = True
+                            listed = {
+                                t.strip().lstrip(".")
+                                for arg in re.findall(r":is\(([^)]*)\)", one)
+                                for t in arg.split(",")
+                            }
+                            has_full_override = has_full_override or want_states.issubset(listed)
+                if not has_base:
+                    problems.append(f"{ui} {face} tone-{tier} 基础规则缺失(无状态行会失去色阶)")
+                if not has_override:
+                    problems.append(
+                        f"{ui} {face} tone-{tier} 在状态行上仍被压制: 须后置且 class 特异度 >= {state_spec}"
+                        " —— 源顺序只在同特异度才生效(issue 26-11-20-0404)"
+                    )
+                elif not has_full_override:
+                    problems.append(
+                        f"{ui} {face} tone-{tier} 的 :is() 未举齐全部状态({'/'.join(sorted(want_states))})"
+                        " —— 漏掉的状态行会重新被状态色压制"
+                    )

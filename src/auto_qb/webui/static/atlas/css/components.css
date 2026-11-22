@@ -344,10 +344,10 @@
 .member-row.paused .m-progress .val, .member-row.paused .state-text,
 .member-row.other .m-stat:not(.zero), .member-row.other .m-hash, .member-row.other .g-save-path,
 .member-row.other .m-progress .val, .member-row.other .state-text { color: var(--paused); }
-/* 数值色阶(TBL-03): tone 写在状态色之后(源顺序胜出) —— 数值列按"占分母比例"着色:
- * 低档压暗(偏弱/离满档还远), 高档用品牌强调色(接近满档); 与状态文字色叠加时数值口径优先 */
-.group-row .g-stat.tone-low { color: var(--fg-muted); }
-.group-row .g-stat.tone-high { color: var(--accent-hi); }
+/* 数值色阶(TBL-03): 状态文字色规则 .group-row.s-* .g-stat:not(.zero) = (0,4,0), 旧 tone (0,3,0) 靠源顺序赢不了(issue 26-11-20-0404)
+ * 数值列按"占分母比例"着色: 低档压暗(偏弱/离满档还远), 高档用品牌强调色(接近满档); 下列 :is() 举齐 7 状态把 tone 提到 (0,4,0), 同特异度后置胜出 */
+.group-row .g-stat.tone-low, .group-row:is(.s-seeding, .s-downloading, .s-checking, .s-moving, .s-error, .s-paused, .s-other) .g-stat.tone-low { color: var(--fg-muted); }
+.group-row .g-stat.tone-high, .group-row:is(.s-seeding, .s-downloading, .s-checking, .s-moving, .s-error, .s-paused, .s-other) .g-stat.tone-high { color: var(--accent-hi); }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;

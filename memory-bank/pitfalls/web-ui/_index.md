@@ -13,11 +13,11 @@
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
 | [1](_index-1.md) | `add-partial-receipt.md` … `color-mix-alpha-weight.md` | 14 |
-| [2](_index-2.md) | `columns-persist.md` … `ctx-sub-clamp-host-settle.md` | 14 |
-| [3](_index-3.md) | `ctx-sub-width-coupling.md` … `esc-attr-quote-dead-class.md` | 14 |
-| [4](_index-4.md) | `est-cold-start-vs-absolute-threshold.md` … `hover-keynav-fight.md` | 14 |
-| [5](_index-5.md) | `hr-tooltip-overlap.md` … `layout-css.md` | 14 |
-| [6](_index-6.md) | `mixin-ce-inject-break.md` … `rowh-sig-and-transition-geometry.md` | 14 |
-| [7](_index-7.md) | `rowwin-reprobe-sig-top-drift.md` … `table-resizer-handle.md` | 14 |
-| [8](_index-8.md) | `tail-holding-clone-fake-data.md` … `vue-reactivity.md` | 14 |
-| [9](_index-9.md) | `wallclock-bucket-as-display-semantics.md` … `wording-audit-surface.md` | 6 |
+| [2](_index-2.md) | `columns-persist.md` … `ctx-menu-item-state-tip.md` | 14 |
+| [3](_index-3.md) | `ctx-sub-clamp-host-settle.md` … `dur-cell-padding-rowheight.md` | 14 |
+| [4](_index-4.md) | `esc-attr-quote-dead-class.md` … `header-cell-gutter.md` | 14 |
+| [5](_index-5.md) | `hover-keynav-fight.md` … `kbd-tab-set-sync.md` | 14 |
+| [6](_index-6.md) | `layout-css.md` … `row-shadow-zeroed-by-rowlang.md` | 14 |
+| [7](_index-7.md) | `rowh-sig-and-transition-geometry.md` … `svg-chart-mapping.md` | 14 |
+| [8](_index-8.md) | `table-resizer-handle.md` … `vif-host-node-stale.md` | 14 |
+| [9](_index-9.md) | `vue-reactivity.md` … `wording-audit-surface.md` | 7 |

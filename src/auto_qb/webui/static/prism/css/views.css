@@ -812,7 +812,7 @@
 .member-row.other .m-stat:not(.zero), .member-row.other .m-hash, .member-row.other .g-save-path,
 .member-row.other .m-progress .val, .member-row.other .state-text { color: var(--paused); }
 
-/* TBL-03 数值色阶: tone-low 压暗(偏弱) / tone-high 品牌强调色(接近满档) */
-.group-row .g-stat.tone-low, .member-row .m-stat.tone-low { color: var(--fg-muted); }
-.group-row .g-stat.tone-high, .member-row .m-stat.tone-high { color: var(--accent-hi); }
+/* TBL-03 数值色阶: 状态色 (0,4,0) 压旧 tone (0,3,0); :is() 举齐状态提至同级后置胜出(issue 26-11-20-0404) */
+.group-row .g-stat.tone-low, .member-row .m-stat.tone-low, .group-row:is(.s-seeding, .s-downloading, .s-checking, .s-moving, .s-error, .s-paused, .s-other) .g-stat.tone-low, .member-row:is(.seeding, .downloading, .checking, .moving, .error, .paused, .other) .m-stat.tone-low { color: var(--fg-muted); }
+.group-row .g-stat.tone-high, .member-row .m-stat.tone-high, .group-row:is(.s-seeding, .s-downloading, .s-checking, .s-moving, .s-error, .s-paused, .s-other) .g-stat.tone-high, .member-row:is(.seeding, .downloading, .checking, .moving, .error, .paused, .other) .m-stat.tone-high { color: var(--accent-hi); }
 

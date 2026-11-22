@@ -2,6 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态; 计划 26-10-31-2316 S2 起 @starting-style 计入容器型 at-rule、shared/fx/fx.js 曾以"待接线豁免"登记(S6 挂 flux shell 静态 script 后豁免已删) / flux 弹窗毛玻璃 vs 浮层不透明底对照(2026-11-03, _scan_flux_modal_frost) / 右键次级子面板宽: 四皮肤 .ctx-sub min-width 互证同值 260px + menu.js 首帧估宽算术绑定 260+12(2026-11-13, _scan_ctx_sub_width)
+- test_frontend_tone_cascade_beats_state_color: issue 26-11-20-0404 修复回归 —— 状态行 numTone 两档必须在四皮肤最终生效级联面上真胜出: 状态色规则 (.group-row.s-* .g-stat:not(.zero) / prism .member-row.<kind> .m-stat:not(.zero)) 特异度 (0,4,0), 旧 tone (0,3,0) 恒被压制(源顺序只在同特异度生效, atlas :347 注释误判); 钉状态锚点仍在 + 无状态行基础 tone 规则仍在 + 状态行上有 :is() 举齐**全部 7 状态**(集合取自 _STATE_TOKEN_EXPECT)、特异度 >= 状态色且后置的 tone 规则且令牌 var() 全名精确等于 --fg-muted/--accent-hi; prism 成员半边同钉, 另三皮肤成员行无 tone 规则(缺规则非压制)不入面
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤256 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220, 26-10-31-2316 S6 fx 三件挂 flux +7 → 227, S6 后半 fx 挂载面(fx-mount.css+fx-mount.js, flux 专属) +6 → 233, R4 域片段挂载(console_hub.css 拆 4 link 净 +3 + 7 域 20 片段 script)+23 → 256, 26-11-20-0009 S1 列风格引擎挂载(colstyle.js 入四 skin manifest)+1 → 257)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 各皮肤 CSS 链接序(atlas/console/flux(fork 自 console, S5 收编): style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
 - test_frontend_skin_css_token_parity: 各皮肤令牌**名集**相等守阵(issue 26-10-20-2231; 26-11-01 S5 收编 flux) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
@@ -91,6 +92,7 @@ from webui_static_scan_css import (
     _scan_progress_val_parity,
     _scan_state_color_tokens,
     _scan_statusbar_speed_width,
+    _scan_tone_cascade,
 )
 from webui_static_scan_js import (
     _scan_episode_member_hashes,
@@ -121,6 +123,18 @@ def test_frontend_static_bundle_health():
     """
     problems = _scan_frontend_assets()
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
+
+
+def test_frontend_tone_cascade_beats_state_color():
+    """issue 26-11-20-0404 修复回归: 状态文字色 (0,4,0) 不再压制 numTone 两档着色。
+
+    静态守阵按每皮肤最终生效级联面(_ui_css_effective)判: 状态色规则锚点 + tone 基础兜底
+    + 状态行上同特异度后置的 tone 规则(令牌不变); prism 成员行半边同判。真浏览器计算色
+    由 e2e/colstyle.spec.mjs 的 tone 用例承担(级联胜负只有 computed style 能证)。
+    """
+    problems = []
+    _scan_tone_cascade(problems)
+    assert not problems, "tone 级联问题: " + "; ".join(problems)
 
 
 def test_frontend_template_split_wiring():

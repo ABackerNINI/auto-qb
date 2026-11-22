@@ -16,9 +16,9 @@ import { readInst, withVm } from './lib/vm.mjs';
  * console/flux 的「LED 默认形态不变」也由 §5 的四皮肤断言承担(计划 S6 原文口径)。
  *
  * 级联推导纪律(断言期望值按真实级联推导, 不按理想模型):
- *   · 主表行 .g-stat 恒带状态色规则(.group-row.s-* .g-stat:not(.zero), 四皮肤最高 (0,4,0)),
- *     numTone 在现状下被它压制(既有缺陷 issue 26-11-20-0404) —— speedramp 选谱 / numeric=on 的
- *     期望值是"新规则 (0,4,1) 压状态色"后的谱色/语义色, 不是 numTone 两档色;
+ *   · 主表行 .g-stat 带状态色规则(.group-row.s-* .g-stat:not(.zero), (0,4,0)); issue 26-11-20-0404
+ *     修复后 tone 两档经 :is() 举齐 7 状态也提到 (0,4,0) 且后置, 状态行上真出色; speedramp 选谱 /
+ *     numeric=on 的 (0,4,1) 仍压过两者, 期望值仍是谱色/语义色, 不是 numTone 两档色;
  *   · D11 invert 组直接改写 .cs-v/.cs-u 两个 span 自身颜色(span 级规则赢过格级继承) ——
  *     单位断言读 span 的计算色, 不把格色当 span 色;
  *   · 组行速度格刻意不挂 speedramp(S4: 组行现状无速度着色, 挂了破坏默认零变化) —— 速度档
@@ -502,6 +502,44 @@ for (const skin of SKINS_ALL) {
         .toEqual({ cls: expect.stringContaining('cst-soon'), rgb: accentHi });
 
       await page.evaluate(() => { if (window.__csBeat) clearInterval(window.__csBeat); }).catch(() => {});
+    });
+
+    test(`tone 两档在状态行上真胜出(级联特异性, issue 26-11-20-0404) @fast (${skin})`, async ({ page }) => {
+      await openApp(page, skin);
+      /* 合成状态行读计算色: 纯 CSS 级联判据不依赖桩数据/行窗口化; 行类名取实模板口径
+       * (种子/组行 s-seeding/s-paused, 成员行 seeding/paused —— 仅 prism 有 member tone 规则)。 */
+      const res = await page.evaluate(() => {
+        const tok = (/** @type {string} */ n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+        const colorOf = (/** @type {string} */ rowCls, /** @type {string} */ cellCls) => {
+          const row = document.createElement('div');
+          row.className = rowCls;
+          const cell = document.createElement('div');
+          cell.className = cellCls;
+          cell.textContent = '1';
+          row.appendChild(cell);
+          document.body.appendChild(row);
+          const color = getComputedStyle(cell).color;
+          row.remove();
+          return color;
+        };
+        return {
+          muted: tok('--fg-muted'), hi: tok('--accent-hi'),
+          gLow: colorOf('group-row s-seeding', 'g-stat tone-low'),
+          gHigh: colorOf('group-row s-paused', 'g-stat tone-high'),
+          mLow: colorOf('member-row seeding', 'm-stat tone-low'),
+          mHigh: colorOf('member-row paused', 'm-stat tone-high'),
+        };
+      });
+      const muted = parseRgb(res.muted);
+      const hi = parseRgb(res.hi);
+      expect(muted, `--fg-muted 应可解析, 实得「${res.muted}」`).not.toBeNull();
+      expect(hi, `--accent-hi 应可解析, 实得「${res.hi}」`).not.toBeNull();
+      expect(parseRgb(res.gLow), '种子/组行 s-* tone-low == --fg-muted(不被状态色压制)').toEqual(muted);
+      expect(parseRgb(res.gHigh), '种子/组行 s-* tone-high == --accent-hi(不被状态色压制)').toEqual(hi);
+      if (skin === 'prism') {
+        expect(parseRgb(res.mLow), 'prism 成员行 tone-low == --fg-muted').toEqual(muted);
+        expect(parseRgb(res.mHigh), 'prism 成员行 tone-high == --accent-hi').toEqual(hi);
+      }
     });
 
     test(`units 单位色组: 按档组 .cs-u 计算色 + 拆分文本逐字一致(R2) + invert 改写数值色 @fast (${skin})`, async ({ page }) => {

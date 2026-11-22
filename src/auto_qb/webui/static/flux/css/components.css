@@ -321,9 +321,9 @@
 .member-row.paused .m-progress .val, .member-row.paused .state-text,
 .member-row.other .m-stat:not(.zero), .member-row.other .m-hash, .member-row.other .g-save-path,
 .member-row.other .m-progress .val, .member-row.other .state-text { color: var(--paused); }
-/* 数值色阶: 低档压暗 / 高档品牌强调 */
-.group-row .g-stat.tone-low { color: var(--fg-muted); }
-.group-row .g-stat.tone-high { color: var(--accent-hi); }
+/* 数值色阶: 状态色 (0,4,0) 压旧 tone (0,3,0) —— :is() 举齐 7 状态提至同级后置胜出(issue 26-11-20-0404) */
+.group-row .g-stat.tone-low, .group-row:is(.s-seeding, .s-downloading, .s-checking, .s-moving, .s-error, .s-paused, .s-other) .g-stat.tone-low { color: var(--fg-muted); }
+.group-row .g-stat.tone-high, .group-row:is(.s-seeding, .s-downloading, .s-checking, .s-moving, .s-error, .s-paused, .s-other) .g-stat.tone-high { color: var(--accent-hi); }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 /* 站点 chip: 3px 微切角小签(R3 精修 T1: 形状回退 console 原版 clip-path 切角; 柔底等取值保留), 柔底 + 同族字色 */

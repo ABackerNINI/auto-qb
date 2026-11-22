@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 6/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `mixin-ce-inject-break.md` … `rowh-sig-and-transition-geometry.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `layout-css.md` … `row-shadow-zeroed-by-rowlang.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [layout-css.md](layout-css.md) | 行宽口径、表头吸顶、两表逐栏对齐、sticky 层叠、flex 挤压、flex 子项错行、特异性之争、状态色分不出 —— 前端版式类的固定判据。 | 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 对齐, 未对齐, 没对齐, 错行, 文字高低不一, 后者更高, 统计栏, 工具条, 图例, align-items, stretch, 垂直居中, 基线, align-items baseline, 省略号, 媒体查询, 颜色不对, 按钮, 控件变形过高, 控件尺寸, 两态分不出, 状态色, 徽章底色, 底色相近, 同亮度, 顶栏, 标题栏, 状态栏, 表头, 列标题行, thead, 底色与其余部分难区分, 同色, 明度差不足, chrome 底色, UA 默认色, 两表对齐, 逐栏对齐, 列宽不一致, table-layout, scrollbar-gutter, 置顶专区 |
 | [mixin-ce-inject-break.md](mixin-ce-inject-break.md) | 全局 mixin(CONFIG_EDITOR)给**每个**组件都挂 `provide(){ce:this}` + 空 cfg 树 —— 把根模板段头抽成中间层组件时, 若它不把注入到的 ce 原样透传, 插槽里的 hub-field 会注入到**该组件实例**: 字段恒显 schema 默认值还带「默认」徽标、拨动不脏树、「保存并应用」永不出现、磁盘不动(重启无效), 而与走 `$root` 的同源读数自相矛盾, 全程零报错。修法 = 中间层组件补 `inject:["ce"]` + `provide(){ce:this.ce}`(范式样本 aq-traffic-card / CE_FIELD_BASE); 守阵必须钉**非缺省态**与写路径往返 —— 默认态断言与断裂回落值同形, 恒真。 | Vue provide/inject, 全局 mixin, CONFIG_EDITOR, ce 透传, 插槽注入断裂, aq-fold, hub-field, 开关不显示磁盘值, 默认徽标, 设置页开关无效, 保存并应用不出现, 改配置重启无效, 组件插槽内容注入, 宿主组件自身模板, aq-cond-node, aq-choose-block, 规则页添加条件无反应, 说明浮窗打不开 |
 | [mixin-method-call-misses-methods-layer.md](mixin-method-call-misses-methods-layer.md) | `window.AQB_*` mixin 对象的方法嵌在 `.methods` 层下, 跨文件直调写根路径(`AQB_DECORATE.hrExclClass(...)`)时根对象无此键, 调用点每次执行必抛 `is not a function`; 模板绑定走 Vue mixin 不受影响, 只有 window 直调点炸 —— pytest 静态守阵不执行 JS 调用路径, e2e 未跑即静默上线。新跨文件直调点必须同批落静态断言钉扎。 | is not a function, hrExclClass, hrExclTip, AQB_DECORATE, methods 层, 根路径直调, 跨文件调用, mixin 全局对象, 每行渲染 TypeError, 判定门单点化, window.AQB_DECORATE |
 | [modal-mask-click-self-drag.md](modal-mask-click-self-drag.md) | `.modal-mask` 上写 `@click.self="closeX"` 判的是 click 事件的 target, 而 click 由 mousedown 与 mouseup 的**公共祖先**派发(DOM 规范)—— 在对话框里的输入框按下左键拖选文字、鼠标终点落到遮罩上抬手, 公共祖先就是遮罩本身, 于是"拖选文字"被判成"点空白关窗"(用户原话: 选个标签文字, 抬手窗口没了)。修法 = 遮罩成对挂 `@mousedown="maskDownSelf"` + `@mouseup.self="maskCloseIfArmed(closeX)"`: 只在"这一笔 mousedown 也从遮罩起手"时才关; 任何落在对话框内部的 mousedown 都会把臂位清掉, 不会累积。 | 遮罩关窗, click.self, 拖选文字窗口消失, 拖选后弹窗自己关了, mouseup 公共祖先, 点空白关窗误判, mousedown 起手位置, 添加种子窗口消失, 弹窗误关, text selection, 拖拽抬手 |
@@ -21,4 +22,3 @@
 | [progress-bar.md](progress-bar.md) | `.m-progress` 是 flex 行 —— 条 `flex: 1 1 auto` 吃剩余空间, 右侧百分比 `.val` 只占自身文本宽, 「100.0%」比「5.2%」宽 ⇒ 同列各行条的长度/起点随文本宽逐行漂移。处置 = **数值盒** `min-width: 4em` + `text-align: right`(不是把条定宽), 条长即与文本解耦。 | 改进度条, 进度条长度不一致, 条宽漂移, 条长不一致, m-progress, 进度列, 数值盒, flex 条宽, 百分比文本 |
 | [reannounce-inactive-gate.md](reannounce-inactive-gate.md) | 「非活跃种子不允许强制汇报」这条 qB 对齐规则, 三处最容易做错 —— ①**判定读 `kind` 而不读 qB 原始 `state`**: `kind` 现 7 档(error/checking/paused/downloading/seeding/**moving**/other; moving 于 2026-10-29 补), 而 qbittorrent-api 把 `queuedDL`/`queuedUP` 归进 is_downloading/is_uploading ⇒ 其 kind 落成 downloading/seeding, 单看 kind 会把**排队**种子当活跃放行(而 qB 自己正是拿 `isQueued` 置灰的); **同一个坑的反向版本**: 补了 moving 档之后它虽然"看 kind 判得出来", 但后端 `state_enum` 的谓词**依然不包含它**, 所以后端那张表照样得按 `state` 串写 —— 前后端判据必须同表, 只改一边必立刻报红; ②**只接一个入口**: 强制汇报有四条入口(右键菜单四支 / 键盘 Shift+A / 详情面板 tracker 重报钮 / 程序化 `torrentCmd`), 只改右键 = 键盘与详情面板绕得过去, "不允许"就不成立; ③**置灰样式压不住 base**: 菜单项图标另有 `.ico-sync`(0,2,0), 变体动作钮 hover 是 (0,3,0), 05 失败区更有 (0,4,0) —— 不显式抬特异性就会出现"文字灰、图标仍蓝"或"置灰了还能 hover 亮起"的半灰态。 | 强制汇报, reannounce, 非活跃, 暂停种子, 排队种子, 搬迁中, moving, queuedDL, stoppedUP, checkingResumeData, is-gated, 置灰, 按钮变灰, 右键置灰, qB 口径, aa189a7, issue 12080, kind 判不出排队, state 原文, isPaused isChecking isQueued |
 | [row-shadow-zeroed-by-rowlang.md](row-shadow-zeroed-by-rowlang.md) | 皮肤 CSS 给行加 box-shadow 会被 row_lang flat 归零 | 行高亮不生效, box-shadow 无效, 右键目标不可见, row_lang, ctx-src |
-| [rowh-sig-and-transition-geometry.md](rowh-sig-and-transition-geometry.md) | 行高签名混入视图态因子 + 容器过渡期几何不可采信: 千级下切页/关抽屉秒级卡死 | 切标签页卡死, 关抽屉卡死, 能滚不能点, 行高签名, viewMode, ResizeObserver, _winCtnSync, 假 bump, 全量量齐 |

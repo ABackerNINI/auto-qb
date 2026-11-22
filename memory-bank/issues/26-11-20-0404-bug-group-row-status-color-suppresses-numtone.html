@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="group-row-status-color-suppresses-numtone">
 <meta name="doc-refs" content="memory-bank/plans/26-11-20-0009-plan-webui-column-style.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="组行状态文字色规则压制 numTone 着色(atlas 注释误判源顺序)">
 <meta name="issue-summary" content="四皮肤 .group-row.s-* .g-stat:not(.zero) 特异度 (0,4,0) 高于 tone 规则 .group-row .g-stat.tone-* (0,3,0), 现状 numTone 两档着色在主表状态行上被级联压制、视觉不生效; atlas components.css :347 「tone 写在状态色之后(源顺序胜出)」的注释判断有误 —— 源顺序只在同特异度时生效">
 <style>
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· bug</div>
+<div class="kicker">计划外问题（已修）· bug</div>
 <h1>组行状态文字色规则压制 numTone 着色(atlas 注释误判源顺序)</h1>
 <p class="lede">四皮肤 .group-row.s-* .g-stat:not(.zero) 特异度 (0,4,0) 高于 tone 规则 .group-row .g-stat.tone-* (0,3,0), 现状 numTone 两档着色在主表状态行上被级联压制、视觉不生效; atlas components.css :347 「tone 写在状态色之后(源顺序胜出)」的注释判断有误 —— 源顺序只在同特异度时生效</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0404-bug-group-row-status-color-suppresses-numtone</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 04:04</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -152,11 +152,12 @@ atlas :347 注释原文: /* 数值色阶(TBL-03): tone 写在状态色之后(源
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-20 04:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 — 状态 Open → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>2026-11-22 11:32 复验: 锚点仍在 —— 四皮肤状态文字色 <code>.group-row.s-* .g-stat:not(.zero)</code> = (0,4,0), 旧 tone <code>.group-row .g-stat.tone-*</code> = (0,3,0), 入池判据必现; 修复前把守阵喂旧 CSS 的红验得 10 条压制告警(8 组行 + 2 prism 成员行)。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>: 走建议 (a) 的等价落地 —— 用 <code>:is()</code> 举齐 7 状态(<code>s-seeding…s-other</code>)把 tone 规则从 (0,3,0) 提到 (0,4,0), 保留裸 <code>.group-row .g-stat.tone-*</code> 兜无状态行, 写在状态规则之后靠源序胜出; 四皮肤 <code>css/components.css</code>(prism 为 <code>views.css</code>)原位改行不增行数, atlas :347 注释改判据。prism 成员半边同法举齐 7 个裸 kind; atlas/flux/console 成员行本无 tone 规则(缺规则非压制), 按范围守恒未加。<code>shared/console_hub.css</code> 的 (0,4,1) csp/cst 显式档位仍压 tone(显式选择优先), 层序不变。<br><b>验证方式</b>: 静态守阵 <code>test_frontend_tone_cascade_beats_state_color</code>(修复前快照红验 10 条; 漏一个状态红验 1 条; 令牌写错红验 10 条) + <code>e2e/colstyle.spec.mjs</code> tone 计算色四皮肤 4/4 通过 + <code>test.full</code> 6790 passed / 6 skipped 全绿。<br><b>与建议修法的差别</b>: 不逐字枚举 7 条全写选择器, 改用单条 <code>:is()</code> 等价提特异度(与项目既有 <code>:where()</code>/<code>:is()</code> 用法同档), 覆盖面与建议一致。</p>
 </section>
 
 <footer>
