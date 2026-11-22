@@ -11,9 +11,9 @@
 <meta name="doc-topic" content="traffic-bench-m30-flake">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="traffic_qb_bucket_cache_perf a4 基准用例全量并行偶红环境敏感 flake(-n 8 下红, 隔离/文件级均绿)">
-<meta name="issue-summary" content="test_a4_bench_group_m30_warm 在 test.quick -n 8 全量次轮偶红 1F(2026-11-20); 隔离复跑与文件级 -n 8 均绿, traceback 未留存 —— 环境敏感 flake, 与同日 hr_discovery 连号建段 flake(26-11-20-0320)用例面不同, 机制关系待查">
+<meta name="issue-summary" content="test_a4_bench_group_m30_warm 在 test.quick -n 8 全量次轮偶红 1F(2026-11-20); 隔离/文件级均绿, traceback 未留存。2026-11-22 复验三形态(隔离1+全量3+超订阅施压8)全未复现、代码路径确定性、best-of-3 已是标准去抖且无确定缺陷 —— 判定环境敏感 flake, 用户拍板 Dropped(不改判据); 与同日 hr_discovery 连号建段 flake(26-11-20-0320)用例面不同">
 <style>
   :root {
     --bg: #10151a;
@@ -84,14 +84,14 @@
 <body>
 <div class="sheet">
 
-<div class="kicker">计划外问题（未修）· test</div>
+<div class="kicker">计划外问题（已关闭 · Dropped）· test</div>
 <h1>traffic_qb_bucket_cache_perf a4 基准用例全量并行偶红环境敏感 flake(-n 8 下红, 隔离/文件级均绿)</h1>
-<p class="lede">test_a4_bench_group_m30_warm 在 test.quick -n 8 全量次轮偶红 1F(2026-11-20); 隔离复跑与文件级 -n 8 均绿, traceback 未留存 —— 环境敏感 flake, 与同日 hr_discovery 连号建段 flake(26-11-20-0320)用例面不同, 机制关系待查</p>
+<p class="lede">test_a4_bench_group_m30_warm 在 test.quick -n 8 全量次轮偶红 1F(2026-11-20); 隔离/文件级均绿, traceback 未留存。2026-11-22 复验三形态全未复现 + 代码路径确定性论证 —— 判定环境敏感 flake、无确定缺陷，<strong>已拍板 Dropped</strong>（理由见 §06 / §07）。</p>
 <div class="meta-row">
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0844-test-traffic-bench-m30-flake</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 08:44</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -133,24 +133,28 @@
 <section id="s5">
   <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
   <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-  <div class="callout">待查（已排除：TODO）</div>
+  <div class="callout">未定位到确定性缺陷（2026-11-22 复验取证）：多形态复验均未复现，代码路径经查为确定性；判定为环境敏感 flake —— 2026-11-20 那次 1F 的具体机制无法定位（traceback 未留存），推测为环境负载尖峰，单轮或持续均无法证实。证据与排除项见 §07 复验行。</div>
 </section>
 
 <section id="s6">
   <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
   <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-  <p class="todo">TODO / 待定</p>
+  <p><strong>已拍板（2026-11-22）：Dropped，不改判据、不动代码。</strong>候选方案与各自代价（均不采纳）：①抬温态线 / 加轮数 = 放水，把 A4 判据的真实退化判别力换成"少报一次"，且 26-11-19 已论证追线是无底洞；②换 <code>time.process_time</code> CPU 时间 = 本机实测最小刻度 15.625ms，而活跃温态 p95 仅 ~20ms，量化后判别力被打废，且改 A4 墙钟判据语义需重标定四形态线值；③给用例加 xdist 独占标记 = 坑档明令治标、拖慢全量。best-of-3 已是基准测试标准去抖且经 26-11-19 实测选线，无确定缺陷可修。若未来该 flake 变为可稳定复现（拿到 traceback），按新证据另立新件。</p>
 </section>
 
 <section id="s7">
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-20 08:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-22 19:18 — 复验取证（用户指派修复，HEAD 839eb6e5）：<strong>三形态均未复现</strong> —— 隔离单跑 1 次（温态 p95(best-of-3)=20.57ms / 线150, 各轮 22.48/21.79/20.57, 最优轮 max 93.46ms）；<code>test.quick</code> 全量 <code>-n 8</code> 连跑 3 轮（本用例全绿，历时 120-139s/轮）；40 进程超订阅施压（32 逻辑核 ×1.25）隔离连跑 8 轮（全绿, best p95 30.48-50.72ms, 各轮最高 57.03ms, 离 150ms 线约 2.6–3 倍余量）。注：同 3 轮全量里另有 1 个<strong>范围外恒红</strong> <code>test_memory_bank_naming::test_task_file_naming_and_sections</code>（今天新提交档案 <code>26-11-22-memory-bank-kb-nav-working-zone.md</code> 缺 <code>## 子任务状态表</code> 必备章节），与本用例无关，按范围守恒不顺手改。</li>
+    <li>2026-11-22 19:18 — 代码路径确定性论证：<code>tests/clock.py::FakeClock</code> 函数级实例（<code>__slots__=("_now",)</code>）、<code>_SeriesWriter</code> 函数级实例、<code>monkeypatch.setattr(tq,"SYSTEM_CLOCK")</code> 自动复位 —— 无 xdist 常驻进程的全局状态残留（对比坑档 <code>xdist-worker-global-snapshot.md</code> 的偶红根因，本例不成立）。锚点三个断言中点数上界/<code>len==42</code>/冷态均随假钟确定，唯一可红的是 <code>assert warm_p95 &lt; 0.15</code>。best-of-3（26-11-19 落地）取 3 轮 p95 最小值，按模块 docstring「A4 温态断言 best-of-3 结构性去抖」节原意 —— 只削单轮环境尖峰，对真回归（持续退化）仍保留判别力（3 轮 p95 全高时 min 照样超线）；该设计是基准测试标准去抖，非缺陷。26-11-20 那次 1F 的 traceback 未留存，究竟属单轮尖峰还是持续负载无法进一步归因；综合判定为环境敏感 flake、无确定代码缺陷。</li>
+    <li>2026-11-22 19:18 — 用户拍板走 <strong>Dropped</strong>（未改代码/判据）：理由见 §06 —— 抬线/加轮=放水、换 CPU 时间=本机 15.625ms 刻度打废 20ms 测量且改判据语义、xdist 独占=治标拖慢全量；best-of-3 已是标准去抖且实测选线，无可修缺陷。若未来可稳定复现拿到 traceback，按新证据另立新件。</li>
+    <li>2026-11-22 — 状态 Open → Dropped（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-22（用户指派修复）——隔离 1 次 / 全量 <code>-n 8</code> 3 轮 / 超订阅施压 8 轮，本用例 <strong>12 次运行全部未复现</strong>，p95 余量约 2.6–3 倍（按各轮最高 57.03ms 算约 2.6 倍，按 best 上限 50.72ms 算约 3 倍）；代码路径确定性、无全局污染面。结论：环境敏感 flake、无确定缺陷，状态 <strong>Dropped</strong>。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p>不适用 —— 本件 Dropped（未复现、无确定缺陷可修），无修复动作。取证与拍板理由见上方 §06 与§07 状态变更日志末三条。</p>
 </section>
 
 <footer>
