@@ -64,20 +64,7 @@ Form 切**内容形态**, 与四工位(制品用途/寿命)**正交**, 四工位
 > `gen_doc_map --check` 同源校验 (2026-10-16, 见 [pitfalls/kb/doc-status-meta.md](../pitfalls/kb/doc-status-meta.md))。
 > 与档案的 4 词表 (`**Status:**` = In Progress/Open/Done/Dropped) **不同**, 别互相套用。
 
-## 索引与检索 (2026-11-08 重构后)
-
-- 记录层(四工位)**零索引**: `plans/` `reports/` `issues/` `tasks/` 的 `_index` 全部退役 ——
-  人走 `commands run kb.nav`(台账/专题视图**现算, 不落盘**; 默认只展**活跃**专题, `--topic <key>` 单专题下钻),
-  agent 走 `grep -rn "<词>" memory-bank/`。
-- **pitfalls 的 8 个 `_index.md` 是全库唯一生成索引例外**(触发词聚合 = 改码前扫陷阱载体,
-  grep 替代不了「扫到不知道的坑」); 重建 = `commands run kb.index`, 不要手改。
-  **触发行全量进索引, 行内不截断** (2026-11-18, issue 26-11-18-0326): 历史上「一句话/触发词」
-  按 (140, 120) 静默截断 —— 那是分卷机制落地前的单文件体积手段, 落地后成了冗余, 尾部关键词
-  路由不到且无任何信号 (复验时全库 120 个坑档触发行全部超限)。现已退役行内截断, 体积由分卷
-  cap 吸收; 写触发行仍把高区分度词放前面 (利于扫读), 但不存在「前 ~120 字符才进索引」的暗预算。
-- 机检(无物化文件): 缺主键 / **主键形态越界(逗号·非 kebab)** / 状态词表越界 / 单向认领链
-  = `gen_doc_map.py --check`(fail-closed: 空库判红, 2026-11-17 计划 26-11-17-0010 S2 摘出
-  `kb.check` 默认链、经 `kb.docmap` 显式挂载, 提交闸门经 commands 引擎指向该 task, 纯文档轮也覆盖)。
+> 已外迁: 索引与检索(kb.nav / 索引退役 / pitfalls 生成索引 / 机检) → [attachments/doc-forms-index-retrieval.md](attachments/doc-forms-index-retrieval.md)(2026-11-22 cap 清零)
 
 ## 认领链
 
