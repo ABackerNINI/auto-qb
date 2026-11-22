@@ -48,7 +48,7 @@
 
 判定帧语义(`_qbBeatStart(scope, u)` 三参 inherited 退役): judge 单点 `_qbAnchorJudge(st, tail, stepNom, spanNom)` 输出 `{anchor, delta, step, span, rewin, slide}` —— 组距标称/名义窗长变化或锚位移 > 2 组距滚动域 -> rewin 瞬时落地(防假 morph 承袭); 其余位移拍 slide(锚点滑动: anchor 从 anchorPrev easeOut 滑向 anchorTo, min/max 两缘同步平移 —— 最老一格滑出左缘、新样本自右缘滑入; 打断在途拍从 `_qbAnimAnchorAt(anim)` 续滑, 打断重建零回跳, 旧 `_qbInheritedViewport`/`_qbBeatVpRem` 公式重建退役 —— 在途锚自身状态直读, 无列亲和捕获约束)。滑动门 `_qbFxShiftGate(cfg, u, nWin)`: cellPx 按名义窗点数(span/step)计, reduce 分量在 slide 判据内(instant/reduce/亚可见 -> 瞬时落地目标锚视口)。retired: `_qbRollJudge`/`_qbPadTailColumns`/补点携带门/dx0-dxN 双锚分离记账/收敛帧 dropPad slice。
 
-左移视觉(D1 用户拍板「全窗统一整体平移」): 1m 视觉几乎不变(本就每拍滚动); 5m+ 从「左缘静止+右缘逐拍扩宽到点回拉」变「每拍平移一格」—— 扩宽-回拉锯齿(与压缩同类)一并消除; 24h 等亚可见窗仍走 0.75px 门瞬时落地。fx 层(bbox+valToPos 读几何)零改动; spawn 的 pxPerT 改按名义 span_s(列含余量后列跨度不再是窗长)。电池: 节拍内核 J1-J10/L1-L9/S0-S20b 重写(锚不变量矩阵: 细相位打断/隐藏/断档/突发/竞态乱序/历史保留/左缘连续/S20b 余量列变异盲区封堵), e2e 流量系全绿零适配。
+左移视觉(D1 用户拍板「全窗统一整体平移」): 1m 视觉几乎不变(本就每拍滚动); 5m+ 从「左缘静止+右缘逐拍扩宽到点回拉」变「每拍平移一格」—— 扩宽-回拉锯齿(与压缩同类)一并消除; 24h 等亚可见窗仍走 0.75px 门瞬时落地。fx 层(bbox+valToPos 读几何)零改动; spawn 的 pxPerT 改按名义 span_s(列含余量后列跨度不再是窗长)。电池: 节拍内核 J1-J10/L1-L9/S0-S20b 重写(锚不变量矩阵: 细相位打断/隐藏/断档/突发/竞态乱序/历史保留/左缘连续/S20b 余量列变异盲区封堵), 其余 e2e 流量系全绿零适配(适配面 = grid-stability/fx-frames 两 spec: 桩 meta 补 span_s、采样器 dx0/dxN 改读锚位移、shift 过滤、A2 签名换代、A4 点数界与刻位容差改写, 见交接文档 §1)。
 
 ## 读侧契约换代收口 (2026-11-20, 计划 26-11-18-0037 七批落地 2d000f5e..a26ea6b4; **现行权威** —— 下列口径覆盖上文全部挂钟桶面语义, 26-11-14 节的动效/装饰面继续现行)
 

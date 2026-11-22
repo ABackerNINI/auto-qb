@@ -94,14 +94,14 @@
  * 元件本体在 u.root 内随 u.destroy 拆除 —— 换肤/重建零残留)。
  *
  * 列余量与左缘连续性(尾锚显式视口换代, 计划 26-11-22-0858; F5 补尾格机制退役): 视口左缘
- * (anchor − span)滑动期由**余量列**承担裁剪数据 —— 列 = [tail − (span+margin), tail],
- * margin = 2×组距(_qbStreamFrame 修剪线), GET 落地清空余量时由 _qbStreamOnLoad 历史保留
- * 合并回填(旧 store 列 < 新列头且 ≥ 余量线的真值点并入)。消灭 G-B「左缺口瞬移」不再靠显示
- * 层补点/摆回(26-11-21-1704 数据面剪 + F5 显示层补的双层结构合成单层数据不变量), 视口左缘
- * 滑动期恒有真实历史可裁。伴随判定换代(_qbAnchorJudge 单点): 跨窗换档 = 组距标称/名义窗长
- * 变化 或 锚位移 > 2 组距滚动域(防假 morph 语义承袭) —— 其余位移拍一律锚滑动(打断续滑同路,
- * 旧「roll 伪真继承」特判退役); instant/reduce 档的恒定压缩变体(补点永不摘)随补点退役
- * 自然消失(上档案 26-11-22-0626 D4 就此收口)。
+ * (anchor − span)滑动期由**余量列**承担裁剪数据 —— 列 = [anchor − (span+margin), anchor]
+ * (margin = 2×组距; 修剪线视口锚优先、尾点回落 —— _qbStreamFrame 修剪线), GET 落地清空余量
+ * 时由 _qbStreamOnLoad 历史保留合并回填(旧 store 列 < 新列头且 ≥ 余量线的真值点并入)。消灭
+ * G-B「左缺口瞬移」不再靠显示层补点/摆回(26-11-21-1704 数据面剪 + F5 显示层补的双层结构合成
+ * 单层数据不变量), 视口左缘滑动期恒有真实历史可裁。伴随判定换代(_qbAnchorJudge 单点): 跨窗
+ * 换档 = 组距标称/名义窗长变化 或 锚位移 > 2 组距滚动域(防假 morph 语义承袭) —— 其余位移拍
+ * 一律锚滑动(打断续滑同路, 旧「roll 伪真继承」特判退役); instant/reduce 档的恒定压缩变体
+ * (补点永不摘)随补点退役自然消失(上档案 26-11-22-0626 D4 就此收口)。
  *
  * 面板接线(S3, plan §05.3/§05.4/§06 S3 行 + D21): cfg.ease 消费端 —— 数值插值曲线选择单点
  * _qbFxCurve, 判定帧冻结进 anim.easeF(拍内不换式, 下一拍起用), 帧循环经 _qbFxShown 单次施加
@@ -725,11 +725,11 @@ function _qbFxShouldShift(cellPx) {
 /* 锚视口判定单点(尾锚显式视口重构, 计划 26-11-22-0858; 模块级纯函数供 node 电池)。
  * 三不变量: (1)视口恒等式 viewport = [anchor − span, anchor](anchor = 末样本时刻, 单调递增;
  * auto x range 全窗退役 —— 视口跨度恒等名义窗, 压缩在结构上不可表达); (2)单列恒等(store 列 ==
- * 显示列, 列 = [tail − (span + margin), tail], margin = 2 组距); (3)取数有效性(_qbLoad stale
- * 判据窗口分量)。本 judge 把「数据位移判定」收敛为**锚位移**: 组距标称或名义窗长变化(换窗/
- * 采样档变更/重定标)或锚位移超出 2 组距滚动域(缺口折叠多格补拍/停摆补齐) -> rewin 瞬时
- * 落地(防假 morph 语义承袭); 其余位移拍 slide(锚滑动动画候选 —— 是否真滑再由 cellPx/shift
- * 档决定, 见 _qbFxShiftGate)。
+ * 显示列, 列 = [anchor − (span + margin), anchor], margin = 2 组距; 修剪线视口锚优先、
+ * 尾点回落); (3)取数有效性(_qbLoad stale 判据窗口分量)。本 judge 把「数据位移判定」收敛为
+ * **锚位移**: 组距标称或名义窗长变化(换窗/采样档变更/重定标)或锚位移超出 2 组距滚动域(缺口
+ * 折叠多格补拍/停摆补齐) -> rewin 瞬时落地(防假 morph 语义承袭); 其余位移拍 slide(锚滑动
+ * 动画候选 —— 是否真滑再由 cellPx/shift 档决定, 见 _qbFxShiftGate)。
  * 入参 st = 图记录 _qbBeat(anchor/step/span 跨拍记账), tail = 新列末样本 t, stepNom/spanNom =
  * meta 组距标称/名义窗长(缺/非法回落 st 记账 —— 防御, meta 恒在场时不达)。
  * 输出: anchor = max(st.anchor, tail)(单调 —— 旧窗响应晚到不回拖视口, 与取数窗口分量互为
@@ -1202,10 +1202,10 @@ function _qbFxComb(n, yLo, yHi, powD, bi, mode, tTop, tBot) {
  *   t <  列末 t   -> 丢弃(GET 竞态纪律: 快照晚于事件时按 ts 归并, 不得回退)。
  * tail = 未折叠事件尾点缓冲(GET 落袋时按 t > GET 列末 t 归并回显示列, 其余视为已被
  * GET 组粒度列折叠); 缓冲与显示列同容量界。空值点(dl/up = null)照事件原样透传(缺口真值)。
- * !本函数只增尾不剪头 —— 头部陈旧点由调用面(_qbStreamFrame)按保留窗剪(尾t − (span_s +
- * 2×组距) 余量线, _qbTrimStaleHead 单点 —— 尾锚显式视口不变量(2): 余量由数据层承担, GET
- * 落地经 _qbStreamOnLoad 历史保留合并回填); 降级 GET 轮询/对账落袋整列替换 + 保留合并,
- * 不经修剪面。 */
+ * !本函数只增尾不剪头 —— 头部陈旧点由调用面(_qbStreamFrame)按保留窗剪(修剪线 = 视口锚 −
+ * (span_s + 2×组距), 锚缺/无效回落尾点, _qbTrimStaleHead 单点 —— 尾锚显式视口不变量(2):
+ * 余量由数据层承担, GET 落地经 _qbStreamOnLoad 历史保留合并回填); 降级 GET 轮询/对账落袋
+ * 整列替换 + 保留合并, 不经修剪面。 */
 function _qbPointEq(a, b) {
   return a.t === b.t
     && (a.dl == null ? b.dl == null : a.dl === b.dl)
@@ -1242,20 +1242,23 @@ function _qbStreamAppend(points, tail, p, cap, book) {
 
 /* ---------------- 保留窗头部修剪(SSE 步进列的列不变量, 计划 26-11-22-0858 换代) ----------------
  * 列不变量(尾锚显式视口三不变量之(2)): store 列 == 显示列(单列恒等 —— 无补点无记账), 列 =
- * [tail − (span_s + margin), tail], margin = 2×组距。缺陷史: SSE 主路径步进列只增尾不剪头
+ * [anchor − (span_s + margin), anchor](margin = 2×组距; 修剪线视口锚优先、尾点回落 —— 锚
+ * 领先尾时列仍覆盖视口左缘, G-B 防回潮)。缺陷史: SSE 主路径步进列只增尾不剪头
  * (26-11-21-1704 根治面), 该轮按**名义窗**剪(trim 线 = 尾t − span_s)把左缘裁剪余量一并剪掉
  * —— 滑动期视口左缘贴列首, GET 打断在途滑动时左缺口(G-B)只能靠显示层补点(F5)回补; 本轮
- * 补点随单列恒等退役, 裁剪余量改由**数据层余量列**承担: 修剪线 = 尾t − (span_s + margin),
- * 视口左缘([anchor − span, anchor] 的 min)滑动时列内恒有真实历史可裁。
+ * 补点随单列恒等退役, 裁剪余量改由**数据层余量列**承担: 修剪线 = 视口锚 − (span_s + margin)
+ * (锚缺/无效回落尾点 —— 函数体行注), 视口左缘([anchor − span, anchor] 的 min)滑动时列内
+ * 恒有真实历史可裁。
  *
  * 语义锚(承袭 26-11-21-1704):
- *   - 修剪线锚**尾点 t** 而非墙钟: 主循环停顿期尾点冻结 -> 修剪线冻结 -> 视图诚实冻结
- *     (停顿面走「滞后 Ns」徽标, D3/R7 —— 挂钟锚会在停顿期把左缘滑走, 与冻结语义相悖);
+ *   - 修剪线锚**数据面锚**(视口锚优先、尾点回落)而非墙钟: 主循环停顿期锚(单调, 随尾点)
+ *     冻结 -> 修剪线冻结 -> 视图诚实冻结(停顿面走「滞后 Ns」徽标, D3/R7 —— 挂钟锚会在
+ *     停顿期把左缘滑走, 与冻结语义相悖);
  *   - 门 = meta.schema === 2 且 span_s > 0: raw 段窗(1m-24h)是唯一点列每点带 t 的契约
  *     (旧契约 null 元素无 t 不可判), agg 段窗(3d+)跨度增长 ≤ 对账周期/窗宽 不可见;
  *     month 段窗(all)是数据面跨度(无固定窗长), 旧契约门同样排除 —— 历史整列本就该
  *     随尾点增长; agg/month 的视口由锚恒等式独立承担(与列修剪解耦);
- *   - 修剪线恒 ≤ 修剪点列尾(尾点定义修剪线), 列不会被剪空; margin = 2×组距取 meta
+ *   - 修剪线恒 ≤ 修剪点列尾(锚领先尾有界 —— 视口含尾), 列不会被剪空; margin = 2×组距取 meta
  *     .interval_s(调用方换算 keepS 传入 —— 本函数不读 meta, 纯函数面);
  *   - 修剪落地在**数据入口面**(_qbStreamFrame 帧合并处): store 列与建图显示列逐点恒等
  *     —— 悬停取值(_qbHoverOf 读 d.points[i])与缺口区段(_qbGapZone 链界)索引零记账;
@@ -1974,10 +1977,24 @@ window.AQB_QB_TRAFFIC = {
       // 尾锚显式视口(计划 26-11-22-0858): setData 的 resetScales 把 x 交还列全宽 auto(列含
       // 余量 —— 恒偏宽, 不是真值), 显式锚视口必须重申(单列恒等下无补点 slice 面 —— 旧
       // dropPad 随补点退役); 视口锚不动(y 重排不搬窗口)。span 缺席(防御)退回 auto。
+      // y 成对钉档: 重排的动机就是换档位(y 切档/限速变化), 旧钉值(判定帧按旧 cap 钉的)已
+      // 失效 —— 按新 cap 对全列重算 yMax(与判定帧扫描同口径), 与 x 重申成对钉档, 终态与
+      // 判定帧基准同尺(不成对钉时 x 重申的 pending 消费按锚窗可视数据重推, 余量持峰即两把尺)。
       u.setData([u.data[0], u.data[1], u.data[2]]);
+      let dmax = 0;
+      for (let c = 1; c <= 2; c++) {
+        const col = u.data[c];
+        if (!col) continue;
+        for (let i = 0; i < col.length; i++) {
+          const v = col[i];
+          if (v != null && v > dmax) dmax = v;
+        }
+      }
+      const yMax = _qbYRange(dmax, this._qbYCapOf(scope))[1];
       const stR = u._qbBeat;
       if (stR && stR.span > 0 && stR.anchor > 0) {
         u.setScale("x", { min: stR.anchor - stR.span, max: stR.anchor });
+        u.setScale("y", { min: 0, max: yMax });  // 与 x 成对: 该提交不得按锚窗可视数据重推 y
       }
     },
     /* 窗口前后切换(快捷键落点, 见 shortcuts.js traffic-win-prev/next): 按 QB_WINDOW_NAMES
@@ -2097,8 +2114,8 @@ window.AQB_QB_TRAFFIC = {
       if (!d) return null;
       const sum = (key) => (d.totals || []).reduce((a, p) => a + ((p && p[key]) || 0), 0);
       // 窗内桶数(保住 26-11-21-1704 恢复的「摘要桶数 = 窗内桶数」语义): 余量列(不变量(2),
-      // 列 = [tail − (span+margin), tail])的 2 组距历史点不计 —— 按 t ≥ 尾t − span_s 现数;
-      // span_s 缺席(旧契约形/防御)回落全列长。
+      // 列 = [anchor − (span+margin), anchor], 修剪线视口锚优先、尾点回落)的 2 组距历史点
+      // 不计 —— 按 t ≥ 尾t − span_s 现数; span_s 缺席(旧契约形/防御)回落全列长。
       const pts = (d.points && d.points.length) ? d.points : null;
       let n = 0;
       if (pts) {
@@ -2423,11 +2440,12 @@ window.AQB_QB_TRAFFIC = {
       if (d && Array.isArray(d.points)) {
         const cap = _QB_RAW_POINTS_MAX + _QB_STREAM_TAIL_HEADROOM;
         for (const p of pts) advanced = _qbStreamAppend(d.points, st.tail, p, cap) || advanced;
-        // 保留窗头部修剪(详 _qbTrimStaleHead 节注): 列不变量 = [tail − (span+margin), tail]
-        // (margin = 2×组距 —— 视口左缘滑动期恒有真实历史可裁, G-B 防回潮; 26-11-21-1704 的
-        // 名义窗剪把余量一并剪掉, 左缺口只能靠显示层补点回补 —— 本轮补点退役, 余量改由数据层
-        // 承担)。修剪在**数据入口面**落地(单列恒等: store 列 == 显示列, 悬停/缺口索引零记账);
-        // 降级 GET 轮询与对账落袋不在此面(整列替换 + 历史保留合并, 见 _qbStreamOnLoad)。
+        // 保留窗头部修剪(详 _qbTrimStaleHead 节注): 列不变量 = [anchor − (span+margin), anchor]
+        // (修剪线视口锚优先、尾点回落; margin = 2×组距 —— 视口左缘滑动期恒有真实历史可裁,
+        // G-B 防回潮; 26-11-21-1704 的名义窗剪把余量一并剪掉, 左缺口只能靠显示层补点回补 ——
+        // 本轮补点退役, 余量改由数据层承担)。修剪在**数据入口面**落地(单列恒等: store 列 ==
+        // 显示列, 悬停/缺口索引零记账); 降级 GET 轮询与对账落袋不在此面(整列替换 + 历史保留
+        // 合并, 见 _qbStreamOnLoad)。
         if (live) {
           const spanS = d.meta && d.meta.schema === 2 ? Number(d.meta.span_s) : 0;
           if (spanS > 0) {
@@ -3377,11 +3395,12 @@ window.AQB_QB_TRAFFIC = {
      * 尾锚显式视口(计划 26-11-22-0858 换代, 三不变量): (1)视口恒等式 viewport = [anchor − span,
      * anchor](锚 = 末样本时刻单调递增; auto x range 全窗退役 —— setData 的 resetScales 把 x
      * 交还列全宽 auto(列含余量恒偏宽), 判定帧**无条件**显式 setScale 重申锚视口, 压缩在结构上
-     * 不可表达); (2)单列恒等(store 列 == 显示列, 列 = [tail − (span+margin), tail] margin=2 组距
-     * —— F5 补点/_qbPad 记账/收敛 slice/悬停扣减整套退役, G-B 左缺口由余量列承担); (3)取数窗口
-     * 分量(_qbLoad)。左移动画 = 锚点滑动: 锚从旧值 easeOut 滑向新值(shiftMs 时间线承袭), min/
-     * max 两缘同步平移 —— 最老一格滑出左缘、新样本自右缘滑入; 打断在途拍从自身存储的在途锚
-     * (_qbAnimAnchorAt)续滑, 打断重建零回跳, 旧 _qbInheritedViewport 公式重建退役。
+     * 不可表达); (2)单列恒等(store 列 == 显示列, 列 = [anchor − (span+margin), anchor] margin=2
+     * 组距; 修剪线视口锚优先、尾点回落 —— F5 补点/_qbPad 记账/收敛 slice/悬停扣减整套退役,
+     * G-B 左缺口由余量列承担); (3)取数窗口分量(_qbLoad)。左移动画 = 锚点滑动: 锚从旧值 easeOut
+     * 滑向新值(shiftMs 时间线承袭), min/max 两缘同步平移 —— 最老一格滑出左缘、新样本自右缘滑入;
+     * 打断在途拍从自身存储的在途锚(_qbAnimAnchorAt)续滑, 打断重建零回跳, 旧 _qbInheritedViewport
+     * 公式重建退役。
      * 每拍两件事, 驱动源解耦(D2):
      *   L0 视口平移(I8, 数据刷新语义): 真值已 setData 落袋(data / _qbAnchors / tooltip 全部
      *     真值), 绘制视口从滑动起点([anchorPrev − span, anchorPrev] —— 上一收敛视口或打断在途
@@ -3511,8 +3530,9 @@ window.AQB_QB_TRAFFIC = {
       // 重置 series.min/max -> y.auto 按可视窗重算) —— 可视窗随锚平移/显示尾值变化, y 会逐帧
       // 漂移(窗沿峰值出窗即整条曲线垂直跳)。按**新数据全列真值**先算 yMax 钉住(与建图 range
       // 单点同口径: _qbYRange × _qbYCapOf, 不是显示尾值), 起拍与每个平移帧的 setScale("x")
-      // 成对补 setScale("y")(Kl.y 非 null 时 qn 原样拷贝、跳过重推); 收敛帧 setData 交还 auto
-      // 重推出的正是同一 yMax(全列真值), 交还无跳变。已在上方扫描前置, 此处直接复用同一 yMax。
+      // 成对补 setScale("y")(Kl.y 非 null 时 qn 原样拷贝、跳过重推); 收敛帧同样成对钉(setData
+      // 后 x 重申的 pending 被 redraw 消费时按锚窗可视数据重推, 余量列持峰即泵动 —— 详
+      // _qbBeatConverge 节注)。已在上方扫描前置, 此处直接复用同一 yMax。
       // t=0 同帧: 尾点摆回显示值(仅绘制面) + 视口落滑动起点。两处写入都发生在 setData 的
       // 微任务渲染之前(同个同步块), 判定帧首绘即「旧位旧值」—— 与上一拍收敛帧逐像素接续(I3,
       // uPlot 同步块内多次 commit 会被 Un 标志合并成一次渲染, 已读 vendor 确认)。
@@ -3643,7 +3663,7 @@ window.AQB_QB_TRAFFIC = {
       if (tailChanged && !dxChanged) {
         // 纯数值收敛帧(视口未动): redraw 内部的 setScale(x, current) 同样触发 y 重推 —— 显示
         // 尾值若是窗口唯一峰值, 重推出的 y 随插值逐帧缩、收敛帧再弹回(垂直跳); 先钉 y 再
-        // redraw 成对盖住(钉值 = 真窗档位 yMax, 与收敛帧 auto 重推同值)。
+        // redraw 成对盖住(钉值 = 真窗档位 yMax, 与判定帧/收敛帧钉档同一把尺)。
         u.setScale("y", { min: 0, max: a.yMax });
         u.redraw();
       }
@@ -3706,13 +3726,16 @@ window.AQB_QB_TRAFFIC = {
       u.redraw();
       return false;
     },
-    /* 收敛帧: 真值写回 + 显式锚视口重申 + 强制轴重算一次, 一次提交完成。
+    /* 收敛帧: 真值写回 + 显式锚视口重申 + y 成对钉档 + 强制轴重算一次, 一次提交完成。
      * x 视口语义(尾锚显式视口换代): setData(resetScales 默认 true) 会把 x 交还列全宽 auto
      * (列含余量恒偏宽, 非真值), 随后必须显式 setScale 重申锚视口 [st.anchor − st.span,
      * st.anchor](st.anchor 已在判定帧记账到本拍目标 —— 滑动末帧 _qbAnimAnchorAt 的 ulp 吸附
      * 已精确落锚, 重申同值零跳变); 旧「交还 auto + dropPad 摘补点」随单列恒等退役(列不再
-     * 有补点可摘, auto 恒偏宽不可作视口)。y 半边承袭 auto 交还: setData 重算 y 重推出的
-     * 正是判定帧钉住的同一 yMax(全列真值), 交还无跳变。 */
+     * 有补点可摘, auto 恒偏宽不可作视口)。y 成对钉 a.yMax(I4): x 重申的 pending 由下方
+     * redraw(false, true) 消费时 vendor qn(Kl.x 非 null)按锚窗可视数据重推 y, 余量列(左缘
+     * 裁剪历史)持峰时峰值被剔出可视窗 —— auto 重推出的可视窗基准 ≠ 判定帧全列钉值, 每拍
+     * 纵轴泵动两次(收敛帧掉档/下拍判定帧弹回), 峰值滑出余量才止; 显式钉与本拍判定帧同一
+     * 把尺, 终态零跳变。 */
     _qbBeatConverge(scope, u) {
       const st = u._qbBeat;
       const a = st.anim;
@@ -3727,6 +3750,7 @@ window.AQB_QB_TRAFFIC = {
       u.setData([u.data[0], u.data[1], u.data[2]]);
       if (st.span > 0 && st.anchor > 0) {
         u.setScale("x", { min: st.anchor - st.span, max: st.anchor });
+        u.setScale("y", { min: 0, max: a.yMax });  // 与 x 成对: 该提交不得按锚窗可视数据重推 y
       }
       // 根因二次纠正(issue 26-11-17-0936): uPlot 只在 scale 变化时置轴重算脏标记(mt), 走 Dn()
       // 重算 _splits/_values。收敛帧 setData 的 auto 与显式视口重申可能在数值上相同(span 缺席
@@ -3869,9 +3893,10 @@ window.AQB_QB_TRAFFIC = {
       }
       this.fxPreviewing = false;
     },
-    /* 预览拍末帧收口(§05.4 第 5 条): 还原真值显示面 + setData(y 交还 auto, 重推出的正是预览
-     * 钉住的同一 yMax —— 轴零跳变) + 显式锚视口重申(x 半边 —— 列全宽 auto 恒偏宽非真值, 与
-     * 收敛帧/rescale 同款), xs / u.data[0] 全程零变化。 */
+    /* 预览拍末帧收口(§05.4 第 5 条): 还原真值显示面 + setData + 显式锚视口重申 + y 成对钉档
+     * (把预览起拍从当前轴档读到的 yMax 原样钉回 —— setData 交还 auto 后 x 重申的 pending 消费
+     * 时 vendor 按锚窗可视数据重推 y, 余量列持峰即与预览钉档两把尺; 成对钉终态零跳变),
+     * xs / u.data[0] 全程零变化。 */
     _qbPreviewEnd(scope, u) {
       const st = u._qbBeat;
       const a = st.anim;
@@ -3881,9 +3906,11 @@ window.AQB_QB_TRAFFIC = {
       u.setData([u.data[0], u.data[1], u.data[2]]);
       // 尾锚显式视口(不变量(1)): setData 的 resetScales 交还列全宽 auto(含余量, 非真值) ——
       // 预览收口与收敛帧/rescale 同款显式重申(评审轮1 major: 该写点漏网 = 预览收场视口跳
-      // 全列宽一拍, 退役的 auto 落地面从预览路回潮)。
+      // 全列宽一拍, 退役的 auto 落地面从预览路回潮); y 成对钉回起拍读到的 yMax(同一把尺,
+      // 不吃锚窗可视重推 —— 与收敛帧同款)。
       if (st.span > 0 && st.anchor > 0) {
         u.setScale("x", { min: st.anchor - st.span, max: st.anchor });
+        u.setScale("y", { min: 0, max: a.yMax });
       }
     },
     _qbChartDestroy(scope) {
