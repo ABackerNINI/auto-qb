@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-11-21
-**Updated:** 2026-11-21
+**Updated:** 2026-11-22
 **Summary:** 流量采样启动恢复机制改造: 游程级重建重写+acc快照账本+raw保留窗清理
 **Topics:** backend-traffic-recovery
 **Refs:** memory-bank/plans/26-11-21-1546-plan-traffic-recovery.html, memory-bank/pitfalls/testing/long-task-background-checkpoint.md, memory-bank/pitfalls/testing/stub-interface-rename-sweep.md, memory-bank/testing/baselines/26-11-22-1224-traffic-recovery.md
@@ -49,3 +49,5 @@
 - 四轮 grilling 17 问拍板完毕; 计划 26-11-21-1546 入库 Open; 档案立档。零代码改动; 未入池新 issue; 随本专题入库。
 
 - 2026-11-21 15:49 立项: 流量恢复11.7s根因四缺陷取证(合成基准钉成本构成) + 四轮grilling 17问拍板(D1/D8/D12/D13用户改判) + 计划26-11-21-1546入库Open(重建重写+acc追加账本+raw保留窗清理, S0-S6待开工) + 0259复验保留
+
+- 2026-11-22 13:13 S6收口: 接缝终审(2发现: harness快路cell机检不相容已收编入库+V4DayResume三处手搓nit留痕)+计划翻Done+kb.wrap; 全任务S0-S6落地, 四判据全过(优雅/崩溃1.45s 168x), test.full 6954全绿99.52%

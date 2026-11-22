@@ -85,6 +85,7 @@ for _p in (_REPO, os.path.join(_REPO, "src")):
 from auto_qb.config.models import QbTraffic  # noqa: E402
 from auto_qb.core.module import AppContext  # noqa: E402
 from auto_qb.core.modules.traffic_sample_mod import TrafficSampleModule  # noqa: E402
+from auto_qb.core.traffic_store_paths import v4_acc_ledger_path  # noqa: E402
 from auto_qb.core.traffic_store import (  # noqa: E402
     AggRow,
     TrafficV4Store,
@@ -462,6 +463,21 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
     # 静默删。放大到 30d(不新增键): 语料自身保留不受清理影响, 清理 daemon 照跑零删除。
     conf.raw_window = 30 * 86400
     ctx = AppContext(SimpleNamespace(data_dir=corpus, qb_traffic=conf, main_tick=2.0))
+
+    # 快照列编排(S2 快路语义接缝, 接缝终审发现 2 收编入库): impl_tag 以 -snap 结尾 =
+    # 两阶段走真实入口 —— 阶段一(不计时): 删 acc.dat -> start 全量重建(B1+B2) -> stop
+    # 终态行自举账本; 阶段二(计时): 新模块实例真实 start = 纯快路(指纹匹配零读直采)。
+    # 零业务逻辑复刻, 与 S5 现场 s5snap.py 编排同构(该编排自此可由本 harness 复跑)。
+    snap_mode = impl_tag.endswith("-snap")
+    if snap_mode:
+        acc_path = v4_acc_ledger_path(corpus)
+        if os.path.exists(acc_path):
+            os.remove(acc_path)
+        boot = TrafficSampleModule(ctx)
+        boot.start(ctx, dry_run=False)
+        boot.stop()
+        del boot
+
     mod = TrafficSampleModule(ctx)
 
     t0 = time.perf_counter()
@@ -479,15 +495,25 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
         n = len(info.get("day_dates") or ())
         day_file_counts[n] = day_file_counts.get(n, 0) + 1
     # 机检断言(评审 26-11-21-1650 #12): cell 结果面与场景定义不自洽 = 该 cell 立即 FAIL,
-    # 不静默记 None/空 bound_counts(fail-fast 机检形态)。
+    # 不静默记 None/空 bound_counts(fail-fast 机检形态)。-snap 快路 cell 走快路面机检
+    # (source 全 ledger / slots=0 / fastpath=系列数; 重建面 bound 断言不适用)。
     expect_bound = "fallback" if scenario == "fallback" else "watermark"
     problems = []
     if stats.get("series") != manifest["series"]:
         problems.append(f"series {stats.get('series')!r} != manifest {manifest['series']}")
-    if not stats.get("slots"):
-        problems.append(f"slots_processed = {stats.get('slots')!r}(应为正)")
-    if bound_counts.get(expect_bound) != stats.get("series"):
-        problems.append(f"bound 分布 {bound_counts} 与场景 {scenario} 不符(期望 {manifest['series']} 个系列全部 {expect_bound})")
+    if snap_mode:
+        ledger_hits = sum(1 for info in reads.values() if info.get("source") == "ledger")
+        if ledger_hits != stats.get("series"):
+            problems.append(f"快路面 source 分布不符: ledger {ledger_hits}/{stats.get('series')}")
+        if stats.get("slots"):
+            problems.append(f"快路面 slots_processed = {stats.get('slots')!r}(应为 0)")
+        if stats.get("ledger_fastpath") != stats.get("series"):
+            problems.append(f"ledger_fastpath {stats.get('ledger_fastpath')!r} != series {stats.get('series')}")
+    else:
+        if not stats.get("slots"):
+            problems.append(f"slots_processed = {stats.get('slots')!r}(应为正)")
+        if bound_counts.get(expect_bound) != stats.get("series"):
+            problems.append(f"bound 分布 {bound_counts} 与场景 {scenario} 不符(期望 {manifest['series']} 个系列全部 {expect_bound})")
     if problems:
         raise AssertionError("recovery cell 机检失败: " + "; ".join(problems))
     return {
@@ -525,10 +551,13 @@ def run_recovery_cell(corpus: str, manifest: dict, scenario: str, impl_tag: str,
         "notes":
             "现行实现(B1 后): 字节级开放段限定解析 + 记账入口水位过滤(封口块不解析"
             "不入账); 崩溃与优雅同路(累计器不落盘); 场景差异仅在 agg 水位形态。"
-            "S2(P2b, 26-11-21-1546)起 acc 快照账本接线已上: 本 harness 语料不含"
-            "acc.dat -> 全体系列走 fallback 重建(ledger_fastpath=0), 恢复埋点新增"
-            "ledger_fastpath/ledger_fallback 计数字段(旧字段语义不变); acc 行只在"
-            "flush/stop 写, 本 harness 只驱动 start 不触",
+            "S2(P2b, 26-11-21-1546)起 acc 快照账本接线已上: 非 -snap cell 本 harness "
+            "语料不含 acc.dat -> 全体系列走 fallback 重建(ledger_fastpath=0), 恢复埋"
+            "点新增 ledger_fastpath/ledger_fallback 计数字段(旧字段语义不变); acc 行"
+            "只在 flush/stop 写。" + (
+                "-snap cell: boot 阶段已自举 acc.dat 并驱动真实 stop, 计时面 = 纯快路"
+                "(接缝终审发现 2 收编入库, S5 现场编排可由本 harness 复跑)" if snap_mode else ""
+            ),
     }
 
 
