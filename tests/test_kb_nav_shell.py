@@ -65,6 +65,12 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_graph_state_survives_poll_remount: 图档位 (scope/steps/showFrag) 提到壳侧 S.graph, 挂载回填 + onState 回存 + applyData 重挂全屏层 (轮询不得洗掉用户选的档位)
 - test_graph_component_is_dependency_free: nav_graph.js 零依赖 (无 import/require/fetch、无 http(s) 资源、只暴露 window.MBGraph)
 - test_shell_has_multiselect_state_and_gestures: 多选会话态 (S.multi/multiAnchor 不进持久化 / derive 不碰) + 主表与置顶区 Ctrl/Shift 手势排在改 S.sel 之前 + 普通单击不清多选
+- test_shell_has_working_zone_and_inline_svg: 正在处理区骨架 (#workZone 位于 pinZone 与主表之间 / WORKING_KEY+WORKING_COLLAPSE_KEY / 闪电 WORKING_SVG 内联 SVG 非 emoji 非外链 / 标题「处理中 · WORKING (n)」/ 克隆主表 thead + 复用 ledgerCells)
+- test_working_state_not_reseeded_by_derive: working 装载点全壳唯一且只在 boot (loadWorking/loadWorkingCollapsed 各一次), derive() 只调 pruneTerminalWorking 不 loadWorking / 不新增成员 (30s 轮询不重播种黄金法则)
+- test_terminal_working_pruned_strictly: pruneTerminalWorking 仅对 Done/Dropped/Superseded 三词严格删除并落盘, 无状态 (NO_ST) 与其他状态不删, 以 link 为键, 状态改回不回区 (node 回放真实 JS)
+- test_pin_and_working_zones_independent: pin 与 working 两份状态独立 (同件可同时在两区, 取消一处不影响另一处; node 回放真实 JS)
+- test_hidden_items_excluded_from_working_zone: 隐藏件被 workingZoneItems() 与主表 wip 标识双重挡掉 (隐藏 = 从所有内容视图退场)
+- test_working_bar_specificity_below_selection: 主表左色条选择器特异性 wip < sel < msel, 源序 sel.msel 胜出; wip 走暖橙 --amber (无 --warn), 不抢交互态
 """
 
 from __future__ import annotations
@@ -100,6 +106,9 @@ from kb_nav_support import (
     nav_port,
     nav_server,
 )
+
+# node 探针超时 (同 test_kb_nav_interaction.py 口径): UTF-8 + replace + 60s, 防子进程卡在写管道。
+NODE_PROBE_TIMEOUT = 60
 
 
 def _hex_token(css: str, name: str) -> tuple[int, int, int]:
@@ -647,3 +656,224 @@ def test_graph_state_survives_poll_remount() -> None:
     apply_ = _shell_fn(text, "applyData")
     assert "stageGraph.getState()" in apply_, "轮询后没重挂全屏层 (看到的还是上一轮快照)"
     assert "byLink.has(" in apply_, "重挂前没判焦点件还在不在 (被外部删掉会直接抛)"
+
+
+# --------------------------------------------------------------------------- 正在处理区 (骨架 / 装载 / 终态剪除)
+# 计划 memory-bank/plans/26-11-22-1742 (D1-D11); 与置顶区同构, 但成员手动加入 + 终态自动退出。
+# 本文件守「结构与数据不变量」; 交互 (折叠 / 右键批量 / 移出按钮) 在 test_kb_nav_interaction.py。
+
+
+def test_shell_has_working_zone_and_inline_svg() -> None:
+    """正在处理区骨架 (计划 S1/D8/D11): #workZone 容器夹在置顶区与主表之间 (专区在置顶正下方);
+    双存储键 WORKING_KEY / WORKING_COLLAPSE_KEY; 闪电为内联 SVG 常量 (非 emoji / 非外链图标库,
+    守 test_shell_no_external_resources); 标题「处理中 · WORKING (n)」; 专区克隆主表 thead + 复用
+    ledgerCells (同栏, 同 test_pin_zone_reuses_ledger_columns)。缺任一即回归。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    # 位置: pinZone < workZone < 主表 (.ledgerwrap) —— 专区在置顶正下方、主表之前
+    at_pin = text.index('id="pinZone"')
+    at_work = text.index('id="workZone"')
+    at_ledger = text.index('class="ledgerwrap"')
+    assert at_pin < at_work < at_ledger, "工作专区必须夹在置顶区与主表之间 (置顶正下方 / 主表之前)"
+
+    # 存储键: 平行键, 不复用 mb-nav-pins
+    assert 'const WORKING_KEY = "mb-nav-working"' in text, "缺工作集存储键 WORKING_KEY"
+    assert 'const WORKING_COLLAPSE_KEY = "mb-nav-working-collapsed"' in text, "缺工作区折叠态存储键"
+    assert 'const PINS_KEY = "mb-nav-pins"' in text, "pin 存储键不可被复用/改名——两份状态须独立"
+
+    # 闪电: 内联 SVG 常量, 非 emoji / 非外链
+    m = re.search(r"const WORKING_SVG = '(.*?)';", text, re.S)
+    assert m and "<svg" in m.group(1) and "<path" in m.group(1), "闪电必须是内联 SVG (WORKING_SVG 常量)"
+    assert "http" not in m.group(1), "闪电 SVG 不得含外链资源"
+    for ch in ("\u26a1", "\U0001F4A1", "\U0001F525"):  # 闪电 / 灯泡 / 火 emoji
+        assert ch not in text, f"壳里出现 emoji 闪电/图标 (code-style 禁图形符号): {ch!r}"
+
+    # 标题 + 专区渲染
+    assert "处理中 · WORKING <b>(" in text, "工作专区标题必须是「处理中 · WORKING (n)」"
+    zone = re.search(r"function renderWorkingZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone, "renderWorkingZone() 不见了? 渲染逻辑搬家要同步本守阵"
+    z = zone.group(1)
+    assert "ledgerwrap thead" in z, "工作专区必须克隆主表 thead (列宽同源), 而非另写列头"
+    assert "ledgerCells(" in z, "工作专区行必须复用 ledgerCells (同栏)"
+    assert "workingZoneItems(" in z, "专区必须消费同一份 working 状态"
+
+
+def test_working_state_not_reseeded_by_derive() -> None:
+    """working 与「状态筛选器自动重置 / pin 被洗」同源风险 (坑 pitfalls/web-ui/poll-reseed-filter.md):
+    derive() 每 30s 跑一次, 绝不能 loadWorking / 重播默认值 / 新增成员 —— 否则用户主动加入的件
+    被轮询洗掉, 或已被终态剪除的件被重新播种回来。装载点必须全壳唯一且只在 boot, derive() 末尾
+    只调 pruneTerminalWorking() (只删不增)。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    # 装载点全壳唯一, 且都在 boot
+    assert text.count("S.working = loadWorking()") == 1, "working 装载点必须全壳唯一 (只在 boot)"
+    assert text.count("S.workingCollapsed = loadWorkingCollapsed()") == 1, "工作折叠态装载点必须全壳唯一"
+    boot = re.search(r"function boot\(\) \{(.*?)\n\}", text, re.S)
+    assert boot, "boot() 不见了? 装载逻辑搬家要同步本守阵"
+    b = boot.group(1)
+    assert "S.working = loadWorking();" in b and "S.workingCollapsed = loadWorkingCollapsed();" in b, (
+        "boot() 必须装载 working 与折叠态各一次"
+    )
+    assert b.count("pruneTerminalWorking()") == 1, "boot() 装载后必须立刻剪一次终态 (S3/D4)"
+
+    # derive() 只调 prune, 绝不装载 / 不新增成员
+    dv = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert dv, "derive() 不见了? 数据派生逻辑搬家要同步本守阵"
+    d = dv.group(1)
+    assert "pruneTerminalWorking()" in d, "derive() 末尾必须调 pruneTerminalWorking (终态退出)"
+    # 剥注释再检: derive() 里有句注释写着「绝不 loadWorking」, 不做字面量会误报 (注释不是代码)
+    code = re.sub(r"/\*.*?\*/", "", d, flags=re.S)
+    code = re.sub(r"//[^\n]*", "", code)
+    for forbidden in ("loadWorking", "loadWorkingCollapsed", "S.working =", "S.working.push", "S.working.unshift"):
+        assert forbidden not in code, f"derive() 里出现 {forbidden}: 30s 轮询会洗掉/重播种用户工作集 (黄金法则)"
+
+
+def test_terminal_working_pruned_strictly(tmp_path) -> None:
+    """终态自动退出 (计划 S3 / 拍板 D2/D3/D4, 风险 §07): pruneTerminalWorking 只对 item.status
+    严格等于 Done / Dropped / Superseded 三者的工作成员删除并落盘; 无状态 (NO_ST='(无状态)')
+    与其它状态 (Open/In Progress) 不删; 以 link 为键 (与加入时同一编码); 状态改回不回区 (只删不增,
+    不再重新入选) —— 这一条靠「剪除后再改状态、再剪一次仍不回区」回放实测。node 回放真实函数体。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    # 源码钉: 三词严格 + stOf + 只删 (filter) + 落盘 + 剪出选区
+    assert 'const terminal = ["Done", "Dropped", "Superseded"]' in text, "终态词表必须是三词严格命中"
+    fn = re.search(r"function pruneTerminalWorking\(\) \{(.*?)\n\}", text, re.S)
+    assert fn, "pruneTerminalWorking() 不见了"
+    body = fn.group(1)
+    assert "stOf(it)" in body and "terminal.includes" in body, "须按 item.status (stOf) 严格命中终态词表"
+    assert "S.working = S.working.filter" in body and "saveWorking()" in body, "删除须落盘 (永久移除, 非显示层过滤)"
+    assert "S.multi = S.multi.filter" in body, "终态剪除须同步把件剪出多选 (与批量隐藏同款边界)"
+    assert "NO_ST" in text, "缺无状态哨兵 (无状态不删的判据来源)"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    save_src = next((ln for ln in text.splitlines() if ln.startswith("function saveWorking()")), None)
+    assert save_src, "saveWorking 单行定义不见了? 同步本守阵"
+    store = {}
+    probe = tmp_path / "prune_working_probe.js"
+    probe.write_text(
+        "const NO_ST = '(无状态)';\n"
+        "const stOf = i => i.status || NO_ST;\n"
+        "const items = {\n"
+        "  'done.md': { link:'done.md', status:'Done' },\n"
+        "  'drop.md': { link:'drop.md', status:'Dropped' },\n"
+        "  'sup.md': { link:'sup.md', status:'Superseded' },\n"
+        "  'open.md': { link:'open.md', status:'Open' },\n"
+        "  'prog.md': { link:'prog.md', status:'In Progress' },\n"
+        "  'nost.md': { link:'nost.md' },\n"
+        "};\n"
+        "const byLink = new Map(Object.entries(items));\n"
+        "const store = " + json.dumps(store) + ";\n"
+        "const localStorage = { getItem: k => (k in store ? store[k] : null), "
+        "setItem: (k, v) => { store[k] = String(v); } };\n"
+        "const S = { working:['done.md','drop.md','sup.md','open.md','prog.md','nost.md'],\n"
+        "  multi:['done.md','open.md'] };\n"
+        "function syncMultiChip() {}\n"
+        "function saveWorking() { localStorage.setItem('mb-nav-working', JSON.stringify(S.working)); }\n"
+        "function pruneTerminalWorking() {" + body + "\n}\n"
+        "const snap = () => S.working.join(',') + '|' + S.multi.join(',') + '|' + "
+        "(store['mb-nav-working'] || '');\n"
+        "pruneTerminalWorking();\n"
+        "console.log('after=' + snap());\n"
+        "/* 状态改回不回区 (D2): 把已剪除的 done.md 改回 Open, 再剪一次仍不得重新入选 */\n"
+        "byLink.get('done.md').status = 'Open';\n"
+        "pruneTerminalWorking();\n"
+        "console.log('reopen=' + snap());\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT,
+    )
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    want = 'open.md,prog.md,nost.md|open.md|["open.md","prog.md","nost.md"]'
+    assert got.get("after") == want, f"终态三词须全删, 其他状态/无状态保留, 且落盘+剪选区: {got}"
+    assert got.get("reopen") == want, f"状态改回不回区 (D2 永久移除, derive 不重播种): {got}"
+
+
+def test_pin_and_working_zones_independent(tmp_path) -> None:
+    """双区独立 (拍板 D9): pin 与 working 是两份独立状态 —— 同一件可同时在两区, 取消一处不影响
+    另一处。源码钉两套装载/判定/切换/落盘函数各司其职; node 回放真实 togglePin / toggleWorking
+    验证「同件双区 → 取消工作 → 仍在置顶 → 取消置顶」全程互不干扰。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    # 源码钉: 两份状态 / 两套判定 / 两套切换 / 两套落盘, 互不复用
+    for frag in (
+        "pins: [],", "working: [],", "const isPinned =", "const isWorking =", "function togglePin(",
+        "function toggleWorking(", "function savePins()", "function saveWorking()"
+    ):
+        assert frag in text, f"双区独立结构缺件: {frag}"
+    toggle_pin = re.search(r"function togglePin\(link\) \{(.*?)\n\}", text, re.S)
+    toggle_work = re.search(r"function toggleWorking\(link\) \{(.*?)\n\}", text, re.S)
+    assert toggle_pin and toggle_work, "togglePin / toggleWorking 不见了"
+    assert "S.pins" in toggle_pin.group(1) and "S.pins" not in toggle_work.group(1), "toggleWorking 不得碰 pins"
+    assert "S.working" in toggle_work.group(1) and "S.working" not in toggle_pin.group(1), "togglePin 不得碰 working"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    probe = tmp_path / "dual_zone_probe.js"
+    probe.write_text(
+        "const S = { pins: [], working: [] };\n"
+        "const saved = [];\n"
+        "function savePins() { saved.push('pins:' + S.pins.join(',')); }\n"
+        "function saveWorking() { saved.push('working:' + S.working.join(',')); }\n"
+        "function renderLedger() {}\n"
+        "function togglePin(link) {" + toggle_pin.group(1) + "\n}\n"
+        "function toggleWorking(link) {" + toggle_work.group(1) + "\n}\n"
+        "togglePin('x.md'); toggleWorking('x.md');\n"
+        "console.log('both=' + (S.pins.includes('x.md') && S.working.includes('x.md')));\n"
+        "toggleWorking('x.md');\n"
+        "console.log('afterUnwork=' + S.pins.includes('x.md') + ',' + S.working.includes('x.md'));\n"
+        "togglePin('x.md');\n"
+        "console.log('afterUnpin=' + S.pins.includes('x.md') + ',' + S.working.includes('x.md'));\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT,
+    )
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    assert got.get("both") == "true", f"同件须可同时在两区: {got}"
+    assert got.get("afterUnwork") == "true,false", f"取消工作不得影响置顶: {got}"
+    assert got.get("afterUnpin") == "false,false", f"取消置顶后工作已不在, 两区互不干扰: {got}"
+
+
+def test_hidden_items_excluded_from_working_zone() -> None:
+    """「隐藏」= 从所有内容视图退场: 加入工作区后又隐藏的件, 既要从工作专区 (workingZoneItems)
+    退场, 也要被主表 wip 标识挡掉 (同 test_hidden_items_excluded_from_views 扩面) —— 少挡一处
+    = 隐藏件仍以左侧色条形式「藏在明处」。恢复隐藏后 working 关系原样回来 (只挡显示, 不删数据)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    wz = re.search(r"function workingZoneItems\(\) \{(.*?)\n\}", text, re.S)
+    assert wz and "isHidden(" in wz.group(1), "workingZoneItems() 未挡隐藏条目"
+    ledger = re.search(r"function renderLedger\(\) \{(.*?)\n\}", text, re.S)
+    assert ledger and "isWorking(i.link) && !isHidden(i.link)" in ledger.group(1), ("主表 wip 标识未挡隐藏条目 (隐藏件仍挂工作色条)")
+
+
+def test_working_bar_specificity_below_selection() -> None:
+    """主表左色条层级 (计划 D5/D6, 风险 §07): wip < sel < msel —— 三个选择器同特异性 (#v-ledger
+    tbody tr.类), 靠**源序**让交互态盖过工作条; 组合态 sel.msel 以更高特异性胜出 (多选优先)。
+    wip 走暖橙 --amber (壳内无 --warn), 只加左侧 inset 色条, 不加第二个行内图标。"""
+    css = _shell_css()
+    wip = "#v-ledger tbody tr.wip"
+    sel = "#v-ledger tbody tr.sel"
+    msel = "#v-ledger tbody tr.msel"
+    sel_msel = "#v-ledger tbody tr.sel.msel"
+    for s in (wip, sel, msel, sel_msel):
+        assert s in css, f"缺色条层级选择器: {s}"
+    assert css.index(wip) < css.index(sel) < css.index(msel), ("同特异性靠源序: wip 必须写在 sel 之前、sel 写在 msel 之前, 交互态才能盖住工作色条")
+    wip_rule = re.search(r"#v-ledger tbody tr\.wip \{[^}]*\}", css)
+    assert wip_rule and "var(--amber)" in wip_rule.group(0), "wip 色条须走暖橙 --amber 令牌"
+    assert "--warn" not in css, "壳内没有 --warn 令牌 (别编), 工作色条用 --amber"
+    assert "box-shadow: inset 2px 0 0 var(--amber)" in wip_rule.group(0), "wip 只加左侧色条, 不加行内图标"

@@ -53,6 +53,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_batch_copy_paths_and_open_links: copyText 双链路降级 + 批量复制每行一个按可见序 + 打开 >5 confirm 走 MB 路由
 - test_pin_zone_collapse_toggle: 置顶区标题行的折叠按钮 (原生 button / aria-expanded + aria-controls / 折叠箭头方向) 切换置顶区主体可见性并持久化 (node 回放真实 JS)
 - test_pin_row_click_opens_drawer_via_shared_path: 置顶区条目单击与主表共用同一 openRowDetail 单点 (同 renderDrawer / 同 sel 高亮), 不再单开原文
+- test_working_zone_collapse_toggle: 工作专区折叠按钮 (原生 button / aria-expanded + aria-controls / 折叠箭头) 切换主体可见性并持久化 (mb-nav-working-collapsed), 折叠不重建 innerHTML 保焦点 (node 回放真实 JS)
+- test_ctx_menu_working_batch: 右键「加入/移出正在处理」data-act=working + 冻结 links 快照 + 批量文案带 N + toggleWorkingBatch 幂等 + saveWorking 落盘 + 移出按钮早退不误开抽屉 (node 回放真实 JS)
 """
 
 from __future__ import annotations
@@ -724,3 +726,166 @@ def test_pin_row_click_opens_drawer_via_shared_path(tmp_path) -> None:
     assert got.get("sel") == "b.md", f"S.sel 未指向被点条目: {got}"
     assert got.get("drawer") == "b.md", f"抽屉未走 renderDrawer 同一条路径: {got}"
     assert got.get("a") == "false" and got.get("b") == "true", f"双区 sel 高亮未同步: {got}"
+
+
+# --------------------------------------------------------------------------- 正在处理区交互 (折叠 / 右键批量)
+# 计划 memory-bank/plans/26-11-22-1742 S2/D7/D8; 交互口径照置顶区 + 批量口径照 pin/hide。
+# 骨架 / 装载 / 终态剪除的结构守阵在 test_kb_nav_shell.py。
+
+
+def test_working_zone_collapse_toggle(tmp_path) -> None:
+    """工作专区折叠 (计划 D8): 照置顶区 applyPinCollapse 模式另写 applyWorkCollapse —— 只切
+    collapsed 类 / aria-expanded / [hidden], **不整表重渲染** (重建 innerHTML 会把键盘焦点从按钮
+    丢回 body)。状态落 WORKING_COLLAPSE_KEY, boot 唯一装载点, derive 不碰 (否则 30s 轮询把收起
+    的区又展开)。按钮为原生 <button> + aria-controls=wzBody, 回车/空格原生触发。node 回放真实
+    函数体 (applyWorkCollapse / toggleWorkingCollapsed / saveWorkingCollapsed)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'const WORKING_COLLAPSE_KEY = "mb-nav-working-collapsed"' in text, "缺工作折叠态存储键常量"
+    assert "workingCollapsed: false" in text, "S 缺 workingCollapsed 状态字段"
+    assert "function loadWorkingCollapsed" in text and "function saveWorkingCollapsed" in text, "缺折叠态存/读函数"
+    assert "function applyWorkCollapse" in text and "function toggleWorkingCollapsed" in text, "缺折叠应用/切换单点"
+
+    btn = re.search(r'<button class="wztoggle" id="wzToggle".*?>', text, re.S)
+    assert btn, "工作专区标题行缺折叠按钮 #wzToggle"
+    markup = btn.group(0)
+    assert 'type="button"' in markup, "折叠控件必须是原生 button (可聚焦, 回车/空格可触发)"
+    assert 'aria-expanded="' in markup and 'aria-controls="wzBody"' in markup, "缺无障碍展开态/受控区属性"
+    assert "aria-label=" in markup, "图标按钮缺无障碍名称"
+    css = _shell_css()
+    assert ".workzone.collapsed .wztoggle svg" in css, "收起态缺箭头方向变化 (状态须可见)"
+    assert ".wztoggle:focus-visible" in css, "折叠按钮缺键盘焦点可见样式"
+
+    zone = re.search(r"function renderWorkingZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone and "applyWorkCollapse()" in zone.group(1), "渲染末尾必须应用折叠态 (轮询重画后仍收起)"
+    assert 'id="wzBody"' in zone.group(1), "工作专区主体缺受控容器 #wzBody (aria-controls 目标)"
+    click = re.search(r'\$\("workZone"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert click and "toggleWorkingCollapsed()" in click.group(1), "折叠按钮点击未接切换单点 (委托里缺早退分支)"
+
+    boot = re.search(r"function boot\(\) \{(.*?)\n\}", text, re.S)
+    assert boot and boot.group(1).count("S.workingCollapsed = loadWorkingCollapsed()") == 1, (
+        "折叠态装载点必须全壳唯一 (只在 boot 装载一次)"
+    )
+    derive = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert derive and "workingCollapsed" not in derive.group(1), "derive() 碰折叠态 = 30s 轮询把收起洗掉"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    apply_body = re.search(r"function applyWorkCollapse\(\) \{(.*?)\n\}", text, re.S)
+    toggle_body = re.search(r"function toggleWorkingCollapsed\(\) \{(.*?)\n\}", text, re.S)
+    save_src = next((ln for ln in text.splitlines() if ln.startswith("function saveWorkingCollapsed()")), None)
+    assert apply_body and toggle_body and save_src, "折叠函数结构搬家要同步本守阵"
+    key = re.search(r'const WORKING_COLLAPSE_KEY = "(.*?)";', text).group(1)
+    probe = tmp_path / "work_collapse_probe.js"
+    probe.write_text(
+        "const WORKING_COLLAPSE_KEY = " + json.dumps(key) + ";\n"
+        "const store = {};\n"
+        "const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };\n"
+        "const S = { workingCollapsed: false };\n"
+        "const cls = new Set();\n"
+        "const zone = { hidden: false, classList: { toggle: (n, on) => { if (on) cls.add(n); else cls.delete(n); }, "
+        "contains: n => cls.has(n) } };\n"
+        "const btn = { attrs: {}, setAttribute(k, v) { this.attrs[k] = String(v); } };\n"
+        "const bodyEl = { hidden: false };\n"
+        "const els = { workZone: zone, wzToggle: btn, wzBody: bodyEl };\n"
+        "function $(id) { return els[id]; }\n"
+        "function applyWorkCollapse() {" + apply_body.group(1) + "\n}\n" + save_src + "\n"
+        "function toggleWorkingCollapsed() {" + toggle_body.group(1) + "\n}\n"
+        "const snap = () => [zone.classList.contains('collapsed'), btn.attrs['aria-expanded'], bodyEl.hidden, "
+        "String(store[WORKING_COLLAPSE_KEY])].join(',');\n"
+        "applyWorkCollapse();\n"
+        "console.log('init=' + snap());\n"
+        "toggleWorkingCollapsed();\n"
+        "console.log('after1=' + snap());\n"
+        "toggleWorkingCollapsed();\n"
+        "console.log('after2=' + snap());\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT,
+    )
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    assert got.get("init") == "false,true,false,undefined", f"初始应为展开态: {got}"
+    assert got.get("after1") == "true,false,true,1", f"首次点击应收起且落盘: {got}"
+    assert got.get("after2") == "false,true,false,0", f"再次点击应展开且落盘: {got}"
+
+
+def test_ctx_menu_working_batch(tmp_path) -> None:
+    """右键批量 working (计划 D7): 菜单加 data-act="working" (动态文案 allWorking 反向), 复用
+    ctxTargets 冻结快照 + 灰色 N, 分发走 toggleWorkingBatch(links); 批量函数与 pin/hide 同款
+    —— every(isWorking) 动态方向 + 过滤已达态成员 + saveWorking 落盘 (幂等)。移出按钮 (# 栏
+    .wzremove) 点击早退, 不误开抽屉 (S2 验收判据); 其图标为内联 SVG UNWORK_SVG。node 回放
+    真实 toggleWorkingBatch 验证幂等 / 批量移出 / 混合加入。"""
+    text = SHELL.read_text(encoding="utf-8")
+    ctx = re.search(r"function openCtx\(.*?\{(.*?)\n\}", text, re.S)
+    assert ctx and 'data-act="working"' in ctx.group(1), "右键菜单缺「加入/移出正在处理」入口"
+    assert "links.every(isWorking)" in ctx.group(1), "working 动态文案须来自 every(isWorking) (全达态反向)"
+    assert 'm.dataset.links = JSON.stringify(links);' in ctx.group(1), "working 须复用冻结 links 快照"
+
+    menu = re.search(r'\$\("ctxMenu"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert menu and "toggleWorkingBatch(links)" in menu.group(1), "菜单分发缺批量 working 动作"
+
+    fn = re.search(r"function toggleWorkingBatch\(links\) \{(.*?)\n\}", text, re.S)
+    assert fn, "缺 toggleWorkingBatch"
+    body = fn.group(1)
+    assert "links.every(isWorking)" in body, "批量 working 缺动态方向判据 (全已在处理 -> 批量移出)"
+    assert "saveWorking()" in body, "批量 working 绕开了 saveWorking 落盘链"
+    assert "!isWorking(l)" in body, "批量加入须过滤已达态成员 (幂等)"
+
+    # 移出按钮点击早退, 不冒泡开抽屉; 图标内联 SVG
+    click = re.search(r'\$\("workZone"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert click, "工作专区 click 委托不见了"
+    c = click.group(1)
+    assert 'e.target.closest(".wzremove")' in c and "toggleWorking(ub.dataset.unwork); return;" in c, (
+        "移出按钮须早退 (toggleWorking + return), 不误开抽屉"
+    )
+    assert c.index(".wzremove") < c.index("openRowDetail("), "移出分支必须排在普通单击打开抽屉之前"
+    assert re.search(r"const UNWORK_SVG = '(.*?)';", text, re.S), "移出按钮须内联 SVG (UNWORK_SVG 常量)"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    save_src = next((ln for ln in text.splitlines() if ln.startswith("function saveWorking()")), None)
+    assert save_src, "saveWorking 单行定义不见了? 同步本守阵"
+    probe = tmp_path / "working_batch_probe.js"
+    probe.write_text(
+        "const store = {};\n"
+        "const localStorage = { getItem: k => (k in store ? store[k] : null), "
+        "setItem: (k, v) => { store[k] = String(v); } };\n"
+        "const S = { working: [] };\n"
+        "const isWorking = link => S.working.includes(link);\n"
+        "function saveWorking() { localStorage.setItem('mb-nav-working', JSON.stringify(S.working)); }\n"
+        "function renderLedger() {}\n"
+        "function toggleWorkingBatch(links) {" + body + "\n}\n"
+        "const snap = () => S.working.join(',');\n"
+        "toggleWorkingBatch(['a.md','b.md']);\n"
+        "console.log('add=' + snap());\n"
+        "toggleWorkingBatch(['a.md','b.md']); /* 全达态 -> 批量移出 */\n"
+        "console.log('remove=' + snap());\n"
+        "toggleWorkingBatch(['b.md']); /* 先加入一个 */\n"
+        "toggleWorkingBatch(['b.md','c.md']); /* 混合: 已达态 b.md 被过滤, 只加入 c.md */\n"
+        "console.log('mixed=' + snap());\n"
+        "toggleWorkingBatch(['c.md','b.md']); /* 再全达态 -> 批量移出 */\n"
+        "console.log('remove2=' + snap());\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT,
+    )
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    assert got.get("add") == "a.md,b.md", f"批量加入保持 links 序 (逆序 unshift): {got}"
+    assert got.get("remove") == "", f"全达态再触发 -> 批量移出: {got}"
+    assert got.get("mixed") == "c.md,b.md", f"混合加入过滤已达态、只加未达态且保持序 (幂等): {got}"
+    assert got.get("remove2") == "", f"再次全达态 -> 批量移出: {got}"
