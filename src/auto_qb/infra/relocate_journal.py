@@ -179,13 +179,19 @@ PHASE_REWRITTEN = "rewritten"
 # - already:   改写前已是目标值(retarget unchanged 且有键 already)—— 黄金法则 1: 幂等
 #              重放必须收敛而非空转, 已在目标值 = 无事可做
 # - unmatched: 全部路径键都不命中旧根(retarget unchanged 且纯 unmatched, 含 N10 相对
-#              路径形态与 AutoTMM 之外的键缺席形态)—— 确定性无操作, 重放无意义; 真错向
-#              由主循环重启后逐成员 save_path 核验兜住(S4), 账里保留逐键明细供诊断
+#              路径形态与 AutoTMM 之外的键缺席形态)—— 确定性无操作, 改写动作重放无意义;
+#              真错向由主循环重启后逐成员 save_path 核验兜住(S4), 账里保留逐键明细供诊断。
+#              「重放无意义」只约束 daemon 改写步(无可为), 不约束重放闸的账面重置 ——
+#              reset_rewrites 按 REWRITE_SETTLED 全集把它清回 pending 属下窗重确认,
+#              无害收敛; 口径单点见下方 REWRITE_SETTLED_FROZEN 注记「消费方按语义取用」句
 # - member_gone(R4 配套, 计划 26-11-13-0448 §03 R4): BT_backup 定位不到成员 fastresume
 #              —— E5 实证(报告 26-11-13-0617): qB 5.2.3 删种即删 fastresume(仅账面
 #              0.03s / 连文件 0.02s 内消失)⇒ 缺失 = 成员已被删, 改写步跳过并按 settled
 #              收口(与主循环 R4 收缩判定同源), 不再无限重试; 成员是否收缩由主循环按
-#              qB 快照缺席判, daemon 不越权改 job 账(D13 账本契约)
+#              qB 快照缺席判, daemon 不越权改 job 账(D13 账本契约)。「不再无限重试」
+#              同样只约束 daemon 改写步, 不约束重放闸的账面重置 —— reset_rewrites 按
+#              REWRITE_SETTLED 全集把它清回 pending 属下窗重确认(缺失即收缩复核),
+#              无害收敛; 口径单点见下方 REWRITE_SETTLED_FROZEN 注记「消费方按语义取用」句
 # 四者视为已收口(pending 出账)。not_found(定位步骤本身)经 member_gone 出账;
 # failed(FastresumeError/ValueError/OSError)不在集合: 留待窗口内重试与下一
 # 窗口重放(D8), fails 计数进账(每失败一次 +1), 供对账「失败计数上限转人工告警」。
@@ -197,8 +203,10 @@ REWRITE_MEMBER_GONE = "member_gone"
 # 「改写已落账」专用判据集(冻结态判据面; R4 评审轮 1 修 1): REWRITE_SETTLED 里只有
 # rewritten/already 代表「成员 fastresume 已改写到 dst」—— 冻结态前提(成员重启将从 dst
 # 载入)对 member_gone 不成立(fastresume 不存在, 无可冻结, 成员重启什么都载不进)。
-# 消费方按语义取用: pending 口径/重放复确认用 REWRITE_SETTLED(缺失下窗重确认无害),
-# 「已落账即冻结」类闸门必须用本集 —— 把 member_gone 当已落账会误堵(且文案失实)。
+# 消费方按语义取用: pending 口径/重放复确认(reset_rewrites)用 REWRITE_SETTLED —— 上面
+# unmatched「重放无意义」/member_gone「不再无限重试」只约束 daemon 改写步, 这两类清回
+# pending 属缺失下窗重确认(无害收敛), 不矛盾; 「已落账即冻结」类闸门必须用本集 ——
+# 把 member_gone 当已落账会误堵(且文案失实)。
 # (历史消费方: 撤销闸 cancel_rewritten —— 已随「撤销不搬回」退役, 计划 26-11-15-2340
 # §03.3 D6: 数据留在新位置后 fastresume 改写与数据位置一致, 冻结态前提消失。)
 REWRITE_SETTLED_FROZEN = frozenset({"rewritten", "already"})
@@ -365,6 +373,9 @@ def reset_rewrites(data_dir: str, job_id: str, *, ts: Optional[float] = None) ->
     本接口把 settled 记录整体清回 pending(status -> REWRITE_RESET_STATUS, 原状态留
     prev_status 诊断), 相位翻回 armed(pending 期), 并累加 verify_replays 计数供调用方
     做「只重放一次」的节奏闸(重放一次后仍不过 = 维持悬挂+告警, 防无限改写循环)。
+    重置集为 REWRITE_SETTLED 全集: unmatched/member_gone 按 daemon 改写步口径虽
+    「重放无意义/不再无限重试」, 此处账面重置属下窗重确认, 无害收敛, 二者不矛盾
+    (口径单点见 REWRITE_SETTLED_FROZEN 注记「消费方按语义取用」句)。
 
     返回重置条数; 0 = 无 settled 记录可重置(不动盘, 幂等); -1 = journal 已终态
     (拒写, 走 write_journal 的前向合并保护 —— 已收口/已取消/已判失败的 job 不再重放)。

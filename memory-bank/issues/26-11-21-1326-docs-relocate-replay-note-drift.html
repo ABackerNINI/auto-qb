@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="relocate-foreign-torrent">
 <meta name="doc-refs" content="memory-bank/plans/26-11-20-0434-plan-backend-relocate-foreign-torrent.html, memory-bank/tasks/26-11-20-backend-relocate-foreign-torrent.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="重放闸重置面与 REWRITE_SETTLED_FROZEN 注记自证不一致">
 <meta name="issue-summary" content="注记明说 unmatched/member_gone 重放无意义/误堵, 但 reset_rewrites 按 REWRITE_SETTLED 全集重置它们, 口径可独立小考">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-21-1326-docs-relocate-replay-note-drift</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-21 13:26</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">计划 26-11-20-0434 实施批 (T4 时发现, 存量行为)</div></div>
 </div>
 
@@ -113,13 +113,23 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>独立小考二选一: (a) 收窄 <code>reset_rewrites</code> 只清 rewritten/already（<code>REWRITE_SETTLED_FROZEN</code> 集, 语义 = 「已落账但未生效」才值得重放）, unmatched/member_gone 维持 settled —— 需核对 pending_members 消费面与既有重放测试（<code>tests/test_relocate_exec_verify.py::test_step_verify_member_not_at_dst_hangs_and_replays</code> 等）; (b) 保持全集重置, 在注记补一句「unmatched/member_gone 重置属无害重确认, 与『重放无意义』不矛盾（后者指改写动作本身无意义, 前者指账面重置收敛）」对齐口径。</p>
+<div class="callout">
+  <strong>实际修法（2026-11-23，采纳 (b)）：</strong>保持 <code>reset_rewrites</code> 的 <code>REWRITE_SETTLED</code> 全集重置行为不变（行为本身无害且收敛，改它属扩大范围），仅在 <code>src/auto_qb/infra/relocate_journal.py</code> 补注记消歧：
+  <ul>
+    <li>unmatched / member_gone 词表注记：「重放无意义」「不再无限重试」明确为<strong>只约束 daemon 改写步</strong>，不约束重放闸的账面重置；</li>
+    <li><code>REWRITE_SETTLED_FROZEN</code> 消费方注记与 <code>reset_rewrites</code> docstring 同步点明：清回 pending 属下窗重确认（缺失即收缩复核），无害收敛、二者不矛盾；</li>
+    <li>三处统一指向 <code>REWRITE_SETTLED_FROZEN</code> 注记「消费方按语义取用」句作口径单点，消除「读者无法判断哪个权威」的歧义。</li>
+  </ul>
+  <strong>验证：</strong>纯注释/docstring 改动，零行为变化；<code>test.full</code> 7025 passed + 6 skipped（99%），未改一行测试；<code>ship.gate</code> 全绿；只读评审零发现（事实/口径/符号逐条对源码核对）；收尾复核 HEAD 与评审锚一致。未 commit/push（用户未授权）。
+</div>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-21 13:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-23 — 状态 Open → Done（kb.status）</li>
+</ul>
 </section>
 
 <footer>
