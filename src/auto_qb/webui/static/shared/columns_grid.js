@@ -358,6 +358,17 @@ Object.assign(window.AQB_COLUMNS.methods, {
       const rz = b.getBoundingClientRect().width / b.offsetWidth;
       return Number.isFinite(rz) && rz > 0 ? rz : null;
     },
+    /* 字体加载代令牌(issue 26-11-19-0754 评审增强): document.fonts.status 从 loading 变 loaded
+     * = 字体交换完成的可靠信号。首拍若在 fallback 字体下量了在案行高, 字体落定后真值变了, 但
+     * 几何签名(sy/vh/n/_winResize)不变 -> _reprobeRenderedRowH 同拍去重会跳过, 存值永不修正
+     * (评审 major: 跳过在案行每拍 gBCR 后, 异步布局变化只剩 reprobe 一条真值收敛面, 而它原本
+     * 只看几何)。把令牌并入 reprobe 调用签名, 字体落定那拍签名失配 -> 重新逐行 diff 修正。
+     * !纯读属性零布局开销; 无 document.fonts 的环境(老浏览器 / node 桩)恒返回 "-", 行为退回
+     * 纯几何签名 —— 不新增事件监听 / mounted-unmounted 生命周期, 零副作用。 */
+    _rowHFontTok() {
+      const fonts = typeof document !== "undefined" ? document.fonts : null;
+      return fonts && fonts.status ? fonts.status : "-";
+    },
     _winSigExtra() {
       // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态 / 根缩放。
       // !根缩放必须进签名(issue 26-11-14-0844): zoom!=1 把全部视觉几何按 z 缩放, 表顶文档偏移
@@ -562,13 +573,23 @@ Object.assign(window.AQB_COLUMNS.methods, {
         const rows = document.querySelectorAll(sel);
         if (!rows.length) continue;
         let changed = false;
+        /* issue 26-11-19-0754: 已实测且签名未变的行直接复用存值, 不发 gBCR —— 首访 updated()
+         * 的 ~4 个收敛拍里, 除首拍外每行存值都在案, 旧代码无条件逐行量高 = 窗行 x 收敛拍的
+         * 无谓强制同步布局(指纹 55 -> 155 的直接来源)。判定分两层, 都不新增 gBCR:
+         *   1. key 不在案 -> 新进窗/首拍未量行, 必须量(下方 for 里发一次 gBCR);
+         *   2. key 在案 -> 复用。为何可跳过: 本 kind 的签名 sig(窗宽代 + 可见列数)在上方
+         *      `_rowHSig[kind] !== sig` 分支里相等(失配那拍已整批 delete + continue), 即本拍
+         *      几何与量那一行时一致; 字体交换/内容重排导致的异步真值变化由 render 拍的
+         *      `_reprobeRenderedRowH` 逐行 diff 兜住(首访后唯一收敛面, 语义不动), 不需要本拍
+         *      每拍重探。跳过的是「未变行每拍重探」, 不是「存值永不复核」。
+         * !抽屉桥(下方第四探测位)不套本门: 它挂 content-visibility:auto, 首拍量到 intrinsic
+         *   占位高 28, 必须靠逐拍重探收敛回真值 27 —— 那里只按 checkVisibility 跳过不可见行。 */
         for (const r of rows) {
-          const h = r.getBoundingClientRect().height;
           const key = kind + ":" + (r.getAttribute("data-hash") || r.getAttribute("data-key") || "");
-          if (this._rowHs[key] === undefined || Math.abs(this._rowHs[key] - h) > 0.5) {
-            this._rowHs[key] = h;
-            changed = true;
-          }
+          if (this._rowHs[key] !== undefined) continue;  // 存值在案: 复用, 零 gBCR
+          const h = r.getBoundingClientRect().height;
+          this._rowHs[key] = h;
+          changed = true;
         }
         // 未量过的行(新种子 / 千级首访尚未滚到的行)用它兜底。取**已实测行的全局均值**而非
         // 当前窗口均值: 后者随窗口切换每帧跳变, 会让占位总高与滚动条长度跟着抖(issue 26-11-02-0902)。
@@ -830,8 +851,11 @@ Object.assign(window.AQB_COLUMNS.methods, {
        * off 侧 68 vs prism 34; prism 表顶恰好两态恒定才幸免)。滚驱动的出窗(sy 变化)与
        * 宽度代变化照常失配重探, 0332 主场景(深滚 pad 跳变)不受影响; zoom 过渡拍另有函数
        * 体内的守卫(751-762)让路, 不依赖签名。 */
+      /* 签名末项 = 字体加载代(issue 26-11-19-0754 评审增强): 字体落定(status loading->loaded)
+       * 令签名失配, reprobe 重新逐行 diff 修正 fallback 字体下量的陈旧存值 —— 跳过在案行每拍
+       * gBCR 后, 这是异步布局变化(字体交换)唯一还能进来的真值收敛面。 */
       this._reprobeRenderedRowH(
-        kind, `${sy}|${vh}|${n}|${this._winResize}`,
+        kind, `${sy}|${vh}|${n}|${this._winResize}|${this._rowHFontTok()}`,
       );
       const hs = this._rowHs;
       const pre = new Array(n + 1);

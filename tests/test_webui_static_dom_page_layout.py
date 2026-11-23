@@ -1458,7 +1458,9 @@ def test_frontend_outgoing_rowh_reprobe_guard():
     (不删表/不改 _rowHVer/_rowH/_winMeasured/_rowHSig/签名 —— 踩 rowh-sig-and-transition-
     geometry 坑就是 3000 行全量重渲 5.9~8.4s 长任务, 切页/关抽屉卡死复发); 3. 抽屉
     content-visibility:auto 守卫在位; 4. 探测位选择器单点(与 _measureRowH 同源), 同拍 sig
-    去重键在 created() 初始化; 5. 重探签名不含 viewMode 等新因子。行为面对: node 电池
+    去重键在 created() 初始化; 5. 重探签名不含 viewMode 等新因子; 6.(issue 26-11-19-0754)
+    主表量高循环必须跳过存值在案行且该分支在 gBR 读取之前(每拍全窗重探回潮守阵, 行为面见
+    node 电池 test_r4_rowmeasure_skips_measured_rows_no_regb)。行为面对: node 电池
     test_r4_outgoing_rowh_reprobe_kills_pad_jump。
     """
     rel = "shared/columns.js"
@@ -1491,6 +1493,14 @@ def test_frontend_outgoing_rowh_reprobe_guard():
         "出窗重探签名嵌 _winTop(表顶) = 重探去重被表顶抖动假失配打穿(issue 26-11-19-0258: "
         "atlas off 轮重读表顶 178.5 vs 窗口化存值 182.5 → 复原重开窗一拍 32 键行全量重探, "
         "off 侧 68 vs prism 34) —— 表顶是布局读数, 不是行高陈旧信号"
+    )
+    assert "_rowHFontTok()" in ms.group(1), (
+        "出窗重探签名缺字体加载代令牌(issue 26-11-19-0754 评审增强) —— 跳过在案行每拍 gBCR 后, "
+        "字体交换(loading->loaded)改了在案行真值但几何签名不变, reprobe 同拍去重会跳过, 存值永不修正"
+    )
+    mf = re.search(r"_rowHFontTok\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert mf and "document.fonts" in mf.group(1) and 'return fonts && fonts.status ? fonts.status : "-"', (
+        "_rowHFontTok 必须纯读 document.fonts.status 且无 fonts 环境回落 '-' —— 不新增事件监听/生命周期"
     )
 
     # 2) 重探实现: 只刷已有键, 零全表作废 / 零响应式自激
@@ -1565,6 +1575,22 @@ def test_frontend_outgoing_rowh_reprobe_guard():
     assert 'if (this._rowH["drawerContent"] === undefined' in mm.group(1), (
         "抽屉内容桥的均值必须保持逐拍收敛, 不可一并冻结 —— content-visibility:auto 首拍量到"
         " intrinsic 占位高 28, 冻结就永远拉不回真值 27"
+    )
+
+    # 6) issue 26-11-19-0754: 主表量高循环必须跳过「存值在案」行, 不再每拍无条件 gBCR。
+    #    摘掉此分支 = 首访逐行量高 x 收敛拍回来(指纹 55->155)。行为面由 node 电池
+    #    test_r4_rowmeasure_skips_measured_rows_no_regb 红绿双验; 这里静态兜底(node 不可用时电池静默跳过)。
+    assert "if (this._rowHs[key] !== undefined) continue;" in mm.group(1), (
+        "_measureRowH 主表量高循环缺『存值在案行跳过』分支 —— 每拍对全窗行无条件 gBCR 回潮"
+        "(issue 26-11-19-0754: 首访指纹 55->155)。真值收敛由 render 拍 _reprobeRenderedRowH 承担, "
+        "本分支跳过的是未变行重探, 不是存值永不复核"
+    )
+    # 跳过分支必须在 gBR 读取之前 —— 顺序颠倒就白跳过(先量后判 = 旧行为)
+    mm_lines = mm.group(1)
+    skip_idx = mm_lines.find("if (this._rowHs[key] !== undefined) continue;")
+    gbr_idx = mm_lines.find("r.getBoundingClientRect().height")
+    assert skip_idx != -1 and gbr_idx != -1 and skip_idx < gbr_idx, (
+        "存值在案跳过分支必须在 getBoundingClientRect() 之前 —— 先量后判等于没跳过(旧行为回潮)"
     )
 
 

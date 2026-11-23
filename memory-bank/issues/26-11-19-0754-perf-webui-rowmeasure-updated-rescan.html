@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-19-0754">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-rowmeasure-updated-rescan">
-<meta name="doc-refs" content="memory-bank/issues/26-11-19-0258-test-e2e-perf-3000-first-visit-fingerprint-drift.html">
+<meta name="doc-refs" content="memory-bank/issues/26-11-19-0258-test-e2e-perf-3000-first-visit-fingerprint-drift.html, memory-bank/testing/baselines/26-11-23-1312-webui-rowmeasure-updated-rescan.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="columns_grid.js _measureRowH 经 updated() 每收敛拍对全窗行无条件 gBCR(签名未变也重探): 首访指纹 55→~155 的直接来源">
 <meta name="issue-summary" content="首访估算开窗的逐行量高在每次 updated() 收敛拍都全窗重探(签名判定只管作废、不管跳过), gBCR 次数 = 窗行数 x 收敛拍数; 引擎侧把 e2e 首访路径指纹从档案值 55 抬到 143-158 —— 量具面预算已按拍板重标定(issue 26-11-19-0258), 本条记引擎优化面, 修后可回抬预算余量">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-19-0754-perf-webui-rowmeasure-updated-rescan</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-19 07:54</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
@@ -150,11 +150,38 @@ rowWin=false 对照: 窗内 gBCR=1(关窗不逐行量) —— 计数全部来自
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-19 07:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-23 12:29 — 复验：仍复现，状态保持 <strong>Open</strong>（静态锚点全在 + 全局无修复引用 + 量具复跑绿，见下方复验记录）</li>
+    <li>2026-11-23 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-23 — 状态 In Progress → Done（kb.status）</li>
+</ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-23 12:29 @ <code>eefdbd2f</code> <strong>仍复现</strong>。判定主据为静态锚点（本条现象 = 代码结构事实）：量高循环 <code>columns_grid.js:562-572</code> 仍对 <code>querySelectorAll(sel)</code> 命中的每一行无条件发 <code>r.getBoundingClientRect()</code>，签名判定 <code>:492-502</code> 仍只在失配时作废存量并 <code>continue</code>（签名未变行照探）；触发链 <code>lifecycle.js:522</code> 仍在 <code>updated()</code> 每拍调 <code>_measureRowH</code>（grep 实测 2026-11-23，锚点未漂移）。全局 grep <code>26-11-19-0754|rowmeasure-updated-rescan</code> 仅命中 <code>e2e/perf.spec.mjs</code> 的预算注与两条 memory-bank 文档，无任何针对本条的修复。动态量具复跑（辅助佐证，确认 gBR 未反向退化为精确冷启动）<code>commands run dev.e2e-perf-serial -- e2e/perf.spec.mjs -g "首访路径指纹"</code>（E2E_TORRENTS=600，2 passed / 0 failed，6.3s）：</p>
+<pre><code># 复验取证 2026-11-23 12:29（600 档, eefdbd2f; 量具为 gBR &lt; FIRST_VISIT_GBR_BUDGET=185 上限断言, 通过不打印精确值）
+[e2e:perf-serial] CPU 敏感 spec 串行补跑 | E2E_TORRENTS=600 | e2e/perf.spec.mjs -g 首访路径指纹
+Running 2 tests using 1 worker
+  ok 1 [chromium] ... perf.spec.mjs:341 ... 皮肤 prism ... P1-2 首访路径指纹 ... (2.3s)
+  ok 2 [chromium] ... perf.spec.mjs:341 ... 皮肤 atlas ... P1-2 首访路径指纹 ... (1.6s)
+2 passed (6.3s)</code></pre>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><strong>实际修法</strong>(2026-11-23，采纳 §06 建议并补评审增强)：主表三 kind 的量高循环
+  (<code>columns_grid.js</code> <code>_measureRowH</code>) 在发 gBCR 前先按行键查 <code>_rowHs</code>，
+  存值在案的行直接 <code>continue</code> 复用、零 gBCR；只对无存值行(首拍 / 新进窗 / 签名作废后首拍)量一次。
+  签名作废面(<code>_winResize</code> / 可见列数失配 → 整批 delete + <code>continue</code>)与抽屉桥第四探测位
+  (content-visibility:auto，逐拍重探收敛 28→27)语义原样保留。</p>
+  <p><strong>评审增强(major 修复)</strong>：跳过在案行每拍 gBCR 后，异步布局变化(字体交换)只剩
+  <code>_reprobeRenderedRowH</code> 一条真值收敛面，而它原本按几何签名
+  <code>(sy|vh|n|_winResize)</code> 去重，字体落定时几何不变会跳过 → 在案行存值永不修正、pad 按旧值累加。
+  修法：新增纯读令牌 <code>_rowHFontTok()</code>(读 <code>document.fonts.status</code>，无 fonts 环境回落
+  <code>-</code>，零事件监听 / 零生命周期副作用)，并入 reprobe 调用签名末项 —— 字体
+  <code>loading→loaded</code> 那拍签名失配 → reprobe 重新逐行 diff 修正 fallback 字体下量的陈旧存值。
+  <span class="hint">已知边界(如实留档)：非字体的内容重排若行数/几何均不变，仍不在 reprobe 几何签名内，
+  与 issue 26-11-15-0332 原设计的覆盖范围一致；本轮只补字体这一主要异步源。</span></p>
+  <p><strong>验证方式与测试数字</strong>：① 动态量具 <code>commands run dev.e2e-perf-serial -- e2e/perf.spec.mjs -g "首访路径指纹"</code>
+  (600 档双皮)：首访 gBR <strong>80</strong>(修复前 143–158，近半)，2 passed / 0 failed，
+  上限 <code>FIRST_VISIT_GBR_BUDGET=185</code> 未动(回抬属放宽判据，未授权)。② node 电池红绿双验
+  <code>test_r4_rowmeasure_skips_measured_rows_no_regb</code>：修正版 5/5 绿，strip 版唯一「在案行零重探」
+  变红(证明守阵对实现敏感)。③ 静态守阵 <code>test_frontend_outgoing_rowh_reprobe_guard</code> 钉跳过分支
+  + 顺序 + 字体令牌；reprobe 电池升至 24 项含字体失配重探。④ pytest 全量绿（见 <code>kb.baseline</code> 切片 26-11-23-1312）。</p>
 </section>
 
 <footer>

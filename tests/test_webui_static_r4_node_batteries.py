@@ -120,10 +120,15 @@
   root zoom 变化, _measureRowH 开头比对 _rootZoomOf() 与上次校准基线 _rowHZoom, 变了就全表乘
   zNew/zOld 原地重标 _rowHs/_rowH(不删键不翻 _winMeasured 不动冻结门, _rowHVer bump 一次);
   配套 _reprobeRenderedRowH 过渡拍让路(系统性差值不得当行高真变, 不烧签名)。电池十三项: 首拍落
-  基线 / 全表等比例重标 / est 同比例跟随 / 键数·量齐态·签名零改动 / 重标后与逐行 gBR 逐位一致 /
-  同 z 幂等 / body 读到 null 不误判成 z=1(1↔z 抖动坑) / 过渡拍让路 / 重标后照常重探 /
+  基线 / 全表等比例重标 / est 同比例跟随 / 键数·量齐态·签名零改动 / 重标后存值=当前缩放实测值且在案行零 gBR(issue
+  0754) / 同 z 幂等在案行零 gBR / body 读到 null 不误判成 z=1(1↔z 抖动坑) / 过渡拍让路 / 重标后照常重探 /
   _winSigExtra 令牌两态口径 / 携带x重标共存(跨拍配对优先读 _rowHs 重标现值, 快照只兜底) /
   携带回落(旧键被签名作废剔键面时才落快照值)
+- test_r4_rowmeasure_skips_measured_rows_no_regb: issue 26-11-19-0754 产品侧修复回归 ——
+  _measureRowH 量高循环对签名未变的在案行跳过逐行 gBCR(`if (this._rowHs[key] !== undefined)
+  continue;`), 消除首访 32 行 x ~4 收敛拍的无谓同步布局(指纹 55->155)。红绿双验同电池:
+  正常版五面(首拍全量 / 在案行零 gBR / 新进窗行单独量 / 签名作废整批删 / 作废后全量)全绿,
+  strip 版(源码摘掉跳过分支)「在案行零重探」唯一变红 —— 断言期望值不按 stripped 分叉, 反证守阵对实现敏感
 
 加载口径: columns 域经 webui_helpers.bundle_file("columns.js") 聚合(根 + 五片段清单序, 与拆分前
 同一份代码); 单文件域(selection/sort/format)直接 eval。app.js 以 loadColState 截断切片加载
@@ -2913,6 +2918,24 @@ cOff.rowWin = false;
 M._rowWindow.call(cOff, "torrent", mkList(), null);
 ok("rowWin 关闭零重探(早退分支不产出 pad)", gbrCalls === N * 2);
 
+// --- 字体加载代令牌(issue 26-11-19-0754 评审增强): 几何不变时字体落定仍触发一次重探 ---
+// 跳过在案行每拍 gBCR 后, 字体交换改了在案行真值、reprobe 本因几何签名相同而跳过。
+// 令牌并入签名 => status loading->loaded 那拍失配 => 重新逐行 diff 修正陈旧存值。
+const cFont = seed(mkCtx());
+global.document.fonts = { status: "loading" };
+gbrCalls = 0;
+M._rowWindow.call(cFont, "torrent", mkList(), null);  // 首探: N 次 gBR + 记签名
+const fontFirstGbr = gbrCalls;
+gbrCalls = 0;
+M._rowWindow.call(cFont, "torrent", mkList(), null);  // 几何不变 + status 未变: 去重跳过
+ok("字体未变时几何相同的重渲零重探(去重仍在)", gbrCalls === 0);
+global.document.fonts.status = "loaded";               // 字体落定
+gbrCalls = 0;
+M._rowWindow.call(cFont, "torrent", mkList(), null);  // 签名含字体令牌 -> 失配 -> 重量
+ok("字体 loading->loaded 令签名失配, 几何不变也重探一次(修正异步布局变化)",
+   fontFirstGbr === N && gbrCalls === N);
+delete global.document.fonts;                          // 复原: 后续桩无 fonts -> 回落 '-'
+
 // --- 抽屉 content-visibility:auto 守卫: 未渲染行不得用 intrinsic 占位高改坏真值 ---
 gbrCalls = 0;
 const cHidden = mkCtx();
@@ -3032,11 +3055,13 @@ def test_r4_outgoing_rowh_reprobe_kills_pad_jump():
     (关掉重探)逐行复现陈旧累加, 绿验(产品实现)断言 _rowHs 被真值顶掉、padTop 与
     _rowPre 按真值重建且前后差恰 3.828px; 同时钉住「不踩全表作废坑」(键数/_rowHVer/
     _rowH/_rowHSig/_winMeasured 零改动)、同拍 sig 去重(三入口只量一次、几何不变零 gBR)、
-    rowWin 关闭零重探、抽屉 content-visibility:auto 未渲染行跳过(intrinsic 占位高 28 不得
-    改坏真值 27)、冻结门**两支各自**都有行为断言(首校 / 存值非正重校)。无 node 静默跳过。"""
+    rowWin 关闭零重探、    抽屉 content-visibility:auto 未渲染行跳过(intrinsic 占位高 28 不得
+    改坏真值 27)、冻结门**两支各自**都有行为断言(首校 / 存值非正重校)、字体加载代令牌
+    (issue 26-11-19-0754 评审增强: status loading->loaded 令 reprobe 签名失配, 几何不变也重探
+    一次修正在案行陈旧存值)。无 node 静默跳过。"""
     report = _run_probe(_NODE_OUTGOING_ROWH_PROBE, bundle_file("columns.js"))
     if report is not None:
-        assert report["total"] == 22, (f"出窗最后一探电池应有 22 项检查(实测 {report['total']})—— 少项 = 检查被删或"
+        assert report["total"] == 24, (f"出窗最后一探电池应有 24 项检查(实测 {report['total']})—— 少项 = 检查被删或"
                                        "中途提前 return, 守阵会静默变弱")
     _assert_battery(report, "出窗最后一探电池")
 
@@ -3117,16 +3142,16 @@ ok("z 变: est 基准同比例跟随(未量行 pad 不再按旧缩放偏大 ~11%
 ok("z 变: 不删键不翻 _winMeasured 不动 _rowHSig, 仅 _rowHVer +1(响应式重算一次)",
    Object.keys(c._rowHs).length === keys0 && measured0 === JSON.stringify(c._winMeasured)
    && sig0 === JSON.stringify(c._rowHSig) && c._rowHVer === ver0 + 1);
-ok("z 变: 重标后与当前缩放的逐行 gBR 逐位一致(重标 = 重新实测的等价形式, 零改写)",
-   gbrCalls === N
+ok("z 变: 重标后存值 = 当前缩放逐行实测值(重标 = 实测等价形式), 在案行零 gBR(issue 0754)",
+   gbrCalls === 0   // 存值在案且签名未变 -> _measureRowH 跳过逐行 gBCR(issue 26-11-19-0754)
    && Math.abs(c._rowHs["torrent:t7"] - TRUE_H(7) * 0.9) < 1e-9);
 
 // --- 同 z 再拍: 幂等(黄金法则 1), 零重标零 bump ---
 gbrCalls = 0;
 const snap = JSON.stringify(c._rowHs);
 M._measureRowH.call(c);
-ok("同 z 再拍幂等: 零重标零 bump(逐行 gBR 照付但不改值)",
-   c._rowHVer === ver0 + 1 && JSON.stringify(c._rowHs) === snap && gbrCalls === N);
+ok("同 z 再拍幂等: 零重标零 bump(在案行全部复用, 零 gBR, issue 0754)",
+   c._rowHVer === ver0 + 1 && JSON.stringify(c._rowHs) === snap && gbrCalls === 0);
 
 // --- body 读不到(null): 跳过重标, 不误判成「缩放回 1」(issue §06 方案 A 点名的 1↔z 抖动坑) ---
 const noBody = mkDoc(); delete noBody.body;
@@ -3211,6 +3236,126 @@ def test_r4_rowh_zoom_rescale_follows_root_zoom():
         assert report["total"] == 13, (f"缩放重标电池应有 13 项检查(实测 {report['total']})—— 少项 = 检查被删或"
                                        "中途提前 return, 守阵会静默变弱")
     _assert_battery(report, "缩放重标电池")
+
+
+# issue 26-11-19-0754 修复回归: _measureRowH 对签名未变的在案行跳过逐行 gBCR ---------------
+# 红绿双验靠 argv[2]=strip 时把源码里的跳过分支摘掉再 eval(复现旧行为), 与正常版对比 gBR 次数。
+_NODE_ROWMEASURE_SKIP_PROBE = r"""
+const fs = require("fs");
+global.ROW_WIN_MIN = 200;
+global.ROW_WIN_OVERSCAN = 10;
+global.ROW_WIN_EST_MIN = 200;
+global.ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
+global.ROW_WIN_GAP_FALLBACK = 0;
+global.window = {};
+let src = fs.readFileSync(process.argv[1], "utf8");
+const SKIP = 'if (this._rowHs[key] !== undefined) continue;';
+if (!src.includes(SKIP)) { console.log(JSON.stringify({ fatal: "跳过分支不在源码里 —— 实现改了? 同步本电池" })); process.exit(2); }
+if (process.argv[2] === "strip") src = src.replace(SKIP, '');  // 红验: 还原成每拍全窗重探的旧行为
+eval(src + "\n;globalThis.__W2__ = window.AQB_COLUMNS;");
+const M = globalThis.__W2__.methods;
+
+const N = 40;
+const H = (i) => 40 + i;
+let gbr = 0;
+let extraRows = [];   // 新进窗行(无存值)在第二拍才出现
+const mkRow = (i) => ({
+  getAttribute: (a) => a === "data-hash" ? "t" + i : null,
+  getBoundingClientRect: () => { gbr++; return { height: H(i) }; },
+});
+const rows = Array.from({ length: N }, (_, i) => mkRow(i));
+global.document = {
+  querySelectorAll: (sel) => sel === '.torrent-row[data-table="torrent"][data-hash]' ? [...rows, ...extraRows] : [],
+  querySelector: () => null,
+};
+global.TABLE_DEFS = {
+  group: { cols: "gCols", tableRef: null },
+  torrent: { cols: "tCols", tableRef: null },
+  detail: { cols: "mCols", tableRef: null },
+};
+const mkCtx = () => Object.assign({}, M, {
+  rowWin: true, filteredGroups: [],
+  _winMeasured: { torrent: false, group: true, member: true, drawerContent: true },
+  _rowH: { torrent: 0, group: 50, member: 50, drawerContent: 50 },
+  _rowHVer: 1,
+  _rowHSig: { torrent: "0|3|3|3", group: "0|3|3|3", member: "0|3|3|3", drawerContent: "0|3" },
+  _winResize: 0, tCols: [{}, {}, {}], gCols: [{}, {}, {}], mCols: [{}, {}, {}],
+  _rowHs: {}, _rowProbeSig: {}, _rowPre: {},
+});
+
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const stripped = process.argv[2] === "strip";
+const c = mkCtx();
+
+// --- 首拍: 所有行无存值, 必须逐行量(N 次 gBCR)并写入存值 ---
+M._measureRowH.call(c);
+ok("首拍全量量高: N 行各发一次 gBCR 并落 _rowHs", gbr === N && c._rowHs["torrent:t" + (N - 1)] === H(N - 1));
+
+// --- 第二拍: 签名未变 + 全部在案 -> 零 gBCR。两版跑同一断言: 修正版 gBR=0 过,
+//     摘除版 gBR=N 红 —— 这是本电池的红绿反证锚, 期望值绝不可按 stripped 分叉。 ---
+gbr = 0;
+const snap = JSON.stringify(c._rowHs);
+const ver = c._rowHVer;
+M._measureRowH.call(c);
+ok("在案行零重探: 存值与版本不变且 gBR=0",
+   JSON.stringify(c._rowHs) === snap && c._rowHVer === ver && gbr === 0);
+
+// --- 新行进窗(无存值): 只量新行, 老行仍复用 ---
+if (!stripped) {
+  const NEW_I = N + 5;
+  extraRows.push(mkRow(NEW_I));
+  gbr = 0;
+  M._measureRowH.call(c);
+  ok("新进窗行单独量: 只 1 次 gBCR 且新键入表", gbr === 1 && c._rowHs["torrent:t" + NEW_I] === H(NEW_I));
+  extraRows.length = 0;
+}
+
+// --- 签名作废: 翻 _winResize -> 整批 delete + 本拍 continue, 下一拍全量重新量 ---
+if (!stripped) {
+  c._winResize = 1;
+  const keysBefore = Object.keys(c._rowHs).filter((k) => k.startsWith("torrent:")).length;
+  gbr = 0;
+  M._measureRowH.call(c);   // 作废拍: delete + continue, 零 gBCR
+  const keysAfter = Object.keys(c._rowHs).filter((k) => k.startsWith("torrent:")).length;
+  ok("签名作废拍: 整批删 torrent 键且不量高", keysBefore > 0 && keysAfter === 0 && gbr === 0);
+  gbr = 0;
+  M._measureRowH.call(c);   // 重量拍: 全量
+  ok("签名作废后一拍: 全量重新量高", gbr === N);
+}
+
+console.log(JSON.stringify({
+  ok: checks.filter((x) => x[1]).length, total: checks.length,
+  failed: checks.filter((x) => !x[1]).map((x) => x[0]),
+}));
+"""
+
+
+def test_r4_rowmeasure_skips_measured_rows_no_regb():
+    """issue 26-11-19-0754 修复回归: _measureRowH 对签名未变的在案行跳过逐行 gBCR。
+
+    旧行为把「每次 updated() 收敛拍都对全窗行无条件 gBR」写死, 首访 32 行 x ~4 拍 = 指纹
+    55 -> 155。修法 = 量高循环里 `if (this._rowHs[key] !== undefined) continue;`: 存值在案且
+    签名(窗宽代 + 可见列数)未变的行直接复用; 真值收敛交给 render 拍的 _reprobeRenderedRowH。
+    红绿双验在同一 node 电池内完成 —— 正常版断言「第二拍在案行零 gBR」, strip 版(源码摘掉
+    跳过分支)断言「第二拍退化为 N 次 gBR」, 一红一绿互为反证。另钉三面: 首拍仍全量 / 新进窗
+    行单独量 / 签名作废整批删且下一拍全量。抽屉桥不套本门的语义由 reprobe 电池 + 静态守阵覆盖。
+    """
+    probe = _NODE_ROWMEASURE_SKIP_PROBE
+    green = _run_probe(probe, bundle_file("columns.js"))
+    _assert_battery(green, "行高量测跳过电池(修正版)")
+    if green is not None:
+        # 首拍全量 / 在案行零重探 / 新进窗单独量 / 签名作废拍 / 作废后全量 = 5 项
+        assert green["total"] == 5, f"修正版应有 5 项检查(实测 {green['total']})"
+    # 红验: 摘掉跳过分支后, 「在案行零重探」必须变红(证明测试对实现敏感, 非恒绿)。
+    # 摘除版只跑首拍 + 零重探两项(新行/作废两面对新实现无判别力, 已跳过)。
+    red = _run_probe(probe, bundle_file("columns.js"), "strip")
+    if red is not None:
+        assert red["total"] == 2, f"摘除版应有 2 项检查(实测 {red['total']})"
+        assert red["ok"] == 1 and red["failed"] == [
+            "在案行零重探: 存值与版本不变且 gBR=0"
+        ], (f"红验反证失败: 摘掉跳过分支后「在案行零重探」应唯一变红, 实测 {red['failed']} "
+            "—— 若全绿说明断言对实现不敏感(恒绿假守阵), 若全红说明首拍断言也被带坏")
 
 
 def test_r4_dt_table_exception_list_geometry_guard():
