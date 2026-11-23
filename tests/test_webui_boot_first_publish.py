@@ -54,6 +54,14 @@ host.run_sync_line 复用发布单点 flush_views -> _publish_locked)先落一�
   site=HHan 但 rec.tracker_conf is None(HR 派生空见 :256-257 同族断言)。
 - test_base_generation_makes_zero_qb_tracker_calls: R7 零 qB 调用计数桩 —— 基础代发布期
   torrents_trackers 调用数 0; 真 match 在前拍之后才拉 qB。
+### 缺口修复守阵(26-11-23-1339 缺口: 全未配库/无 group_key_migrations 时临时态滞留)
+- test_all_unconfigured_library_completion_clears_provisional: 两枚种子 trackers_map 全映射到
+  未配域名 -> 无 matched_added / 无 torrents_added / 无 group_key_migrations, 非提前发布拍靠
+  行字段判据补一次 full 重建: 两行翻 False + 真告警 no_site_conf; 静默拍不再多发布一代。
+- test_provisional_settle_reaches_grouped_rows: 归组场景下主动 rebuild 出临时态代后, 结算拍
+  的 full 重建覆盖到已归组种子的成员行(flat_view 判据不漏 groups 视角)。
+- test_provisional_settlement_with_concurrent_delta_forces_full: 结算拍与行级增量同拍时 full
+  必需 —— partial 只重建脏行, 未脏行原样复用(True 滞留且每拍重触发), full 才四视图整体翻假。
 """
 
 import json
@@ -599,3 +607,106 @@ def test_base_generation_makes_zero_qb_tracker_calls():
             assert len(calls_at_publish) == 1, "启动首轮管线中恰一次发布(基础代)"
             assert calls_at_publish[0] == 0, "基础代纯内存推断, 零 torrents_trackers 调用"
             assert tracker_calls, "真 match 在提前发布之后的 full_round 才拉 qB"
+
+
+def test_all_unconfigured_library_completion_clears_provisional():
+    """全未配库结算缺口(26-11-23-1339 缺口修复): 所有种子 tracker 都不在 config 时,
+    基础代 site_provisional=True + 空告警不会因 view_changed/组键迁移而滞留 —— flush 的
+    非提前发布拍用行字段判据补一次 full 重建, 把行翻 False 并按真 conf 重算 no_site_conf。
+
+    FakeClient.torrents_trackers 未命中 trackers_map 时默认回 HHan URL(helpers.py:122-125),
+    故必须显式把 H1/H2 的 trackers_map 都映射到未配域名 —— 否则真 match 会绑上 conf、
+    缺陷被掩盖, 测试假绿。根因链: 全未配 -> conf 全 None -> matched_added 空 -> 无
+    torrents_added 广播 -> 无 group_key_migrations -> flush 的 view_changed 已被提前发布
+    消费 -> _pending_full_reasons 空 -> 不置脏 -> 不重建 -> 临时态与空告警永久滞留。
+    """
+    unconf_url = "https://tracker.unconfigured.example/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client = _boot_env(td)
+        # 显式覆盖**所有**种子: full_round 真 match 也全部落 None(无 matched_added/迁移)
+        client.trackers_map["H1"] = [{"url": unconf_url}]
+        client.trackers_map["H2"] = [{"url": unconf_url}]
+        _inject_trackers(mgr, {"H1": unconf_url, "H2": unconf_url})
+        mgr._refresh_torrents()  # 启动首轮: 提前发布基础代, 之后 full_round 全未配
+
+        base = _rows(mgr)
+        base_ver = mgr.web.group_view_ver
+        for h in ("H1", "H2"):
+            assert base[h]["site"] == "Unknown", f"{h} 基础代未配域名保留 Unknown, 不臆造站点名"
+            assert base[h]["site_provisional"] is True, f"{h} 基础代临时态"
+            assert base[h]["site_alert"] == "" and base[h]["site_alert_msg"] == "", f"{h} 基础代临时态压告警"
+        assert mgr.store.by_hash["H1"].tracker_conf is None, "基础代不绑 conf(廉价解析只算展示值)"
+
+        # 客户端取走基础代 -> 非提前发布拍: 无 view_changed / 无迁移, 全靠结算判据补 full
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)
+        final = _rows(mgr)
+        assert mgr.web.group_view_ver == base_ver + 1, "结算恰补一代(不多发布)"
+        for h in ("H1", "H2"):
+            assert final[h]["site_provisional"] is False, f"{h} 补全代临时态复位"
+            assert final[h]["site_alert"] == "no_site_conf", f"{h} 补全代真告警"
+            assert final[h]["site_alert_msg"] == "站点未在配置中", f"{h} 告警文案按既有词表"
+        assert all(mgr.store.by_hash[h].tracker_conf is None for h in ("H1", "H2")), \
+            "真告警源自 conf=None(非误绑)—— 证明是真告警而非假绑定"
+
+        # 反向风险: 再跑一拍静默同步, 判据翻 False 后自灭, 不应每拍多发布一代
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)
+        assert mgr.web.group_view_ver == base_ver + 1, "静默拍不再发布(判据自灭, 幂等)"
+
+
+def test_provisional_settle_reaches_grouped_rows():
+    """归组场景结算面: 已配种子驱动 group_key_migrations 正常落组后, 主动 rebuild 出
+    临时态代, 结算拍的 full 重建必须覆盖到已归组种子的成员行(flat_view 判据不漏
+    groups 视角 —— 归组后 singles 空, 若误用 singles 作判据会假阴性)。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
+        mgr._refresh_torrents()
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)  # 补全代: 归组落位
+        assert len(mgr.web.group_view) == 1, "hhan 种子已归组(H2 绑 conf 驱动迁移)"
+
+        # 归组后主动取一代临时态(参考 :536 写法), host 侧标记 True 写进四视图成员行
+        mgr.web.rebuild_views(site_provisional=True)
+        provisional = _rows(mgr)
+        assert all(r["site_provisional"] is True for r in provisional.values()), "临时态代全部行 True"
+        assert all(r["hash"] in mgr.store.member_to_key for r in provisional.values()), \
+            "两枚种子均已归组(flat 行即组行成员行的同源对象)"
+
+        # 结算拍: 非提前发布 flush 见 flat_view 有 True 行 -> full 重建, 翻 False
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)
+        settled = _rows(mgr)
+        assert all(r["site_provisional"] is False for r in settled.values()), "结算后已归组行全部翻 False"
+        assert len(mgr.web.group_view) == 1, "结算 full 重建后组行仍在(不丢归组)"
+        assert all(r["site"] == "HHan" for r in settled.values()), "结算后站点名由真 conf 派生"
+
+
+def test_provisional_settlement_with_concurrent_delta_forces_full():
+    """结算拍与行级增量同拍: 必须 full, 不能 mark_dirty()(partial)
+
+    partial 路径只重建脏行, 未脏行对象原样复用(_merge_rows 的引用稳定契约)—— 这里只让
+    H1 速度变化成为脏行, H2 未脏: 若结算只 mark_dirty() 走 partial, H2 的 site_provisional
+    仍是 True(判据不灭, 每拍重触发); full=True 强制四视图整体重建才把 H2 也翻 False。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
+        mgr._refresh_torrents()
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)  # 补全代: 归组落位 + 临时态 False
+        mgr.web.rebuild_views(site_provisional=True)  # 主动取一代临时态(仅 H1 后续会脏)
+        assert all(r["site_provisional"] is True for r in _rows(mgr).values())
+        mgr.web.ensure_state(rid=None)  # 消费, 放开门控
+
+        client.torrents["H1"].dlspeed = 512  # 只有 H1 产生行级增量键, H2 未脏
+        mgr._refresh_torrents()  # 非启动轮: 无提前发布, 仅 apply
+        mgr.host.run_sync_line(False)  # 结算拍: 同带 H1 行级键(partial 与 full 的分叉点)
+        settled = _rows(mgr)
+        assert settled["H1"]["site_provisional"] is False, "脏行翻 False(partial 也会重建它)"
+        assert settled["H2"]["site_provisional"] is False, \
+            "未脏行也必须翻 False —— 证明确实走了 full 而非 partial(partial 原样复用 True 行)"

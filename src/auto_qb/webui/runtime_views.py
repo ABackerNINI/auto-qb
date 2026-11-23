@@ -281,6 +281,15 @@ class ViewsMixin:
         hr = getattr(host, "hr", None)
         if hr is not None and self._hr_rev_at_build != hr.revision:
             self.mark_dirty(full=True, reason="hr_revision")
+        # 临时态结算(plan 26-11-23-1339 缺口修复): 已发布代仍是 site_provisional 临时态
+        # (提前发布的基础代), 而本拍不是提前发布(site_provisional=False)时, 必须补一次
+        # full 重建把行翻 False 并按真 conf 重算告警 —— 否则纯未配库/无 group_key_migrations
+        # 时无 view_changed 无迁移, 临时态与空告警滞留, no_site_conf 永不出现。
+        # 用行字段作判据(不新增共享状态); mark_dirty(full=True) 的 reason 留到本次
+        # rebuild 的 _publish_locked fold 段消费, 本代标 full 清累积键; 翻 False 后判据自灭,
+        # 幂等不每拍多发。
+        if not site_provisional and any(r.get("site_provisional") for r in self.flat_view):
+            self.mark_dirty(full=True, reason="provisional_completion")
         web_active = self.is_active()
         # 「上一版有没有人取走」门控(P-03 S10 裁决: 保留, 全口径见 pending_ver 字段声明):
         # 服务端节拍与客户端节拍各自独立定档, 大库下服务端生产的中间版本可能无人消费。
