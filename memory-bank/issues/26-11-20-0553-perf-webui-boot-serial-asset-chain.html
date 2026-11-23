@@ -125,7 +125,7 @@
   <table>
     <tr><th>维度</th><th>结论</th></tr>
     <tr><td>触发条件</td><td>每次页面加载(冷加载/刷新)都要走全链; 单请求延迟越高(远程/代理/磁盘慢)放大越显著</td></tr>
-    <tr><td>影响范围</td><td>三皮肤共用 boot.js; 框架可见时间(导航栏/状态栏/vue mount 前的白屏段)</td></tr>
+    <tr><td>影响范围</td><td>四皮肤（atlas/prism/console/flux）共用 boot.js; 框架可见时间(导航栏/状态栏/vue mount 前的白屏段)</td></tr>
     <tr><td>严重度</td><td>低-中 —— 本地稳态约 1.4s 可接受; 用户复测硬刷新 1-2s, 非本次重启 5-15s 卡顿主因</td></tr>
   </table>
 </section>
@@ -157,11 +157,13 @@
   <ul>
     <li>2026-11-20 05:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-20 07:06 — 真机逐阶段桩坐实为「重启后 5-15s 白屏」<strong>根因</strong>: 109 请求串行 × ttfb 54-166ms = 10.5s(87%); 原「非主因」判断作废(见 §08)</li>
+    <li>2026-11-23 — 真机验收采数完成：P1 框架可见 / P2 严口径 / 带 ?v= 静态重验 / 四皮肤各一次判据全达标，升级路径未采（D3 约束）；证据见 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md；状态按用户拍板保持 <strong>Open</strong>，待升级路径补验后由用户定夺是否翻 Done</li>
+    <li>2026-11-23 — 口径说明：真机判据达标不等于全量闭环（升级路径为最后缺口，不虚报 Done）；静态重验 PASS 仅计带 ?v= 的版本化 URL，不带 ?v= 的裸 URL 回源重验如实记账、不并入 PASS 口径</li>
   </ul>
   <h3>复验</h3>
-  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <p>复验：2026-11-23 以外部真机探针（gitignored 工作区、develop 零桩）重跑启动链判据 —— 已复验：P1 框架可见 / P2 严口径 / 带 ?v= 静态重验 / 四皮肤各一次判据全达标（PASS），升级路径未采。判据明细与实测数字只引证据档、不在此手抄，见 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md。</p>
   <h3>修复后补充</h3>
-  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  <p><b>实际修法</b>：P1 分片改 <code>Promise.all</code> 并发 fetch + 脚本 preload 批量插入（顺序注入仍保序）；P2 静态树内容哈希（<code>?v=</code>）+ immutable 长缓存分流，<code>index.html</code> 保留 no-cache 防升级后旧缓存。落点见计划 memory-bank/plans/26-11-20-0727-plan-webui-boot-first-data.html。<br><b>验证方式</b>：自动化数字引测试基线切片（memory-bank/testing/baselines/26-11-20-0940-webui-boot-static-fingerprint.md）；真机用外部 Playwright 探针（gitignored 工作区、develop 零桩）量框架可见时刻、<code>?v=</code> 静态重验、四皮肤。<br><b>测试数字</b>：仅引用证据档与基线切片路径，不在本 issue 手抄 —— 真机见 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md，自动化见 memory-bank/testing/baselines/26-11-20-0940-webui-boot-static-fingerprint.md。</p>
 </section>
 
 <section id="s8">
