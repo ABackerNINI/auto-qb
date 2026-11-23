@@ -8,9 +8,10 @@ host.run_sync_line 复用发布单点 flush_views -> _publish_locked)先落一�
 
 ## 测试计划(每个测试函数一条)
 - test_startup_first_round_publishes_base_generation_mid_pipeline: 启动首轮管线中恰一次发布,
-  且该代已含落库种子(flat 全量 / singles 全量超集 / groups 空 / site=Unknown 证明早于
-  full_round 的 tracker 匹配); 管线照常跑完(归组落 store), 客户端消费后收尾发布点落补全代
-  (groups 落位 / singles 收缩 / site=HHan / ver 严格 +1)。
+  且该代已含落库种子(flat 全量 / singles 全量超集 / groups 空 / site=HHan 为基础代纯内存
+  推断名, 真 conf 未绑 + HR 派生字段空才证明早于 full_round 的 tracker 匹配); 管线照常
+  跑完(归组落 store), 客户端消费后收尾发布点落补全代(groups 落位 / singles 收缩 /
+  site=HHan / ver 严格 +1)。
 - test_preempting_empty_generation_does_not_skip_early_publish: 首请求抢先发布空代后,
   提前发布不因空代已存在而跳过(R3 竞态形态), 基础代照常落位且 rid 序列 +1。
 - test_non_startup_full_rounds_keep_publish_rhythm: 非启动全量轮零行为变化 —— qB 重启补
@@ -20,8 +21,10 @@ host.run_sync_line 复用发布单点 flush_views -> _publish_locked)先落一�
   首轮管线(full_round/归组不丢), 收尾发布点照常落代(权威发布不被加速器拖累)。
 ### S2 守阵补齐(plan §04 S2 行: 只补 S1 未钉的缺面, 已钉面不重复)
 - test_base_generation_lacks_site_derived_fields_completion_fills_them: 两代语义细面 ——
-  基础代 site 派生面全空(site=Unknown / hr_tag="" / hr_triggered=False / hr_req_time=0);
-  补全代 HR 派生字段落位(tracker_conf 匹配后现算: hr_tag 文本 / hr_triggered / hr_req_time);
+  基础代站点名走廉价解析推断(site=HHan / site_provisional=True / site_alert=""), 但真 conf
+  未绑故 HR 派生面全空(hr_tag="" / hr_triggered=False / hr_req_time=0)—— "早于 full_round"
+  的证明从 site=Unknown 转移到 HR 空 + 临时态; 补全代 HR 派生字段落位(tracker_conf 匹配后
+  现算: hr_tag 文本 / hr_triggered / hr_req_time);
   tracker 错误原因取数器在任务线(module.on_task_line advance_error_reasons -> flush_views),
   同步线两代里错误种子只有笼统回退「错误」(views._error_reason 兜底), 具体原因由任务线
   一代补齐(各占一代, ver 逐代 +1)。
@@ -37,6 +40,20 @@ host.run_sync_line 复用发布单点 flush_views -> _publish_locked)先落一�
   site_provisional=True(「尚未评估」而非「未配置」)。
 - test_non_startup_round_site_provisional_false: 非启动轮(补全代)站点名由真 tracker_conf
   派生, site_provisional=False(临时态不串味)。
+### S3 语义守阵收口(plan 26-11-23-1339 §04 S3 行: 补 S1/S2 尚未覆盖的语义面)
+- test_unconfigured_site_alert_only_at_completion_generation: 真未配置站(域名不在 config)
+  基础代临时态压 alert(空), 二拍真 match 仍 None 时按 _site_alert 报 no_site_conf;
+  由另一枚已配种子绑定 conf 置脏驱动补全代发布。
+- test_backup_tracker_site_residual_self_heals_at_completion: R1 备用 tracker 残差自愈 ——
+  首 tracker host 未配 + 备条 hhan: 基础代只用 rec.tracker 落 Unknown + 临时态不告警,
+  二拍真 match 用全量 tracker_urls 补齐 HHan。
+- test_member_rows_consistent_across_four_views_under_provisional: R5 四视图成员行同代一致
+  —— flat/singles/groups 成员/shows 剧行 e.members 经 memberByHash(flat 索引等价)解析行,
+  逐视角断 site_provisional=True + 推断名一致; shows 剧行本体聚合字段不断言。
+- test_base_generation_cheap_parse_never_binds_tracker_conf: R4 廉价解析只算展示值 —— 基础代
+  site=HHan 但 rec.tracker_conf is None(HR 派生空见 :256-257 同族断言)。
+- test_base_generation_makes_zero_qb_tracker_calls: R7 零 qB 调用计数桩 —— 基础代发布期
+  torrents_trackers 调用数 0; 真 match 在前拍之后才拉 qB。
 """
 
 import json
@@ -122,8 +139,10 @@ def _spy_publishes(mgr):
 
 def test_startup_first_round_publishes_base_generation_mid_pipeline():
     """启动首轮: apply_sync 后即有含落库数据的基础代; 管线照常, 第二跳补全"""
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
     with tempfile.TemporaryDirectory() as td:
         mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
         snaps, patcher = _spy_publishes(mgr)
         with patcher:
             mgr._refresh_torrents()  # 启动首轮(rounds_applied 落库前 == 0)
@@ -133,7 +152,11 @@ def test_startup_first_round_publishes_base_generation_mid_pipeline():
             assert base["singles"] == ["H1", "H2"], "基础代 singles 为全量超集(归组前全体未归组)"
             assert base["group_rows"] == [], "基础代 groups 空(组键依赖文件表, 内容问题非结构问题)"
             assert len(base["show_keys"]) == 1, "shows 按名称解析可给(两集同剧一行)"
-            assert base["sites"] == ["Unknown", "Unknown"], ("早于 full_round 的 tracker 匹配(证明发布点在 need_validate 分支之前)")
+            assert base["sites"] == ["HHan", "HHan"], (
+                "基础代纯内存推断名(命中已配 host 取 conf.tags[0]), 仍证明早于 full_round —— "
+                "真 conf 未绑, 见 test_base_generation_lacks_site_derived_fields_completion_fills_them "
+                "的 site_provisional=True / HR 派生全空断言"
+            )
             assert mgr.store.rounds_applied == 1
             # 管线照常继续: 归组在提前发布之后跑完(store 面)
             assert len(mgr.store.groups) == 1, "归组管线不被提前发布打断"
@@ -236,23 +259,30 @@ def _rows(mgr):
 
 
 def test_base_generation_lacks_site_derived_fields_completion_fills_them():
-    """两代语义细面(S2): 基础代 site 派生面全空(早于 full_round 的 tracker 匹配),
-    补全代 HR 派生字段落位; tracker 错误原因取数器在任务线 —— 两代里错误种子只有笼统
-    回退「错误」(状态自明面), 具体原因由任务线一代补齐
+    """两代语义细面(S2 + 26-11-23-1339 S3 改写): 基础代站点名走廉价解析推断(site=HHan /
+    site_provisional=True / site_alert=""), 但真 conf 未绑故 HR 派生面全空; 补全代 HR 派生
+    字段落位; tracker 错误原因取数器在任务线 —— 两代里错误种子只有笼统回退「错误」(状态
+    自明面), 具体原因由任务线一代补齐
 
-    机制: HR 展示字段与 site 都由 rec.tracker_conf 派生(views.hr_view_fields 在 conf=None
-    时回全空值), 基础代发布点在 full_round/added 匹配之前 -> 全空是内容问题非结构问题;
-    错误原因(tracker_error_msg)的唯一写点是 WebviewMixin.refresh_tracker_health, 挂在
-    module.on_task_line(advance_error_reasons -> flush_views), 不在同步线管线内 ——
+    机制: site 在基础代由 rec.tracker 纯内存推断(plan 26-11-23-1339 S1), 补全代才由真
+    tracker_conf 派生; HR 展示字段仍只由 rec.tracker_conf 派生(views.hr_view_fields 在
+    conf=None 时回全空值), 基础代发布点在 full_round/added 匹配之前 -> HR 全空是内容问题
+    非结构问题 —— "早于 full_round" 的证明从 site=Unknown 转移到 HR 空 + 临时态, 不再依赖
+    Unknown; 错误原因(tracker_error_msg)的唯一写点是 WebviewMixin.refresh_tracker_health,
+    挂在 module.on_task_line(advance_error_reasons -> flush_views), 不在同步线管线内 ——
     _error_reason 在预取未跑时回退状态文本「错误」(views._error_reason 兜底),
     具体原因补齐自占一代, ver 逐代 +1。
     """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
     with tempfile.TemporaryDirectory() as td:
         mgr, _client = _boot_env(td, hr_tag="HR-3D", errored=True)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
         mgr._refresh_torrents()  # 提前发布后管线照常跑完; 此刻当前代 = 基础代(收尾发布在 sync 线尾段)
         base = _rows(mgr)
         ver_base = mgr.web.group_view_ver
-        assert base["H1"]["site"] == "Unknown", "基础代 tracker 未匹配(S1 已钉形状, 此处钉派生字段面)"
+        assert base["H1"]["site"] == "HHan", "基础代站点名由 rec.tracker 廉价解析推断(非 conf 派生)"
+        assert base["H1"]["site_provisional"] is True, "基础代站点名为临时态(供前端压暗)"
+        assert base["H1"]["site_alert"] == "" and base["H1"]["site_alert_msg"] == "", "临时态告警清空(尚未评估)"
         assert base["H1"]["hr_tag"] == "" and base["H1"]["hr_triggered"] is False, "HR 展示字段全空(tracker_conf=None)"
         assert base["H1"]["hr_req_time"] == 0, "HR 要求值未派生(全空值字段的 0 哨兵)"
         assert base["H3"]["error_reason"] == "错误", "错误种子基础代只有笼统回退(预取未跑, tracker_error_msg 空)"
@@ -391,3 +421,181 @@ def test_non_startup_round_site_provisional_false():
         final = _rows(mgr)["H1"]
         assert final["site_provisional"] is False, "补全代临时态标记复位(False)"
         assert final["site"] == "HHan", "补全代站点名由真 tracker_conf 派生"
+
+
+def test_unconfigured_site_alert_only_at_completion_generation():
+    """真未配置站: 基础代临时态压告警(空), 第二拍真 match 仍 None 才报 no_site_conf
+
+    域名 tracker.unconfigured.example 不在 config.trackers —— 廉价解析未命中, 基础代保留
+    Unknown 但 site_provisional=True 且告警清空(「尚未评估」); 补全代真 match 用全量
+    tracker_urls 仍匹配不到 -> rec.tracker_conf is None, _site_alert(views.py:334-337)见
+    conf=None + 真实 tracker URL(非虚拟前缀) -> no_site_conf /「站点未在配置中」。
+    补全代的发布由另一枚已配种子 H2 绑定 conf 置 view_changed 驱动 —— 若全库皆未配则无
+    视图字段变化, 收尾 flush 不重建(见交付报告的实施发现), 故用混合场景钉真实守阵面。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+    unconf_url = "https://tracker.unconfigured.example/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client = _boot_env(td)
+        client.trackers_map["H1"] = [{"url": unconf_url}]
+        client.trackers_map["H2"] = [{"url": hhan_url}]
+        _inject_trackers(mgr, {"H1": unconf_url, "H2": hhan_url})
+        mgr._refresh_torrents()
+        base = _rows(mgr)
+        ver_base = mgr.web.group_view_ver
+        assert base["H1"]["site"] == "Unknown", "未配域名: 基础代保留 Unknown, 不臆造站点名"
+        assert base["H1"]["site_provisional"] is True
+        assert base["H1"]["site_alert"] == "" and base["H1"]["site_alert_msg"] == "", "基础代临时态压告警"
+        assert base["H2"]["site"] == "HHan" and base["H2"]["site_alert"] == "", "已配站基础代同样无假告警"
+        assert mgr.store.by_hash["H1"].tracker_conf is None, "基础代不绑 conf(廉价解析只算展示值)"
+
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)
+        final = _rows(mgr)
+        assert mgr.web.group_view_ver == ver_base + 1, "补全代恰 +1"
+        assert final["H1"]["site"] == "Unknown", "未配站补全代仍 Unknown(真 match 也未命中)"
+        assert final["H1"]["site_provisional"] is False, "补全代临时态复位"
+        assert final["H1"]["site_alert"] == "no_site_conf", "第二拍真告警: 未配置站报 no_site_conf"
+        assert final["H1"]["site_alert_msg"] == "站点未在配置中", "告警文案按既有词表"
+        assert final["H2"]["site"] == "HHan" and final["H2"]["site_alert"] == "", "已配站补全代常态无告警"
+
+
+def test_backup_tracker_site_residual_self_heals_at_completion():
+    """R1 备用 tracker 残差自愈: 首 host 未配 + 备条 hhan, 二拍用全量 URLs 补齐真名
+
+    基础代 _member_view 只把 rec.tracker(首个 URL)喂 match_tracker_confs -> 未命中落 Unknown
+    + 临时态不告警(接受基础代残差, 与 0269 两跳语义一致); 补全代 tracker_mod.match 用
+    rec.tracker_urls(client)(trackers_map 全量两条) -> 备条 hhan 命中, 站点名 HHan、
+    site_provisional 复位。
+    """
+    first_url = "https://tracker.unconfigured-first.example/announce.php"
+    backup_url = "https://tracker.hhanclub.net/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client = _boot_env(td)
+        client.trackers_map["H1"] = [{"url": first_url}, {"url": backup_url}]
+        client.trackers_map["H2"] = [{"url": first_url}, {"url": backup_url}]
+        _inject_trackers(mgr, {"H1": first_url, "H2": first_url})
+        mgr._refresh_torrents()
+        base = _rows(mgr)["H1"]
+        assert base["site"] == "Unknown", "基础代只用首 tracker(未配) -> Unknown 残差"
+        assert base["site_provisional"] is True
+        assert base["site_alert"] == "", "残差也不告警(临时态压)"
+
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)
+        final = _rows(mgr)["H1"]
+        assert final["site"] == "HHan", "二拍真 match 用全量 tracker_urls, 备条 hhan 命中补齐"
+        assert final["site_provisional"] is False
+        assert final["site_alert"] == "", "备条已配 -> 无 no_site_conf"
+
+
+def test_member_rows_consistent_across_four_views_under_provisional():
+    """R5 四视图成员行同代一致: 逐视角断 site_provisional 与推断名一致
+
+    flat/singles 行本身即 _member_view; groups 成员 / shows 剧行 e.members 只带 hash, 经
+    memberByHash(前端 decorate.js:549-554 从 groups U singles U torrents 建索引; 此处以
+    flat_view = torrents 全量 SEED_ITEM 作等价索引)解析出同一份 _member_view 行。shows 剧行
+    本体的 node['sites'] 聚合字段前端未消费(views_episodes.py:45-46), 按 plan R5 不断言。
+    真启动路径基础代 groups 空(组键依赖文件表, 归组在 full_round 后), 另在归组落位后经
+    rebuild_views(site_provisional=True)再取一代临时态, 覆盖 groups 成员视角。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+
+    def collect(mgr, index):
+        views = {"flat": [], "singles": [], "groups": [], "shows": []}
+        for r in mgr.web.flat_view:
+            views["flat"].append(index[r["hash"]])
+        for r in mgr.web.singles_view:
+            views["singles"].append(index[r["hash"]])
+        for g in mgr.web.group_view:
+            for h in g["members"]:
+                views["groups"].append(index[h])
+        for show in mgr.web.shows_view["list"]:
+            for season in show["seasons"]:
+                for ep in season["episodes"]:
+                    for h in ep["members"]:
+                        views["shows"].append(index[h])
+        return views
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
+        mgr._refresh_torrents()  # 当前代 = 真启动路径基础代(临时态)
+
+        base = collect(mgr, _rows(mgr))
+        assert base["groups"] == [], "基础代 groups 空(归组在 full_round 后)"
+        for name in ("flat", "singles", "shows"):
+            assert base[name], f"基础代 {name} 视角应有成员行"
+            for row in base[name]:
+                assert row["site_provisional"] is True, f"基础代 {name} 成员行临时态一致"
+                assert row["site"] == "HHan", f"基础代 {name} 成员行推断名一致"
+        # shows 剧行本体的 node['sites'] 聚合(此时代仍为 ['Unknown'])按 R5 不断言
+
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)  # 补全代: 归组落位
+        mgr.web.rebuild_views(site_provisional=True)  # 归组后再取一代临时态, 覆盖 groups 成员视角
+        provisional = collect(mgr, _rows(mgr))
+        assert provisional["flat"] and provisional["groups"] and provisional["shows"], "临时态代四视角成员行齐备"
+        # singles 在归组落位后恒空(全体已归组), 无成员行可查 —— 非空视角逐行断同代一致
+        for name, rows in provisional.items():
+            for row in rows:
+                assert row["site_provisional"] is True, f"临时态代 {name} 成员行临时态一致"
+                assert row["site"] == "HHan", f"临时态代 {name} 成员行推断名一致"
+
+
+def test_base_generation_cheap_parse_never_binds_tracker_conf():
+    """R4 廉价解析不误绑 conf: 基础代 site=HHan 但 rec.tracker_conf is None
+
+    设计底线只算展示值 —— 若把 match_tracker_confs 结果写回 rec.tracker_conf, 会带上规则 /
+    HR / 限速副作用, 且等于把真匹配挪前抵消提前发布。这里在基础代发布后直接查 store 记录:
+    推断名已出、conf 仍未绑(HR 派生字段全空见
+    test_base_generation_lacks_site_derived_fields_completion_fills_them 的同族断言)。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
+        state_at_publish = []
+        real_publish = mgr.web._publish_locked
+
+        def spy(*args, **kwargs):
+            real_publish(*args, **kwargs)
+            # 必须在此刻采: full_round 在提前发布之后跑, 到 _refresh_torrents 返回时 conf 早已绑上
+            state_at_publish.append((_rows(mgr)["H1"]["site"], mgr.store.by_hash["H1"].tracker_conf))
+
+        with mock.patch.object(mgr.web, "_publish_locked", spy):
+            mgr._refresh_torrents()
+        assert state_at_publish == [("HHan", None)], "基础代发布当刻: 推断名已出但 rec.tracker_conf 仍 None"
+
+
+def test_base_generation_makes_zero_qb_tracker_calls():
+    """R7 基础代零 qB tracker 调用: 纯内存廉价解析不触发 torrents_trackers
+
+    计数桩包 client.torrents_trackers, 在 _publish_locked 出口采当前累计调用数: 启动首轮
+    管线中唯一一次发布(基础代)时计数必须为 0; 真 match 发生在提前发布之后的 full_round,
+    此时才拉 qB —— 只钉「基础代 = 0」不变量, 不钉补全代具体调用次数(随实现变化)。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url, "H2": hhan_url})
+        tracker_calls = []
+        calls_at_publish = []
+        real_trackers = client.torrents_trackers
+
+        def counting(h):
+            tracker_calls.append(h)
+            return real_trackers(h)
+
+        real_publish = mgr.web._publish_locked
+
+        def spy(*args, **kwargs):
+            real_publish(*args, **kwargs)
+            calls_at_publish.append(len(tracker_calls))
+
+        with mock.patch.object(client, "torrents_trackers",
+                               counting), mock.patch.object(mgr.web, "_publish_locked", spy):
+            mgr._refresh_torrents()
+            assert len(calls_at_publish) == 1, "启动首轮管线中恰一次发布(基础代)"
+            assert calls_at_publish[0] == 0, "基础代纯内存推断, 零 torrents_trackers 调用"
+            assert tracker_calls, "真 match 在提前发布之后的 full_round 才拉 qB"
