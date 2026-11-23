@@ -1,9 +1,9 @@
 # 26-11-20-webui-boot-static-fingerprint — WebUI 静态资源并发化 + 查询参数指纹长缓存（计划 26-11-20-0727 两期落地）
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-20
 **Updated:** 2026-11-23
-**Summary:** WebUI 首屏静态资源两期根治落地: P1 boot.js 分片/脚本并发化 + P2 静态树哈希 V 与 ?v= 指纹长缓存 immutable 分流, 四皮肤共用; 真机验收 2026-11-23 已完成（判据全达标、升级路径未采，证据档 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md）; 档案 Status 保守保持 In Progress（issue 0553 状态待用户定夺）
+**Summary:** WebUI 首屏静态资源两期根治落地: P1 boot.js 分片/脚本并发化 + P2 静态树哈希 V 与 ?v= 指纹长缓存 immutable 分流, 四皮肤共用; 真机验收 2026-11-23 已完成（判据全达标、升级路径未采，证据档 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md）; task 已完成（代码 + 自动化测试 + 真机判据全达标，证据档见上）；issue 0553 仍由用户决定是否翻 Done（前拍板保持 Open）
 **Topics:** webui-boot-static-fingerprint
 **Refs:** memory-bank/plans/26-11-20-0727-plan-webui-boot-first-data.html, memory-bank/issues/26-11-20-0553-perf-webui-boot-serial-asset-chain.html, memory-bank/issues/26-11-20-0726-question-webui-build-toolchain.html, memory-bank/testing/baselines/26-11-20-0940-webui-boot-static-fingerprint.md
 
@@ -54,4 +54,4 @@ WebUI 重启后首屏静态资源链路（分片/脚本串行 + 每次 ETag 重�
 - 真机验收完成并采到真实数字：P1 框架可见 / P2 严口径 / 带 ?v= 静态重验 / 四皮肤各一次判据全达标，升级路径未采（D3 约束）。证据档 `memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md`（数字只进该证据档，本篇不抄裸数字）；自动化测试基线 `memory-bank/testing/baselines/26-11-20-0940-webui-boot-static-fingerprint.md`。
 - 子任务表 P1-3 / P2-4 真机两行按判据翻 Done(2026-11-23)，升级路径未采缺口如实留痕。
 - 哈希漂移同步：原 26-11-20 三笔提交的哈希经 rebase 变更，本篇与基线切片引用已替换为现哈希（68a8c693 / 4401b13b / 37e8c7f8，均核实存在且在 HEAD 祖先链）。
-- 计划 0727 已 Done（26-11-20-0954）；issue 0553 §07 已回填真机结论并按用户拍板保持 Open，是否最终翻 Done 交回用户定夺；档案 Status 保守保持 In Progress，不抢先翻 Done。
+- 计划 0727 已 Done（26-11-20-0954）；issue 0553 §07 已回填真机结论并按用户拍板保持 Open，是否最终翻 Done 交回用户定夺；task 已完成（代码 + 自动化测试 + 真机判据全达标，证据档见本节上），按用户新指令翻 Done；本轮只翻 task，issue 0553 前拍板不变、仍 Open。
