@@ -13,7 +13,8 @@ TOTAL                                                28957     45  10328     63 
 
 ## 本改动面
 
-- 三笔本地提交(均 `ship.commit --no-push`, 分支 `feat/webui-boot-first-data-0727`): `204f69df` P1 分片 Promise.all + 脚本 preload 批量插入 / `072f2734` P2-a 静态树哈希 + HTML 令牌替换 / `c5cee5f0` P2-b withV + immutable 四态分流
+- 三笔本地提交(均 `ship.commit --no-push`, 分支 `feat/webui-boot-first-data-0727`): `68a8c693` P1 分片 Promise.all + 脚本 preload 批量插入 / `4401b13b` P2-a 静态树哈希 + HTML 令牌替换 / `37e8c7f8` P2-b withV + immutable 四态分流
+- 哈希引用注：原 26-11-20 三笔提交的哈希经 rebase 变更，上面引用已替换为现哈希（均核实存在且在 HEAD 祖先链）；测试数字与验收口径不变。
 - `src/auto_qb/webui/static/shared/boot.js`: Promise.all 分片并发 + index 归位; link preload 脚本预取 + 按序 async=false 批量插入; withV() 三处统一追加 ?v=
 - `src/auto_qb/webui/server/static_version.py`(新): static 树内容哈希 V(白名单扩展名 + 长度前缀排序, sha256 前 16 位), 挂载时算一次缓存
 - `src/auto_qb/webui/server/static_ui.py`: 响应层 HTML 令牌替换(HEAD 提前 return) + 缓存分流(仅 v 匹配 + 非 HTML + 2xx → immutable)
