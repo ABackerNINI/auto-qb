@@ -37,6 +37,12 @@ v3「成功一行, 失败一行(原因 + 下一步)」保留, **结果行逐字�
 会被静默丢弃, `status -sb` 的 ahead/behind 是快照, 都不可信(单点: memory-bank/pitfalls/git/refs.md)。
 合并/变基失败一律自动回滚现场, sync 失败后仓库状态与跑之前一致 —— 写状态的命令必须比只读的更干净地失败。
 
+远端无分支 ≠ 离线(2026-11-23): ls-remote rc=0 但输出里没有 refs/heads/<branch> = 远端**没有这个分支**
+(新建 / 从未推送), 失败行只如实报「远端 <remote>/<branch> 不存在(分支未推送, 非离线)」—— 本地分支大多
+不需要推送(平时走 develop 同步), 不在错误行里塞 `git push -u` 指引; 只有 ls-remote 非 0(网络 / 远端不可达)
+才报「(离线?) —— 联网后重跑」。旧文案把两者混为一谈, 让人去查网络、反复重跑, 而重跑恒败 ——
+死锁见 pitfalls/git/unpushed-branch-sync.md。
+
 网络容错(2026-10-06): 本脚本每条 git 命令都走 `_pipeline.run_git` —— **单次超时 20s + 有界重试**
 (push / fetch / ls-remote 这类网络子命令**失败即重试**, 默认 3 次, 全部失败才判失败; 非幂等的本地写
 只给超时、不给重试)。Gitee 间歇性卡住时旧行为要等满 120s 才失败一次 ⇒ 提交被拆成「未推送 + 手工补推」,
@@ -74,20 +80,35 @@ from _pipeline import (  # noqa: E402
 from _ship_config import CONFIG_NAME, ConfigMissing, load_config, resolve_branch, resolve_main_remote  # noqa: E402
 
 
-def remote_sha(name: str, branch: str, attempts: int = GIT_ATTEMPTS) -> str:
-    """取远端 ref 真值(空串 = 取不到)。**取不到 ≠ 不一致** —— 调用方按「无法核实」如实说。
+def remote_sha_probe(name: str, branch: str, attempts: int = GIT_ATTEMPTS) -> tuple[str, str]:
+    """取远端 ref 真值 + 取不到的性质, 供失败行分清「远端没这个分支」与「网络不可达」。
+
+    返回 (sha, miss): sha 非空 = 取到(miss 恒空); sha 空时 miss 为
+      'absent'      —— ls-remote 成功(rc=0)但输出里没有 refs/heads/<branch>: 远端**没有这个分支**;
+      'unreachable' —— ls-remote 非 0: 网络 / 远端不可达。
+    必须分开报: 旧实现把两者都写成「(离线?) —— 联网后重跑」, 未推送分支的使用者据此去查网络、
+    反复重跑, 而重跑恒败 —— 死锁见 memory-bank/pitfalls/git/unpushed-branch-sync.md。
 
     「重试」已下沉到 git 层(`_pipeline.run_git`: 网络子命令失败即重试, 单次超时 20s) ——
     这里**不再套第二层**, 否则 ls-remote 会被重试 9 次, 离线时白等三个退避周期(2026-10-06)。
     attempts 只给**拒跑路径上的旁证查询**收紧到 1(2026-10-17: commit.py 树净判"本地是否领先远端"),
     那里不值得为一句"无事可做"等三个退避周期; 同步判据自己一律用默认值。
     """
-    out = git("ls-remote", name, branch, check=False, attempts=attempts)
-    for line in out.splitlines():
+    proc = git_run("ls-remote", name, branch, attempts=attempts)
+    for line in proc.stdout.splitlines():
         parts = line.split()
         if len(parts) == 2 and parts[1] == f"refs/heads/{branch}":
-            return parts[0]
-    return ""
+            return parts[0], ""
+    return "", "unreachable" if proc.returncode != 0 else "absent"
+
+
+def remote_sha(name: str, branch: str, attempts: int = GIT_ATTEMPTS) -> str:
+    """取远端 ref 真值(空串 = 取不到)。**取不到 ≠ 不一致** —— 调用方按「无法核实」如实说。
+
+    只要 ref 真值、不问性质的调用方(commit.py 旁证 / push.py 推后核对)沿用本入口;
+    需要区分「远端无分支」与「不可达」的同步失败行用 remote_sha_probe。
+    """
+    return remote_sha_probe(name, branch, attempts)[0]
 
 
 # 树脏挡路的**解锁配方** —— 两类脏分支失败行都必须带上它(不带 = 双向死锁, 见模块 docstring)。
@@ -426,8 +447,12 @@ def run_sync(steps: list[str] | None = None) -> tuple[bool, str]:
         return False, f"找不到主线远端 —— git remote -v 核对后改 {CONFIG_NAME} 的 main_candidates"
 
     git("fetch", main, branch, check=False)  # 只为把远端 tip 的对象拉进对象库; 判据不读 refs/remotes
-    rsha = remote_sha(main, branch)
+    rsha, miss = remote_sha_probe(main, branch)
     if not rsha:
+        if miss == "absent":
+            # ls-remote 通了、远端却没有同名分支 —— 不是离线, 重跑也不会出现该分支。
+            # 只报事实: 本地分支大多不需要推送(平时走 develop 同步), 不塞 push -u 指引。
+            return False, f"远端 {main}/{branch} 不存在(分支未推送, 非离线)"
         return False, f"拿不到远端 {main}/{branch} (离线?) —— 联网后重跑"
     head = git("rev-parse", "HEAD", check=False)
     if not head:

@@ -23,6 +23,8 @@ v3.1 步骤行(「改写留痕」; 纪律见 `_pipeline.py`「步骤登记」段
 - test_diverged_dirty_refuses           分叉+树脏 → 失败(自带解锁配方, 不再给「先提交」这条死锁指引)
 - test_dirty_block_flag_recognized      脏类失败行被 is_dirty_block 认出; 冲突/离线类不被认成脏类
 - test_offline_reports_unreachable      远端不可达 → 拿不到远端
+- test_remote_branch_absent_reports_unpushed  远端通但无同名分支 → 只报「不存在(分支未推送, 非离线)」事实,
+                                       不塞 push -u 指引, 不写「离线?/联网后重跑」(旧文案误导人查网络)
 - test_staged_overflow_refuses          staged 暴增 → 拒绝(ref 回退信号)
 - test_main_prints_one_line_contract    main() 输出形态: 无步骤时成功一行 / 冲突行恰为约定模板
 - test_cli_flag_reaches_main_without_running_sync  裸调 main() 时 sys.argv 的参数必须到达
@@ -399,6 +401,21 @@ def test_offline_reports_unreachable(env, monkeypatch):
     ok, line = sync_mod.run_sync()
     assert not ok
     assert "拿不到远端 origin/develop" in line and "联网后重跑" in line
+
+
+def test_remote_branch_absent_reports_unpushed(env, monkeypatch):
+    monkeypatch.chdir(env.a)
+    # 远端可达(develop 在), 但当前特性分支从未推送 —— ls-remote rc=0 且无 refs/heads/<branch>。
+    _git(env.a, "checkout", "-b", "feat/new-branch")
+    assert _git(env.origin, "for-each-ref", "--format=%(refname)", "refs/heads/") == "refs/heads/develop"
+    ok, line = sync_mod.run_sync()
+    assert not ok
+    assert "远端 origin/feat/new-branch 不存在" in line
+    assert "非离线" in line
+    # 旧文案的两处误导都不能留: 「离线?」让人查网络, 「联网后重跑」让人空等。
+    # 本地分支不需要推送 —— 也不要塞 push -u 指引(用户平时走 develop 同步)
+    assert "离线?" not in line and "联网后重跑" not in line
+    assert "push -u" not in line
 
 
 def test_staged_overflow_refuses(env, monkeypatch):
