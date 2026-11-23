@@ -31,6 +31,12 @@ host.run_sync_line 复用发布单点 flush_views -> _publish_locked)先落一�
   协商客户端回 full=true + 数组(协议合法回退, 不含 delta/removed 键), 载荷 json 可序列化;
   未协商客户端历史形状逐键兼容(无 full/delta/removed); 补全代消费后一拍行级变化
   (delta_fields 速度字段)照常回增量(R5 键集) —— "rid<ver 回增量"在两代序列存活的时间线内成立。
+- test_base_generation_provisional_site_inference: 基础代站点临时态分支(plan 26-11-23-1339 S1) ——
+  纯内存从 rec.tracker 推断站点名: 命中已配 host 取 conf.tags[0]、tags 空走 conf.name、
+  未配 host 保留 Unknown、虚拟 tracker 前缀跳过; 命中/未命中都清空 site_alert 且
+  site_provisional=True(「尚未评估」而非「未配置」)。
+- test_non_startup_round_site_provisional_false: 非启动轮(补全代)站点名由真 tracker_conf
+  派生, site_provisional=False(临时态不串味)。
 """
 
 import json
@@ -70,6 +76,26 @@ def _boot_env(td, hr_tag="", errored=False):
     return mgr, client
 
 
+def _inject_trackers(mgr, url_by_hash):
+    """apply_sync 后、启动首轮提前发布前, 给落库记录注入 rec.tracker
+
+    tracker 是快照扩展字段(_EXTENSION_FIELDS), 不在 REQUIRED_TORRENT_FIELDS, 故
+    FakeClient.sync_maindata 的字段表不带它 —— 直接注入 store 记录, 驱动真启动路径
+    (_refresh_torrents -> run_sync_line -> flush_views -> _publish_locked -> _member_view)。
+    """
+    real_apply = mgr.store.apply_sync
+
+    def apply_with_trackers(api):
+        added, removed = real_apply(api)
+        for h, url in url_by_hash.items():
+            rec = mgr.store.by_hash.get(h)
+            if rec is not None:
+                rec.tracker = url
+        return added, removed
+
+    mgr.store.apply_sync = apply_with_trackers
+
+
 def _snapshot(mgr):
     """一次发布后的四视图形状快照(同代同临界区, 「四视图同轮发布」铁律的观察面)"""
     return {
@@ -87,8 +113,8 @@ def _spy_publishes(mgr):
     snaps = []
     orig = mgr.web._publish_locked
 
-    def spy():
-        orig()
+    def spy(*args, **kwargs):
+        orig(*args, **kwargs)
         snaps.append(_snapshot(mgr))
 
     return snaps, mock.patch.object(mgr.web, "_publish_locked", spy)
@@ -184,11 +210,11 @@ def test_early_publish_failure_does_not_break_pipeline():
         orig = mgr.web._publish_locked
         calls = {"n": 0}
 
-        def flaky():
+        def flaky(*args, **kwargs):
             calls["n"] += 1
             if calls["n"] == 1:
                 raise RuntimeError("early publish boom")
-            orig()
+            orig(*args, **kwargs)
 
         with mock.patch.object(mgr.web, "_publish_locked", flaky):
             with capture_logs("auto_qb.core.qbmanager") as logs:
@@ -298,3 +324,70 @@ def test_delta_client_two_generation_sequence_compatibility():
         assert {r["hash"] for r in third["delta"]["torrents"]} == {"H1"}, "增量桶 = 变化行"
         assert third["removed"] == {"torrents": []}
         json.dumps(third, ensure_ascii=False)
+
+
+def test_base_generation_provisional_site_inference():
+    """基础代站点临时态分支(plan 26-11-23-1339 S1): 纯内存从 rec.tracker 推断站点名
+
+    views_row._member_view 在 site_provisional=True 时不绑 rec.tracker_conf、不调 qB, 只按
+    rec.tracker 的 hostname 精确匹配 config.trackers: 命中取 conf.tags[0](tags 空则 conf.name),
+    未命中/虚拟 tracker 前缀("**"/"[DHT]"/"[PeX]"/"[LSD]")保留 r.tracker_name=Unknown;
+    命中与否都清空 site_alert(「尚未评估」而非「未配置」), 且 site_provisional=True 供前端压暗。
+    用 _inject_trackers 驱动真启动路径(_refresh_torrents 提前发布), 断言发布出的真实行值。
+    """
+    hhan_url = "https://tracker.hhanclub.net/announce.php"
+    with tempfile.TemporaryDirectory() as td:
+        # 1)已配 host 命中 -> conf.tags[0]=HHan, alert 空, 临时态标记 True
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": hhan_url})
+        mgr._refresh_torrents()  # 启动首轮: 基础代经真发布路径落位
+        row = _rows(mgr)["H1"]
+        assert row["site"] == "HHan", "命中已配 host: 纯内存推断取 conf.tags[0]=HHan"
+        assert row["site_provisional"] is True, "基础代站点名是临时推断值(供前端压暗)"
+        assert row["site_alert"] == "" and row["site_alert_msg"] == "", "临时态告警清空(尚未评估)"
+
+    with tempfile.TemporaryDirectory() as td:
+        # 2)未配 host -> 匹配未命中, 保留 Unknown, alert 空, 临时态标记 True
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": "https://tracker.unconfigured.example/announce.php"})
+        mgr._refresh_torrents()
+        row = _rows(mgr)["H1"]
+        assert row["site"] == "Unknown", "未配 host: 保留 rec.tracker_name=Unknown, 不臆造站点名"
+        assert row["site_provisional"] is True
+        assert row["site_alert"] == "" and row["site_alert_msg"] == "", "未命中同样清空告警"
+
+    with tempfile.TemporaryDirectory() as td:
+        # 3)虚拟 tracker 前缀 -> 跳过匹配, 保留 Unknown
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": "[DHT]9abc"})
+        mgr._refresh_torrents()
+        row = _rows(mgr)["H1"]
+        assert row["site"] == "Unknown", "虚拟 tracker 跳过 match, 保留 Unknown"
+        assert row["site_provisional"] is True
+        assert row["site_alert"] == ""
+
+    with tempfile.TemporaryDirectory() as td:
+        # 4)tags 空 -> conf.name(命中但无 tags 时回退站点配置名)
+        mgr, _client = _boot_env(td)
+        mgr.config.trackers["HHan"].tags = []
+        _inject_trackers(mgr, {"H1": hhan_url})
+        mgr._refresh_torrents()
+        row = _rows(mgr)["H1"]
+        assert row["site"] == "HHan", "tags 空: 推断名回退 conf.name=HHan"
+        assert row["site_provisional"] is True
+
+
+def test_non_startup_round_site_provisional_false():
+    """非启动轮(补全代): 站点名由真 tracker_conf 派生, site_provisional=False(临时态不串味)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _client = _boot_env(td)
+        _inject_trackers(mgr, {"H1": "https://tracker.hhanclub.net/announce.php"})
+        mgr._refresh_torrents()  # 启动轮基础代: 临时态
+        base = _rows(mgr)["H1"]
+        assert base["site_provisional"] is True and base["site"] == "HHan", "基础代走临时态"
+        # 消费基础代 -> 同步线尾段常规调用(不带 site_provisional)落补全代
+        mgr.web.ensure_state(rid=None)
+        mgr.host.run_sync_line(False)
+        final = _rows(mgr)["H1"]
+        assert final["site_provisional"] is False, "补全代临时态标记复位(False)"
+        assert final["site"] == "HHan", "补全代站点名由真 tracker_conf 派生"

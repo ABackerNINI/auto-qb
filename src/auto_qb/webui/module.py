@@ -221,9 +221,13 @@ class WebUIModule(BaseModule):
         web.drain_probe_receipts()
         return changed
 
-    def on_sync_line(self, force: bool) -> None:
-        """同步线收尾: 视图发布(「要不要重建」门控在门面, 内核不判表现层细节)"""
-        self._manager.web.flush_views(force=force)
+    def on_sync_line(self, force: bool, site_provisional: bool = False) -> None:
+        """同步线收尾: 视图发布(「要不要重建」门控在门面, 内核不判表现层细节)
+
+        site_provisional 仅启动首轮提前发布基础代为 True(plan 26-11-23-1339 S1),
+        透传到 flush_views -> _publish_locked 置本代标记; 其余轮缺省 False。
+        """
+        self._manager.web.flush_views(force=force, site_provisional=site_provisional)
 
     def on_task_line(self, force: bool) -> None:
         """任务线收尾: 错误原因预取 -> 视图发布 -> 搜索索引推进(慢路径门控都在门面)

@@ -406,10 +406,14 @@ class ModuleHost:
             changed = bool(hook()) or changed
         return changed
 
-    def run_sync_line(self, force: bool) -> None:
-        """同步线收尾 hook(webui: 视图发布)"""
+    def run_sync_line(self, force: bool, site_provisional: bool = False) -> None:
+        """同步线收尾 hook(webui: 视图发布)
+
+        site_provisional 仅启动首轮提前发布基础代时为 True(plan 26-11-23-1339 S1),
+        其余调用缺省 False; 逐字广播给各订阅者, 由订阅者按自身职责消费或忽略。
+        """
         for hook in self._iter_hooks("on_sync_line"):
-            hook(force)
+            hook(force, site_provisional)
 
     def run_task_line(self, force: bool) -> None:
         """任务线收尾 hook(webui: 错误原因预取 / 搜索索引)"""

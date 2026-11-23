@@ -991,7 +991,9 @@ class QbManager(
         # 归组整段丢失, 首批种子要等下次全量轮才补), 权威发布仍在管线结束的既有路径。
         if rounds_before_apply == 0:
             try:
-                self.host.run_sync_line(False)
+                # 基础代 conf 未绑: 透传站点临时态, 视图构建期纯内存推断站点名并压掉假告警
+                # (plan 26-11-23-1339 S1), 不绑 rec.tracker_conf / 不调 qB。
+                self.host.run_sync_line(False, site_provisional=True)
             except Exception as e:
                 logger.warning(f"启动首轮提前发布视图失败(管线结束的发布点照常兜底): {e}", exc_info=True)
         if self.store.need_validate:

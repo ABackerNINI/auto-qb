@@ -418,7 +418,7 @@ def test_module_host_loop_hooks_skipped_when_absent():
             self.outer.append("cmd:hooked")
             return True
 
-        def on_sync_line(self, force):
+        def on_sync_line(self, force, site_provisional=False):
             self.outer.append(f"sync:hooked:{force}")
 
     plain = _Recorder("plain", log)
@@ -502,7 +502,7 @@ def test_loop_hook_exception_propagates_and_skips_rest():
         def on_command_line(self):
             raise RuntimeError("hook 炸了")
 
-        def on_sync_line(self, force):
+        def on_sync_line(self, force, site_provisional=False):
             raise RuntimeError("hook 炸了")
 
         def on_task_line(self, force):
@@ -517,7 +517,7 @@ def test_loop_hook_exception_propagates_and_skips_rest():
         def on_command_line(self):
             self.outer.append("cmd:ok")
 
-        def on_sync_line(self, force):
+        def on_sync_line(self, force, site_provisional=False):
             self.outer.append(f"sync:ok:{force}")
 
         def on_task_line(self, force):

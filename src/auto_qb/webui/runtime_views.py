@@ -225,7 +225,7 @@ class ViewsMixin:
             self._delta_pending = _new_delta_buckets()
         self._delta_timeline.append(entry)
 
-    def flush_views(self, force: bool = False) -> None:
+    def flush_views(self, force: bool = False, site_provisional: bool = False) -> None:
         """消费视图脏标记并在 Web 活跃时惰性重建(同步线 / 任务线各自调用一次)
 
         每拍次序(plan 26-10-07-0414 S2): 1.先排空 store 增量为脏行键并入 `_delta_pending`
@@ -239,6 +239,9 @@ class ViewsMixin:
 
         `force=True` 表示"本轮有命令改了种子状态", 必须**绕过**下面的"已取走"门控 ——
         用户操作后真值要在几十毫秒内进快照, 不能因为上一版还没被取走就跳过。
+
+        `site_provisional=True` 仅启动首轮提前发布基础代为 True(plan 26-11-23-1339 S1),
+        透传到 `_publish_locked` 置本代标记; Web 线程 ensure_* 兜底发布不传 = False, 防串味。
         """
         host = self._host
         # 增量排空(plan S2): 每拍(无论门控是否放行)先把 store 本轮增量推导成脏行键并入
@@ -288,7 +291,7 @@ class ViewsMixin:
         # 历史提交的「省 50%」是主循环单列口径, 总重建次数并未下降。
         unconsumed = self.pending_ver is not None
         if self.group_view_dirty and web_active and (force or not unconsumed):
-            self.rebuild_views()
+            self.rebuild_views(site_provisional=site_provisional)
 
     def advance_error_reasons(self) -> None:
         """任务线: tracker 健康取数(错误原因 + 站点健康, 仅 Web 活跃时发 tracker 请求)"""
@@ -302,12 +305,12 @@ class ViewsMixin:
 
     # ------------------------------------------------------------------ 视图发布 / 读取
 
-    def rebuild_views(self) -> None:
+    def rebuild_views(self, site_provisional: bool = False) -> None:
         """重建全部视图快照并自增版本号 —— **唯一**的重建入口(主循环侧)"""
         with self.view_lock:
-            self._publish_locked()
+            self._publish_locked(site_provisional=site_provisional)
 
-    def _publish_locked(self) -> None:
+    def _publish_locked(self, site_provisional: bool = False) -> None:
         """重建四视图并发布 —— **调用方必须持有 view_lock**
 
         与 rebuild_views 分离, 使"判脏 → 重建 → 读取"能在**同一个临界区**内一次完成
@@ -327,6 +330,10 @@ class ViewsMixin:
         view_lock) —— 单一写线程假设不破, 无第二把锁(R12)。
         """
         host = self._host
+        # 本代站点临时态标记(plan 26-11-23-1339 S1): 临界区内写到宿主, 供构建期
+        # (_member_view 单点, 全量/局部两路径)读取 —— 单写线程 + view_lock 内读写,
+        # 不引入新锁/全局开关。Web 线程 ensure_* 兜底发布不传 = False, 不串味。
+        host._site_provisional_generation = site_provisional
         # ---- 本代键集定型(原属 _fold_delta_pending_locked 的前置段前移到构建前, S6) ----
         # 错误原因暂存并入: 分叉判定需要完整键集, 该源比 store 增量键集(排空在 flush_views
         # 开头)更及时, 并入点仍在 view_lock 临界区内(R12 不变)。

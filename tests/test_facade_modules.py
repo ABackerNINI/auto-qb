@@ -165,7 +165,9 @@ def test_webui_module_loop_hooks(monkeypatch):
         monkeypatch.setattr(mgr.web, "consume_commands", lambda: calls.append("consume") or True)
         monkeypatch.setattr(mgr.web, "check_pending", lambda: calls.append("check_pending"))
         monkeypatch.setattr(mgr.web, "advance_error_reasons", lambda: calls.append("reasons"))
-        monkeypatch.setattr(mgr.web, "flush_views", lambda force: calls.append(f"views:{force}"))
+        monkeypatch.setattr(
+            mgr.web, "flush_views", lambda force, site_provisional=False: calls.append(f"views:{force}")
+        )
         monkeypatch.setattr(mgr.web, "advance_search_index", lambda: calls.append("index"))
 
         assert mod.on_command_line() is True, "命令线返回「本批是否改了 qB 状态」(P0-5 补刷新判据)"

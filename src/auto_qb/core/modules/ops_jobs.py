@@ -30,8 +30,10 @@ _SKIP_BACKUP_READD_KEYS = frozenset(
 class JobsMixin:
     # ---------- 跳检崩溃恢复对账(计划 26-10-21-1857 §9) ----------
 
-    def on_sync_line(self, force: bool) -> None:
+    def on_sync_line(self, force: bool, site_provisional: bool = False) -> None:
         """同步线 hook: 首轮快照落地后做一次跳检备份对账(每进程一次)
+
+        site_provisional 为广播兼容参数(plan 26-11-23-1339 S1): 跳检对账不消费它。
 
         账本就是 `state.skip_check_backup` —— 它在删除**之前**落盘(崩溃安全的锚点), 所以
         "有备份" 等价于 "我们当时正准备删/已经删了这个 hash"。对账三分流:

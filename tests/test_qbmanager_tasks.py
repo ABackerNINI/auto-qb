@@ -438,8 +438,8 @@ def test_p2a_sync_line_flush_propagates_to_host():
         mgr.client = FakeClient()
         with mock.patch.object(mgr.host, "run_sync_line") as hook:
             mgr._sync_line(dry_run=True, flush=True, force=True)
-            assert hook.call_args_list == [mock.call(False),
-                                           mock.call(True)], ("启动首轮: 提前发布 fire(False) + 收尾透传 fire(True) 恰两次")
+            assert hook.call_args_list == [mock.call(False, site_provisional=True),
+                                           mock.call(True)], ("启动首轮: 提前发布 fire(False, 临时态) + 收尾透传 fire(True) 恰两次")
         with mock.patch.object(mgr.host, "run_sync_line") as hook2:
             mgr._sync_line(dry_run=True, flush=False, force=False)
             assert hook2.call_count == 0, "flush=False 不执行视图收尾钩子(且非启动轮无提前 fire)"

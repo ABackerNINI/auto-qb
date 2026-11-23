@@ -2,7 +2,7 @@
 
 from typing import List
 
-from ..infra.utils import encode_group_key
+from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, encode_group_key, match_tracker_confs
 from ..torrents import view_field_value
 
 
@@ -13,10 +13,23 @@ class RowMixin:
         # 非迭代读取, 与 Web 线程重建路径并发无 "dictionary changed size" 风险)
         gkey = self.store.group_key(r.hash)
         site_alert, site_alert_msg = self._site_alert(r)
+        # 站点临时态标记由 _publish_locked 在本代入口写入宿主(plan 26-11-23-1339 S1):
+        # 基础代 conf 未绑, 纯内存从 rec.tracker 推断展示用站点名, 不写 rec.tracker_conf、
+        # 不调 qB; 站点告警一律留空(「尚未评估」而非「未配置」), 真值交第二拍。
+        provisional = getattr(self, "_site_provisional_generation", False)
+        site = r.tracker_name
+        if provisional:
+            url = r.tracker or ""
+            if url and not url.startswith(VIRTUAL_TRACKER_PREFIXES):
+                # 多配歧义取首个, 口径同 tracker_mod.match / record.tracker_name
+                confs = match_tracker_confs(self.config.trackers, [url])
+                if confs:
+                    site = confs[0].tags[0] if confs[0].tags else confs[0].name
+            site_alert, site_alert_msg = "", ""
         return {
             "hash": r.hash,
             "name": r.name,
-            "site": r.tracker_name,
+            "site": site,
             "state": r.state,
             "kind": self.state_kind(r),
             # 错误状态的具体原因(文件丢失 / tracker 报错原文; 非错误状态为空串) ——
@@ -27,6 +40,8 @@ class RowMixin:
             # 前端只按 token 选图标与颜色, 不按 state 猜原因。
             "site_alert": site_alert,
             "site_alert_msg": site_alert_msg,
+            # 站点名是否为本代纯内存推断的临时值(True 时前端压暗, 第二拍真 conf 绑定后归 False)
+            "site_provisional": provisional,
             "dlspeed": r.dlspeed,
             "upspeed": r.upspeed,
             "uploaded": r.uploaded,
