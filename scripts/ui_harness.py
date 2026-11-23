@@ -1539,6 +1539,23 @@ def main() -> int:
     gate = _BootGate(mgr.client) if boot_first else None
     if boot_first:
         mgr.config.grouping.enabled = True  # 冷启动走真实归组管线(默认模式直写组绕过它)
+        # e2e 桩数据对齐(plan 26-11-23-1339 S4): rec.tracker 是快照扩展字段(_EXTENSION_FIELDS),
+        # 不在 REQUIRED_TORRENT_FIELDS —— FakeClient.sync_maindata 的字段表不带它, 启动首轮的
+        # 站点名廉价解析推断(rec.tracker)拿不到 URL 会恒为 Unknown。按单测 _inject_trackers 同款
+        # 做法在 apply_sync 后把种子 tracker URL 注入 store 记录, 给 e2e 提供「已配域名种子」
+        # (tracker.hhanclub.net ∈ HHan), 让 sa-provisional 视觉断言真钉推断名而非空跑。
+        # 只动桩(测试面), 不改产品代码/不动模式矩阵; 默认模式走 seed_store 直写对象不受影响。
+        _real_apply_sync = mgr.store.apply_sync
+
+        def _apply_sync_with_tracker(api):
+            added, removed = _real_apply_sync(api)
+            for tor in torrents:
+                rec = mgr.store.by_hash.get(tor.hash)
+                if rec is not None:
+                    rec.tracker = tor.tracker
+            return added, removed
+
+        mgr.store.apply_sync = _apply_sync_with_tracker
         print("[harness] 冷启动两跳模式: store 空, 启动首轮等 /__harness__/boot_go 放行; 归组在 files 闸口挂起", flush=True)
     else:
         seed_store(mgr, torrents)

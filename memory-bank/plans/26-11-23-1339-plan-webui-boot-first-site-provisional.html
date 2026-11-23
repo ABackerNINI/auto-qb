@@ -7,9 +7,9 @@
 <title>重启首份数据基础代站点临时态: 廉价解析 + 前端压暗 + 第二拍绑真 conf</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-boot-first-site-provisional">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-23-1339">
-<meta name="doc-updated" content="26-11-23-1339">
+<meta name="doc-updated" content="26-11-23-2040">
 <meta name="doc-refs" content="memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>重启首份数据基础代站点临时态: 廉价解析 + 前端压暗 + 第二拍绑真 conf</h1>
 <p class="lede">本篇只回答: 计划 26-11-18-0259 的提前发布基础代把站点落成 "Unknown" 并误报「站点未在配置中」, 怎么在不抵消提前发布的前提下修掉这两个症状 —— 修法是基础代用已在手的 <code>rec.tracker</code> 纯内存解析出站点名、标临时态并压暗显示, 第二拍照常绑真 <code>tracker_conf</code> 恢复正常色与真告警。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-23-1339 · <b>doc-updated</b> 26-11-23-1339 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-23-1339 · <b>doc-updated</b> 26-11-23-2040 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话「0269 计划会导致基础视图 WEBUI 种子显示站点 Unknown, 需要特殊区分」问答 + 两轮 grilling(2026-11-23, 用户拍板选项2主/选项1辅/压暗/第二拍真绑) + 用户指令「这轮只写计划」
 </div>
 
@@ -159,6 +159,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-23-1339</span> 初版: 会话问答「0269 计划导致基础视图站点 Unknown」→ 两轮 grilling 取证(根因链: 基础代早于 full_round / conf 未绑 / tracker URL 已在手且 mask 保留 host / 真 match 需每种子一次 qB) → 用户拍板选项2主+选项1辅+压暗+二拍真绑(§06 D1-D6) → 计划入库 Open, S1-S4 待显式开工。本轮零代码改动。</li>
   <li><span class="tag">R1 · 26-11-23-1341</span> 提交前评审修 2 发现(检 2/2): (major)「四视图经 _member_view 单点同源」对 shows 剧行不成立 —— 剧行 <code>node["sites"]</code> 由 <code>_agg_show_node</code> 直接取 <code>rec.tracker_name</code>, 但前端站点 chip 实由 <code>e.members</code> 经 <code>memberByHash</code> 解析的 <code>_member_view</code> 行渲染, 该聚合字段前端未消费 —— 全文改成按真实消费面表述(§01/§03/S1/S3/R5), 剧行本体不断言新字段; (minor) §02.2 的 <code>:237</code> 是标量断言而非数组, 已改正。</li>
+  <li><span class="tag">R2 · 26-11-23-2040</span> R2 落地收口: 四批本地提交全部落地 —— b2ce154b(S1 后端: 基础代 rec.tracker 纯内存推断站点名 + site_provisional 临时态透传, 不绑 conf 不调 qB), 5084d47e(S2 前端: sa-provisional 四皮肤压暗 + 行指纹纳新字段二拍 delta 重绘), dfe254b2(S3 守阵: 真未配二拍告警 / 备用自愈 / 四视图同源), 95bd22f6(缺口修复: 收尾补 full 结算翻 False 并按真 conf 报 no_site_conf)。缺口根因: 全未配库无 group_key_migrations、无 view_changed、不重建, 致临时态与空告警滞留; 正解=非提前发布拍用行字段判据触发 full 四视图整体翻假。S4 收尾: e2e/boot-first-two-hop.spec.mjs 已补站点 chip 临时态视觉两跳断言(基础代 sa-provisional 压暗 + 推断名 HHan + 无假 sa-no-conf; 补全代 provisional 翻假 + 真值保持 + 不误报), 桩侧补齐 boot-first 记录 tracker 注入以对齐已配域名种子, Playwright chromium 实跑通过; ≤2s 真机判据本轮未重采(测试实例未起; 三处改动均不在首份数据关键路径; 零 qB 调用计数桩已钉; 既有 S3 余量 margin 分析), 不虚报实测数字, 测试数字见 kb.baseline。计划翻 Done。</li>
 </ul>
 
 </div>

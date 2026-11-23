@@ -1,13 +1,15 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 8/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `sim-root-sentinel.md` … `tests-real-retirement-blindspot.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `sidefx-diagnostic-probe.md` … `test-plan-docstring-sections.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例, 与肇事者无关 | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
+| [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 sim 都撞 `B1: --root 已存在且非空, 但缺哨兵`。 | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
 | [single-file-coverage-gate.md](single-file-coverage-gate.md) | 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。**`commands run test.one` 已内置 `--no-cov`(2026-10-05 修复)**, 该假红此后只在**裸跑** `uv run pytest tests/x.py -q` 时仍会出现; 判据看 `N passed` / `FAILED` 行, 不要被 FAIL 行骗去修代码。 | test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件 |
 | [single-file-xdist-hang.md](single-file-xdist-hang.md) | 只跑**一个**测试文件却用默认的 `-n 8`, 会长时间**零输出**看起来像挂死 (实测 7 分钟无一行, 只有 1 个 worker 存活); 单文件 / 少量用例一律 `-n 0` 串行, 同一批用例 24s 跑完。`test.one` 已内置 `-n 0`。 | 单文件 -n 8, 挂死, 零输出, xdist worker 卡住, test.one, 单文件慢, 并行度 |
@@ -22,5 +24,3 @@
 | [test-data-dir-prod-fallback-write.md](test-data-dir-prod-fallback-write.md) | 测试环境 data_dir 缺省落空串时, 模块侧 `_data_dir()` 按 `or "auto-qb-data"` 兜底 —— 测试驱动的 journal/spec 写点全部落进生产红线目录 `auto-qb-data/relocate/` (T2 引入 T3 发现, 残留 j1.json/ja.json 即此来); 修法 = autouse 夹具把 env 缺省钉到 tmp_path, 显式传参恒优先。教训: 默认值兜底指向生产目录本身就是坑。 | auto-qb-data 污染, 测试写红线目录, data_dir 兜底, _data_dir 默认值, 测试驱动触盘写点, env 夹具钉 data_dir, autouse 夹具, 残留 journal json, relocate 测试 |
 | [test-lock-path-injection.md](test-lock-path-injection.md) | 工具侧 `Storage` 的默认锁锚点(S12/D8)从 `data_dir` 迁到用户级指针目录(`%LOCALAPPDATA%/global-traffic-monitor/instance.lock` 等) —— 于是 `Storage(str(tmp_path))` 后直接 `acquire_lock()` 的测试**不再动 tmp**, 而是去锁真实用户目录: 沙箱内 `os.makedirs` 报 `PermissionError [WinError 5]`, 沙箱外更隐蔽(污染真实目录 / 跨用例互相抢锁)。修法 = 每处装配显式传 `lock_path=<tmp>/instance.lock`, 发现指针同理传 `endpoint_file=<tmp>/endpoint.json`。 | 加/改工具侧测试, Storage, acquire_lock, 真实用户目录, PermissionError WinError 5, 拒绝访问, AppData, LOCALAPPDATA, global-traffic-monitor, instance.lock, endpoint.json, 锁锚点, 跨用例抢锁, S12 |
 | [test-plan-docstring-sections.md](test-plan-docstring-sections.md) | test_plan_docstring_guard 只审计 docstring 主「## 测试计划」段, 用例条目写进其它同级小节不进审计面, 首次全量才被点名 | 测试计划, docstring 守卫, test_plan_docstring_guard, 用例清单, 同级小节 |
-| [tests-real-qb-api-traps.md](tests-real-qb-api-traps.md) | 手工压测/relocate 取证直接打 qB WebAPI 时的十类坑 —— 短 hash 静默 200、renameFolder 账面级假成功(ENOENT 也算成功且零日志)、addTrackers 参数是单数 hash、FakeTracker 的 peer 表是构造时静态注入、lib/bencode.decode 返回 (值, pos) 元组、preferences 无 free_space_on_disk 键、/torrents/main 不存在、content_path 报文件路径非内容根、real.seed 子命令已被 task 内置、.torrent 默认落 .work/seeds/ | tests-real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内存盘, R 盘, 端点漂移, free_space_on_disk, sync/maindata, torrents/main, content_path, real.seed, .torrent 落点, --out |
-| [tests-real-retirement-blindspot.md](tests-real-retirement-blindspot.md) | tests-real 不在 pytest testpaths, 全量全绿不等于 tests-real 可收集; 退役/改签名产品组件时 grep 面必须含 tests-real/, 否则同组件的 tests-real 用例 import 即炸且全量发现不了。 | 退役, 组件退役, 改签名, 删模块, tests-real, testpaths, 全量全绿, 收集不到, import 失败, finalize_watch, acquire_pid, collect-only, 真机片, 同步退役 |

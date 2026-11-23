@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-11-18
-**Updated:** 2026-11-20
+**Updated:** 2026-11-23
 **Summary:** 重启后 WebUI 首份数据 5-15s 已修: S1 启动首轮提前发布(apply_sync 落库后即发基础视图), S3 真机验收探测轮空窗 1.49s→0.050s 收缩为一拍, 硬判据 flat/singles/shows ≤2s 三轮全 PASS; groups 第二跳残差承接 issue 26-11-18-0259-perf-first-round-grouping-files-serial(Open 待排期)
 **Topics:** webui-boot-first-data
 **Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/pitfalls/testing/playwright-testignore-negation.md, memory-bank/plans/26-11-23-1339-plan-webui-boot-first-site-provisional.html
@@ -64,3 +64,5 @@
 - 2026-11-18 接缝终审处置: S0 提交消息 groups 上界 2.47 系 2.421 转抄误(提交固化不改写), 该数字权威 = S0 证据档 §03 表格, 后续引用一律从证据档誊写
 
 - 2026-11-20 09:36 P1 并发化 + P2 指纹长缓存两期落地（四套皮肤共用 boot.js + 静态树哈希 + immutable 分流），评审每批 2 轮零 actionable，真机验收按拍板剥离待用户做。
+
+- 2026-11-23 20:40 webui-boot-first-site-provisional 专题收尾: 在 0269 基础代提前发布之上补站点语义 —— 基础代 rec.tracker 纯内存推断站点名 + site_provisional 临时态 + sa-provisional 四皮肤压暗, 补全代经 provisional_completion full 结算翻 False 并按真 conf 报真 no_site_conf; 四批本地提交 b2ce154b/5084d47e/dfe254b2/95bd22f6 全部落地, 计划 26-11-23-1339 翻 Done; e2e 两跳站点 chip 视觉断言已补并实跑通过, ≤2s 真机判据本轮未重采(零 qB 调用计数桩 + 关键路径未触及的 margin 分析), 测试数字见 kb.baseline。

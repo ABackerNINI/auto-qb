@@ -14,10 +14,10 @@
 |---|---|---|
 | [1](_index-1.md) | `annotations-lazy-eval.md` … `commands-wrapper-from-python.md` | 16 |
 | [2](_index-2.md) | `config-validation-test-input.md` … `fake-config-shared-mutables.md` | 16 |
-| [3](_index-3.md) | `fake-seed-injection.md` … `guard-literal-comment-trip.md` | 16 |
-| [4](_index-4.md) | `gz-plaintext-assertion.md` … `long-task-background-checkpoint.md` | 16 |
-| [5](_index-5.md) | `longtask-redverify-page-task.md` … `node-e-cmdline-limit.md` | 16 |
-| [6](_index-6.md) | `node-guards-silent-skip.md` … `red-verify-must-hit-behavior.md` | 16 |
-| [7](_index-7.md) | `redverify-anchor-lineendings.md` … `sidefx-import-time-temp-roots.md` | 16 |
-| [8](_index-8.md) | `sim-root-sentinel.md` … `tests-real-retirement-blindspot.md` | 16 |
-| [9](_index-9.md) | `time-tick-collapse-strict-advance.md` … `xdist-worker-global-snapshot.md` | 13 |
+| [3](_index-3.md) | `fake-seed-injection.md` … `guard-dead-branch.md` | 16 |
+| [4](_index-4.md) | `guard-literal-comment-trip.md` … `log-capture.md` | 16 |
+| [5](_index-5.md) | `long-task-background-checkpoint.md` … `no-uv-fallback.md` | 16 |
+| [6](_index-6.md) | `node-e-cmdline-limit.md` … `real-probe-rid-window.md` | 16 |
+| [7](_index-7.md) | `real-suite-cascade-skip.md` … `side-effects.md` | 16 |
+| [8](_index-8.md) | `sidefx-diagnostic-probe.md` … `test-plan-docstring-sections.md` | 16 |
+| [9](_index-9.md) | `tests-real-qb-api-traps.md` … `xdist-worker-global-snapshot.md` | 15 |

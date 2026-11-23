@@ -22,7 +22,9 @@ import { requireMode } from './lib/mode.mjs';
  * 默认模式(off)桩行为逐字不变, 本 spec 整组 skip(requireMode)。
  *
  * 断言面: HTTP 形状(四视图两跳) + UI 落位(种子页行先出、分组页空->有、flat 恒满);
- * rid 严格 +1(两跳间零中间代 —— 版本号单调不跳不重)。
+ * rid 严格 +1(两跳间零中间代 —— 版本号单调不跳不重)。R3(plan 26-11-23-1339): 追加
+ * 站点 chip 临时态视觉两跳 —— 基础代已配域名种子 chip 带 sa-provisional 压暗/推断名 HHan/
+ * 无假 sa-no-conf, 补全代 provisional 翻假/真值保持/不误报。
  * 只跑单皮肤(prism): 两跳形状是后端数据面, 与皮肤渲染无关(其余 e2e 双皮肤口径不变)。
  */
 
@@ -66,6 +68,25 @@ test.describe('桩冷启动两跳落位形状(plan 26-11-18-0259 S2)', () => {
     await tab(page, 'torrents').click();
     await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
     expect(await readInst(page, 'vm.torrents.length'), 'UI flat 满量').toBe(TORRENTS);
+
+    // 基础代站点临时态视觉(plan 26-11-23-1339 S2/S4): 桩种子 tracker=tracker.hhanclub.net
+    // ∈ HHan 配置域名, 基础代 conf 未绑 —— 后端纯内存从 rec.tracker 推断站点名 HHan、
+    // site_provisional=True、假告警压空; 前端 siteAlertClass 据此给 chip 挂 sa-provisional
+    // 压暗, 不挂 sa-no-conf。数据面(readInst 行字段)与视觉面(DOM class/文本)双读,
+    // 任一漂移都能当场定位(只钉已配域名种子的推断态, 不碰真未配场景)。
+    const hop1Site = /** @type {{site: string, site_provisional: boolean, site_alert: string}} */ (
+      await readInst(page, 'vm.torrents[0]')
+    );
+    expect(hop1Site.site_provisional, '基础代站点名应标记为临时推断态').toBe(true);
+    expect(hop1Site.site, '推断站点名应取 HHan 配置首标签').toBe('HHan');
+    expect(hop1Site.site_alert, '基础代假告警应被压(尚未评估)').toBe('');
+    await expect(page.locator('.torrent-row .site-chip.sa-provisional').first(),
+      '基础代 chip 应带 sa-provisional 压暗').toBeVisible({ timeout: 15_000 });
+    expect(await page.locator('.torrent-row .site-chip.sa-no-conf').count(),
+      '基础代不应出现假 no_site_conf 告警').toBe(0);
+    await expect(page.locator('.torrent-row .site-chip').first(),
+      'chip 文本应是推断名 HHan').toContainText('HHan');
+
     await tab(page, 'groups').click();
     await expect(page.locator('.group-row')).toHaveCount(0, { timeout: 2_000 });
 
@@ -83,5 +104,25 @@ test.describe('桩冷启动两跳落位形状(plan 26-11-18-0259 S2)', () => {
       message: 'UI 分组行落位', timeout: 15_000,
     }).toBe(TORRENTS / 2);
     expect(await readInst(page, 'vm.torrents.length'), 'UI flat 恒满(两跳不变)').toBe(TORRENTS);
+
+    // 补全代站点态视觉(plan 26-11-23-1339 缺口修复): 非提前发布拍经 provisional_completion
+    // 补 full 重建, 已配域名种子的 site_provisional 翻回 False、站点名保持真值 HHan,
+    // chip 的 sa-provisional 压暗随之消失。本桩 boot-first 首轮 full_round 会重匹配 conf,
+    // 且刻意跳过站点告警两态注入 —— 库内无「真未配」种子, 故 no_site_conf 的正向告警面
+    // 不在本 spec 空跑, 由 e2e/site-alerts.spec.mjs(默认模式桩)与 S3/S4 单测覆盖;
+    // 这里只断言推断态翻假/真值保持/不误报, 不伪造真未配数据。
+    await tab(page, 'torrents').click();
+    await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+    const hop2Site = /** @type {{site: string, site_provisional: boolean}} */ (
+      await readInst(page, 'vm.torrents[0]')
+    );
+    expect(hop2Site.site_provisional, '补全代站点名应翻回真值(非临时)').toBe(false);
+    expect(hop2Site.site, '补全代站点名应保持真值 HHan').toBe('HHan');
+    expect(await page.locator('.torrent-row .site-chip.sa-provisional').count(),
+      '补全代 chip 应去掉 sa-provisional 压暗').toBe(0);
+    expect(await page.locator('.torrent-row .site-chip.sa-no-conf').count(),
+      '已配域名种子补全代不应误报 no_site_conf').toBe(0);
+    await expect(page.locator('.torrent-row .site-chip').first(),
+      '补全代 chip 文本应是真值站点名 HHan').toContainText('HHan');
   });
 });

@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `gz-plaintext-assertion.md` … `long-task-background-checkpoint.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `guard-literal-comment-trip.md` … `log-capture.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [guard-literal-comment-trip.md](guard-literal-comment-trip.md) | 「X 已移除/退役, 不得回潮」类守阵按 `assert "标识符" not in 源码` 扫描**整份源文本**(含注释与 docstring) —— 在同一份源码里写退役说明注释时把标识符原文写进去, 守阵立刻判红, 且报错信息极具迷惑性(明明只是注释)。写退役说明要么换措辞避开标识符, 要么守阵侧排除注释。 | 移除功能, 反回潮守阵, 退役注释, assert not in, 判红, 注释, 文档字符串, 源码扫描 |
 | [gz-plaintext-assertion.md](gz-plaintext-assertion.md) | 对 .gz 原始字节做子串断言恒真, 必须解压后扫文本再验内容 | gz,压缩产物,脱敏断言,假绿,no_credentials |
 | [harness-host-platform-data-leak.md](harness-host-platform-data-leak.md) | e2e/冒烟桩(ui_harness)给被测环境钉沙箱时, 容易只钉「项目自己的文件面」(config_path / data_dir / state 文件)而漏掉「整机共享的用户级平台目录」—— 代码若消费这类全局状态(本仓: gtm 发现指针 `pointer_dir()`, 单点解析到 %LOCALAPPDATA% / $XDG_DATA_HOME 或 ~/Library, 指针是**整机共享一处**的用户级文件), 断言前提就从「桩决定」变成「宿主机决定」: 宿主真跑 gtm 工具的开发机上 probe 真阳性 -> bundle.gtm 非 null -> settings-backup.spec 8 例确定性红, 而 Linux/容器机器上恒绿 —— 同一 spec 两台机器两种命运, 还会误判成 flaky/前提过期。**附带污染面更要命**: 可达后导入用例的真 POST 会经 `backup._apply_gtm_section` PUT 打到**宿主真实 gtm 工具**覆写其配置(复现轮在假 gtm 上捕到 2 笔 PUT 实证)。对策: 桩启动早期(任何 probe/create_app 之前)把发现单点重定向进桩私有目录 —— 合流机制是 `agent.pointer_dir` 单点 monkeypatch 到 `<tmp>/gtm-pointer`(`_isolate_gtm_discovery`); 加单测锁「隔离后指针面在桩私有目录」并用红验(调用前解析回宿主真实平台目录)证明判据非恒绿。 | e2e 桩, ui_harness, 沙箱隔离, 宿主泄漏, 用户级目录, XDG_DATA_HOME, LOCALAPPDATA, 整机级状态, gtm 指针, endpoint.json, pointer_dir, bundle.gtm, 单机红他机绿, 环境依赖断言, harness-host-platform-data-leak |
 | [harness-is-stub-server.md](harness-is-stub-server.md) | `dev.harness` 只起一个 **uvicorn 常驻服务**(脚本末尾 `uvicorn.run(...)` 阻塞, 包内 timeout 900s), **不跑任何断言**; 它的 `when` 曾写「浏览器冒烟（真浏览器跑前端断言合集）」, 与命令实际形态不符 —— 按"冒烟闸门"跑它会**挂到超时**(2026-10-11 实测后台跑 6 分钟零输出, 只能 TaskStop)。断言面在 `commands run dev.e2e`(Playwright 自带 webServer 自动起/收桩)。`dev.harness` 的正确用途 = 手动开浏览器看 / 给外部工具连桩。包内 `when`/`note`/`doc` 已一并订正。 | 跑前端冒烟; dev.harness 卡住不退出; 后台任务无输出; "断言合集"跑哪条命令; 桩服务突然打不开; 15 分钟就死; 验收时服务没了 |
@@ -23,4 +24,3 @@
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
 | [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted, ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接')` —— 0 端口无抢号问题(fixed-port / free-port TOCTOU 两族都不沾), 是**已建立的连接被本机中止**。被测行为的主断言往往此时已全过, 红在末段"机制自证/红验"的对照组; 单跑绿 + 复跑全量绿即定性偶发, 别当回归去修测试。 | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服, 真客户端, 对照组, 红验回放, 机制自证, xdist, 并行高载, 偶发红, 单跑绿, urlopen, urllib3 |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
-| [long-task-background-checkpoint.md](long-task-background-checkpoint.md) | 前台跑 >10min 无输出的长任务(基准矩阵/语料生成/全量回归)会被宿主按「无输出」切断, 模型配额也可能中途夭折 —— 两者都保留已落盘产出但丢未落盘进度; 委派长任务必须后台 + 分批落盘 + 幂等可续跑。 | 长任务, 后台, 宿主切断, 无输出超时, 配额耗尽, 中途夭折, 分批落盘, checkpoint, 可续跑, 幂等重跑, 基准矩阵, 语料生成, run_in_background, 子代理, 委派 |
