@@ -5,7 +5,7 @@
 **Updated:** 2026-11-20
 **Summary:** 重启后 WebUI 首份数据 5-15s 已修: S1 启动首轮提前发布(apply_sync 落库后即发基础视图), S3 真机验收探测轮空窗 1.49s→0.050s 收缩为一拍, 硬判据 flat/singles/shows ≤2s 三轮全 PASS; groups 第二跳残差承接 issue 26-11-18-0259-perf-first-round-grouping-files-serial(Open 待排期)
 **Topics:** webui-boot-first-data
-**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/pitfalls/testing/playwright-testignore-negation.md
+**Refs:** memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/issues/26-11-18-0259-perf-first-round-grouping-files-serial.html, memory-bank/issues/26-11-18-0259-perf-first-round-pathmap-selfcheck-critical-path.html, memory-bank/pitfalls/testing/playwright-testignore-negation.md, memory-bank/plans/26-11-23-1339-plan-webui-boot-first-site-provisional.html
 
 ## 本篇只回答
 

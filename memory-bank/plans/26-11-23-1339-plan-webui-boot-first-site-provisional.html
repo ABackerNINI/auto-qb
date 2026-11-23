@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>重启首份数据基础代站点临时态: 廉价解析 + 前端压暗 + 第二拍绑真 conf</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-boot-first-site-provisional">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-23-1339">
+<meta name="doc-updated" content="26-11-23-1339">
+<meta name="doc-refs" content="memory-bank/plans/26-11-18-0259-plan-webui-boot-first-data.html, memory-bank/tasks/26-11-18-webui-boot-first-data.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-boot-first-site-provisional</div>
+<h1>重启首份数据基础代站点临时态: 廉价解析 + 前端压暗 + 第二拍绑真 conf</h1>
+<p class="lede">本篇只回答: 计划 26-11-18-0259 的提前发布基础代把站点落成 "Unknown" 并误报「站点未在配置中」, 怎么在不抵消提前发布的前提下修掉这两个症状 —— 修法是基础代用已在手的 <code>rec.tracker</code> 纯内存解析出站点名、标临时态并压暗显示, 第二拍照常绑真 <code>tracker_conf</code> 恢复正常色与真告警。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-23-1339 · <b>doc-updated</b> 26-11-23-1339 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话「0269 计划会导致基础视图 WEBUI 种子显示站点 Unknown, 需要特殊区分」问答 + 两轮 grilling(2026-11-23, 用户拍板选项2主/选项1辅/压暗/第二拍真绑) + 用户指令「这轮只写计划」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: 计划 26-11-18-0259(Done)在启动首轮 <code>apply_sync</code> 后、<code>full_round</code> 之前提前发布一「基础代」, 让首份数据秒出。基础代发布时所有记录 <code>tracker_conf</code> 尚未绑定(<code>full_round</code> 与 added 循环都在其后), 于是派生出两个症状:</p>
+<ol>
+  <li><code>site = r.tracker_name</code> 在 <code>tracker_conf is None</code> 时返回字面量 <code>"Unknown"</code> —— 整批种子站点列显示 Unknown。</li>
+  <li><code>_site_alert</code> 见 <code>conf is None</code> 且行内已有真实 tracker URL(来自 qB maindata, 入库时按脱敏单点落 mask 值但 host 保留)→ 返回 <code>no_site_conf</code>, 前端把站点 chip 画成橙底虚线并提示「站点未在配置中」 —— 这是对已配置站点的<b>假告警</b>。</li>
+</ol>
+<p><b>North Star</b>: 基础代站点列显示<b>可辨识的推断站点名</b>而非 Unknown、且不触发假告警; 补全代恢复真值与真告警。前提是不抵消 0269 的提前发布收益(首份数据 ≤2s 判据不回退)。</p>
+<p><b>设计底线 / 不变量</b>:</p>
+<ul>
+  <li>基础代<b>只算展示用的站点名 + 临时态标记</b>, <b>不绑 <code>rec.tracker_conf</code></b> —— 绑 conf 会带上规则/HR/限速副作用, 且等于把真匹配挪前, 抵消提前发布目的(D2)。</li>
+  <li>廉价解析必须<b>纯内存</b>: <code>match_tracker_confs(config.trackers, [rec.tracker])</code>, 不调 <code>torrents/trackers</code>。真 <code>trackers.match()</code> 每种子一次 qB API(冷缓存约 210 次), 正是被 0269 抢在前面的那段管线。</li>
+  <li>四视图同轮发布铁律不破: 站点 chip 的每个成员行都来自 <code>_member_view</code> 单点(flat / singles / groups 成员 / shows 剧行的成员经 <code>memberByHash</code> 解析), 同代同标记; shows 剧行本体的 <code>node["sites"]</code> 是未被前端消费的聚合字段, 不在本修复面。单一写线程、不引入新锁、不挂配置开关(承 0269 D11)。</li>
+  <li>补全代语义不变: 真 conf 绑定后站点名、HR 派生字段、<code>no_site_conf</code> 真告警照旧; 任务线错误原因仍自占一代(0269 S2 实测)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>02.1 已核实的证据链</h3>
+<table>
+  <tr><th>环节</th><th>现状</th><th>位置</th></tr>
+  <tr><td>提前发布点</td><td><code>rounds_before_apply == 0</code> 时 <code>apply_sync</code> 后直接 <code>run_sync_line(False)</code>, 早于 <code>need_validate</code> / <code>full_round</code></td><td><code>qbmanager.py:978-996</code></td></tr>
+  <tr><td>真 conf 绑定时机</td><td><code>full_round</code> 相位 → <code>tracker_mod._on_full_round</code> 对 <code>conf is None</code> 记录逐个 <code>match</code>; added 循环也有一条匹配</td><td><code>qbmanager.py:997-1007, 1057-1062</code>; <code>tracker_mod.py:66-71</code></td></tr>
+  <tr><td>site 派生</td><td><code>"site": r.tracker_name</code>; conf 为 None 时返回 <code>"Unknown"</code></td><td><code>views_row.py:19</code>; <code>record.py:236-248</code></td></tr>
+  <tr><td>假告警判定</td><td><code>conf is None</code> + tracker 非虚拟前缀 → <code>no_site_conf</code> /「站点未在配置中」; 前端映射为 <code>sa-no-conf</code>(橙底虚线)</td><td><code>views.py:324-341</code>; <code>views_common.py:84-94</code>; <code>commands.js:47-52</code></td></tr>
+  <tr><td>廉价解析可行性</td><td><code>match_tracker_confs(trackers, urls)</code> 纯内存按 hostname 精确/子域匹配; <code>rec.tracker</code> 落库即带 mask 值、host 保留, 可直接喂入</td><td><code>utils.py:335-346</code>; <code>record.py:76, 208-215</code></td></tr>
+  <tr><td>真匹配为何慢</td><td><code>match</code> → <code>tracker_urls</code> → <code>tracker_info</code> → 每种子一次 <code>client.torrents_trackers(hash)</code></td><td><code>tracker_mod.py:83-96</code>; <code>record.py:290-301</code></td></tr>
+</table>
+<h3>02.2 现有测试的形状与缺口</h3>
+<p>0269 的守阵把「基础代 Unknown」当成<b>发布点在 full_round 之前的证明</b>钉死:<code>test_webui_boot_first_publish.py:110</code> <code>base["sites"] == ["Unknown","Unknown"]</code>、<code>:229</code> <code>base["H1"]["site"] == "Unknown"</code>; 补全代 <code>:123</code> 断 <code>["HHan","HHan"]</code>(数组)、<code>:237</code> 断 <code>final["H1"]["site"] == "HHan"</code>(标量)。测试替身 <code>FakeTorrent.tracker</code> 缺省为空(<code>helpers.py:718</code>), 所以假告警面从未被覆盖 —— 这正是两个症状逃过 S2 守阵的原因。本计划实施时这两处断言需按新语义改写。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线(D1/D2/D3 拍板)</b>: 选项2 为主 —— 基础代用 <code>rec.tracker</code> 经 <code>match_tracker_confs</code> 纯内存解析出站点名填 <code>site</code>; 选项1 为辅 —— 同一行加 <code>site_provisional=True</code> 临时态, 基础代 <code>site_alert</code> 一律留空(「尚未评估」而非「未配置」), 前端据此把站点 chip 压暗。第二拍真 conf 绑定后 <code>site_provisional=False</code>、站点名取真值、告警按真值重算, chip 恢复常态色。</p>
+<p><b>站点名口径</b>: 廉价解析得到的 conf 按 <code>tracker_name</code> 同款口径取名(<code>tags[0]</code> 非空否则 <code>name</code>), 保证一拍与二拍显示同名、不闪变。匹配不到时基础代保留 <code>"Unknown"</code> 但带临时态(不告警), 二拍由真 conf 决定。</p>
+<p><b>临时态传递</b>: 新增行级布尔字段 <code>site_provisional</code>(缺省 False)。发布链加一个显式参数从提前发布点透传到视图构建 —— 推荐在 <code>_publish_locked</code> 入口据参数置本代标记、各行构建期(<code>_member_view</code> / <code>_seed_view</code>)读该标记写字段(全部构建都在 <code>_publish_locked</code> 临界区内, 含 delta upsert 的 <code>_publish_locked</code> 重入, 见 <code>runtime_views.py:310/608/637</code>)。参数经 <code>run_sync_line</code> → web 模块 <code>flush_views</code> → <code>_publish_locked</code> 下传; 用参数而非环境态, 避免 Web 线程 <code>ensure_state</code> 触发的发布串味, 守住单写线程与「不新增共享可变标记」。shows 剧行本体无此字段, 其站点 chip 由成员对象经 <code>memberByHash</code> 提供, 见 §07 R5。</p>
+<p><b>分期</b>: S1 后端廉价解析与临时态 → S2 前端压暗与指纹 → S3 守阵红绿双验 → S4 真机/e2e 验收与回写。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S1</b> 后端廉价解析与临时态</td><td>发布链透传临时态参数; 行视图(<code>_member_view</code>/<code>_seed_view</code> 单点)在临时态下: 用 <code>config.trackers</code> + <code>[rec.tracker]</code> 纯内存匹配得站点名、写 <code>site_provisional=True</code>、<code>site_alert</code> 与 <code>site_alert_msg</code> 置空; 所有站点 chip 的成员行同源; shows 剧行本体聚合字段不在本面(§07 R5); 不绑 <code>tracker_conf</code>、不调 qB</td><td>基础代已配置站点显示推断名且不告警; 未配置站点基础代也不告警; 非启动轮零行为变化; 无新增 qB 调用(用计数桩钉)</td></tr>
+  <tr><td><b>S2</b> 前端压暗与指纹</td><td><code>commands.js</code> 加按 <code>m.site_provisional</code> 的 chip 类名分支; <code>xtpl-cells.html</code> 的 <code>&lt;aq-site-chip&gt;</code> 挂类; <code>shared/row_lang.css</code>(四皮肤共用)给压暗样式; <code>decorate.js</code> 行指纹纳入 <code>site_provisional</code>, 使补全代翻转能触发 delta 重绘</td><td>四皮肤一致压暗; 二拍颜色恢复; 指纹变更实测钉住(否则 delta 客户端滞留旧色); 筛选/读屏语义不破</td></tr>
+  <tr><td><b>S3</b> 守阵红绿双验</td><td>改写 <code>test_webui_boot_first_publish.py:110/:229</code> 的 Unknown 断言; 新增: 基础代推断名 + 临时态 + 无告警 / 补全代真名 + 无临时态 + 真告警 / 真未配置站二拍才报 <code>no_site_conf</code> / 备用 tracker 残差自愈 / delta 指纹含新字段 / 各视图成员行(含 shows 经 memberByHash)同代一致、shows 剧行本体不钉该字段(§07 R5)</td><td>摘掉实现即红(推名与压暗分别有红面); <code>commands run test.full</code> 全绿(数字入 kb.baseline)</td></tr>
+  <tr><td><b>S4</b> 真机/e2e 与回写</td><td>e2e 冷启动两跳观察 chip 颜色与告警; real-machine 轨道复测首份数据 ≤2s 不回退; 回写 0269 计划 R 行与档案、本计划翻 Done</td><td>首份数据 ≤2s 判据不回退; two-hop 视觉符合预期; 文档回写齐</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>推荐</th><th>备选</th></tr>
+  <tr><td>Q1</td><td>基础代是否一律压 <code>no_site_conf</code>, 还是只压廉价解析命中的行?</td><td class="good">一律压 —— 临时态即「尚未评估」, 真告警交给二拍; 真未配置站二拍照报</td><td>只压命中行(未命中即报真未配置) —— 会让备用 tracker 站的残差变假告警</td></tr>
+  <tr><td>Q2</td><td>临时态的视觉区分做到什么程度?</td><td class="good">只压暗颜色(用户明确「稍微做一点区别, 比如颜色暗一点」), 不加新文案</td><td>压暗 + 悬停提示「站点解析中」</td></tr>
+  <tr><td>Q3</td><td>「暂态 vs 真未配置」用什么区分?</td><td class="good">随 Q2: 新行字段 <code>site_provisional</code> 承载, 复用 <code>site_alert</code> 词表不动</td><td>复用 <code>site_alert</code> 加 <code>pending</code> 枚举 —— 会动优先级语义与既有守阵</td></tr>
+</table>
+<p class="aside">Q1/Q2/Q3 已在 2026-11-23 grilling 中由用户拍板(见 §06 D1-D6), 本表为留痕, 无待决项。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>结论</th></tr>
+  <tr><td>D1</td><td>缺陷范围</td><td>Unknown 与假告警<b>两者都修</b>(用户拍板 2026-11-23)</td></tr>
+  <tr><td>D2</td><td>主修法</td><td><b>选项2 为主</b>: 用 <code>rec.tracker</code> 纯内存廉价解析站点名, 不绑真 conf、不调 qB</td></tr>
+  <tr><td>D3</td><td>辅修法</td><td><b>选项1 为辅</b>: 第一拍挂廉价解析的临时态, 前端把颜色压暗做轻微区别</td></tr>
+  <tr><td>D4</td><td>二拍边界</td><td>第二拍再绑真的 <code>tracker_conf</code>, 站点名/告警恢复真值、颜色恢复常态</td></tr>
+  <tr><td>D5</td><td>区分机制</td><td>参考 Q2: 以廉价解析产出的临时态为新行字段承载, 不扩 <code>site_alert</code> 词表</td></tr>
+  <tr><td>D6</td><td>本轮动作边界</td><td>本轮<b>只写计划</b>, 零产品代码改动、零 commit/push; 实施待显式开工</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>单 <code>rec.tracker</code> URL 漏配</td><td>配置的域名只在备用 tracker、首个 working tracker 不含该域</td><td>基础代落 Unknown + 临时态(不告警), 二拍真 <code>match</code> 用全量 tracker_urls 补齐; 接受基础代残差, 与 0269 两跳语义一致; 守阵钉自愈</td></tr>
+  <tr><td>R2</td><td>临时态标记串味到补全代 / 别的发布</td><td>用环境态而非参数, Web 线程 <code>ensure_state</code> 触发 <code>_publish_locked</code></td><td>参数显式透传、<code>_publish_locked</code> 入口置本代标记; 所有 view 构建在其临界区内; 守阵钉非启动轮 <code>site_provisional=False</code></td></tr>
+  <tr><td>R3</td><td>delta 客户端滞留压暗旧色</td><td>行指纹未纳入 <code>site_provisional</code>, 二拍站点名/告警恰好不变时该行不重绘</td><td><code>decorate.js</code> 指纹纳入新字段并加活性探针守阵(摘字段即红)</td></tr>
+  <tr><td>R4</td><td>廉价解析误绑 conf 引入副作用</td><td>实现图省事在基础代写 <code>rec.tracker_conf</code></td><td>设计底线明令只算展示值; 守阵钉基础代 <code>rec.tracker_conf is None</code> 且 HR 派生字段仍为空</td></tr>
+  <tr><td>R5</td><td>四视图「同源」陈述过头, 守阵照它写会落空</td><td>shows 剧行不经 <code>_member_view</code>: 它由 <code>_agg_show_node</code> / <code>_build_show_row</code> 构建, <code>node["sites"]</code> 直接取 <code>rec.tracker_name</code>(<code>views_episodes.py:45-46</code>), 剧行字典无 <code>site</code> / <code>site_provisional</code>; 但前端剧行 sites 单元格实际渲染 <code>e.members</code> 经 <code>memberByHash</code> 解析的 <code>_member_view</code> 行(<code>xtpl-cells.html:313</code> / <code>decorate.js:546</code>), <code>node["sites"]</code> 聚合字段前端未消费</td><td>守阵按真实消费面写: flat/singles/groups 成员及 shows 剧行的成员 chip 都来自 <code>_member_view</code> 单点(经 memberByHash), 逐视角断 <code>site_provisional</code> 一致; shows 剧行本体的 <code>site_provisional</code> 字段与 <code>node["sites"]</code> 聚合<b>不断言</b>(无渲染消费); 若后续要让剧行 sites 聚合也显示推断名, 另把廉价解析抽同源 helper 供 <code>_agg_show_node</code> 用, 不进本计划范围</td></tr>
+  <tr><td>R6</td><td>假告警被误当真告警保留</td><td>S1 只压廉价解析命中行</td><td>按 Q1 推荐基础代一律压 <code>site_alert</code>; 守阵钉已配置站基础代无告警</td></tr>
+  <tr><td>R7</td><td>首份数据 ≤2s 判据回退</td><td>廉价解析意外引入 qB 调用或 O(N) 重活</td><td>纯内存匹配 + 计数桩钉零 <code>torrents/trackers</code> 调用; 真机轨道复测 0269 North Star 不回退</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-23-1339</span> 初版: 会话问答「0269 计划导致基础视图站点 Unknown」→ 两轮 grilling 取证(根因链: 基础代早于 full_round / conf 未绑 / tracker URL 已在手且 mask 保留 host / 真 match 需每种子一次 qB) → 用户拍板选项2主+选项1辅+压暗+二拍真绑(§06 D1-D6) → 计划入库 Open, S1-S4 待显式开工。本轮零代码改动。</li>
+  <li><span class="tag">R1 · 26-11-23-1341</span> 提交前评审修 2 发现(检 2/2): (major)「四视图经 _member_view 单点同源」对 shows 剧行不成立 —— 剧行 <code>node["sites"]</code> 由 <code>_agg_show_node</code> 直接取 <code>rec.tracker_name</code>, 但前端站点 chip 实由 <code>e.members</code> 经 <code>memberByHash</code> 解析的 <code>_member_view</code> 行渲染, 该聚合字段前端未消费 —— 全文改成按真实消费面表述(§01/§03/S1/S3/R5), 剧行本体不断言新字段; (minor) §02.2 的 <code>:237</code> 是标量断言而非数组, 已改正。</li>
+</ul>
+
+</div>
+</body>
+</html>
