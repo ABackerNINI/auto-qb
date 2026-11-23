@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="curves-syntaxwarning">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/curves.py:53 存量 SyntaxWarning: invalid escape sequence">
 <meta name="issue-summary" content="无效转义序列 &#x27;\d&#x27; 触发存量 SyntaxWarning, pytest warnings summary 常驻一条">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-22 06:04</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -117,7 +117,11 @@
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-22 06:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-23 — 状态 Open → Done（kb.status）</li>
+</ul>
+  <h3>修复后补充</h3>
+  <p>实际修法：采纳建议①——<code>period_sort_key</code> 的 docstring 起始 <code>"""</code> 改为 <code>r"""</code>（raw string），一行覆盖该 docstring 内两处 <code>\d</code>（<code>Python \d + int()</code> 与 <code>JS \d 仅 ASCII</code>）。<code>\d</code> 在普通字符串里是无效转义（被原样保留但发 SyntaxWarning），在 raw string 里同样原样保留且无警告，故 <code>__doc__</code> 值逐字节不变、函数运行时零行为变化；未走建议②转义翻倍（两处需各改、更易漏）。第 40、83 行的正则字面量本就是 <code>r"..."</code>，无需动。</p>
+  <p>验证方式：<code>python -W error::SyntaxWarning py_compile</code> 对该文件由原报错转为通过；全库逐文件 <code>compile()</code> 捕获 SyntaxWarning 命中 0（本次唯一目标清零）。<code>commands run test.full</code> 实测 <code>7025 passed, 6 skipped, 1 warning</code>（数字与基线切片 26-11-23-1121 一致）；剩余 1 条 warning 是 <code>test_repo_text_subprocess_calls_pin_utf8</code> 故意构造的 <code>&lt;unknown&gt;:28</code> 的 <code>\P</code>，与本 issue 的 <code>\d</code> 无关（范围外，按范围守恒未动）。代码改动 1 行经只读评审零发现；回写数字经复评发现与基线冲突一处（test.quick 的 7029/2 混入了 test.full 口径），已按基线改正。</p>
 </section>
 
 <footer>

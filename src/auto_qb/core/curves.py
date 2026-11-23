@@ -44,7 +44,7 @@ def normalize_period(value: Any) -> str:
 
 
 def period_sort_key(value: Any) -> Tuple[int, ...]:
-    """period 排序键(计划 26-11-18-0801 D5): day=(0,) < {N}D=(1,N) 按 N 数值 < month=(2,) 恒最后
+    r"""period 排序键(计划 26-11-18-0801 D5): day=(0,) < {N}D=(1,N) 按 N 数值 < month=(2,) 恒最后
 
     - 输入先经 normalize_period 归一化(别名 DAY/1D/D 等归一后判同键); 非法 period 抛
       ValueError, 由调用方捕获决定放弃该次排序。
