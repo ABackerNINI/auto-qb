@@ -511,6 +511,11 @@ html[data-fx-preset] .site-chip.sa-no-conf::before {
   border-bottom: 1px dashed var(--warn); /* S4 迁入(views.css:95), dashed 保留 */
 }
 html[data-fx-preset] .site-chip.sa-tracker::before { background: var(--error-soft); }
+/* 基础代临时态压暗(计划 26-11-23-1339 S2): 柔底画在切角 ::before 绘制层, 与上面 sa-* 同分层同构。
+ * 本体背景已由 html[data-fx-preset] .site-chip 覆盖为 transparent, 无需本体侧关闭;
+ * views.css 的 sa-provisional 只改背景/字色(无 border/box-shadow), 故只有这一条背景覆写。
+ * 源序放在 sa-* 之末 = 优先级最高; 压暗取令牌, 不用警示橙(sa-no-conf 的语义)。 */
+html[data-fx-preset] .site-chip.sa-provisional::before { background: var(--surface-2); }
 /* S4 本体侧关闭: 三条状态边线的本体载体整组覆盖(几何已迁上面对应 ::before;
  * 只覆盖不改写源文件。本体 box-shadow 过渡段仍服务 hover 辉光, 不动) */
 html[data-fx-preset] .site-chip.paused,

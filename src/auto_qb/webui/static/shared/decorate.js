@@ -91,17 +91,20 @@ function _groupRelocateSig(r) {
 }
 
 /* 指纹槽位(与 _decoFpBuild 逐字对应): [members 引用, (kind, size, category, site, tags 引用,
- * site_alert, site_alert_msg, relocate 签名)*n, 首成员 save_path, 组 relocate 签名]
+ * site_alert, site_alert_msg, site_provisional, relocate 签名)*n, 首成员 save_path, 组 relocate 签名]
  * !site_alert / site_alert_msg 必须进指纹(计划 26-10-19-2007 R3): 它们是站点 chip 左槽图标的
  *   唯一数据源, 而组行装饰是记忆化的 —— 不进指纹则"站点报错"出现/消失后组行仍命中旧缓存,
  *   图标永远陈旧(成员行是现渲染的, 只有组行会停在旧态, 这类不一致最难查)。
+ * !site_provisional 同理必须进指纹(计划 26-11-23-1339 R3): 基础代靠它把 chip 压暗, 二拍翻假时
+ *   站点名/告警可能恰好不变 —— 漏槽则组行命中旧缓存, delta 客户端滞留压暗旧色(二拍不恢复)。
  * !成员/组的 relocate 签名同理必须进指纹(P0 迁移可见性): 相位推进只改 relocate 值,
  *   组行与成员对象引用不变, 漏槽会让进度徽标停在旧相位。 */
 function _decoFpBuild(g) {
   const ms = g.members || [];
   const fp = [ms];
   for (const m of ms) {
-    fp.push(m.kind, m.size, m.category, m.site, m.tags, m.site_alert, m.site_alert_msg, _relocateSig(m.relocate));
+    fp.push(m.kind, m.size, m.category, m.site, m.tags, m.site_alert, m.site_alert_msg,
+            !!m.site_provisional, _relocateSig(m.relocate));
   }
   fp.push(ms.length ? ms[0].save_path : undefined, _groupRelocateSig(g.relocate));
   return fp;
@@ -109,12 +112,12 @@ function _decoFpBuild(g) {
 
 function _decoFpHit(g, fp) {
   const ms = g.members || [];
-  if (fp[0] !== ms || fp.length !== ms.length * 8 + 3) return false;
+  if (fp[0] !== ms || fp.length !== ms.length * 9 + 3) return false;
   let i = 1;
   for (const m of ms) {
     if (fp[i++] !== m.kind || fp[i++] !== m.size || fp[i++] !== m.category || fp[i++] !== m.site ||
         fp[i++] !== m.tags || fp[i++] !== m.site_alert || fp[i++] !== m.site_alert_msg ||
-        fp[i++] !== _relocateSig(m.relocate)) {
+        fp[i++] !== !!m.site_provisional || fp[i++] !== _relocateSig(m.relocate)) {
       return false;
     }
   }

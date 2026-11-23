@@ -510,7 +510,7 @@ def test_frontend_site_alert_icon_wiring():
     CMD_TOKENS = ("pending", "ok", "warn", "error")
     NEED = {".site-chip .sx", ".g-status.k-error .ico", ".site-chip.search-hit"}
     NEED |= {f".site-chip .sx-{t}" for t in CMD_TOKENS}
-    NEED |= {".site-chip.sa-no-conf", ".site-chip.sa-tracker"}
+    NEED |= {".site-chip.sa-no-conf", ".site-chip.sa-tracker", ".site-chip.sa-provisional"}
 
     def _selectors(css):
         """从 CSS 文本里收集本守阵关心的选择器(注释先剥, 避免注释里的示例文字被当成规则)

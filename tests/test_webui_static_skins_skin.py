@@ -240,9 +240,11 @@ def test_frontend_template_split_wiring():
                 f"prism/css/themes/{t}.css" for t in ("ocean", "galaxy", "frost", "golden", "orbit")
             ] + ["prism/css/base.css", "prism/css/components.css", "prism/css/views.css", "prism/css/dialogs.css"
                 ], (f"prism CSS 链接顺序漂移: {rels}(级联序 = link 序; 令牌/主题必须在最前, 弹窗层在最后)")
-            # 体量: 存量冻结 —— prism/css/views.css 现存 818 行(页面级版式密度本就高于另两皮肤),
+            # 体量: 存量冻结 —— prism/css/views.css 原冻结 818 行(页面级版式密度本就高于另两皮肤),
             # 拆它属独立排期; 这里冻结现值, 只拦"再长"。其余文件一律吃 700 行口径。
-            frozen = {"prism/css/views.css": 818}
+            # 26-11-23-1339 S2: 本批按四皮肤现有惯例补 .site-chip.sa-provisional 压暗规则与 why 注释,
+            # 净增 5 行 → 基线 818→823; 此后继续冻结 823, 仍只拦"再长"。
+            frozen = {"prism/css/views.css": 823}
             for p in css_files:
                 rel = os.path.relpath(p, STATIC_ROOT).replace(os.sep, "/")
                 n = open(p, encoding="utf-8").read().count("\n")
@@ -809,6 +811,11 @@ def test_frontend_fx_site_chip_shape_layering():
     _body_has(
         ".sa-no-conf::before", "border-bottom: 1px dashed var(--warn)",
         ("S4 迁入的缺配置虚线底边载体缺失 —— 边线消失(dashed 是 D4 非颜色通道, 迁移回退)")
+    )
+    _body_has(
+        ".sa-provisional::before", "background: var(--surface-2)",
+        ("基础代临时态压暗的柔底载体缺失 —— flux 第四套皮肤下 chip 不压暗"
+         "(计划 26-11-23-1339 S2/Q2: 压暗柔底画在 ::before 切角层, 与 sa-* 同分层同构)")
     )
     for sel in (".paused", ".other", ".search-hit"):
         _body_has(sel, "box-shadow: none", ("S4 本体侧关闭漏写 —— 本体方角 inset 线与 ::before 切角线双线叠画"))

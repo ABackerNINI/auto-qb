@@ -491,7 +491,7 @@ def test_decorate_fingerprint_includes_relocate():
           "src/auto_qb/webui/static/shared/decorate.js").read_text(encoding="utf-8")
     assert "function _relocateSig(" in js and "function _groupRelocateSig(" in js
     assert "_relocateSig(m.relocate)" in js
-    assert "fp.length !== ms.length * 8 + 3" in js, "成员 relocate 槽 + 组 relocate 槽必须同步长度"
+    assert "fp.length !== ms.length * 9 + 3" in js, "成员 site_provisional/relocate 槽 + 组 relocate 槽必须同步长度"
     assert "_groupRelocateSig(g.relocate)" in js
     assert "r.armed_at" in js, "P1 详情消费 armed_at, 必须进装饰指纹"
     assert "r.created_at" in js, "P1 详情消费设置时间, 新字段必须进装饰指纹"

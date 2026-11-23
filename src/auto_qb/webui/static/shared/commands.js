@@ -40,11 +40,14 @@ window.AQB_COMMANDS = {
     /* ---------------- 站点 chip: 站点问题走颜色, 命令结果走图标(计划 26-10-19-2206) ----------------
      * 缺配置 = 橙底 + 虚线底边(非颜色通道, D4), tracker 报错 = 红底; 图标只剩命令结果一种,
      * 固定放在站点名之后 —— 一列扫下去图标位置恒定。 */
-    /* 站点问题 -> chip/明细行类名(返回 "" / "sa-no-conf" / "sa-tracker")。
-     * 判定只读后端 token(site_alert), 不在前端按 state 猜原因; 缺配置优先于报错 ——
-     * 与后端 _site_alert 的判定顺序一致(配置缺失时报错文本不可信)。
+    /* 站点问题 -> chip/明细行类名(返回 "" / "sa-provisional" / "sa-no-conf" / "sa-tracker")。
+     * 判定只读后端字段, 不在前端按 state 猜原因。基础代临时态(site_provisional)优先 ——
+     * 后端此时已把 site_alert 置空, 二者不会同现; 先判临时态压暗再走原 site_alert 映射,
+     * 稳妥兜住任何字段并存的脏数据(计划 26-11-23-1339 S2/Q2: 只压暗颜色, 不加新文案)。
+     * 缺配置优先于报错 —— 与后端 _site_alert 的判定顺序一致(配置缺失时报错文本不可信)。
      * 类名与旧图标类(sa-no_site_conf / sa-tracker_error)刻意不同名: 旧类残留会被静态守阵拦下。 */
     siteAlertClass(m) {
+      if (m && m.site_provisional) return "sa-provisional";
       const t = m && m.site_alert;
       if (t === "no_site_conf") return "sa-no-conf";
       if (t === "tracker_error") return "sa-tracker";

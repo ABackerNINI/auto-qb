@@ -13,8 +13,8 @@
   已移除(轮询已落地)也收; _deleteFlow 回执契约四出口(取消/汇报前置失败/发送异常 => false,
   回执 ok => true; bulk 载荷 action/hashes/delete_files 齐全; 未知目标 falsy 零投递)
 - test_r4_deco_fingerprint_pair: R5#56 —— 组行装饰记忆化指纹对 build->hit 往返: 未脏行必命中、
-  fp 长度不变量(n*8+3)、逐槽必失配(kind/size/category/site/tags 引用/site_alert/site_alert_msg/
-  成员 relocate 签名字段/首成员 save_path/members 引用/成员数增减/组 relocate 签名)、
+  fp 长度不变量(n*9+3)、逐槽必失配(kind/size/category/site/tags 引用/site_alert/site_alert_msg/
+  site_provisional/成员 relocate 签名字段/首成员 save_path/members 引用/成员数增减/组 relocate 签名)、
   失配后恢复原值复命中(逐槽值比对而非一次性)、重算回填后的新指纹对往返命中、
   无 relocate 字段与空成员组边界
 - test_r4_delete_details_rows: R5#145 —— 删除确认框行拼装: _hrRiskOf(HR_NO_DELETE 只认 danger,
@@ -293,7 +293,7 @@ const ok = (name, cond) => checks.push([name, !!cond]);
 
 const mkMember = (over) => Object.assign({
   hash: "h1", kind: "seeding", size: 100, category: "cat", site: "s1",
-  tags: ["t1"], site_alert: "", site_alert_msg: "",
+  tags: ["t1"], site_alert: "", site_alert_msg: "", site_provisional: false,
   relocate: { state: "moving", phase: "watching", job_id: "j1", mover: true, origin: "web",
               alias_kind: "symlink", alias_count: 2, src: "R:/a", dst: "R:/b",
               created_at: 1, armed_at: 2, updated_at: 3, reason: "" },
@@ -308,13 +308,14 @@ const g = mkGroup([m1, m2], { state: "mixed", pending: 1, total: 2, job_ids: ["j
 // 1. 未脏行必命中 + 长度不变量
 const fp = B(g);
 ok("未脏行 build->hit 命中", H(g, fp) === true);
-ok("fp 长度不变量 n*8+3(与 build 槽清单逐字对应)", fp.length === 2 * 8 + 3);
+ok("fp 长度不变量 n*9+3(与 build 槽清单逐字对应)", fp.length === 2 * 9 + 3);
 
-// 2. 逐槽必失配(成员 8 列值槽 + save_path); 每槽配对还原(值槽换引用, relocate 是原地改值
+// 2. 逐槽必失配(成员 9 列值槽 + save_path); 每槽配对还原(值槽换引用, relocate 是原地改值
 // 槽 —— 签名槽的还原必须写回原字段值, 只还原引用不够)
 const relSnap = JSON.parse(JSON.stringify(m1.relocate));
 const snap = { kind: m1.kind, size: m1.size, category: m1.category, site: m1.site, tags: m1.tags,
-               site_alert: m1.site_alert, site_alert_msg: m1.site_alert_msg, save_path: m1.save_path };
+               site_alert: m1.site_alert, site_alert_msg: m1.site_alert_msg,
+               site_provisional: m1.site_provisional, save_path: m1.save_path };
 const mutAndMiss = (name, fn, undo) => {
   fn();
   const missed = H(g, fp) === false;
@@ -329,6 +330,8 @@ mutAndMiss("槽: site", () => { m1.site = "s9"; }, () => { m1.site = snap.site; 
 mutAndMiss("槽: tags 引用(换新数组即失配)", () => { m1.tags = ["t1"]; }, () => { m1.tags = snap.tags; });
 mutAndMiss("槽: site_alert", () => { m1.site_alert = "err"; }, () => { m1.site_alert = snap.site_alert; });
 mutAndMiss("槽: site_alert_msg", () => { m1.site_alert_msg = "boom"; }, () => { m1.site_alert_msg = snap.site_alert_msg; });
+mutAndMiss("槽: site_provisional(基础代压暗, R3 二拍翻假必须触发 delta 重绘)",
+           () => { m1.site_provisional = true; }, () => { m1.site_provisional = snap.site_provisional; });
 mutAndMiss("槽: 成员 relocate.state(P0 相位推进只改值)",
            () => setRel("state", "done"), () => setRel("state", relSnap.state));
 mutAndMiss("槽: 成员 relocate.src(P1 详情段消费)",

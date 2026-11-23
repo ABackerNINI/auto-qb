@@ -94,6 +94,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .site-chip.sa-no-conf { background: var(--warn-soft); color: var(--warn);
   border-bottom: 1px dashed var(--warn); }
 .site-chip.sa-tracker { background: var(--error-soft); color: var(--error); }
+/* 基础代临时态(计划 26-11-23-1339 S2/Q2): 站点名由 rec.tracker 廉价解析推断, 尚未绑真 conf ——
+ * 只把 chip 压暗/去饱和做轻微区别, 不加新文案也不用警示橙(那是 sa-no-conf 的语义);
+ * 颜色全取令牌(中性柔底 + 暗字), 只染 chip 不动行底色; 二拍 site_provisional 翻假即恢复常态色。 */
+.site-chip.sa-provisional { background: var(--surface-2); color: var(--fg-dim); }
 /* 明细行站点文本(D9): 没有 chip 底色可用, 只染文字色(不动行底色, 不与行状态色抢) */
 .m-site.sa-no-conf { color: var(--warn); }
 .m-site.sa-tracker { color: var(--error); }
