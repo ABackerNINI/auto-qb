@@ -9,7 +9,7 @@
 TOTAL                                                28957     45  10328     63    99%
 6505 passed, 6 skipped, 8 warnings in 137.62s (0:02:17)
 
-`commands run test.full` 实测(2026-11-20 09:40, 覆盖率 99% 达标)。真机验收(P1-3 ≤3s / P2-4 ≤1.5s)按用户拍板剥离, 未跑, 待用户在有 qB/浏览器环境做。
+`commands run test.full` 实测(2026-11-20 09:40, 覆盖率 99% 达标)。真机验收(P1-3 ≤3s / P2-4 ≤1.5s)按用户拍板剥离, 未跑, 待用户在有 qB/浏览器环境做。（此为 26-11-20 当时口径；26-11-23 真机已验收，见 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md）
 
 ## 本改动面
 

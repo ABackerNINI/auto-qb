@@ -162,7 +162,7 @@ config_public_req 出现在 12,036ms（框架可见那一刻）-> 后端 API 不
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-20-0727</span> 初版：来源为 grilling 三轮 8 问拍板 + issue 26-11-20-0553 §08 真机证据 + issue 26-11-20-0726 构建工具链对比；要点为两期方案、D1-D8、≤1.5s 验收与分期门槛。</li>
-  <li><span class="tag">R1 · 26-11-20-0954</span> 收尾：P1/P2-a/P2-b 三笔本地提交落地（<code>204f69df</code> 分片 Promise.all 并发 + 脚本 preload 批量插入 / <code>072f2734</code> 静态树哈希 + HTML 令牌替换 / <code>c5cee5f0</code> withV + immutable 四态分流）；守阵 <code>test.quick</code> 全绿（验收数字只进基线切片，本条不写裸数字）。P1-3 真机复测（≤3s）与 P2-4 真机验收（≤1.5s）按用户拍板剥离、未做——子代理只承担代码 + 自动化测试，框架可见 ≤1.5s 待用户在有 qB/浏览器环境验收，不得当作已达成；收尾回写两条新坑档、task 档案 26-11-20-webui-boot-static-fingerprint、架构/坑档事实回写、计划与两 issue 双向补链、基线切片。</li>
+  <li><span class="tag">R1 · 26-11-20-0954</span> 收尾：P1/P2-a/P2-b 三笔本地提交落地（<code>68a8c693</code> 分片 Promise.all 并发 + 脚本 preload 批量插入 / <code>4401b13b</code> 静态树哈希 + HTML 令牌替换 / <code>37e8c7f8</code> withV + immutable 四态分流）；守阵 <code>test.quick</code> 全绿（验收数字只进基线切片，本条不写裸数字）。P1-3 真机复测（≤3s）与 P2-4 真机验收（≤1.5s）按用户拍板剥离、未做——子代理只承担代码 + 自动化测试，框架可见 ≤1.5s 待用户在有 qB/浏览器环境验收，不得当作已达成；收尾回写两条新坑档、task 档案 26-11-20-webui-boot-static-fingerprint、架构/坑档事实回写、计划与两 issue 双向补链、基线切片。原 26-11-20 哈希经 rebase 变更。</li>
   <li><span class="tag">R2 · 26-11-23-1240</span> 真机验收完成，P1/P2/静态重验/四皮肤判据全达标（证据档 memory-bank/testing/real-baselines/26-11-23-1232-webui-boot-first-data-acceptance.md），升级路径未采；issue 0553 保持 Open 待用户定夺是否翻 Done；本计划代码+验收闭环。</li>
 </ul>
 
