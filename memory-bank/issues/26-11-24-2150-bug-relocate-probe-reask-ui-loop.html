@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组移动二次确认后回到设定位置框、无移动反馈 · bug · 计划外问题</title>
+<meta name="issue-slug" content="relocate-probe-reask-ui-loop">
+<meta name="issue-stamp" content="26-11-24-2150">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-confirm-probe-reask-three-step">
+<meta name="doc-refs" content="memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/tasks/26-11-24-backend-relocate-foreign-notified-cleanup.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="整组移动二次确认后回到设定位置框、无移动反馈">
+<meta name="issue-summary" content="真机首次确认被同机探测闸消费, 续跑再次等确认时前端回到设定位置框且看不到受理提示, 用户误判为无法移动">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>整组移动二次确认后回到设定位置框、无移动反馈</h1>
+<p class="lede">真机首次确认被同机探测闸消费, 续跑再次等确认时前端回到设定位置框且看不到受理提示, 用户误判为无法移动</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-24-2150-bug-relocate-probe-reask-ui-loop</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-24 21:50</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>真机 <code>D:\Projects\auto-qb-long-seeding</code> 整组移动（<code>relocate.enabled=true</code>，<code>foreign_torrent</code> 缺省 true）。用户对一组 4 个 hash 点「设定位置」→ 弹确认框 → 点确认 → 又回到「设定位置」对话框，界面上看不到任何迁移进度，判断为「无法再次移动」。用户 2026-11-24 21:49 口述确认：不是硬拒，是确认框反复出现、无移动反馈造成的误判。</p>
+  <p>与平台无强绑定；触发需要首次提交命中「需确认」闸门（目录别名 / 长路径校正等）且随后进入同机强探测未命中缓存的路径。此前 issue <a href="26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html">26-11-22-0905-question-relocate-confirm-probe-reask-three-step</a>（Done）已记录「confirm 位被探测闸消费、自动续跑再问一次」，修法只补回执文案；本件记的是**前端呈现**层：探测中回执被当作失败、对话框重开且无「已受理」提示。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">取证 2026-11-24 21:50，<code>auto-qb-data/logs/auto-qb.log</code> 原文：</p>
+<pre><code>2026-11-24 21:17:40,488 - INFO - relocate | 迁移执行(4 个 hash -> 1 项): ok 0 / confirm 1 / blocked 0
+2026-11-24 21:17:40,489 - INFO - WEB UI | 批量移动位置(整组迁移) 4 个: 已发起 0 / 幂等跳过 0 / 需确认 1 / 拒绝 0
+2026-11-24 21:20:22,172 - INFO - relocate | 迁移执行(4 个 hash -> 1 项): ok 0 / confirm 0 / blocked 1
+2026-11-24 21:20:22,172 - INFO - WEB UI | 批量移动位置(整组迁移) 4 个: 已受理(同机探测进行中 1 项; 拒绝 0 项)
+2026-11-24 21:20:24,483 - INFO - relocate | probe verdict 消费: 指纹 a2042df3 结论 passed/ok(缓存已写(passed))
+2026-11-24 21:20:24,491 - INFO - relocate | 迁移执行(4 个 hash -> 1 项): ok 0 / confirm 1 / blocked 0
+2026-11-24 21:20:25,249 - INFO - WEB UI | 整组迁移(探测结论自动续跑): 已发起 0 / 幂等跳过 0 / 需确认 1 / 拒绝 0</code></pre>
+  <p>要点：两轮都是 <code>confirm 1 / 拒绝 0</code>，没有任何闸门硬拒；探测结论到达后自动续跑重新过闸，再次落到 <code>confirm</code>，用户看到的就是「点确认 → 回对话框 → 没动」。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>整组迁移武装态 + 首次提交命中 confirm 闸 + 同机强探测未命中缓存（异步探测一轮）</td></tr>
+    <tr><td>影响范围</td><td>WebUI 设定位置对话框（单种子 / 单组 / 多选批量三入口共用 <code>submitMoveDialog</code>）；不改数据，零副作用。与 <code>foreign</code> 标注无关（该组 jobs=0，foreign 账不进闸门）</td></tr>
+    <tr><td>严重度</td><td>中 —— 功能可用但需要多点一次确认；用户误判为功能失效，是真机可复现的可用性缺陷</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">符号名 + grep 关键词 + 取证当时行号（2026-11-24 21:50，目标 clone <code>728192e</code> 工作树）：</p>
+  <ul>
+    <li><code>src/auto_qb/webui/static/shared/drawer.js:918-980</code>（取证 2026-11-24 21:50）· <code>submitMoveDialog</code> · grep <code>async submitMoveDialog</code> —— confirm 回路：<code>final === "confirm"</code> 只 toast 后 <code>reopen()</code>；<code>r.ok=false</code> 落失败 toast 分支</li>
+    <li><code>src/auto_qb/webui/static/shared/drawer.js:679-705</code>（取证同上）· <code>_editPost</code> · grep <code>_relocateConfirmCount</code> —— 只把 <code>confirm</code> 桶译作二次确认；warn 桶走「移动失败」分支</li>
+    <li><code>src/auto_qb/webui/commands_torrents.py:472-480</code>（取证同上）· <code>_relocate_receipt</code> · grep <code>已受理</code> —— 仅探测中时写 warn 回执「已受理…」</li>
+    <li><code>src/auto_qb/core/modules/relocate_exec.py:2350-2366</code>（取证同上）· 探测闸 note · grep <code>续跑重新过全闸链</code> —— 26-11-22-1714 D8 补的预告文案（行为未改）</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（已定位，待认领复验）</span></h2>
+  <div class="callout">探测闸的「已受理」是 <code>warn</code> 回执（<code>r.ok=false</code>），前端 <code>_editPost</code> 只认 <code>confirm</code> 桶为二次确认，其余非 ok 一律当失败；用户点完第一次确认后看到的不是「探测进行中」，而是对话框重开、无进度提示。探测结论到达后续跑不带 confirm 位（安全设计，不代用户点头），再次落到 confirm 桶并要求第二次确认 —— 于是形成「确认 → 回框 → 没动」的观感。</div>
+  <p>已排除：后端闸门硬拒（日志两轮 <code>拒绝 0</code>）；foreign 标注阻断（foreign 账不参与 <code>evaluate_group_unit</code>）。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>只写方向，待认领后拍板：</p>
+  <ol>
+    <li><strong>呈现层最小改</strong>：<code>_editPost</code> 识别探测中的 warn 回执（<code>truth.summary.probing&gt;0</code>），给「已受理、探测中，结论到达后自动续跑」的持续提示而非失败 toast，对话框收起；续跑再次 confirm 时用非模态提示明确说明「需再确认一次，前次确认已被探测消费」。代价小，不动后端安全设计。</li>
+    <li><strong>交互层改</strong>：在第一次确认框里预告「本次确认用于探测，探测通过后会再问一次」（后端文案已有，前端未透出到用户眼前）。代价小，但仍是两步。</li>
+    <li><strong>后端语义改</strong>：探测闸消费 confirm 位、续跑继承。直接消除两步，但推翻 26-11-22-1714 D8「绝不代用户点头」拍板，需重新拍板，不建议在这个 issue 里静默做。</li>
+  </ol>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-24 21:50 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-24-2150-bug-relocate-probe-reask-ui-loop.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

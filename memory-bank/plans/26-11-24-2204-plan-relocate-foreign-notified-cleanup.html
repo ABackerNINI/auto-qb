@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>外部旧路径种子通知账启动自愈</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-foreign-notified-cleanup">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-24-2204">
+<meta name="doc-updated" content="26-11-24-2212">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-24-backend-relocate-foreign-notified-cleanup.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-foreign-notified-cleanup</div>
+<h1>外部旧路径种子通知账启动自愈</h1>
+<p class="lede">本篇只回答: 外部旧路径种子通知账(relocate.foreign.notified)在 job 终态/清空历史后永久滞留,如何在不推翻 D4「终态 mismatch 重落 + 恰重发一次」拍板的前提下,用启动接管期的孤儿账自愈清掉陈旧条目。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-24-2204 · <b>doc-updated</b> 26-11-24-2212 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-24 会话只读取证 + 用户逐项 grilling 拍板(D1–D8);取证对象 <code>D:\Projects\auto-qb-long-seeding</code>(工作树),当前 clone 仅落文档
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>目标</b>:在 relocate 模块接管(<code>enabled=true</code> 的启动或热启用)时陈旧 A/mismatch 账归零;活跃 job 的 A 账与全部 B 账不动;D4 重落重告警语义不动;dry-run 零副作用;不 materialize 账键。<b>边界</b>:<code>enabled=false</code> 时 <code>_load_jobs</code> 不被调用(启动/热启用两处均包在 <code>if enabled</code> 内),关闭态的存量账要等模块被启用才自愈 —— 与"闸关闭期间视图冻结"同一边界(Open issue <code>26-11-21-1326-feat-relocate-foreign-view-stale-gate-off</code>)。</p>
+<ul>
+  <li><b>不变量</b>:单一写线程(清理挂 <code>_load_jobs</code> 尾部,主循环线程);写前走只读视图判存在;删除用 <code>pop(h, None)</code> 幂等。</li>
+  <li><b>不做</b>:不引入周期定时器;不改在账跳过与 D4 文件清单比对;不动 <code>config.yml</code> 与 <code>auto-qb-data/</code> 里的人工数据;不写一次性清账脚本。</li>
+  <li><b>范围外</b>:确认框反复出现的 UX 问题(另 issue <code>26-11-24-2150-bug-relocate-probe-reask-ui-loop</code>);兄弟目录洪泛防御(B1 已落地);在账每拍重评(B 方案未采纳)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+  <li>取证 2026-11-24 21:30,目标 clone <code>auto-qb-data/state.json</code>:<code>relocate.jobs</code> 为 0,但 <code>relocate.foreign.notified</code> 有 61 条(60 mismatch + 1 A),<code>first_seen</code> 全在 11-21 14:11:41–51;root <code>h:/pt/longseeding/hdhome</code>,location <code>I:/PT/LongSeeding/HDHome</code>,phase 仍 <code>armed</code>,job_id <code>jr-a2ce556d0165</code> / <code>jr-d4834171bd83</code>。</li>
+  <li>日志:11-21 14:11:41 activation 扫入池 61 条;14:34 两个 job 收尾完成(当时终态清理逻辑尚未落地);14:41「清空历史: 已清除 4 条,剩余 0 条」;之后 reconnect 扫 0 候选 —— 账在 job 消失后永久滞留。</li>
+  <li>三条清理出口全错过:<code>_foreign_cleanup_notified</code> 只在种子从 qB 快照消失时删;<code>_foreign_cleanup_job_terminal</code> 只在"非终态→终态"边沿跑,边沿已过;<code>_foreign_full_scan</code> 对在账 hash <code>continue</code>,不再重判。</li>
+  <li>当前代码 B1 内容根预筛已接线(<code>relocate_foreign.py:454</code> 调用、<code>:521</code> 定义),兄弟目录洪泛不再复现。残留路径仅剩:终态后才到达的 mismatch、空 job 表的存量启动、闸关闭期间视图冻结(Open issue <code>26-11-21-1326-feat-relocate-foreign-view-stale-gate-off</code>)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>:启动接管期一次性自愈,不做周期扫、不做落账拦截。落点 = <code>relocate_mod._load_jobs</code> 尾部(reconciled 回写之后、<code>prune_success_history</code> 与接管写穿同窗)。单期实施,D1–D8 见 §06。</p>
+<table>
+  <tr><th>决策</th><th>结论</th><th>默认 / 备选</th></tr>
+  <tr><td>范围</td><td>A 窄版自愈:启动清孤儿 + 保留 D4 重落</td><td>推荐 / C 仅数据清理、B 在账重评均未采纳</td></tr>
+  <tr><td>时机</td><td>启动扫一次;落账拦截撤销</td><td>推荐 / 周期扫未采纳</td></tr>
+  <tr><td>判据</td><td>kind ∈ {A, mismatch} 且(job 不在 <code>_jobs</code> 或已终态);B 一律保留</td><td>推荐</td></tr>
+  <tr><td>存量</td><td>靠下次启动自愈清当前 61 条,不写脚本、不改 state.json</td><td>推荐</td></tr>
+  <tr><td>开关</td><td>清理函数本身只受 dry-run 限制、不受 foreign_torrent 限制;但调用点 <code>_load_jobs</code> 仅在 <code>relocate.enabled=true</code> 时执行(启动/热启用),故关闭 enabled 时存量账不自愈</td><td>推荐(评审 minor 修订)</td></tr>
+  <tr><td>验收</td><td>单测 + test.full + 测试 qB 走真机 real.up 路径</td><td>用户指定</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步骤</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1 清理函数</td><td>新增 <code>_foreign_cleanup_stale_notified()</code>(ForeignMixin):只读视图先判存在,遍历 kind∈{A,mismatch} 且 job 不在 <code>self._jobs</code> 或 <code>job.phase ∈ TERMINAL_PHASES</code> 的条目,<code>pop</code> 删除并 DEBUG 计数;B 与活跃 job 的 A 不动。</td><td>单测覆盖:job 不在 / 已终态的 A+mismatch 清、B 留、活跃 A 留、无命中零动作、foreign_torrent=false 不建键。</td></tr>
+  <tr><td>S2 接线</td><td><code>_load_jobs</code> 尾部(reconciled 落盘之后、prune 之前)调 <code>if not self._dry_run(): self._foreign_cleanup_stale_notified()</code>;清理后调一次 <code>_foreign_publish_view()</code> 换代;与现有接管写穿同窗落盘。</td><td>dry-run 零写账测试;启动后 WebUI foreign 行消失;幂等重复启动零副作用。</td></tr>
+  <tr><td>S3 回归守阵</td><td><code>tests/test_relocate_startup_reconcile.py</code> 增启动清理守阵;<code>tests/test_relocate_foreign.py</code> 补一条确保 D4 重落重告警、在账跳过不被影响。</td><td>新用例全绿;删掉清理调用即红(回归敏感度)。</td></tr>
+  <tr><td>S4 闸门与真机</td><td><code>commands run test.full</code>(数字只写基线切片);真机验收用测试 qB:<code>commands run real.up</code> 拉起白名单测试实例,按 <code>testing/real-machine.md</code> 跑 <code>real.guard</code> → <code>real.run</code>/<code>real.suite</code> 对启动自愈路径验收,不碰生产 <code>state.json</code>。</td><td>全绿(见 kb.baseline);真机用例通过并记录环境 id;生产存量由用户下次真启动时自愈,计划不代跑生产。</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无未决项。八项口径已在 grilling 中逐项拍板并迁入 §06;若实施读码发现新分叉,再以 D9 起编号追加。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>日期</th><th>结论</th></tr>
+  <tr><td>D1</td><td>2026-11-24</td><td>范围取 A 窄版自愈:启动孤儿账清理 + 保留既有 D4 重落;不做 B 在账重评、不做 C 一次性脚本。</td></tr>
+  <tr><td>D2</td><td>2026-11-24</td><td>清理时机 = 启动扫一次 + 落账拦截;经 D4 修订为撤销拦截。</td></tr>
+  <tr><td>D3</td><td>2026-11-24</td><td>判据 = job 不在或已终态的 A/mismatch;B 一律保留。</td></tr>
+  <tr><td>D4</td><td>2026-11-24</td><td>遇 <code>26-11-21-1326-refactor-relocate-foreign-notified-cleanup</code> 的 D4 拍板冲突,撤销落账拦截,保留终态 mismatch 重落 + 恰重发一次 WARNING。</td></tr>
+  <tr><td>D5</td><td>2026-11-24</td><td>当前 61 条存量靠下次启动自愈清,不写一次性脚本、不手工改生产 state.json。</td></tr>
+  <tr><td>D6</td><td>2026-11-24</td><td>挂点 = <code>_load_jobs</code> 尾部;用户确认骨架。</td></tr>
+  <tr><td>D7</td><td>2026-11-24</td><td>开关口径 = 清理函数只受 dry-run 限制、不受 foreign_torrent 限制;调用点受 enabled 闸控(<code>_load_jobs</code> 仅在 enabled 时跑),关闭 enabled 时存量账不自愈。靠只读视图保证不 materialize 键。</td></tr>
+  <tr><td>D8</td><td>2026-11-24</td><td>真机验收用测试 qB 的 <code>real.up</code> 路径,不跑生产实例。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险 / 触发</th><th>处置</th></tr>
+  <tr><td>误清活跃 job 的 A 账(判据取盘上陈旧 job 表)</td><td>判据只认 <code>_load_jobs</code> 已灌回的内存 <code>self._jobs</code>;启动对账先跑,清理后跑。</td></tr>
+  <tr><td>foreign_torrent=false 时清账但发布视图冻结</td><td>属已入池 Open issue <code>26-11-21-1326-feat-relocate-foreign-view-stale-gate-off</code> 的既有边界;本计划只清账不修冻结,清完调一次发布换代。</td></tr>
+  <tr><td>enabled=false 时存量账不自愈</td><td><code>_load_jobs</code> 仅在 enabled 时调用(启动 <code>relocate_lifecycle.py:43</code> / 热启用 <code>:113</code>,取证 2026-11-24 22:10);关闭态属同一冻结边界,需先启用模块才触发清理。</td></tr>
+  <tr><td>dry-run 误写账</td><td>调用点包 <code>if not self._dry_run()</code>,与 <code>_migrate_legacy_accounts</code> 同判;单测守阵。</td></tr>
+  <tr><td>终态 mismatch 重告警继续刷通知</td><td><code>26-11-21-1326-refactor-relocate-foreign-notified-cleanup</code> 的 D4 用户拍板接受(重落 + 恰重发一次);本计划不改,若日后要改须新拍板。</td></tr>
+  <tr><td>生产 state.json 手工清理踩红线</td><td>明令禁止;生产存量靠用户下次真启动自愈,本计划只在测试 qB 上验收。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-24-2204</span> 初版:来自会话只读取证(61 条陈旧账、job=0、终态边沿已过)与用户 grilling 的 D1–D8;定 A 窄版启动自愈,保留 D4 重落重告警。</li>
+  <li><span class="tag">R1 · 26-11-24-2212</span> 评审修订:① D4 拍板引用补全为 <code>26-11-21-1326-refactor-relocate-foreign-notified-cleanup</code>(同时间戳另有一件 view-stale-gate-off,此前引用有歧义);② 补明 <code>enabled=false</code> 时 <code>_load_jobs</code> 不被调用、存量账不自愈的边界(§01/§03 D7/§07)。两条均经引文校验与源码复核属实。</li>
+</ul>
+
+</div>
+</body>
+</html>
