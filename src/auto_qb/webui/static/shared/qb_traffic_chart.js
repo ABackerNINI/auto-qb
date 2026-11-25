@@ -67,13 +67,13 @@
  * V3 三阶段多边形粒子(两轨合计 ≤32)+ 次区流动光点; N 层白名单(Lv 色相, cfg.neon 独立开关),
  * D3 双轨仲裁(both/lead/merge)与 D4 末点 y 间距缩小。图层顺序 I6 单点
  * _QB_FX_LAYER_ORDER, 背景零铺色(I11/G7), 曲线描边恒语义色一行不动(I10/D1); 纯函数(仲裁/
- * 预算/粒子运动/回落阈值)在模块级「视觉引擎」节, 绘制在 methods 域 _qbDrawFx/_qbDrawFxAnchor
- * (drawAxes/draw 钩子, 不新增 canvas), 装饰帧挂节拍调度器循环内(无独立循环)。
+ * 预算/粒子运动/回落阈值)在模块级「视觉引擎」节, 绘制在 methods 域 _qbDrawFx/_qbDrawFxCurveGlow/
+ * _qbDrawFxAnchor(drawAxes/draw 钩子, 不新增 canvas), 装饰帧挂节拍调度器循环内(无独立循环)。
  *
  * T6 综合表现层(S2-b, plan §03 T6 行/D17-D19 + §02 R5/R6/R7): 在 S2-a 引擎上补齐 T6 五层 ——
  * T2 光带爬升(cfg.layers.band: 末点插值 shown 的渐变光带两轨各自画, 读数过渡不占装饰预算;
  * N 数值光带辉光 bandHalo 仅 lead 一道, 同帧 blur 描边 <=5: 环外圈 <=2 + 光带 1 + 曲线辉光 2
- * (A1/D4 本阶段落地))+ T4 扫描束
+ * (_qbDrawFxCurveGlow 全程常驻 + 视口裁剪))+ T4 扫描束
  * (_qbDrawFxScan: 双相位六层束 —— 亚像素硬核/六层晕/色散/彗尾/梳齿/回声, 束体逐帧 ≤23 指令,
  * 回声越线 span=clamp(0.22×绘图宽,100,200) px 按 pow(1−d/span,0.85) 距离衰减、到点几何硬停;
  * 束体 clip 放宽到画布右缘 —— 判定线右侧留白是相位 A「滑入」与右向结构的可见域, 段尾自含
@@ -846,11 +846,13 @@ function _qbFxShown(track, p, ease) {
  * methods 域: _qbDrawFx(drawAxes 钩子 = uPlot 网格之后、系列原生之前: T2 光带 → 几何环/粒子/
  * 撕裂切片 → N 霓虹元素层, 段尾 restore 后再调 _qbDrawFxScan 扫描束 —— 束体自含 save/scale
  * 且 clip 放宽到画布右缘, 判定线右侧留白是相位 A「滑入」的可见域, 层序仍先于系列(I6))与
- * _qbDrawFxAnchor(draw 钩子 = 系列之上: 末点菱形锚 + lead 策略从属轨描边加亮), 装饰帧挂在
+ * _qbDrawFxCurveGlow(draw 钩子 = 系列之上: 曲线辉光全程常驻 + 严格绘图区视口裁剪, 无时间窗
+ * 无 tail 门)与 _qbDrawFxAnchor(draw 钩子 = 系列之上: 末点菱形锚 + lead 策略从属轨描边加亮), 装饰帧挂在
  * 节拍调度器的 rAF 循环内(无独立循环 —— 调度器每帧提交即重跑钩子, L0/L1 提交帧顺路带出装饰)。
  * !clip 口径(F5, plan 26-11-14-1313): _qbDrawFx 与 _qbDrawFxAnchor 的 clip 右缘放宽到画布右缘
  * (rect(L, T, max(W, canvasW-L), H), 同 _qbDrawFxScan 评审 blocker 修复先例 —— 判定线右侧留白
- * 是环/粒子/菱形锚的可见域, 无轴面内容); 左缘/上缘/下缘不动, 近底由环心上抬钳制与粒子底缘
+ * 是环/粒子/菱形锚的可见域, 无轴面内容); 曲线辉光 _qbDrawFxCurveGlow 例外用严格绘图区
+ * rect(L,T,W,H) clip(不放宽 —— R2 裁剪口径: 不画进判定线右留白); 左缘/上缘/下缘不动, 近底由环心上抬钳制与粒子底缘
  * 镜像反弹承接(P3 拍板), 菱形锚(数据标记)保持真位不钳。
  * 生效条件(I7/§05.6): cfg.on === true(有效值单点 = enabled && !reduce)且该轨 level ≥ 1 ——
  * 真 0(target==0)/缺口轨零装饰但 L0/L1 照常(D2/I10); 值>0 的活跃轨恒 ≥Lv.1(F1/D1, plan
@@ -882,8 +884,8 @@ const _QB_FX_LV_COLORS = { 1: "#7AD9FF", 2: "#FEFFA9", 3: "#FF6BD6" };
 
 /* V1 三档配色 shadowBlur 上限(I9): glitch 14 / neon(常规) 10 / calm 0。同帧辉光(blur)描边
  * 修订预算 <=5(S3 口径): 扩张环外圈(至多 2 次) + T2 数值光带辉光 bandHalo(仅 lead 轨 1 道)
- * + 曲线辉光 2 道(A1/D4, 拍内 t<beat 全曲线重描, 轨语义色); 锚辉光用无 blur 低透明外圈六边环
- * (白名单 anchorHalo), 粒子外圈/判定线短亮段不加 blur。曲线分量早期让给环外圈, 本阶段回退。 */
+ * + 曲线辉光 2 道(_qbDrawFxCurveGlow, 全程常驻 + 视口裁剪, 轨语义色); 锚辉光用无 blur 低透明外圈六边环
+ * (白名单 anchorHalo), 粒子外圈/判定线短亮段不加 blur。 */
 const _QB_FX_BLUR_CAPS = { neon: 10, glitch: 14, calm: 0 };
 
 /* V2 冲击环边数映射(由 lead 等级决定): Lv.1 三边 / Lv.2 六边 / Lv.3 八边 */
@@ -3447,9 +3449,78 @@ window.AQB_QB_TRAFFIC = {
         }
       }
     },
-    /* draw 装饰段(系列之上): 曲线辉光回退(A1/D4: 拍内 t<beat 全曲线 blur 重描) -> lead 策略从属轨
-     * 描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽半透明短段, 不着 Lv —— I10) -> N 锚辉光(白名单
+    /* 曲线辉光(draw 钩子 = 系列原生描边之后、_qbDrawFxAnchor 之前): 常驻 + 视口裁剪(缺陷一+二
+     * 重构, plan 26-11-26-0227 §3.1)。判据 = cfg.on===true 且 up/dl 轨 u._qbBeat.tracks[k].level>0
+     * —— level 拍间仍在, 不依赖 a.fx / anim 缺席亦画; 无 t<beat 时间窗、无 phase==="tail" 门:
+     * 生产 draw 钩子是事件驱动重绘(非模板 demo 连续 rAF), 旧「拍内窗」在拍间必然留空导致辉光
+     * 每拍闪现; 常驻后每次重绘都重描, 拍间画布保留末帧像素, 视觉常驻(模板 demo:1407-1409 观感)。
+     * 自身 ctx.save() + rect(L,T,W,H) 严格绘图区 clip(不采 F5 右缘放宽 —— R2: 不画进判定线右
+     * 留白; 缺陷二根因: 遍历全列而视口外点在 valToPos 下落到绘图区左缘外, 无自身 clip 时带 blur
+     * 画到图例上方) —— 遍历仍走全列 xs.length, 视口外点由 clip 裁除; 缺口 null 段 gStarted=false
+     * 断段重新 moveTo(spanGaps:false 语义, 与系列原生同款, 禁止桥接); shadowColor=轨语义色
+     * (tk 单源, 同旧 A1), shadowBlur = blurCap x (dual lead/both ? 1 : 0.45), 帧末清 0(帧内
+     * 非零赋值点恰 1 —— I9 预算峰值 <=5 不叠加); 曲线宽仍 _qbFxCurveWidth(常规 2.4 / calm 2,
+     * calm blurCap=0 自然退化普通描边)。yMax: 动画期取 anim.yMax(L1 收敛插值面钉档), 拍间/tail
+     * 回落 u.scales.y.max(同 _qbFxAnchorSync 口径)。双轨 level 均 <=0(真 0/缺口轨)早退零操作
+     * (不 touch ctx 状态)。 */
+    _qbDrawFxCurveGlow(u, tk) {
+      const cfg = window.AQB_FX_CFG;
+      if (!cfg || cfg.on !== true || !u.bbox || !u.ctx || !u.data || !u.data.length) return;
+      const st = u._qbBeat;
+      const tracks = st && st.tracks;
+      if (!tracks || (!(tracks.up.level > 0) && !(tracks.dl.level > 0))) return;
+      const a = st.anim && st.anim.phase !== "tail" ? st.anim : null;
+      const yMax = a && a.yMax > 0 ? a.yMax
+        : (u.scales && u.scales.y && u.scales.y.max > 0 ? u.scales.y.max : 1);
+      const px = this._qbCanvasScale(u);
+      const ctx = u.ctx;
+      const L = u.bbox.left / px;
+      const T = u.bbox.top / px;
+      const W = u.bbox.width / px;
+      const H = u.bbox.height / px;
+      const yOf = (v) => T + H * (1 - Math.min(v, yMax) / yMax);
+      const xs = u.data[0];
+      const blurCap = _QB_FX_BLUR_CAPS[cfg.palette] != null
+        ? _QB_FX_BLUR_CAPS[cfg.palette] : _QB_FX_BLUR_CAPS.neon;
+      const glowBlur = Math.round(blurCap * ((cfg.dual === "lead" || cfg.dual === "both") ? 1 : 0.45));
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(L, T, W, H);
+      ctx.clip();
+      ctx.shadowBlur = glowBlur;   // 单一施加点(两轨共用), 帧末清零 —— I9 非零赋值点恰 1
+      for (const k of ["up", "dl"]) {
+        if (!(tracks[k].level > 0)) continue;
+        const col = u.data[k === "up" ? 1 : 2];
+        const trackCol = k === "up" ? tk.up : tk.down;
+        ctx.strokeStyle = trackCol;
+        ctx.shadowColor = trackCol;
+        ctx.lineWidth = this._qbFxCurveWidth(cfg.palette);
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        let gStarted = false;
+        for (let i = 0; i < xs.length; i++) {
+          const v = col[i];
+          if (v == null) { gStarted = false; continue; }
+          const x = L + u.valToPos(xs[i], "x");
+          const y = yOf(v);
+          if (!gStarted) {
+            ctx.moveTo(x, y);
+            gStarted = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        if (gStarted) ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    },
+    /* draw 装饰段(系列之上): lead 策略从属轨描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽半透明
+     * 短段, 不着 Lv —— I10) -> N 锚辉光(白名单
      * anchorHalo, C7 模板式 6 边环随末点 tipX 滑动; 辉光色走 T5 联动单点, grade 关恒 Lv.1 —— S2-b)。
+     * 曲线辉光已抽独立常驻函数 _qbDrawFxCurveGlow(draw 钩子接线在系列原生之后、本方法之前 ——
+     * 缺陷一+二重构, plan 26-11-26-0227 §3.1), 不再在本方法内重描。
      * F2(plan 26-11-14-1313): 末点菱形**本体**移除画布侧(常驻层交 DOM .qb-fx-anchor, 本方法
      * 顶部顺路重写其位置 —— 避免双画); 画布只留拍内脉冲辉光, 与 DOM 常驻锚短暂分离属预期(C7 位置
      * 改 tipX 随末点滑, DOM 锚仍钉判定线 x —— 模板亦如此, 二者不要求逐帧同位置)。clip 放宽
@@ -3470,46 +3541,7 @@ window.AQB_QB_TRAFFIC = {
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
       const yOf = (v) => T + H * (1 - Math.min(v, a.yMax) / a.yMax);
-      // —— 曲线辉光回退(A1/D4, plan 26-11-22-2330 §3.3): 拍内窗 t < beat 且该轨 level>0 时按
-      //     u.data[1/2] 全曲线重描一遍(系列之上的 draw 钩子), 色走轨语义色, shadowColor=trackCol,
-      //     shadowBlur = blurCap x (dual lead/both ? 1 : 0.45) —— calm 档 blurCap=0 自然退化为普通
-      //     描边(I9 预算不增)。缺口 null 段 gStarted=false 断段重新 moveTo(与 spanGaps:false 同款,
-      //     禁止桥接 —— 与从属轨加亮同路); 帧末 shadowBlur=0。窗独立判断置于顶门之前 —— 顶门
-      //     0.7xbeat 只做锚段装饰的粗滤, 不得把曲线辉光误收到 0.7(拍内 0.7-1.0 段仍要有辉光)。 ——
-      if (t < fx.beatMs) {
-        const blurCap = _QB_FX_BLUR_CAPS[cfg.palette] != null
-          ? _QB_FX_BLUR_CAPS[cfg.palette] : _QB_FX_BLUR_CAPS.neon;
-        const glowBlur = Math.round(blurCap * ((cfg.dual === "lead" || cfg.dual === "both") ? 1 : 0.45));
-        ctx.shadowBlur = glowBlur;   // 单一施加点(两轨共用), 帧末清零 —— I9 非零赋值点恰 1
-        for (const k of ["up", "dl"]) {
-          if (!(st.tracks[k].level > 0)) continue;
-          const col = u.data[k === "up" ? 1 : 2];
-          const xs = u.data[0];
-          const trackCol = k === "up" ? tk.up : tk.down;
-          ctx.strokeStyle = trackCol;
-          ctx.shadowColor = trackCol;
-          ctx.lineWidth = this._qbFxCurveWidth(cfg.palette);
-          ctx.globalAlpha = 1;
-          ctx.beginPath();
-          let gStarted = false;
-          for (let i = 0; i < a.n; i++) {
-            const v = col[i];
-            if (v == null) { gStarted = false; continue; }
-            const x = L + u.valToPos(xs[i], "x");
-            const y = yOf(v);
-            if (!gStarted) {
-              ctx.moveTo(x, y);
-              gStarted = true;
-            } else {
-              ctx.lineTo(x, y);
-            }
-          }
-          if (gStarted) ctx.stroke();
-        }
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
-      }
-      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7xbeat(仅锚段装饰; 曲线辉光独立)
+      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7xbeat(仅锚段装饰)
       // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFx/_qbDrawFxScan 口径) ——
       // 末点在绘图区右缘的 N 锚辉光右半不再被切(F2 后画布只留辉光, 菱形本体在 DOM 常驻层);
       // 辉光位置取末点滑动 x(tipX, C7 改判); 与 DOM 常驻锚短暂分离属预期, 近底不钳。
@@ -4233,13 +4265,13 @@ window.AQB_QB_TRAFFIC = {
           // Ci("draw"), 且 Ci("drawAxes") 在 Dl.axes 函数**末尾**(网格/刻度/轴标画完之后)——
           // 即 drawAxes = **网格之后、系列原生之前**。故: drawClear = 缺口斜纹(恒最底, 与网格
           // 相互独立), drawAxes = 几何环/粒子/切片 → N 霓虹元素层(I6 层序: 装饰压网格不压曲线
-          // —— 挂 drawClear 会被网格盖住, 评审 blocker 实证), draw = 系列之上(限速虚线 → lead
-          // 从属轨加亮 + 末点菱形锚)。曲线描边由 uPlot 系列原生画在 drawAxes 之后 = 装饰永远
+          // —— 挂 drawClear 会被网格盖住, 评审 blocker 实证), draw = 系列之上(限速虚线 → 曲线辉光
+          // 常驻段 _qbDrawFxCurveGlow → lead 从属轨加亮 + 末点菱形锚)。曲线描边由 uPlot 系列原生画在 drawAxes 之后 = 装饰永远
           // 不压曲线(语义色一行不动 —— I10/D1)。tk 由本次建图捕获 —— 令牌换肤走整图重建,
           // 钩子随新图换新 tk。
           drawClear: [(u) => this._qbDrawGaps(u, tk)],
           drawAxes: [(u) => this._qbDrawFx(u, tk)],
-          draw: [(u) => this._qbDrawLimits(u, tk), (u) => this._qbDrawFxAnchor(u, tk)],
+          draw: [(u) => this._qbDrawLimits(u, tk), (u) => this._qbDrawFxCurveGlow(u, tk), (u) => this._qbDrawFxAnchor(u, tk)],
           // 悬停取值通道: uPlot 算好 idx/px, Vue 侧渲染 tooltip(数据/格式化走组件既有成员);
           // 尾锚显式视口(计划 26-11-22-0858)下单列恒等(store 列 == 显示列)—— 索引直通,
           // 旧补点扣减(setCursor 按 _qbPad 扣回真值索引)随补点退役。
