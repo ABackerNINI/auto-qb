@@ -892,15 +892,25 @@ const _QB_FX_RING_SIDES = { 1: 3, 2: 6, 3: 8 };
 const _QB_FX_ANCHOR_SPIN_MS = 2639;
 
 /* I9 视觉预算常量(R3: 全部按 up + dl 两轨合计, 不每轨各配一套): 粒子 ≤32 / 每轨半套 ≤16 /
- * N 层 ≤0.33×beat 回落 / 粒子活跃窗 ≤0.55×beat(扫描束/光带同窗零绘制 —— R5/R6) / 末点 y
- * 间距 <26px 反馈按比例缩小(下限 0.4 —— 不合并不取消, D4) / glitch 切片 ≤5 条(R6)且微震
- * ≤5px(实际 ±3px) / 次区光点每轨 ≤2(合计 ≤4)沿末段 6 桶缓动 */
+ * N 层 ≤0.33×beat 回落 / 粒子活跃窗 ≤0.55×beat / 末点 y 间距 <26px 反馈按比例缩小(下限 0.4
+ * —— 不合并不取消, D4) / 切片 ≤5 条(R6)且微震 ≤5px(实际 ±3px) / 次区光点每轨 ≤2(合计 ≤4)。
+ * 冲击类窗 I9 逐元素窗改判(模板保真二轮, plan §01 修订表): 旧「>0.55×beat 冲击类叠加层零
+ * 绘制」单一判据退役, 改逐元素窗 —— 粒子 0.55(不动) / 环 0.6(B3) / 切片 0.25(C2) / 束体+
+ * 彗尾+梳齿 0.7(B2) / 光带 0.7 顶门内画 alpha 0.6×beat 后自然归零(B1); 顶层门 0.7×beat 只做
+ * 「最大窗」粗滤, 逐元素窗在各自块内。 */
 const _QB_FX_PART_MAX = 32;
 const _QB_FX_SHARD_MAX = 16;
 const _QB_FX_NEON_RATIO = 0.33;
 const _QB_FX_PART_RATIO = 0.55;
 /* 冲击环窗(B3 模板保真二轮): 0.6×beat(模板 demo:1294; 粒子仍 0.55 不动 —— I9 逐元素窗改判) */
 const _QB_FX_RING_RATIO = 0.6;
+/* 顶层门最大窗(B 类改判): 0.7×beat —— 三个装饰段(_qbDrawFx/_qbDrawFxScan/_qbDrawFxAnchor)
+ * 共用的粗滤门, 只做「最大窗」, 各元素窗在各自块内(I9 逐元素窗改判) */
+const _QB_FX_TOP_RATIO = 0.7;
+/* 撕裂切片独立窗(C2 模板保真二轮): 0.25×beat(模板 demo:1091 同式), q 由绘制侧现算 */
+const _QB_FX_SLICE_RATIO = 0.25;
+/* 束体 fade 窗(B2 模板保真二轮): 0.7×beat(模板 demo:1173 fade=(1−t/(0.7beat))^1.4 同式) */
+const _QB_FX_BEAM_RATIO = 0.7;
 const _QB_FX_Y_GAP_PX = 26;
 const _QB_FX_Y_GAP_MIN_SCALE = 0.4;
 const _QB_FX_SLICES_MAX = 5;
@@ -939,6 +949,9 @@ const _QB_FX_ECHO_PHASE_LO = 0.18;
 const _QB_FX_ECHO_PHASE_HI = 0.45;
 const _QB_FX_ECHO_FADE_POW = 0.85;
 const _QB_FX_ECHO_ALPHA_CAP = 0.2;
+/* 回声 9px 淡晕 alpha(B4 模板保真二轮): 0.34×fall(模板 demo:1246 同式 —— 旧 0.20 上限对晕
+ * 退役, I9 修订表已记; 1px 包络核仍 ≤0.20×fall×a0 即 _QB_FX_ECHO_ALPHA_CAP 不变) */
+const _QB_FX_ECHO_HALO_ALPHA = 0.34;
 
 /* 确定性伪随机(线性同余; 数值域: int32 种子 × 1664525 < 2^53 无精度丢失) —— 粒子/切片清单
  * 同拍重绘恒同形(不闪变), 跨拍随尾桶时刻自然变化 */
@@ -2883,7 +2896,10 @@ window.AQB_QB_TRAFFIC = {
       const cfg = window.AQB_FX_CFG;
       if (!cfg || cfg.on !== true) return;
       const t = a.clock;
-      if (!(t < fx.beatMs * _QB_FX_PART_RATIO)) return;   // 0.55×beat 后冲击类零绘制(I9)
+      // I9 逐元素窗改判(模板保真二轮): 顶门改 0.7×beat「最大窗」粗滤 —— 粒子(0.55)/N(0.33)/
+      // 切片(0.25)/环(0.6)/束(0.7)各自保留独立窗检查(在各自块内), 光带无独立窗(顶门内画,
+      // alpha 0.6×beat 后自然归零 —— B1)。
+      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;
       const px = this._qbCanvasScale(u);
       const ctx = u.ctx;
       const L = u.bbox.left / px;
@@ -2911,14 +2927,15 @@ window.AQB_QB_TRAFFIC = {
         ? _QB_FX_BLUR_CAPS[cfg.palette] : _QB_FX_BLUR_CAPS.neon;
       const q = _qbFxNeonQ(t, fx.beatMs);        // N 层回落系数(≤0.33×beat —— I9/I11)
       const neon = cfg.neon === true && q > 0;
-      const ens = Math.max(0, 1 - t / (fx.beatMs * _QB_FX_PART_RATIO));
       // —— T2 光带爬升层(cfg.layers.band; S2-b, plan §03 T2 行 + L1 aside): 末点插值 shown
       //     的视觉表达 —— 末点从 prev 爬向 shown 的渐变光带(轨道语义色, 底透明 -> 顶峰值),
-      //     **两轨都必须画**(读数过渡, 不占 I9 装饰预算; 但仍守冲击类 0.55×beat 零绘制窗,
-      //     上方已门)。impact 窗 shown=prev 时光带零长, <0.75px 不落笔。N 数值光带辉光
-      //     bandHalo(白名单)只 lead 轨一道 —— 同帧 blur 描边 = 环外圈(≤2) + 光带(1) ≤ 3
-      //     (I9 辉光预算; blurCap×q, calm 档上限 0 自然退化为纯描边)。cfg.impact 滑杆
-      //     (0-1)是峰值 alpha 的强度源(原型 S.impact 同式)。 ——
+      //     **两轨都必须画**(读数过渡, 不占 I9 装饰预算; 无独立窗 —— 顶门 0.7×beat 内画,
+      //     alpha 随收敛进度 pConv 在 0.6×beat 处自然归零, B1 模板保真二轮)。
+      //     impact 窗 shown=prev 时光带零长, <0.75px 不落笔。N 数值光带辉光
+      //     bandHalo(白名单)只 lead 轨一道 —— 同帧 blur 描边 = 环外圈(≤2) + 光带(1), I9 辉光
+      //     预算修订 ≤5(环外圈 ≤2 + bandHalo 1 + 曲线辉光 2 预留 S3; blurCap×q, calm 档上限
+      //     0 自然退化为纯描边)。cfg.impact 滑杆(0-1)是峰值 alpha 的强度源(原型 S.impact
+      //     同式)。 ——
       if (cfg.layers.band === true) {
         const pConv = Math.min(1, t / (fx.beatMs * _QB_FX_CONV_END_RATIO));
         const bandA = _QB_FX_BAND_ALPHA * (1 - pConv)
@@ -2981,12 +2998,12 @@ window.AQB_QB_TRAFFIC = {
       const ringScale = cfg.dual === "lead" || cfg.dual === "merge" ? 1 : 0.5;
       const imp = Math.min(1, Math.max(0, Number(cfg.impact)));
       const ringT = _qbFxRingAt(t, fx.beatMs, ringScale, fx.gapScale, imp);
-      // —— 几何环(C3 模板式: 线性扩张 r=(4+24pf)×rScale×gapScale, alpha 联 impact; 旋转
-      //     绘制面(rot=t/300)与外圈独立扩张属 S2 接线, 本阶段半径/alpha 先按模板式) ——
-      // 近底/近顶钳制(P3 拍板, F5): 环心 y clamp 进 [T+终态半径, T+H-终态半径], 终态半径 =
-      // (4+24)×rScale×gapScale(保真二轮: 半径源由 rMax 改环终态值) —— 环完整可见, 允许与
-      // 末点轻微分离; 钳的是绘制面, 菱形锚(数据标记)仍走真位。终态值冻结现算(不随帧生长)
-      // 避免环心在扩张期抖动; 绘图区过矮(上下界反转)退中点。
+      // —— 几何环(C3 模板式 demo:1294-1300): 线性扩张 r=(4+24pf)×rScale×gapScale, alpha 联
+      //     impact, lw2, **rot = t/300 旋转**(S2 接线 —— 模板同式); 近底/近顶钳制(P3 拍板,
+      //     F5): 环心 y clamp 进 [T+终态半径, T+H-终态半径], 终态半径 = (4+24)×rScale×gapScale
+      //     (保真二轮: 半径源由 rMax 改环终态值) —— 环完整可见, 允许与末点轻微分离; 钳的是
+      //     绘制面, 菱形锚(数据标记)仍走真位。终态值冻结现算(不随帧生长)避免环心在扩张期
+      //     抖动; 绘图区过矮(上下界反转)退中点。
       const ringRMax = 28 * ringScale * fx.gapScale;
       const ringY = (sp) => {
         const yLo = T + ringRMax;
@@ -2994,24 +3011,31 @@ window.AQB_QB_TRAFFIC = {
         return yHi > yLo ? Math.min(Math.max(sp.y, yLo), yHi) : T + H / 2;
       };
       if (ringT && ringT.r > 0) {
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;   // C3: 模板 lw2(旧 1.5 -> 2, 保真二轮)
         ctx.globalAlpha = ringT.alpha;
+        const ringRot = t / 300;   // C3 模板 demo:1297 同式
         for (const sp of spots) {
           ctx.strokeStyle = sp.color;
-          _qbFxPolyPath(ctx, tipX, ringY(sp), ringT.r, sides, 0);
+          _qbFxPolyPath(ctx, tipX, ringY(sp), ringT.r, sides, ringRot);
           ctx.stroke();
         }
       }
-      // —— N 环外圈辉光(白名单 ringOuter; blur = 配色上限 × q ≤ 上限; 同帧 blur 描边 =
-      //     环外圈 ≤2 + T2 bandHalo 1 ≤ 3 —— I9 辉光预算, S2-b) ——
+      // —— N 环外圈辉光(白名单 ringOuter; blur 结构不动 —— A 类 ringOuter: blur = 配色上限 ×
+      //     q ≤ 上限)。C3 外圈新式(S2): 半径 (9+31×pf)×rScale×gapScale 独立扩张(替换旧恒
+      //     +3px), alpha 0.55×(1−pf)×impact×rScale×gapScale(模板 demo:1298 outer(9+31pf,...,
+      //     0.55) 同式, ×gapScale 为生产 D4 适配; 旧 q×ringT.alpha 衰减退役), rot+0.4 与主环
+      //     错相 —— 同帧 blur 描边 = 环外圈 ≤2 + T2 bandHalo 1, I9 辉光预算 ≤5(曲线辉光
+      //     2 预留 S3) ——
       if (neon && ringT && ringT.r > 0) {
-        ctx.globalAlpha = q * ringT.alpha;
+        const os = ringScale * fx.gapScale;
+        ctx.globalAlpha = 0.55 * (1 - ringT.pf) * imp * os;
         ctx.strokeStyle = lvColor;
         ctx.lineWidth = 1;
         ctx.shadowBlur = Math.round(blurCap * q);
         ctx.shadowColor = lvColor;
+        const outerRot = t / 300 + 0.4;   // C3 模板 outer() rot+0.4 同式
         for (const sp of spots) {
-          _qbFxPolyPath(ctx, tipX, ringY(sp), ringT.r + 3, sides, 0);
+          _qbFxPolyPath(ctx, tipX, ringY(sp), (9 + 31 * ringT.pf) * os, sides, outerRot);
           ctx.stroke();
         }
         ctx.shadowBlur = 0;
@@ -3043,19 +3067,25 @@ window.AQB_QB_TRAFFIC = {
           }
         }
       }
-      // —— R6 撕裂切片(glitch 档; palette 逐帧门控, 拍内切入/切出下一帧生效; ≤5 条 1px 级
-      //     fillRect, 长度/色池/缩进按 R6 清单, ±3px 正弦微震 ≤5px; 抽屉入场 rAF 追赶循环
-      //     在途时暂停 —— §09「故障微震与抽屉动画耦合」: 逐帧改 dock 高会经 ResizeObserver ->
-      //     u.setSize 连锁重画近似「闪」, 让位检测读 drawer_general.js 挂在同一 Vue 实例上的
-      //     _drawerAnimRaf(入场/收场循环句柄, 在途非零 —— 全局入场态可读, 无需时间窗近似)) ——
-      if (fx.slices && fx.slices.length && cfg.palette === "glitch" && ens > 0 && !this._drawerAnimRaf) {
+      // —— R6 撕裂切片(C2 模板保真二轮: 门 = 非 calm 且 (glitch || lv>=2) —— 不再 glitch
+      //     唯一门, 默认霓虹档 Lv>=2 即画(模板 demo:1088); calm 排除系评审修复裁决: 模板
+      //     demo:1086 isCalm() 早退在门表达式之前, 计划 §02 C2「不限配色」系只抄 :1088 漏看
+      //     :1086 的引用疏漏 —— 按用户既定「C 类按模板修」拍板以模板为准, 计划侧修订记录
+      //     留 S6 回写; 厚 1.5(Lv.3 2.0; fixed 对照档 3, demo:1096); 独立窗 0.25×beat q 现算
+      //     (demo:1091); ≤5 条细 fillRect, 长度/色池/缩进按 R6 清单, x 向 ±3q 微震 ≤5px(S1
+      //     已落); 抽屉入场 rAF 追赶循环在途时暂停 —— §09「故障微震与抽屉动画耦合」: 逐帧改
+      //     dock 高会经 ResizeObserver -> u.setSize 连锁重画近似「闪」, 让位检测读
+      //     drawer_general.js 挂在同一 Vue 实例上的 _drawerAnimRaf(入场/收场循环句柄, 在途
+      //     非零 —— 全局入场态可读, 无需时间窗近似)) ——
+      const sq = Math.max(0, 1 - t / (fx.beatMs * _QB_FX_SLICE_RATIO));   // C2 独立窗 q
+      if (fx.slices && fx.slices.length && cfg.palette !== "calm"
+        && (cfg.palette === "glitch" || fx.lv >= 2) && sq > 0 && !this._drawerAnimRaf) {
         const pool = [lvColor, _QB_FX_TEAR_MAGENTA, fx.lead === "up" ? tk.up : tk.down];
+        const th = cfg.tear === "fixed" ? 3 : (fx.lv >= 3 ? 2 : 1.5);   // C2 厚度(模板 demo:1096)
         for (const sl of fx.slices) {
-          // C2 模板式 alpha 联 impact + 窗因子 q(本阶段 q = ens, 独立 0.25×beat 窗与切片门/
-          // 厚度改判留后续阶段); x 向 ±3q 微震(C2/D3, 替换旧 y 正弦)。
-          ctx.globalAlpha = sl.alpha * ens * imp;
+          ctx.globalAlpha = sl.alpha * sq * imp;
           ctx.fillStyle = pool[sl.ci] || pool[0];
-          ctx.fillRect(L + W - sl.len - sl.inset + sl.offX * ens, sl.y, sl.len, 1);
+          ctx.fillRect(L + W - sl.len - sl.inset + sl.offX * sq, sl.y, sl.len, th);
         }
       }
       // —— N 判定线短亮段(白名单 judgeFlash: 活性轨末点 y ±10px; ≤0.33×beat 回落) ——
@@ -3071,13 +3101,44 @@ window.AQB_QB_TRAFFIC = {
           ctx.lineTo(L + W - 0.5, y + 10);
           ctx.stroke();
         }
-        // —— N 角落 Lv 徽标(白名单 lvBadge; 与环边数/粒子数同源的第三种分级信号 —— T5 联动) ——
-        ctx.globalAlpha = 0.85 * q;
-        ctx.fillStyle = lvColor;
-        ctx.font = "9px ui-monospace, Consolas, monospace";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "top";
-        ctx.fillText("Lv." + fx.lv, L + W - 4, T + 4);
+        // —— N 判定线小菱形(C10 模板保真二轮照补, demo:1053 同式 poly(xJudge,y,2.2q+1,4,
+        //     t/300) alpha 0.7q×impact; neon 门内 —— 模板同门; 大半被 F2 DOM 常驻锚覆盖属
+        //     预期(D3 拍板), 锚间隙/滑入期可见) ——
+        for (const k of ["up", "dl"]) {
+          if (!fx.act[k]) continue;
+          const y = k === "up" ? yUp : yDl;
+          ctx.globalAlpha = 0.7 * q * imp;
+          ctx.fillStyle = lvColor;
+          _qbFxPolyPath(ctx, L + W, y, 2.2 * q + 1, 4, t / 300);
+          ctx.fill();
+        }
+      }
+      // —— 角落 Lv 徽标(C9/D7 模板保真二轮: 移出 neon 门常显 —— 门 = cfg.on 且 fx 在场(本
+      //     方法顶门), alpha 0.85 恒定无 q 衰减, 11px, 文案 "Lv.X · lead 上传/下载"(模板
+      //     demo:1446-1449 同式); 色走 Lv 表(grade 联动)—— I11 例外注记: 非 N 局部装饰不挂
+      //     neon 门, neon=false 白名单断言面相应收窄) ——
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = lvColor;
+      ctx.font = "11px ui-monospace, Consolas, monospace";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillText("Lv." + fx.lv + " · lead " + (fx.lead === "up" ? "上传" : "下载"), L + W - 4, T + 4);
+      // —— 判定帧全高冲击闪光(C4 模板保真二轮照补, demo:1373-1377 同式: t < impactMs 时
+      //     判定线全高 stroke, lw2, alpha 0.75×(1−t/impactMs)×impact 线性回落; 不挂 neon 门
+      //     且 calm 档亦显 —— D7/I11 例外注记, 色走 Lv 表; I9 装饰指令修订注记: 新增冲击
+      //     闪光 +1 stroke 仅 impact 窗内(0.12×beat), 束体 ≤23 / 束+切片 ≤28 / 横线 ≤12
+      //     预算原样不抬) ——
+      if (t < fx.burstMs) {
+        const flA = 0.75 * (1 - t / fx.burstMs) * imp;
+        if (flA > 0) {
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = _qbFxFade(lvColor, flA);
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(L + W - 0.5, T);
+          ctx.lineTo(L + W - 0.5, T + H);
+          ctx.stroke();
+        }
       }
       ctx.restore();
       // —— T4 扫描束(双相位六层束; cfg.layers.scan 逐帧门, 方法内自含 save/scale/clip) ——
@@ -3099,8 +3160,9 @@ window.AQB_QB_TRAFFIC = {
      * 起落(渐变, 峰贴近 <0.08 合并单峰; 缺口轨退 lead 末点 y)。T6 内束强度 = cfg.impact ×
      * 0.78(R5 D17), 双轨共享同一道束。色相走 T5 联动单点(grade 关恒 Lv.1 色)。
      * 预算(I9-R5/R6): 束体逐帧 ≤23 条绘制指令(6 晕 + 1 核 + 2 色散 + 5 彗尾 + ≤7 梳齿 +
-     * 2 回声); 零整块 fillRect 铺底(梳齿是 1px 级 fillRect, 高度字面量 1); 0.55×beat 后束体
-     * 与回声零绘制(与冲击类同窗); calm 配色零束体(plan §10 束体探针第 6 条); cfg.layers.scan 逐帧门
+     * 2 回声); 零整块 fillRect 铺底(梳齿是 1px 级 fillRect, 高度字面量 1); 束 fade 窗
+     * 0.7×beat(B2 模板保真二轮改判 —— 旧 0.55×beat 提前消失), 顶门最大窗 0.7×beat(I9 逐
+     * 元素窗改判); calm 配色零束体(plan §10 束体探针第 6 条); cfg.layers.scan 逐帧门
      * (拍内改参下一帧生效); 回声按曲线包络着色(扫过曲线时最亮)。亮束止于判定线不横穿数据:
      * 除回声外全部竖笔 x ≥ 绘图区右缘(晕/彗尾以 lineWidth 向两侧渗, 探针断言的是落笔 x)。
      * !clip 口径(评审 blocker 修复): 本方法**自含** save + scale(pxRatio) + clip + restore,
@@ -3117,7 +3179,7 @@ window.AQB_QB_TRAFFIC = {
       if (cfg.palette === "calm") return;   // 克制档束体零绘制(plan §10 束体探针第 6 条)
       const fx = a.fx;
       const t = a.clock;
-      if (!(t < fx.beatMs * _QB_FX_PART_RATIO)) return;   // 0.55×beat 后束体与回声零绘制(I9)
+      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7×beat(I9 逐元素窗改判)
       const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
       const L = u.bbox.left / px;
       const T = u.bbox.top / px;
@@ -3136,7 +3198,9 @@ window.AQB_QB_TRAFFIC = {
       const lvColor = _qbFxLvColor(fx.lv, cfg.layers.grade === true);   // T5 联动单点
       const pEnt = Math.min(1, t / Math.max(1, fx.burstMs));   // 相位 A: 与冲击窗同长(0.12beat)
       const x0 = R + cellPx * 1.2 * (1 - _qbFxEaseOut(pEnt));
-      const fade = Math.pow(1 - Math.min(1, t / (fx.beatMs * _QB_FX_PART_RATIO)), 1.4);
+      // B2 束 fade 窗(模板保真二轮): 0.7×beat(模板 demo:1173 fade=(1−t/(0.7beat))^1.4 同式
+      // —— 旧 0.55×beat 提前消失改判; 束/彗尾/梳齿同窗)
+      const fade = Math.pow(1 - Math.min(1, t / (fx.beatMs * _QB_FX_BEAM_RATIO)), 1.4);
       const tr = st.tracks;
       const yOf = (v) => T + H * (1 - Math.min(Math.max(v, 0), a.yMax) / a.yMax);
       const yLeadS = yOf(tr[fx.lead].shown);
@@ -3228,7 +3292,8 @@ window.AQB_QB_TRAFFIC = {
         ctx.moveTo(ex + 0.5, T);
         ctx.lineTo(ex + 0.5, T + H);
         ctx.stroke();
-        ctx.globalAlpha = _QB_FX_ECHO_ALPHA_CAP * fall;   // 淡晕一起收(≤0.20), 否则残影拖半条带
+        ctx.globalAlpha = _QB_FX_ECHO_HALO_ALPHA * fall;   // B4: 淡晕 0.34×fall(模板 demo:1246;
+        //  旧 0.20 上限对 9px 晕退役 —— I9 修订表已记), 否则残影拖半条带
         ctx.lineWidth = 9;
         ctx.beginPath();
         ctx.moveTo(ex + 0.5, T);
@@ -3344,7 +3409,7 @@ window.AQB_QB_TRAFFIC = {
       if (!cfg || cfg.on !== true) return;
       const fx = a.fx;
       const t = a.clock;
-      if (!(t < fx.beatMs * _QB_FX_PART_RATIO)) return;
+      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7×beat(I9 逐元素窗改判)
       const px = this._qbCanvasScale(u);
       const ctx = u.ctx;
       const L = u.bbox.left / px;
@@ -3783,8 +3848,10 @@ window.AQB_QB_TRAFFIC = {
       // F2 常驻菱形锚 · 同步点 2/4(收敛帧): 真值落袋后把锚位写到终值(shown=target), 拍间常驻
       // 位置与曲线尾点对齐 —— setData 提交本会经锚钩子带上, 此处显式落笔钉住计划四处之一(R3)。
       this._qbFxAnchorSync(u);
-      // S2-a 次区相位衔接(tail 开启且有活性轨): 主区装饰在本帧已全部回落(环/粒子 ≤0.55×beat、
-      // N ≤0.33×beat —— 收敛帧零残留), 此处转入 tail 相位让次区光点沿末段曲线缓动到下一拍前
+      // S2-a 次区相位衔接(tail 开启且有活性轨): 主区装饰在本帧已全部回落(粒子 ≤0.55×beat、
+      // 环 0.6×beat、N ≤0.33×beat —— 收敛帧零残留; 束 fade 窗 0.7×beat, animEnd =
+      // max(shiftRatio,0.6)×beat < 0.7×beat 时束尾段随收敛帧提交截断 —— B2 窗与调度 animEnd
+      // 的交界属调度面(计划 S5), 本阶段不改调度), 此处转入 tail 相位让次区光点沿末段曲线缓动到下一拍前
       // (窗长 tail = min(period − beat, 2000), 600s 长窗也只铺 2s, 非常驻)。拍内 cfg 在
       // _qbTailFrame 逐帧重读 —— 关闭即下一帧收尾(补一帧清理提交)。n 取落袋后显示列长。
       const tl = a.tl;
