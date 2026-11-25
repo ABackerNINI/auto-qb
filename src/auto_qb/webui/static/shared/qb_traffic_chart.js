@@ -3173,6 +3173,19 @@ window.AQB_QB_TRAFFIC = {
           _qbFxPolyPath(ctx, L + W, y, 2.2 * q + 1, 4, t / 300);
           ctx.fill();
         }
+        // —— 判定线小菱形(P4 模板保真 demo:1421 同式 poly(xJudge,y,2.6,4,t/420) fill
+        //     rgba(trackCol,0.35) —— 与上枚 C10 N 小菱形(r=2.2q+1)是两枚不同元素, 都保留;
+        //     本枚钉判定线 x(L+W), 模板「判定线小菱形 + 末点大菱形」双锚形态的画布侧锚
+        //     (DOM 锚随末点滑属 P5, 本阶段不动); neon 门内(模板同门); I9: 每活性轨 +1 fill,
+        //     计数面 G6/G9/G10 同步改判) ——
+        for (const k of ["up", "dl"]) {
+          if (!fx.act[k]) continue;
+          const y = k === "up" ? yUp : yDl;
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = k === "up" ? tk.up : tk.down;
+          _qbFxPolyPath(ctx, L + W, y, 2.6, 4, t / 420);
+          ctx.fill();
+        }
       }
       // —— 角落 Lv 徽标(C9/D7 模板保真二轮: 移出 neon 门常显 —— 门 = cfg.on 且 fx 在场(本
       //     方法顶门), alpha 0.85 恒定无 q 衰减, 11px, 文案 "Lv.X · lead 上传/下载"(模板
