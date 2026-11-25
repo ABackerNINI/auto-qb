@@ -2,6 +2,7 @@
 
 > 摘要: 保真修补计划 26-11-26-0227 S4 守阵总收口批后基线: e2e 裁剪面 C 案 P6 改判(先红后绿) + 受影响面 e2e 全绿 + 全量绿
 > 基线时间: 2026-11-26 05:02
+**Refs:** memory-bank/tasks/26-11-26-webui-traffic-fidelity-patch.md
 
 ## 验收数字
 

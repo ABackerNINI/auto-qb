@@ -7,11 +7,11 @@
 <title>WEBUI 流量图保真二轮缺陷修补: 辉光常驻 + 视口裁剪 + 粒子三漂移 + 差异清单逐项落地</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-traffic-fidelity-patch">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-26-0227">
-<meta name="doc-updated" content="26-11-26-0245">
+<meta name="doc-updated" content="26-11-26-0508">
 <!-- 前序计划/附件为冻结历史件, 不做 meta 双向声明; 引用以正文文字锚点为准 (doc-forms「认领链」未声明天然豁免) -->
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-26-webui-traffic-fidelity-patch.md">
 <style>
   :root {
     --bg: #10151a;
@@ -72,7 +72,7 @@
 <h1>WEBUI 流量图保真二轮缺陷修补: 辉光常驻 + 视口裁剪 + 粒子三漂移 + 差异清单逐项落地</h1>
 <p class="lede">本篇只回答: <strong>计划 26-11-22-2330 落地后真机复报的两个缺陷 + 逐函数代码比对新挖出的三处粒子形态漂移怎么修, 以及用户已勾选的六项模板差异怎么落地</strong>。取证分两轮: 第一轮(文档驱动)对照二轮计划的差异表与拍板记录; 第二轮(代码驱动)把模板 demo 每个特效函数与生产对应函数逐一比对, 挖出<strong>文档从未记录的三处粒子缺陷</strong>——这才是「其它特效不尽人意」的代码级根因。共 5 个实施缺陷 + 6 项勾选修法, 全部给出落点与守阵改判面。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-26-0227 · <b>doc-updated</b> 26-11-26-0245 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-26-0227 · <b>doc-updated</b> 26-11-26-0508 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 26-11-26 真机复报「辉光每拍闪现一次 / 曲线左侧每拍浮在图例上方且与辉光同步 / 其它特效也不尽人意, 对比模板再拟修补计划」→ grilling 两问拍板(D1 辉光改常驻、D2 先列清单逐项挑)→ R1 交付文档驱动清单后用户追问「清单是读文档还是读代码? 我需要找到实施的缺陷」并逐项勾选 P1-P8 → R2 补做<strong>逐函数代码级比对</strong>, 新发现三处粒子漂移 → 本计划改版。<br>
   <b>本轮动作边界</b> 仅改本计划文件; 不改生产代码、不入池 issue、不改前序计划与附件、不立档案、不 commit/push。
 </div>
@@ -233,6 +233,8 @@
 <ul>
   <li><span class="tag">R0 · 26-11-26-0227</span> 初版(文档驱动): 用户真机复报两缺陷 +「其它特效不尽人意」→ 对照二轮计划 26-11-22-2330 差异表/拍板记录列文档驱动清单(P1-P8) → grilling 拍板 D1(辉光改常驻)/D2(先列清单逐项挑) → 立项。要点: S1-S3 两缺陷修法 + S4 条件步待勾选; 清单为文档框架+代码交叉核对。</li>
   <li><span class="tag">R1 · 26-11-26-0245</span> 改版(代码驱动补漏): 用户追问「清单是读文档还是读代码? 我需要找到实施的缺陷」并逐项勾选 P1-P8(D3)→ 逐函数比对模板 demo 与生产代码, 新挖出三处文档零记录的粒子形态漂移(纵向压缩 0.7 / 寿命缩小 ×life / 边数 i%3 轮换, 列 P9-P11) → 改成 5 缺陷 + 6 勾选共 11 项修法。要点: §02 补缺陷三四五的代码级根因与「文档为何漏」; §03.2 粒子三因子修法 + §03.3 六勾选逐项修法(含 P1 右向不裁、P6 去钳制不裁的张力处置); §04 S1-S4 重排; §05 落实勾选; §06 D3; §07 补 R5-R7。本版仍零生产代码改动。</li>
+  <li><span class="tag">R2 · 26-11-26-0508</span> 实施落地(S1-S3 七笔, 守阵先红后绿): S1 辉光常驻+严格视口裁剪抽 _qbDrawFxCurveGlow(348002a3) / S2 粒子三因子纵压 0.7+寿命随 ×life 缩小+边数 i%3(b8d1f2f2) / P2 短亮段 lw3+0.55×q×impact(523fa0b0) / P4 判定线小菱形双锚形态(f737bcf6) / P1 喷射角 360 度+dist 按右余量静态钳(9cfe6a24) / P5 DOM 锚动画期随 tipX 滑静止回落 L+W 零新 rAF(f00b99fa) / P6 去 ringY 钳制与底缘镜像+装饰 clip 上下缘放宽到画布缘(6fe8ad28); 附件 webui-traffic-beat.md 增「缺陷修补(2026-11-26)」子节</li>
+  <li><span class="tag">R3 · 26-11-26-0508</span> S4 守阵总收口落地(a33aa41b): 静态钉/e2e 全改判, fx 主 clip 断言上下缘=画布缘、束体只右缘放宽; test.full 全绿基线切片 26-11-26-0502-webui-traffic-fidelity-patch 入库(数字权威见 kb.baseline); 附件子节与代码实况核对一致; doc-status Open -&gt; Done</li>
 </ul>
 
 </div>
