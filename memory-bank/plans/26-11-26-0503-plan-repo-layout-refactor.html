@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>仓库目录结构重构: 测试树三分统一与根目录瘦身</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="repo-layout-refactor">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-26-0503">
+<meta name="doc-updated" content="26-11-26-0628">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-26-dev-repo-layout-refactor.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: repo-layout-refactor</div>
+<h1>仓库目录结构重构: 测试树三分统一与根目录瘦身</h1>
+<p class="lede">本篇只回答: 仓库目录怎么重组 —— 测试树三分(tests/{unit,e2e,real})、根目录瘦身(minimal.yml / hatch_build.py / assets / sim_* / env.sh)、docker 资产归置(config/ 并入 docker/ + .dockerignore 补窟窿)、pytest 配置并入 pyproject;全程零逻辑改动,纯移动 + 引用更新。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-26-0503 · <b>doc-updated</b> 26-11-26-0628 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-26 会话: 用户提出结构混乱清单 → 全库只读盘点(引用面取证, HEAD 303164f1) → grilling 一轮九问(Q1–Q9) → 用户拍板(四处改判, 见 §06)。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景</h3>
+<p>用户指出根目录与顶层目录组织混乱。盘点结论:决定移动范围的不是「目录看着像什么」,而是谁按字面路径引用它们——</p>
+<ul>
+  <li>生产代码运行时解析 <code>&lt;repo&gt;/tools/global-traffic-monitor</code>(<code>src/auto_qb/core/traffic_source/agent.py</code> tool_dir 兜底),<code>tools/</code> 已被伴生工具占住语义;</li>
+  <li>e2e 被 8 类字面引用钉住(playwright 配置 / package.json / CI 白名单与运行行 / .commands dev 四 task / Python 守阵与 flaky allowlist);</li>
+  <li>tests-real 被 <code>.commands/real</code> 十余行 task、安全守阵扫描根、.gitignore 与真机规程钉住,且用例文件名 <code>test_rmNN_*.py</code>,并入 tests/ 会被主套件误收集;</li>
+  <li>pytest.ini 的 addopts 与 <code>tests/_tmp_bootstrap.py</code> 是并行 / TMPDIR / 覆盖率闸的单点,tests-real/runner.py 已用 <code>--no-cov -n 0</code> 反制 ini;</li>
+  <li>.dockerignore 有窟窿:node_modules/、config/(生产凭据)、e2e/、tests-real/、tools/、package*.json 等全部进 build context。</li>
+</ul>
+<h3>目标(做到什么算成)</h3>
+<ul>
+  <li>测试树三分:<code>tests/unit</code>(原 tests 全部内容)+ <code>tests/e2e</code> + <code>tests/real</code>,主套件零误收集;</li>
+  <li>根目录瘦身:minimal.yml、hatch_build.py、assets/、scripts/ 的 sim_*、env.sh 全部离根或清除;</li>
+  <li>docker 归置:<code>config/</code> 并入 <code>docker/config/</code>,.dockerignore 窟窿补齐;</li>
+  <li>pytest 配置并入 pyproject,<code>pytest.ini</code> 删除;</li>
+  <li>全部移动 git mv 完成、旧路径引用清零(memory-bank 冻结历史件豁免)、结构守阵与 test.full 全绿、实测数字落新基线切片。</li>
+</ul>
+<h3>设计底线/不变量</h3>
+<ul>
+  <li><b>零逻辑改动</b>:只动位置与引用,不改任何行为(含报错文案/默认值);</li>
+  <li><b>红线</b>:根 <code>config.yml</code> 与 <code>auto-qb-data/</code> 内容一字不动;<code>.commands/</code>、<code>.agents/</code>、<code>memory-bank/</code>、<code>src/</code> 位置不迁移,行内引用/注释更新豁免;</li>
+  <li><b>单 commit 交付</b>:移动+引用更新+文档回写一笔提交,不留中间态;</li>
+  <li><b>grep 快照闭环</b>:动手前全库 grep 旧路径冻结引用清单,收尾按清单清零核对。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <tr><th>对象</th><th>今天的样子(26-11-26 盘点, HEAD 303164f1)</th><th>痛点</th></tr>
+  <tr><td><code>tests/</code>(366 tracked)</td><td>单测电池平铺顶层:conftest.py、_tmp_bootstrap.py(TMPDIR 自举单点)、fixtures/、31 个 *_support.py、300+ test_*.py,另有 64 处 <code>parents[1]</code>/parent.parent 式 __file__ 仓库根锚(迁入 unit 子目录后全部需 +1 层,见 S0②/S2);pytest.ini <code>testpaths = tests</code>,addopts <code>-n 8 --cov=src --cov-report=term-missing --cov-branch -p no:randomly</code>,覆盖率闸在 conftest::pytest_configure(Windows 99.5 / 其它 99.0)</td><td>与 e2e、tests-real 三处并列,测试树没有单一家园</td></tr>
+  <tr><td><code>e2e/</code>(90 tracked)</td><td>Playwright 工程:testDir './e2e';package.json 六个 script 中两条引用 e2e/ 路径;CI 白名单 WL_PATHS 含 e2e/ 且 4 条 <code>node e2e/...</code> 运行行;dev.e2e/fast-shard/perf-serial/check 四 task;test_flaky_timing_guards.py 硬编码扫 <code>REPO/"e2e"</code>;flaky_allowlist.py key 用 e2e/ 路径</td><td>与 pytest 主套件割裂;引用面广但全部可机械更新</td></tr>
+  <tr><td><code>tests-real/</code>(65 tracked)</td><td>真机轨:runner.py/seed.py/lib/ + rm00–rm10 十一个分片;<code>.commands/real</code> 全部 task 指向 <code>tests-real/runner.py</code>;tests/test_real_machine_safety.py 扫描根 <code>ROOT/"tests-real"</code>;.gitignore 两行;memory-bank/testing/real-machine.md 规程引用</td><td>性质就是测试却不在 tests/ 下;并入后需防误收集</td></tr>
+  <tr><td><code>assets/icons/</code>(17 tracked)</td><td>16 张品牌 SVG 设计稿 + 说明(自述「设计草稿,尚未接入程序」);运行时零引用(运行时图标在 <code>src/auto_qb/assets/</code>);5 处 webui 注释提「assets/icons」品牌出处</td><td>与 resources/(64 tracked,WebUI 设计模板家)同类异处</td></tr>
+  <tr><td><code>tools/</code>(34 tracked)</td><td>global-traffic-monitor 独立子项目:自带 pyproject/uv.lock/venv/launchers;agent.py 默认 <code>&lt;repo&gt;/tools/global-traffic-monitor</code>;CI test-gtm job(working-directory);.gitignore 三条运行数据</td><td>语义 = 「可安装伴生工具」,不是杂物抽屉</td></tr>
+  <tr><td><code>scripts/</code>(31 tracked)</td><td>平铺混层:dev 运行壳(dev_run/dev_webui/ui_harness/e2e_selfcheck)、诊断(bench/diag)、定点杀三豁免件、语料回放工具链(sim_*.py 九件互相同目录 import + qb_capture 三件, 共用独立 howto 文档)</td><td>sim 家族值得成族;其余保持 scripts/ 语义</td></tr>
+  <tr><td>根散件</td><td>minimal.yml = README 快速开始入口示例(README 7 处提及、其中 3 条 uv 命令行 + tests/test_config_load.py:291 守阵 + AGENTS.md 红线行 + deployment.md + .dockerignore);hatch_build.py = hatchling custom 钩子约定位置(pyproject 默认路径 + test_hatch_build.py 按路径加载);env.sh = 5 行裸 pip install 死件;config/ = gitignored 部署挂载目录(0 tracked,compose <code>./config:/config</code>)</td><td>示例 / 构建件 / 死件 / 部署态混在根</td></tr>
+  <tr><td>.dockerignore</td><td>已排 tests/、scripts/、extensions/、resources/、assets/、docs/、memory-bank/ 等;漏 node_modules/、config/、e2e/、tests-real/、tools/、package*.json、playwright.config.mjs、compose.yaml、.github/、tmp-analysis/ 等</td><td>每次 build 把几百 MB node_modules 与生产凭据目录喂给 daemon</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线:一笔提交完成「移动 + 引用更新 + 回写」,分四批执行、不分笔提交;全部 <code>git mv</code> 保历史。</p>
+<table>
+  <tr><th>落点</th><th>内容</th><th>同步更新面</th></tr>
+  <tr><td><code>tests/unit</code></td><td>原 tests/ 全部内容整体迁入(含 conftest.py / _tmp_bootstrap.py / fixtures / *_support.py)——tests/ 不留顶层 conftest,unit 夹具不外溢到 real/e2e;同步更新 64 处 <code>parents[1]</code>/parent.parent 式 __file__ 仓库根锚(+1 层或收敛单一 helper,S0② 冻结清单闭口)</td><td>pytest 配置、.commands test 包注释、AGENTS.md TMPDIR 行、活口径文档</td></tr>
+  <tr><td><code>tests/e2e</code></td><td>原 e2e/ 整迁;JS 清单(package.json / playwright.config.mjs / node_modules)留根,只改 testDir 与引用</td><td>playwright.config.mjs(testDir / import / globalTeardown)、package.json e2e 相关 script 两条、CI WL_PATHS + 4 运行行、dev 四 task、守阵与 allowlist 路径</td></tr>
+  <tr><td><code>tests/real</code></td><td>原 tests-real/ 整迁 + 防误收集四件套:tests/real/conftest.py 经 pytest_collection_modifyitems 统一打 <code>real_machine</code> 标 + addopts 增 <code>-m "not real_machine"</code> + runner._pytest 增 <code>-m real_machine</code> + test.random-order 的 addopts 整体替换串(<code>-o addopts=-n 8</code>)单点拼入同一 marker 过滤(否则巡检轮 marker 消失、真机用例被收集执行)+ lib 环境探测惰性化:tests-real/lib/instances.py:21 与 lib/guard.py:21 的模块级 <code>env_registry.active()</code> 改为调用时求值,覆盖 :21 及其模块级派生链(instances :22–23 / guard :22–25 一并惰性化;不改 lib 的容错备选须同时覆盖 conftest 与用例模块的 lib import),收集期 import 在无 EXE 环境不炸、打标钩子无条件安装</td><td>.commands/real 全部 task 行、test_real_pkg.py、test_real_machine_safety.py、.gitignore 两行、real-machine.md 规程与 .agents skill 模板行(征询后改)、src/tests 内 tests-real 字样引用(fastresume.py 注释、test_port_zero_guards / test_real_schema_version_guard / test_free_port / _ascii_symbol_frozen)、e2e spec 注释 1 处、.commands/test/scripts/test_random_order.py 断言(:43/:49 钉死 addopts 替换串)</td></tr>
+  <tr><td>根瘦身</td><td>minimal.yml→examples/;hatch_build.py→scripts/(pyproject <code>path=</code>);assets/icons→resources/icons;语料回放工具链整族→tools/sim/(sim_*.py 九件 + qb_capture 三件);env.sh 删除</td><td>README×7、test_config_load 守阵、AGENTS.md、deployment.md、docker/config.example.yml 头注、cli.py:218 注释、howto 文档、test_sim_corpus / test_qb_capture / test_legacy_review4_scripts 按路径装载、review lane.toml 清单、grouping_mod 注释、6 处品牌注释(含 resources/theme-tokens.css)、.dockerignore</td></tr>
+  <tr><td>docker</td><td>config/→docker/config/(本地未跟踪目录一并 mv);Dockerfile / .dockerignore / compose.yaml 位置不动;.dockerignore 重排:对齐 .gitignore 本地物集合,显式写入 <code>docker/config/</code>(与 .gitignore <code>/config/</code> 行改写绑定同批;不写旧路径 <code>config/</code>——迁移后根目录已无该目录),显式保留 README / LICENSE / pyproject.toml / uv.lock / src</td><td>compose volume + 注释、.gitignore <code>/config/</code> 行、deployment.md、.dockerignore</td></tr>
+  <tr><td>pytest 合并</td><td>pytest.ini → pyproject <code>[tool.pytest.ini_options]</code>(pythonpath / testpaths / addopts / filterwarnings 原值平移,addopts 另加 <code>-m "not real_machine"</code>,markers 注册 <code>real_machine</code>);删 pytest.ini;rootdir 锚转 pyproject</td><td>.commands 注释、mutants / my-commit-flow docstring、conventions/code-style.md、pitfalls 活口径、tests 内 pytest.ini 字样引用(helpers / conftest / test_commands_engine / test_modules_p5 / webui_helpers)、pyproject dev 注释、tests-real 顶层 conftest + rm01–rm10 各分片 conftest 共 11 处(rm00_infra 无)</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S0 前置</td><td>①全库 grep 旧路径(tests-real/、e2e/、scripts/sim_、qb_capture、assets/、minimal.yml、hatch_build、pytest.ini、config/)冻结引用清单,memory-bank tasks/plans/issues/reports 冻结件标豁免 —— <b>冻结清单是唯一闭口依据</b>,§03/§04 枚举仅为提示不穷举;②tests/ 内 <code>__file__</code> 仓库根锚深度盘点(parents[1] / parent.parent,实测 64 文件);③<code>uv run pytest --collect-only -q</code> 计数快照;④用户确认各 clone 无 WIP 触及被挪文件;⑤docker build 现状冒烟,记录钩子缺失行为(构建环境本就不含 hatch_build.py,既有事实)</td><td>引用清单落本档案;计数数字誊写;冒烟结论行</td></tr>
+  <tr><td>S1 根瘦身批</td><td>assets→resources/icons(6 注释);minimal.yml→examples/(README×7 / 守阵 / AGENTS / deployment / .dockerignore);sim_* 九件 + qb_capture 三件→tools/sim/(test_sim_corpus、test_qb_capture、test_legacy_review4_scripts 按路径装载、dev.sim task、howto 命令行与工具表、sim_baseline 自述串、review lane.toml、grouping_mod 注释);hatch_build.py→scripts/(pyproject path=、test_hatch_build.py SCRIPT);删 env.sh;config/→docker/config/(compose / .gitignore / deployment.md / 本地 mv);.dockerignore 补窟窿(显式写 <code>docker/config/</code> 新路径)</td><td>uv build 成功(钩子路径生效);collect-only 计数与 S0 一致;test.quick 绿;docker build 冒烟过 + 排除闸:核验 docker/config/ 与 node_modules 不进 build context(探针文件法:临时探针 Dockerfile COPY . /ctx 后 find 断言 canary 不在;--progress=plain 聚合体积仅作 node_modules 旁证,判不出 KB 级目录)</td></tr>
+  <tr><td>S2 测试树批</td><td>tests/**→tests/unit/(64 处 __file__ 仓库根锚 +1 层或收敛单一 helper);tests-real→tests/real(+四件套);e2e→tests/e2e(+配置 / CI / dev / 守阵 / allowlist 全套路径)</td><td>collect-only:unit 计数 = 原 tests 计数、real 全 deselect、e2e 零收集;仓库根锚 grep 清零;无真机环境面 collect-only 全绿(容器或 CI 口径);test.quick 绿;dev.e2e(@fast)绿;test.gtm 绿;real 环境可用时 real.guard / dry-run 冒烟</td></tr>
+  <tr><td>S3 pytest 合并批</td><td>ini_options 迁移 + 删 pytest.ini + 引用面(.commands 注释、docstring、code-style.md、pitfalls 活口径、tests 内 pytest.ini 字样、pyproject dev 注释、tests-real 顶层 conftest + rm01–rm10 分片 conftest 共 11 处(rm00_infra 无))</td><td>test.full 全绿(数字誊写);test.random-order 抽一轮且 real 面 deselect 对账(替换串已拼入 marker 过滤);test.one 单文件 --no-cov 假红防线不变</td></tr>
+  <tr><td>S4 回写批</td><td>AGENTS.md(TMPDIR 行、minimal.yml 红线行、测试树口径句)+ doc.caps 自查;memory-bank 活口径(testing/baseline.md、run.md、real-machine.md、conventions/webui.md 若引 assets);pitfalls 触及行;mutation-testing SKILL.md 事实行(先征询);新坑入档 + kb.index</td><td>kb.check / kb.docmap 绿;grep 旧路径清零(frozen 豁免)</td></tr>
+  <tr><td>S5 终验收尾</td><td>结构守阵名单全绿(test_no_ghost_pkg_dirs / test_memory_bank_structure / test_docs_forms / test_ascii_symbol_guard / test_command_drift / test_impact);test.full 全绿 + 新基线切片(kb.new baseline --total 实测誊写);code-review 分批评审;kb.wrap 切片</td><td>守阵绿;基线切片落档;评审零 actionable;提交/推送等用户显式指令</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>九问(Q1–Q9)已全部拍板,结论迁 §06,无剩余待拍板项。四个落点级默认由本计划判定,执行前可改判:</p>
+<ul>
+  <li>原 tests 内容的目标子目录命名 = <code>tests/unit</code>;</li>
+  <li>config/ 的落点 = <code>docker/config/</code>(与 docker/config.example.yml 同居);</li>
+  <li>hatch_build.py 的落点 = <code>scripts/hatch_build.py</code>(pyproject <code>path=</code> 指向);</li>
+  <li>语料回放工具链范围 = <code>sim_*.py</code> 九件 + <code>qb_capture</code> 三件(R1 改判:抓取器与 sim 同族,整族迁 tools/sim/)。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论</th><th>来源</th></tr>
+  <tr><td>D1</td><td>单 commit 交付(移动+引用+回写),空窗执行,动手前核各 clone WIP</td><td>Q1 yes(按推荐)</td></tr>
+  <tr><td>D2</td><td>测试树三分 tests/{unit,e2e,real};JS 清单留根;tests/real 用 marker 四件套防误收集(含 random-order 替换串单点)+ lib 探测惰性化防收集期炸</td><td>Q2 + 用户改判「原 tests 内容移子目录」</td></tr>
+  <tr><td>D3</td><td>config/ → docker/config/,compose/.gitignore/deployment.md 同步;无既有 docker 用户,无迁移负担</td><td>Q3 用户改判(原推荐保留)</td></tr>
+  <tr><td>D4</td><td>Dockerfile / .dockerignore / compose.yaml 位置不动;.dockerignore 补窟窿</td><td>Q4 yes(按推荐)</td></tr>
+  <tr><td>D5</td><td>assets/icons → resources/icons,更新 6 处品牌注释(webui 5 + theme-tokens.css 1)</td><td>Q5 yes</td></tr>
+  <tr><td>D6</td><td>minimal.yml → examples/minimal.yml,README / 守阵 / AGENTS / deployment / .dockerignore 同步</td><td>Q6 yes</td></tr>
+  <tr><td>D7</td><td>hatch_build.py → scripts/,pyproject <code>path=</code> + 守阵加载路径</td><td>Q7 用户改判(原推荐保留根)</td></tr>
+  <tr><td>D8</td><td>语料回放工具链(sim_*.py 九件 + qb_capture 三件)→ tools/sim/;伴生工具语义以子目录隔离;howto / test_sim_corpus / test_qb_capture / dev.sim / review lane 同步</td><td>Q8 用户改判(原推荐 scripts/sim/);R1 追问后扩围纳入 qb_capture 三件</td></tr>
+  <tr><td>D9</td><td>删除 env.sh(5 行裸 pip install 死件)+ .dockerignore 条目清理</td><td>Q9 yes(破坏性动作已确认)</td></tr>
+  <tr><td>D10</td><td>pytest.ini 并入 pyproject [tool.pytest.ini_options],文件删除</td><td>追加拍板(原推荐保留 pytest.ini)</td></tr>
+  <tr><td>D11</td><td>不动清单:AI 工具链根文件(apm*.yml / skills-lock.json / CLAUDE.md / .codebuddy / .github/agents 等)、src/auto-qb.py 兼容薄壳、想法.md、根 config.yml、auto-qb-data/、docs/、extensions/、根 tools/ 本体、.commands/ / .agents/ / memory-bank/ / src/</td><td>盘点结论(用户未提异议)</td></tr>
+</table>
+<p class="aside">拍板时间 2026-11-26;Q 编号对应本会话 grilling 第一轮。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>R</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1 real 误收集</td><td>tests/real 用例被 test.full / CI 捞进</td><td>marker 四件套 + collect-only 对账闸;若 marker 链路异常,退备选:runner 侧 <code>-o addopts=</code> 整体替换(test.random-order 同款机制)</td></tr>
+  <tr><td>R2 unit 夹具外溢</td><td>tests/real / tests/e2e 被 unit conftest 链污染</td><td>原 conftest 随 battery 整体迁入 tests/unit/,tests/ 不留顶层 conftest——结构上即消除;real.guard / dry-run 冒烟复核</td></tr>
+  <tr><td>R3 e2e 引用遗漏</td><td>WL_PATHS / allowlist / 守阵漏改 → CI 假绿或守阵红</td><td>S0 grep 快照 + S5 清零核对,清单逐项过</td></tr>
+  <tr><td>R4 钩子缺失行为</td><td>docker build 冒烟暴露 hatchling 对缺失钩子文件报错</td><td>属既有事实(构建环境本就不含钩子文件,非本次引入);单独拍板处置(补 COPY 行或入池),不混入本次提交</td></tr>
+  <tr><td>R5 配置拾取变化</td><td>pytest.ini 删除后 rootdir / ini 拾取路径变化</td><td>pyproject 含 ini_options 即成 rootdir 锚;S3 验收含 random-order 机制抽测与 test.one 复验;tools/global-traffic-monitor 自带 ini_options(nested-pytest-config 坑档),不受影响</td></tr>
+  <tr><td>R6 多 clone 冲突</td><td>其它 clone 在途 WIP 触及被挪文件,rebase 冲突</td><td>动手前用户确认各 clone 干净;落地后各 clone 立即 sync;历史死链按 memory-bank/README 政策不修(兜底 grep + git log)</td></tr>
+  <tr><td>R7 活文档漏改</td><td>conventions / pitfalls / SKILL.md 里的路径或 pytest.ini 字样残留</td><td>S4 以 grep 快照逐条清;治理文件(SKILL.md)只改事实行且改前征询</td></tr>
+  <tr><td>R8 marker 与 addopts 整体替换的交互</td><td>test.random-order 巡检轮用 <code>-o addopts=-n 8</code> 整体替换 addopts,marker 过滤丢失 → 真机用例被收集执行(真机环境在位时产生真实副作用)</td><td>.commands/test/scripts/test_random_order.py 替换串单点拼入 <code>-m "not real_machine"</code>(或入口改指 tests/unit);S3 验收含「random-order 侧 real 全 deselect」对账</td></tr>
+  <tr><td>R9 收集期 import 炸 CI</td><td>tests/real 入 testpaths 后主套件收集即 import 其 conftest 与模块,lib 两处模块级 <code>env_registry.active()</code> 在无 EXE 环境(CI / test.linux 容器 / mutants)raise RuntimeError;现有验收全在作者真机跑,闸门探不到</td><td>lib 探测惰性化(调用时求值,覆盖 :21 及模块级派生链;容错备选须覆盖 conftest 与用例模块;打标钩子无条件安装);S2 验收补「无真机环境面 collect-only 全绿」</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-26-0503</span> 初版: 用户提出结构混乱清单 → 只读全库盘点(引用面取证) → grilling 一轮九问 → 用户拍板 D1–D11(含四处改判) → 计划入库 Open;零代码改动。</li>
+  <li><span class="tag">R1 · 26-11-26-0513</span> R1: 用户追问语料抓取器归属, D8 扩围: qb_capture 三件并入 tools/sim/ 整族迁移; 同步面增 test_qb_capture 加载路径 / review lane.toml 快扫清单 / src grouping_mod 注释</li>
+  <li><span class="tag">R2 · 26-11-26-0615</span> R2 复评修复: 八条发现全修 —— tests/real 收集期 import 在无 EXE 环境炸(lib 探测惰性化 + 无环境 collect-only 验收, 新增 R9)、docker/config/ 显式进 .dockerignore 修复面与排除闸、markers 注册 real_machine、random_order 断言入同步面、四件套改称残留/×11 口径/D5 数字/R8 文件全路径校正</li>
+  <li><span class="tag">R3 · 26-11-26-0628</span> R3 复评修复: 三条全修 —— lib 惰性化覆盖面扩到模块级派生链(instances :22–23 / guard :22–25)且容错备选须覆盖用例模块、排除闸钉死探针文件法(--progress=plain 仅作体积旁证)</li>
+</ul>
+
+</div>
+</body>
+</html>
