@@ -919,7 +919,6 @@ const _QB_FX_Y_GAP_MIN_SCALE = 0.4;
 const _QB_FX_SLICES_MAX = 5;
 const _QB_FX_SLICE_SHAKE_PX = 3;
 const _QB_FX_TAIL_PTS_MAX = 2;
-const _QB_FX_TAIL_SPAN_BUCKETS = 6;
 
 /* ---- T4 扫描束 + R6 横向线条 + T2 光带(S2-b, plan §03 T4/T6 行 + R6 节/D17-D19) ---- */
 /* R6 横向线条条数按 lead 等级(T5 联动): 撕裂切片 2/3/5(≤5 = _QB_FX_SLICES_MAX)/梳齿 3/5/7
@@ -2899,17 +2898,48 @@ window.AQB_QB_TRAFFIC = {
       const a = st && st.anim;
       if (!a) return;
       if (a.phase === "tail") {
-        // 次区相位: 流动光点落笔(像素位置由 _qbTailFrame 现算; 轨道语义色, 极轻不着 Lv —— I10)
-        const pts = a.fxTail && a.fxTail.pts;
-        if (!pts || !pts.length) return;
-        this._qbCanvasScale(u);
+        // 次区相位: 判定线余晖线(C6) + 全宽巡回光点(C5)。像素位置由 _qbTailFrame 现算;
+        // 光点走轨道语义色极轻不着 Lv(I10), 余晖线走 Lv 表联动单点且不挂 neon 门(D7)。
+        const px = this._qbCanvasScale(u);
         const ctx = u.ctx;
-        for (const pt of pts) {
-          ctx.globalAlpha = pt.alpha;
-          ctx.fillStyle = pt.k === "up" ? tk.up : tk.down;
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
-          ctx.fill();
+        const tl = a.tl;
+        const qt = tl && tl.tailMs > 0
+          ? Math.min(1, Math.max(0, (a.clock - tl.beat) / tl.tailMs)) : 0;
+        // —— 余晖线(C6 模板保真二轮照补, demo:1395-1399 同式): 判定线全高 stroke lw1,
+        //     rgba(lvColor, 0.14×(1−qt)) 线性回落; 不挂 neon 门且 calm 档亦显 —— D7/I11 例外
+        //     注记, 色走 Lv 表联动单点 _qbFxLvColor(fx.lv, grade); I9 装饰指令修订注记:
+        //     新增余晖线 +1 stroke 仅 tail 窗内(与冲击闪光 +1 同理), 束体 ≤23 / 束+切片 ≤28 /
+        //     横线 ≤12 预算原样不抬 ——
+        const fx = a.fx;
+        if (fx && fx.lv && qt < 1) {
+          const cfg = window.AQB_FX_CFG;
+          const lvColor = _qbFxLvColor(fx.lv, !!(cfg && cfg.layers && cfg.layers.grade === true));
+          const aLine = 0.14 * (1 - qt);
+          if (aLine > 0) {
+            const L = u.bbox.left / px;
+            const T = u.bbox.top / px;
+            const W = u.bbox.width / px;
+            const H = u.bbox.height / px;
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = _qbFxFade(lvColor, aLine);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(L + W - 0.5, T);
+            ctx.lineTo(L + W - 0.5, T + H);
+            ctx.stroke();
+          }
+        }
+        // 光点: 4 边菱形 r2.2 rot=t/500(C5 模板同式)复用 _qbFxPolyPath 单点; 颜色仍轨道
+        // 语义色 tk.up/tk.down, 极轻不着 Lv(I10)。每轨 ≤2 错峰由 _qbTailFrame 落位。
+        const pts = a.fxTail && a.fxTail.pts;
+        if (pts && pts.length) {
+          const rot = a.clock / 500;
+          for (const pt of pts) {
+            ctx.globalAlpha = pt.alpha;
+            ctx.fillStyle = pt.k === "up" ? tk.up : tk.down;
+            _qbFxPolyPath(ctx, pt.x, pt.y, 2.2, 4, rot);
+            ctx.fill();
+          }
         }
         ctx.restore();
         return;
@@ -3830,45 +3860,52 @@ window.AQB_QB_TRAFFIC = {
       }
       st.raf = requestAnimationFrame(() => this._qbBeatFrame(scope));
     },
-    /* 次区相位帧(S2-a: tail 光点推进): 沿末段 _QB_FX_TAIL_SPAN_BUCKETS 个桶的折线缓动, 每轨
-     * ≤2 个错峰光点(合计 ≤4, 轨道语义色, 极轻 alpha ≤0.35); 位置 1px 量化 —— 无可见变化不
-     * 提交(全量路径重建是帧成本大头, 极轻面不逐帧重绘 —— I9 R8 复核)。返回 true = 次区结束
+    /* 次区相位帧(C5 模板保真二轮: tail 光点全宽巡回): ph=(t/1000×0.12+i/2+轨偏移) mod 1
+     * (t=相位时钟 a.clock ms, i=每轨光点序号 0/1), 映射整条 u.data[0] 全列(非旧末段 6 桶);
+     * 轨偏移取模板 demo:1124 口径 up=0.31/dl=0 —— 同轨两点由 i/2 错峰半周期, 双轨再错 0.31
+     * 周期(四路错峰; 若取 0.5 会与 i/2 回绕重合, 四点塌成两相位)。两轨 y 分离。每轨 ≤2(合计 ≤4, 轨道语义色); alpha 0.3×(1−qt)
+     * 线性衰减(qt=相位进度, 峰值 ≤0.3; qt→1 归零自然退场, ph 回绕重生即循环淡入 —— 不常驻)。
+     * 资格门 live && level>0 沿用 spawn 的 a.fx.tail; 缺口段跳过, 位置 1px 量化 —— 无可见变化
+     * 不提交(全量路径重建是帧成本大头, 极轻面不逐帧重绘 —— I9 R8 复核)。返回 true = 次区结束
      * (窗尽/拍内关闭), 调用方清 anim 并补一帧清理提交。 */
     _qbTailFrame(u, a) {
       const tl = a.tl;
       if (!(a.clock < tl.beat + tl.tailMs)) return true;
       const cfg = window.AQB_FX_CFG;
       if (!cfg || cfg.on !== true || cfg.tail !== true) return true;
-      const K = Math.min(_QB_FX_TAIL_SPAN_BUCKETS, a.n - 1);
       const pts = [];
-      if (K >= 1 && a.clock >= tl.beat) {
-        const p = Math.min(1, (a.clock - tl.beat) / tl.tailMs);
-        const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
-        const L = u.bbox.left / px;
-        const T = u.bbox.top / px;
-        const H = u.bbox.height / px;
-        const xs = u.data[0];
-        for (const k of a.fx.tail) {
-          const col = u.data[k === "up" ? 1 : 2];
-          for (let j = 0; j < _QB_FX_TAIL_PTS_MAX; j++) {
-            const pj = p + j * 0.45;
-            if (pj > 1) continue;   // 走完即隐(不循环 —— 次区是余韵, 不是常驻动画)
-            const b = (a.n - 1 - K) + pj * K;
-            const i = Math.floor(b);
-            const f = b - i;
-            const v0 = col[i];
-            const v1 = col[i + 1];
-            if (v0 == null || v1 == null) continue;   // 缺口段跳过(曲线断线处无光点 —— D4)
-            const alpha = 0.35 * Math.min(1, p * 8) * Math.min(1, (1 - p) * 6);
-            if (!(alpha > 0)) continue;   // 淡入前/淡出后零绘制
-            const x0 = L + u.valToPos(xs[i], "x");
-            const x1 = L + u.valToPos(xs[i + 1], "x");
-            pts.push({
-              k,
-              x: x0 + (x1 - x0) * f,
-              y: T + H * (1 - (v0 + (v1 - v0) * f) / a.yMax),
-              alpha,
-            });
+      const xs = u.data[0];
+      if (xs && xs.length > 1) {
+        const t = a.clock;
+        const qt = Math.min(1, Math.max(0, (t - tl.beat) / tl.tailMs));
+        const alpha = 0.3 * (1 - qt);
+        if (alpha > 0) {
+          const px = (typeof uPlot !== "undefined" && uPlot.pxRatio) || 1;
+          const L = u.bbox.left / px;
+          const T = u.bbox.top / px;
+          const H = u.bbox.height / px;
+          const xOf = (idx) => L + u.valToPos(xs[idx], "x");
+          for (const k of a.fx.tail) {
+            const col = u.data[k === "up" ? 1 : 2];
+            const off = k === "up" ? 0.31 : 0;   // 轨偏移: up=0.31 / dl=0(模板 demo:1124, 四路错峰)
+            for (let i = 0; i < _QB_FX_TAIL_PTS_MAX; i++) {
+              const ph = (t / 1000 * 0.12 + i / 2 + off) % 1;
+              const idx = ph * (xs.length - 1);
+              const i0 = Math.floor(idx);
+              const f = idx - i0;
+              const i1 = Math.min(i0 + 1, xs.length - 1);
+              const v0 = col[i0];
+              const v1 = col[i1];
+              if (v0 == null || v1 == null) continue;   // 缺口段跳过(曲线断线处无光点 —— D4)
+              const x0 = xOf(i0);
+              const x1 = xOf(i1);
+              pts.push({
+                k,
+                x: x0 + (x1 - x0) * f,
+                y: T + H * (1 - (v0 + (v1 - v0) * f) / a.yMax),
+                alpha,
+              });
+            }
           }
         }
       }
@@ -3917,7 +3954,7 @@ window.AQB_QB_TRAFFIC = {
       // S2-a 次区相位衔接(tail 开启且有活性轨): 主区装饰在本帧已全部回落(粒子 ≤0.55×beat、
       // 环 0.6×beat、N ≤0.33×beat —— 收敛帧零残留; 束 fade 窗 0.7×beat, animEnd =
       // max(shiftRatio,0.6)×beat < 0.7×beat 时束尾段随收敛帧提交截断 —— B2 窗与调度 animEnd
-      // 的交界属调度面(计划 S5), 本阶段不改调度), 此处转入 tail 相位让次区光点沿末段曲线缓动到下一拍前
+      // 的交界属调度面(计划 S5), 本阶段不改调度), 此处转入 tail 相位让次区光点沿整条曲线全宽巡回到下一拍前
       // (窗长 tail = min(period − beat, 2000), 600s 长窗也只铺 2s, 非常驻)。拍内 cfg 在
       // _qbTailFrame 逐帧重读 —— 关闭即下一帧收尾(补一帧清理提交)。n 取落袋后显示列长。
       const tl = a.tl;
