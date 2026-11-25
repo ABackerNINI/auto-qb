@@ -3151,9 +3151,9 @@ window.AQB_QB_TRAFFIC = {
       }
       // —— N 判定线短亮段(白名单 judgeFlash: 活性轨末点 y ±10px; ≤0.33×beat 回落) ——
       if (neon) {
-        ctx.globalAlpha = q;
+        ctx.globalAlpha = 0.55 * q * imp;   // P2 模板 demo:1050 同式 alpha=0.55×q×impact(旧裸 q 退役 —— impact 耦合是模板式)
         ctx.strokeStyle = lvColor;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;                  // P2 模板 demo:1050: lw2 -> lw3
         for (const k of ["up", "dl"]) {
           if (!fx.act[k]) continue;
           const y = k === "up" ? yUp : yDl;

@@ -3372,11 +3372,14 @@ const at = (u, t) => { u._qbBeat.anim.clock = t; draw(u); };
     + "(x=判定线-0.5, y=cy±10)+ 小菱形 4 顶点 + 冲击闪光 2(x=判定线-0.5, y=T/T+H 全高 —— C4 几何钉死)"
     + "(rot=0 旧式/恒 +3px 外圈/闪光几何漂移回潮即红)", vOk);
   ok("G13 环笔画: 主环 lw2 alpha=0.85x(1-pf)ximpact(1 处) / 外圈 lw1 alpha=0.55x(1-pf)ximpact Lv 色"
-    + "(独立扩张新式 —— 旧 q 衰减与恒 +3px 回潮即红)",
+    + "(独立扩张新式 —— 旧 q 衰减与恒 +3px 回潮即红)"
+    + " / 短亮段 lw3 alpha=0.55xqximpact Lv 色(P2 模板 demo:1050 —— 旧 lw2/裸 q 回潮即红)",
     u.ctx.strokeMeta.length >= 2
     && u.ctx.strokeMeta[0].w === 2 && Math.abs(u.ctx.strokeMeta[0].alpha - 0.85 * (1 - pf) * 0.7) <= 1e-9
     && u.ctx.strokeMeta[1].w === 1 && Math.abs(u.ctx.strokeMeta[1].alpha - 0.55 * (1 - pf) * 0.7) <= 1e-9
-    && u.ctx.strokeMeta[1].style === "#FF6BD6");
+    && u.ctx.strokeMeta[1].style === "#FF6BD6"
+    && u.ctx.strokeMeta[2].w === 3 && Math.abs(u.ctx.strokeMeta[2].alpha - 0.55 * qD * 0.7) <= 1e-9
+    && u.ctx.strokeMeta[2].style === "#FF6BD6");
   ok("G13 小菱形 alpha(C10): fill 记录面恰 1 笔(单活性轨夹具)且 = 0.7xqximpact = 0.7x(1-100/330)x0.7",
     u.ctx.fillAlphas.length === 1 && Math.abs(u.ctx.fillAlphas[0] - 0.7 * qD * 0.7) <= 1e-9);
 }
@@ -3614,6 +3617,9 @@ def test_frontend_qb_fx_visual_engine_battery():
         "_QB_FX_Y_GAP_PX = 26;", "_QB_FX_ANCHOR_SPIN_MS = 2639;"
     ):
         assert line in js, f"缺/漂移 I9 预算常量 {line}"
+    seg = re.search(r"N 判定线短亮段.*?ctx\.lineWidth = 3;", js, re.S)
+    assert seg and "globalAlpha = 0.55 * q * imp" in seg.group(0), \
+        "短亮段 lw/alpha 漂移(P2 模板 demo:1050: lw3 / alpha=0.55×q×impact —— 旧 lw2/裸 q 退役)"
     # —— b. 钩子注册序 = I6 层序(vendor 1.6.32 源实证: 主渲染序 clearRect -> Ci("drawClear") ->
     #      Pl.forEach(axes -> series) -> Ci("draw"), 且 Ci("drawAxes") 在 Dl.axes 函数末尾 = 网格
     #      之后、系列之前 —— fx 挂 drawClear 会被网格盖住, 必须挂 drawAxes) ——
