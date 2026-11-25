@@ -3390,14 +3390,17 @@ window.AQB_QB_TRAFFIC = {
      * keyframes(2639ms linear infinite, 注入单点 _qbChartInjectCss; 模板 rot=t/420 弧度/ms,
      * 一圈 2*pi*420=2639ms, 旧 420ms 系单位误读) —— 合成器动画, 零 rAF/
      * 零重绘(D2: 不进 draw 循环; 背景恒静态, 菱形是 DOM 元件不引入画布铺底 —— G5/R4)。
-     * 位置 = 判定线 x(bbox 右缘, 与画布 tipX 静止位/模板 xJudge 同源) + 末点 y(双轨 shown 的
+     * 位置 x(P5, 26-11-26-0227 §03.3): 动画期取 tipX(末点像素 x —— 与画布装饰 tipX/N 锚辉光
+     * 同源: L+W + 剩余锚位移(anchorTo - 在途锚) x pxPerT, 公式与 _qbDrawFx 的 tipX 同式),
+     * 静止期(无 anim/tail 相位)回落判定线 x = L+W(模板 xJudge —— P4 判定线小菱形钉住该位,
+     * 旧「DOM 锚恒钉判定线」拍板由本次改判覆盖); 末点 y(双轨 shown 的
      * 显示面换算, 公式与画布 yOf 同源; 动画期 yMax 读 anim.yMax 与画布钉档一致, 静止期读当前
      * y 轴档 —— I4: 显示面与钉档换算恒同一把尺)。同步点收敛四处(R3):
      *   1 判定帧  _qbBeatStart(轨道推进后同帧写 —— 覆盖零变化拍/早退拍, 锚位不落旧值)
      *   2 收敛帧  _qbBeatConverge(setData 交还 auto 后 x 重申锚视口 + y 成对钉档)
      *   3 锚钩子  _qbDrawFxAnchor 顶部(每次画布提交顺路重写 —— L0 左移/L1 收敛的逐帧位置与
      *     提交帧对齐; 挂钩子顶部而非门后, 无拍间隙的重绘也能带上锚)
-     *   4 ResizeObserver(宿主尺寸变 -> 判定线 x 与绘图区几何变, u.setSize 后立即重写)
+     *   4 ResizeObserver(宿主尺寸变 -> 锚 x 口径(P5)与绘图区几何变, u.setSize 后立即重写)
      * 另有门面单点: _qbFxCfgSync(cfg.on/palette 变化即时生效, 不等下一拍)。
      * 门 = cfg.on === true 且图活跃且该轨活性(live && shown != null —— 缺口轨隐藏, I10 模板
      * live 门同款); reduced-motion 双保险: cfg.on 已含 !reduce 分量 + CSS 媒体查询 display:none
@@ -3451,7 +3454,16 @@ window.AQB_QB_TRAFFIC = {
         const a = st.anim && st.anim.phase !== "tail" ? st.anim : null;
         const yMax = a && a.yMax > 0 ? a.yMax
           : (u.scales && u.scales.y && u.scales.y.max > 0 ? u.scales.y.max : 1);
-        const x = L + W;   // 判定线 x
+        // P5(26-11-26-0227 §03.3/R5): 动画期 x = tipX(末点像素 x, 与画布装饰 tipX/N 锚辉光同源),
+        // 静止期回落判定线 x = L+W。无新增 rAF —— 四处同步点原位搭车(锚钩子每次画布提交顺路
+        // 重写); pxPerT 与画布装饰同源读 fx.pxPerT, 缺 fx(桩 anim)退 W/span 现算。
+        let x = L + W;   // 判定线 x(静止位)
+        if (a) {
+          const dxTip = a.needsShift === true ? a.anchorTo - _qbAnimAnchorAt(a) : 0;
+          const pxPerT = a.fx && a.fx.pxPerT != null ? a.fx.pxPerT
+            : (a.span > 0 ? W / a.span : 0);
+          x = L + W + dxTip * pxPerT;
+        }
         const yOf = (v) => T + H * (1 - Math.min(v, yMax) / yMax);
         for (const k of ["up", "dl"]) {
           const tr = st.tracks && st.tracks[k];

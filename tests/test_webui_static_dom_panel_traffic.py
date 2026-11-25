@@ -7737,6 +7737,46 @@ function mkCtx() {
   self._qbFxAnchorSync(u);
   ok("K bbox 宽变(RO 面): 判定线 x 860 -> 760 立即跟随", Math.abs(num(eu.style.left) - 760) < 1e-9);
 }
+// —— B2(P5, 26-11-26-0227 §03.3): 动画期锚 x = tipX(末点像素 x, 与画布装饰/N 锚辉光同源),
+//          静止期回落判定线 x。复用同步单点 _qbFxAnchorSync(无新 rAF —— 静态钉在测试尾部)。
+//          clock=0 时在途锚 = anchorFrom(easeOut(0)=0, 不触吸附), 期望值可从 anim 字段直算。 ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  u._qbBeat.anim = { dx0: 0, needsShift: true, needsTail: false, n: 5, clock: 0, lastT: 0,
+    lastDx: null, phase: "impact", anchorFrom: 1000, anchorTo: 1100, span: 120,
+    tl: { beat: 1000, impactMs: 120, shiftMs: 600, convergeMs: 480, animEndMs: 600, tailMs: 0 },
+    yMax: YMAX, easeF: null, fx: { pxPerT: 0.5 } };
+  self._qbFxAnchorSync(u);
+  const eu2 = u._qbFxAnchors.up;
+  ok("B2 动画期(P5): 锚 x = tipX = L+W+(anchorTo-在途锚)*pxPerT = 860+100*0.5 = 910(与画布装饰同源)",
+    Math.abs(num(eu2.style.left) - (60 + 800 + (1100 - 1000) * 0.5)) < 1e-9
+    && Math.abs(num(eu2.style.top) - yOfT(10)) < 1e-9);
+  u._qbBeat.anim.phase = "tail";
+  self._qbFxAnchorSync(u);
+  ok("B2 tail 相位(P5): 回落判定线 x = 860(动画期口径只对非 tail 的 anim)",
+    Math.abs(num(eu2.style.left) - 860) < 1e-9);
+  u._qbBeat.anim = { dx0: 0, needsShift: false, needsTail: true, n: 5, clock: 100, lastT: 0,
+    lastDx: null, phase: "impact", anchorFrom: 1000, anchorTo: 1100, span: 120,
+    tl: { beat: 1000, impactMs: 120, shiftMs: 600, convergeMs: 480, animEndMs: 600, tailMs: 0 },
+    yMax: YMAX, easeF: null, fx: null };
+  self._qbFxAnchorSync(u);
+  ok("B2 fx-only 拍(needsShift=false): 恒判定线 x = 860(锚不滑动, 零位移面)",
+    Math.abs(num(eu2.style.left) - 860) < 1e-9);
+  u._qbBeat.anim.clock = 300;   // 拍中帧: needsShift=false 下在途锚不进公式, 仍恒 860
+  self._qbFxAnchorSync(u);
+  ok("B2 拍中帧(needsShift=false): 仍恒判定线 x(口径不逐帧漂移)",
+    Math.abs(num(eu2.style.left) - 860) < 1e-9);
+  u._qbBeat.anim.needsShift = true;
+  u._qbBeat.anim.clock = 300;   // 拍中帧 needsShift 翻真 + 补回同源 fx(pxPerT): 在途锚 = 1000+100*easeOut(0.5)
+  u._qbBeat.anim.fx = { pxPerT: 0.5 };
+  self._qbFxAnchorSync(u);
+  const at300 = 1000 + 100 * (1 - Math.pow(1 - 300 / 600, 3));   // easeOut 三次多项式(节拍内核 D9)
+  ok("B2 拍中帧(needsShift=true): 锚 x = L+W+(anchorTo-在途锚)*pxPerT, 在途锚随时钟推进(与 L0 同源)",
+    Math.abs(num(eu2.style.left) - (60 + 800 + (1100 - at300) * 0.5)) < 1e-6);
+}
 // —— C: 门三态(enabled=false / reduce) + 图不活跃 + 死轨 ——
 {
   const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
@@ -7900,9 +7940,12 @@ def test_frontend_qb_fx_anchor_battery():
     行为面(node 电池, 无 node 静默跳过, 同 _NODE_QB_TRAFFIC_PROBE 口径; DOM 桩 + 真 mixin 方法):
     A ensure 幂等建(恰两枚 .qb-fx-anchor 挂 .u-wrap, 类名 up/dl 可寻址; 颜色 = tk 语义色内联
     I10; 初始隐藏; 再调零操作 —— 与 _qbFxBound 同款纪律)
-    + B 同步单点位置公式(判定线 x = bbox 右缘 860 + 末点 y = yOf(shown) 对当前 y 轴档; px 后缀;
+    + 同步单点位置公式(P5: 动画期 x = tipX = L+W+剩余锚位移x pxPerT 与画布装饰同源, 静止期回落
+    判定线 x = bbox 右缘 860 + 末点 y = yOf(shown) 对当前 y 轴档; px 后缀;
     门全开复显; calm 类默认不在; 同位置重同步零改写 —— 变值才写)
     + K RO 面等价(bbox 宽 800->700 判定线 x 860->760 立即跟随)
+    + B2 P5 动画期面(clock=0 tipX=910 / tail 相位回落 860 / fx-only 拍恒 860 / 拍中在途锚随时钟
+    推进 —— 与 L0 同源) + 四处同步点全覆盖且无新 rAF(c2 静态钉)
     + C 门三态(enabled=false / reduce(on=false) 隐藏, 翻回复显; root 拆走隐藏; 死轨该轨隐藏
     活性轨照显 —— I10 模板 live 门同款; 真 0(live=true, shown=0)显形且 top=yOf(0)=T+H
     —— A3 零流量菱形旋转仍在的门面 closure, 门真值化变异即红)
@@ -8022,6 +8065,17 @@ def test_frontend_qb_fx_anchor_battery():
     ro_m = re.search(r"u\.setSize\(\{ width: w, height: h \}\);.*?this\._qbFxAnchorSync\(u\);", js, re.S)
     assert ro_m and len(ro_m.group(0)) < 600, \
         "缺 ResizeObserver 同步点(u.setSize 之后同回调内重写锚位 —— R3 resize 遗漏即像素漂移)"
+    # —— c2. P5 锚 x 新口径 + 无新 rAF(R5): 动画期 tipX 在同步单点内实现, 四处同步点原位搭车 ——
+    sync_m = re.search(r"_qbFxAnchorSync\(u\) \{\n(.*?)\n    \},", js, re.S)
+    assert sync_m, "缺 _qbFxAnchorSync(位置/门同步单点)"
+    sync_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", sync_m.group(1), flags=re.S))
+    for frag in (
+        "a.needsShift === true ? a.anchorTo - _qbAnimAnchorAt(a) : 0",
+        "a.fx && a.fx.pxPerT != null ? a.fx.pxPerT",
+    ):
+        assert frag in sync_code, f"P5 动画期 tipX 口径缺/漂移: {frag}(静止期 L+W 回落 + 与画布装饰同源)"
+    assert "requestAnimationFrame" not in sync_code, \
+        "P5/R5: 锚同步不得新增独立 rAF(动画期 tipX 只在四处既有同步点内顺路重写)"
     # —— d. 门面/建图/销毁接线 ——
     cfg_blk = re.search(r"_qbFxCfgSync\(\) \{\n(.*?)\n    \},", js, re.S)
     assert cfg_blk and "_qbFxAnchorSync" in cfg_blk.group(1), \
