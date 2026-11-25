@@ -808,8 +808,10 @@ test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; 
        *     W / 右沿 = 绘图区右缘, 即红);
        *   · height = H(下缘不放宽 —— 轴标区零墨的机制面);
        *   · x/y = 绘图区左上(不外溢到 y 轴/顶栏)。 */
-      /* 冲击窗(<=0.55xbeat)内的渲染才落 clip(环/粒子/切片的绘制段); 0.55xbeat 后冲击类
-       * 零绘制是 I9 口径(fx 在场而零 rect 属正常帧, 不入断言域) */
+      /* 装饰段逐元素窗(模板保真二轮 S2 口径): 粒子 <=0.55xbeat / 环 0.6xbeat / 束 fade 与
+       * 顶门 0.7xbeat / 切片 0.25xbeat —— 窗内绘制才落 clip; 逐元素窗的有界断言在电池面
+       * (visual_engine/scan_band), 本探针只核每个 fx 渲染的 clip 实参机制; 窗后 fx 在场而零
+       * rect 属正常帧, 不入断言域 */
       const clipped = previewFrames.filter((f) => f.clip.length > 0);
       expect(clipped.length, '冲击窗内的预览渲染必须 >= 3 帧(装饰路径真的在画)').toBeGreaterThanOrEqual(3);
       for (let i = 0; i < clipped.length; i++) {

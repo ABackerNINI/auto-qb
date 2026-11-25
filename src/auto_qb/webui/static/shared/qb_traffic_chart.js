@@ -641,7 +641,7 @@ function _qbBeatMs(period) {
 /* 段内时间线常量单点(§03 节奏公式代码块逐字语义; S1 只消费 impact/左移/收敛三段, 余辉与次区
  * tail 是 S2 装饰面的预算, 常量一并在此单点) */
 const _QB_FX_IMPACT_RATIO = 0.12;   /* impact = 0 .. 0.12 × beat */
-const _QB_FX_CONV_END_RATIO = 0.60; /* converge 收敛窗 = 0.12 × beat .. 0.60 × beat */
+const _QB_FX_CONV_END_RATIO = 0.60; /* converge 收敛窗 = 0 .. 0.60 × beat(t=0 起步, impact 窗不再钉 prev; B5/D1) */
 const _QB_FX_TAIL_MAX_MS = 2000;    /* tail = min(period − beat, 2000): 长窗 600s 也只铺 2s(P5) */
 /* 每拍时间线(纯函数, 供 node 电池): period 每拍重算(I2); shiftRatio 读面板存储值(校验域
  * [0.2,1], 此处再防御夹取一次), 缺省回落 QB_FX_DEFAULTS.shiftRatio。 */
@@ -657,7 +657,7 @@ function _qbBeatTimeline(period, shiftRatio) {
     beat,
     impactMs: impact,
     shiftMs: ratio * beat,
-    convergeMs: convEnd - impact,
+    convergeMs: convEnd,   // 0.6×beat: p=clock/convergeMs 自 t=0 起步(impact 窗不再钉 prev)
     animEndMs: Math.max(ratio * beat, convEnd),
     tailMs: beat < pr ? Math.min(pr - beat, _QB_FX_TAIL_MAX_MS) : 0,
   };
@@ -3591,7 +3591,7 @@ window.AQB_QB_TRAFFIC = {
      *     位)按 easeOut 平移到 [anchorTo − span, anchorTo]; 过渡期不重建 xs、不改 up/dl、
      *     不碰 _qbAnchors; rewin(换窗/重定标/滚动域外)瞬时落地不播动画。
      *   L1 双轨数值收敛(纯数据语义, 非装饰): 两列独立 {prev,target,shown,delta,level,live},
-     *     尾点 n-1 在收敛窗(0.12-0.6 beat)内按 easeOut 从 prev 收敛到 target(u.data 绘制面,
+     *     尾点 n-1 在收敛窗(0-0.6 beat, t=0 起步 —— B5/D1)内按 easeOut 从 prev 收敛到 target(u.data 绘制面,
      *     tooltip/悬停锚仍读 Vue points 真值 —— I4, 读数面与本插值面零交集), 收敛帧写回真值。
      * 短路: reduced-motion(AQB_FX_CFG.on === false 的 reduce 分量)显式视口一次落笔 + 瞬时
      * 左移, 无 rAF(I7); 总开关 enabled=false 不短路 —— L0/L1 照常执行(§05.6: 那是数据刷新
@@ -3819,13 +3819,15 @@ window.AQB_QB_TRAFFIC = {
           u.setScale("y", { min: 0, max: a.yMax });  // 与 x 成对: 该提交不得按平移可视窗重推 y
         }
       }
-      // L1: 尾点收敛窗(0.12-0.6 beat)内 shown = prev + (target − prev) × ease(p), 单调
-      // 无 overshoot(I4/D9); impact 窗(0-0.12 beat)内 shown 恒 = prev(冲击留给 S2 装饰)。
+      // L1: 尾点收敛窗(0-0.6 beat, t=0 起步 —— B5/D1 模板口径)内 shown = prev + (target − prev)
+      // × ease(p), 单调无 overshoot(I4/D9); impact 窗(0-0.12 beat)不再钉 prev —— 数值插值
+      // 自 t=0 起爬升, 冲击窗只留给 S2 装饰(环/粒子/闪光)。ease 越界夹取保留: p 越界自然
+      // 落 prev/target 端点, 不破坏 I4。
       // p 传**原始进度**(S3 接线: 曲线在 _qbFxShown 内单次施加, 判定帧冻结的 anim.easeF 选式
       // —— 修正 S1 遗留的「帧循环预 easeOut + _qbFxShown 再 easeOut」双重施加, 与计划 §03
       // 公式及 §04 演示单次口径对齐); ease 只作用于数值收敛, L0 与装饰运动曲线不随 ease 变。
       if (a.needsTail) {
-        const p = (a.clock - tl.impactMs) / tl.convergeMs;
+        const p = a.clock / tl.convergeMs;
         const tr = st.tracks;
         if (tr.up.live && tr.up.prev !== tr.up.target) {
           const shown = _qbFxShown(tr.up, p, a.easeF);
@@ -3851,9 +3853,11 @@ window.AQB_QB_TRAFFIC = {
         u.setScale("y", { min: 0, max: a.yMax });
         u.redraw();
       }
-      // S2-a 装饰帧保障: 冲击窗(≤0.55×beat)内 L0/L1 都没提交的帧(无 shift 长窗的 impact 段,
-      // 尾点显示值冻结在 prev)强制重绘一次, 否则粒子/环/切片冻结在 t=0 帧(I5: 冲击 t=0 同帧
-      // 触发); y 钉成对同上(显示尾值参与可视窗重推会垂直跳)。
+      // S2-a 装饰帧保障(零 Δ 拍兜底, 保留): L0/L1 都无提交的帧(无 shift 长窗且两轨 prev==target
+      // 的零变化拍, 或 setScale/shown 同值的恢复首帧)强制重绘一次, 否则粒子/环/切片冻结在 t=0
+      // 帧(I5: 冲击 t=0 同帧触发)。converge 改 t=0 起步后 impact 窗内 L1 通常已在逐帧提交,
+      // 本分支只守零变化拍(含 0.75px gate 拒绝的 L0), 不再是「尾点冻结在 prev」的常规路径;
+      // y 钉成对同上(显示尾值参与可视窗重推会垂直跳)。
       if (a.fx && !dxChanged && !tailChanged && a.clock < a.fx.beatMs * _QB_FX_PART_RATIO) {
         u.setScale("y", { min: 0, max: a.yMax });
         u.redraw();
@@ -3952,9 +3956,12 @@ window.AQB_QB_TRAFFIC = {
       // 位置与曲线尾点对齐 —— setData 提交本会经锚钩子带上, 此处显式落笔钉住计划四处之一(R3)。
       this._qbFxAnchorSync(u);
       // S2-a 次区相位衔接(tail 开启且有活性轨): 主区装饰在本帧已全部回落(粒子 ≤0.55×beat、
-      // 环 0.6×beat、N ≤0.33×beat —— 收敛帧零残留; 束 fade 窗 0.7×beat, animEnd =
-      // max(shiftRatio,0.6)×beat < 0.7×beat 时束尾段随收敛帧提交截断 —— B2 窗与调度 animEnd
-      // 的交界属调度面(计划 S5), 本阶段不改调度), 此处转入 tail 相位让次区光点沿整条曲线全宽巡回到下一拍前
+      // 环 0.6×beat、N ≤0.33×beat —— 收敛帧零残留)。束 fade 窗 0.7×beat 与调度 animEnd 的
+      // 交界(S5 核实结论): animEnd = max(shiftRatio,0.6)×beat 不变(I1); 缺省 shiftRatio=0.6
+      // 即 animEnd=0.6×beat, 束 fade 残余 = (1−0.6/0.7)^1.4 ≈ 0.0656, 乘强度 a0=0.78×0.7
+      // =0.546 后晕峰 ≈0.036 / 1px 硬核 ≈0.031(绝对 alpha ≈3%, 肉眼不可见), 收敛帧提交即
+      // 自然收口无可见截断; shiftRatio≥0.7 时 animEnd 已越 0.7×beat, fade 自然归零。故不改
+      // 调度(不动 I1/拍长), 此处转入 tail 相位让次区光点沿整条曲线全宽巡回到下一拍前
       // (窗长 tail = min(period − beat, 2000), 600s 长窗也只铺 2s, 非常驻)。拍内 cfg 在
       // _qbTailFrame 逐帧重读 —— 关闭即下一帧收尾(补一帧清理提交)。n 取落袋后显示列长。
       const tl = a.tl;
