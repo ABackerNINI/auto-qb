@@ -3009,7 +3009,7 @@ window.AQB_QB_TRAFFIC = {
             ctx.moveTo(tipX, yOld);
             ctx.lineTo(tipX, yNew);
             ctx.stroke();
-            if (neon && k === fx.lead) {   // bandHalo: 同路径再描一道 blur 辉光(仅 lead —— ≤3 次)
+            if (neon && k === fx.lead) {   // bandHalo: 同路径再描一道 blur 辉光(仅 lead —— 计入同帧 ≤5 次预算)
               ctx.globalAlpha = _QB_FX_BAND_HALO_ALPHA * q;
               ctx.strokeStyle = lvColor;
               ctx.shadowBlur = Math.round(blurCap * q);
@@ -3512,7 +3512,7 @@ window.AQB_QB_TRAFFIC = {
       if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7xbeat(仅锚段装饰; 曲线辉光独立)
       // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFx/_qbDrawFxScan 口径) ——
       // 末点在绘图区右缘的 N 锚辉光右半不再被切(F2 后画布只留辉光, 菱形本体在 DOM 常驻层);
-      // 辉光位置与 DOM 同源(判定线 x), 近底不钳。
+      // 辉光位置取末点滑动 x(tipX, C7 改判); 与 DOM 常驻锚短暂分离属预期, 近底不钳。
       const canvasW = ctx.canvas && ctx.canvas.width ? ctx.canvas.width / px : L + W;
       ctx.beginPath();
       ctx.rect(L, T, Math.max(W, canvasW - L), H);

@@ -7,9 +7,9 @@
 <title>WEBUI 流量图动效模板保真二轮: A 类两回退 + B 类窗放宽 + C 类漂移全修</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-traffic-template-fidelity-2">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-22-2330">
-<meta name="doc-updated" content="26-11-22-2330">
+<meta name="doc-updated" content="26-11-26-0145">
 <meta name="doc-refs" content="memory-bank/plans/26-11-12-1139-plan-webui-traffic-beat-motion.html, memory-bank/plans/26-11-14-1313-plan-webui-traffic-beat-fidelity.html, memory-bank/conventions/attachments/webui-traffic-beat.md, memory-bank/tasks/26-11-22-webui-traffic-template-fidelity-2.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 流量图动效模板保真二轮: A 类两回退 + B 类窗放宽 + C 类漂移全修</h1>
 <p class="lede">本篇只回答: <strong>生产 T6 节拍动效(<code>qb_traffic_chart.js</code>)与前序计划 26-11-12-1139 §04 模板 demo 之间盘点出的 20+ 处观感差异怎么修</strong>。差异已三类归因(A 已拍板落地适配 / B 生产守 I9 规格、模板 demo 违自己规格 / C 疑似真实漂移), 用户已拍板处置矩阵——A 类回退两项、B 类按模板观感放宽、C 类全修——本篇给出逐项修法、守阵改判面与文档回写面, 开工即照此实施不再二次设计。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-22-2330 · <b>doc-updated</b> 26-11-22-2330 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-22-2330 · <b>doc-updated</b> 26-11-26-0145 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 26-11-22 真机对照模板反馈「线条粗细 / 扫描线颜色变化 / 横向扫描线 / 方框旋转速度 / 爬升动画等很多差异」→ 只读盘点轮产出全量差异清单(20+ 项, 三类归因, 引文到行) → 用户拍板处置矩阵「A类 的这两项回退模板实现 / B类 按模板观感放宽 / C类 全修」→ 本计划立项。<br>
   <b>本轮动作边界</b> 仅新建本计划文件; 不改生产代码、不入池 issue、不认领 issue、不 commit/push。
 </div>
@@ -204,7 +204,7 @@
   <tr><td>converge 起步 (:3629-3654)</td><td><code>p = clock/convergeMs</code>(convergeMs = 0.6×beat), impact 窗不再钉 prev(B5/D1); ease 越界夹取机制不变; 「装饰帧保障」分支保留(零 Δ 拍仍需); 注释与 I4 叙述同步</td></tr>
   <tr><td>电池改判(红绿双验)</td><td>节拍内核(converge [0,0.6]) / 视觉引擎(I9 常量行、环、粒子、切片、partCap、6 桶、blur ≤5、neon=false 断言收窄) / scan_band(0.7 窗、full、回声 0.34、beamWScale 删、指令计数白名单 +2) / 锚电池(CSS 2639ms + C7 两断言改钉: 「<code>_qbFxPolyPath(ctx, tipX</code>」禁用钉放行、辉光调用串改钉新式 tipX/6 边/7+4qn —— test_webui_static_dom_panel_traffic.py:7382-7385 现钉恰与此对立) / panel_wiring(预览同预算窗口径)</td></tr>
   <tr><td>e2e 改判</td><td>traffic-fx-frames: <strong>无 0.55 断言面</strong>(0.55 零绘制在 e2e 仅 :811 注释, 逐元素窗断言落电池面), 仅同步该注释措辞; 回声行程探针默认档仍 ≤200, full 档单独变体; traffic-fx-anchor: 旋转断言速度无关不动, CSS 逐字钉同步</td></tr>
-  <tr><td>文档回写</td><td>本计划 I9 修订表即权威改判记录; <code>conventions/attachments/webui-traffic-beat.md</code> 动效节追加「模板保真二轮收口(2026-11-22)」节(逐条列新口径); 代码注释(:85/:3220/:4157/:879-883/:2889-2906/:3068-3086/:928/:1103)同步; 历史计划 26-11-12-1139/26-11-14-1313 不改写(史件), 矛盾处以本计划+附件收口节为准</td></tr>
+  <tr><td>文档回写</td><td>本计划 I9 修订表即权威改判记录; <code>conventions/attachments/webui-traffic-beat.md</code> 动效节追加「模板保真二轮收口(2026-11-26)」节(逐条列新口径, 已落地); 代码注释(:85/:3220/:4157/:879-883/:2889-2906/:3068-3086/:928/:1103)同步; 历史计划 26-11-12-1139/26-11-14-1313 不改写(史件), 矛盾处以本计划+附件收口节为准</td></tr>
 </table>
 
 <h2><span class="no">§04</span>实施步骤</h2>
@@ -235,7 +235,8 @@
 <table>
   <tr><th>D</th><th>日期</th><th>结论</th></tr>
   <tr><td>D0</td><td>26-11-22</td><td>用户处置矩阵(原话): 「A类 的这两项回退模板实现: 曲线 2.4→2 + 辉光移除 / 扫描束宽度感 ×0.9/1/1.1; 回声 full 档降格 auto」; 「B类 按模板观感放宽」; 「C类 全修」——A 类其余项、P3/F2/F1/P9 等拍板面不在回退范围。</td></tr>
-  <tr><td>D1–D8</td><td>—</td><td>待用户确认或默许默认值(§05); 拍板后回填。</td></tr>
+  <tr><td>D1–D8</td><td>2026-11-26</td><td>已拍板(用户默许 §05 默认值, 逐项闭合): D1 爬升起步 t=0(B 类含入, converge [0,0.6×beat]); D2 粒子喷射角保留 270° 左弧; D3 N 小菱形照补 + 判定线小菱形不补(DOM 锚覆盖) + 切片微震回模板 x 向 ±3q; D4 曲线宽 2.4(calm 2)+ 辉光收敛拍内窗 t&lt;beat; D5 粒子基数 6+7Lv, 保留 P9 的 Lv.1 发射; D6 旋转周期 2639ms(2π×420 取整); D7 闪光/余晖/lvBadge 三元素不挂 neon 门、色走 Lv 表(I11 例外注记); D8 C12/C13 保留生产口径(短亮段 lw2 无 impact 耦合、从属轨加亮照留), 非经用户改判不扩范围。</td></tr>
+  <tr><td>S2 评审裁决</td><td>2026-11-26</td><td>C2「不限配色」系引用疏漏: 只读盘点只抄了 demo:1088(Lv≥2 即画), 漏看紧邻 demo:1086 的 <code>isCalm</code> 早退——模板本体以 <code>isCalm</code> 为准(calm 档不画切片), 非 calm 且 Lv≥2/glitch 才画; 生产门已补 calm 排除(门 = 非 calm 且 (glitch || lv≥2))。计划侧以本记录为权威(用户既定「C 类按模板修」), §02 表 C2「不限配色」为史件取证措辞不改写。</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -251,6 +252,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-22-2330</span> 初版: 用户真机对照模板报五类观感差异 → 只读盘点轮产出 20+ 项差异全量清单(模板 demo 行号 vs 生产行号, 三类归因 A/B/C) → 用户拍板处置矩阵(A 类回退两项 / B 类按模板观感放宽 / C 类全修) → 本计划立项。要点: I9 四处改判(逐元素窗/回声淡晕/辉光 ≤5/次区光点)+ converge 起步 t=0 + C 类修法落点 + 守阵改判面五电池两 e2e + 文档回写面(附件收口节); 待拍板 D1–D8 均给默认值。</li>
+  <li><span class="tag">R1 · 26-11-26-0139</span> S1–S5 落地(常量/纯函数、装饰绘制、曲线锚、次区、调度五面逐项红绿双验) + S2 评审裁决入 §06(C2 引用疏漏, 模板 isCalm 为准) + T6 收口(附件「模板保真二轮收口(2026-11-26)」节与代码注释统一到现行新口径); 全绿见 kb.baseline, 本轮不抄裸测试数字。</li>
 </ul>
 
 </div>

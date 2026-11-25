@@ -1,11 +1,11 @@
 # 26-11-22-webui-traffic-template-fidelity-2 — WEBUI 流量图动效模板保真二轮(A 两回退/B 放宽/C 全修)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-22
-**Updated:** 2026-11-22
-**Summary:** WEBUI 流量图动效模板保真二轮(A 两回退/B 放宽/C 全修)
+**Updated:** 2026-11-26
+**Summary:** WEBUI 流量图动效模板保真二轮(A 两回退/B 放宽/C 全修); S1-S5 已落地, S6 文档回写与收口
 **Topics:** webui-traffic-template-fidelity-2
-**Refs:** memory-bank/plans/26-11-22-2330-plan-webui-traffic-template-fidelity-2.html
+**Refs:** memory-bank/plans/26-11-22-2330-plan-webui-traffic-template-fidelity-2.html, memory-bank/testing/baselines/26-11-26-0145-webui-traffic-template-fidelity-2.md
 
 ## 本篇只回答
 
@@ -38,12 +38,12 @@
 
 | 步 | 内容 | 状态 |
 |---|---|---|
-| S1 | 常量与纯函数面 + 电池红绿 | Open |
-| S2 | 装饰绘制面(环/闪光/切片/束/小菱形/徽标) | Open |
-| S3 | 曲线/锚面(宽+辉光/锚辉光/CSS 2639ms) | Open |
-| S4 | 次区面(菱形化+巡回/余晖线) | Open |
-| S5 | 调度面(converge t=0) + e2e 改判 | Open |
-| S6 | 文档回写 + test.full + 基线切片 + 真机冒烟 | Open |
+| S1 | 常量与纯函数面 + 电池红绿 | Done |
+| S2 | 装饰绘制面(环/闪光/切片/束/小菱形/徽标) | Done |
+| S3 | 曲线/锚面(宽+辉光/锚辉光/CSS 2639ms) | Done |
+| S4 | 次区面(菱形化+巡回/余晖线) | Done |
+| S5 | 调度面(converge t=0) + e2e 改判 | Done |
+| S6 | 文档回写 + test.full + 基线切片 + 真机冒烟 | Done |
 
 ## 进度日志
 
@@ -53,3 +53,5 @@
 
 - 2026-11-22 23:34 立项轮: 只读盘点 20+ 项模板-生产差异(A/B/C 三类归因, 引到行) + 用户拍板处置矩阵 D0(A 两回退/B 按模板放宽/C 全修) + 计划 26-11-22-2330 入库 Open(I9 修订表/D1-D7 预拍板/S1-S6) + 档案立档; 零代码改动
 - 2026-11-23 00:14 评审轮: 只读子代理 3 轮修复循环收口——轮 1 检 8/8(1 major 锚电池改判面漏 C7 两断言 + 6 minor + 1 nit)全修, A3/A5 查无拍板记录重分类 C12/C13 + 预拍板 D8; 轮 2 检 2/2 全修; 轮 3 零 actionable; 累计 检 10/10 · 修 10 · blocker 0 · 基 80d3c4156fdd · 264 行
+
+- 2026-11-26 01:45 S1-S5 五笔本地提交落地 + S6 文档回写批/全量基线入库; 真机冒烟五项交用户目测
