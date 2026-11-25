@@ -852,8 +852,9 @@ function _qbFxShown(track, p, ease) {
  * !clip 口径(F5, plan 26-11-14-1313): _qbDrawFx 与 _qbDrawFxAnchor 的 clip 右缘放宽到画布右缘
  * (rect(L, T, max(W, canvasW-L), H), 同 _qbDrawFxScan 评审 blocker 修复先例 —— 判定线右侧留白
  * 是环/粒子/菱形锚的可见域, 无轴面内容); 曲线辉光 _qbDrawFxCurveGlow 例外用严格绘图区
- * rect(L,T,W,H) clip(不放宽 —— R2 裁剪口径: 不画进判定线右留白); 左缘/上缘/下缘不动, 近底由环心上抬钳制与粒子底缘
- * 镜像反弹承接(P3 拍板), 菱形锚(数据标记)保持真位不钳。
+ * rect(L,T,W,H) clip(不放宽 —— R2 裁剪口径: 不画进判定线右留白); 上/下缘已随 P6(26-11-26-0227
+ * §03.3)放宽到画布上下缘(贴边环/粒子不被裁; 环心钳制与粒子底缘镜像同时退役 —— 几何回归模板
+ * 式, 张力处置: 允许画到画布留白不压轴标签, S4 真机核对), 左缘不动, 菱形锚(数据标记)恒真位。
  * 生效条件(I7/§05.6): cfg.on === true(有效值单点 = enabled && !reduce)且该轨 level ≥ 1 ——
  * 真 0(target==0)/缺口轨零装饰但 L0/L1 照常(D2/I10); 值>0 的活跃轨恒 ≥Lv.1(F1/D1, plan
  * 26-11-14-1313 —— 只是让既有预算被用到, 上限不抬); N 层独立开关 cfg.neon(I11), T6 四层开关
@@ -2974,12 +2975,17 @@ window.AQB_QB_TRAFFIC = {
       const T = u.bbox.top / px;
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
-      // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFxScan 评审 blocker 修复先例
-      // —— 判定线右侧留白是环/粒子/菱形锚的可见域, 无轴面内容); 左/上/下缘不动。
+      // F5(plan 26-11-14-1313)+ P6(26-11-26-0227 §03.3): clip 右缘放宽到画布右缘(同
+      // _qbDrawFxScan 评审 blocker 修复先例 —— 判定线右侧留白是环/粒子/菱形锚的可见域, 无轴面
+      // 内容); 上/下缘同步放宽到画布上下缘(P6 仿 F5 先例 —— 贴边环/粒子不被裁; 张力处置:
+      // 允许画到画布留白但不压轴标签, S4 真机核对, 压则改轻钳到画布边缘); 左缘不动; 不铺底
+      // (I11/G7 不变 —— 只放宽装饰绘制域)。canvas 高不可知(桩)退绘图区高(旧行为)。
       const canvasW = ctx.canvas && ctx.canvas.width ? ctx.canvas.width / px : L + W;
+      const hasCanvasH = !!(ctx.canvas && ctx.canvas.height);
+      const canvasH = hasCanvasH ? ctx.canvas.height / px : H;
       ctx.beginPath();
-      ctx.rect(L, T, Math.max(W, canvasW - L), H);
-      ctx.clip();   // 装饰不出绘图区(右缘放宽到画布右缘 —— F5; 与缺口斜纹同口径仅左/上/下缘)
+      ctx.rect(L, hasCanvasH ? 0 : T, Math.max(W, canvasW - L), canvasH);
+      ctx.clip();   // 装饰绘制域 = 绘图区左缘/画布右缘/画布上下缘(F5 + P6; 与缺口斜纹同口径仅左缘)
       // 尾锚显式视口(计划 26-11-22-0858): tip 位移 = 剩余锚位移(anchorTo − 在途锚, _qbAnimAnchorAt
       // 单点) —— 视口两缘同步平移下末点自判定线右侧滑入, 装饰原点与曲线末点同尺(旧 lastDxMax
       // /lastDx 分离记账随双锚退役)。
@@ -3067,24 +3073,16 @@ window.AQB_QB_TRAFFIC = {
       const imp = Math.min(1, Math.max(0, Number(cfg.impact)));
       const ringT = _qbFxRingAt(t, fx.beatMs, ringScale, fx.gapScale, imp);
       // —— 几何环(C3 模板式 demo:1294-1300): 线性扩张 r=(4+24pf)×rScale×gapScale, alpha 联
-      //     impact, lw2, **rot = t/300 旋转**(S2 接线 —— 模板同式); 近底/近顶钳制(P3 拍板,
-      //     F5): 环心 y clamp 进 [T+终态半径, T+H-终态半径], 终态半径 = (4+24)×rScale×gapScale
-      //     (保真二轮: 半径源由 rMax 改环终态值) —— 环完整可见, 允许与末点轻微分离; 钳的是
-      //     绘制面, 菱形锚(数据标记)仍走真位。终态值冻结现算(不随帧生长)避免环心在扩张期
-      //     抖动; 绘图区过矮(上下界反转)退中点。
-      const ringRMax = 28 * ringScale * fx.gapScale;
-      const ringY = (sp) => {
-        const yLo = T + ringRMax;
-        const yHi = T + H - ringRMax;
-        return yHi > yLo ? Math.min(Math.max(sp.y, yLo), yHi) : T + H / 2;
-      };
+      //     impact, lw2, **rot = t/300 旋转**(S2 接线 —— 模板同式)。环心钳制(P3 拍板/F5 的
+      //     近底/近顶 clamp)已随 26-11-26-0227 §03.3 P6 删除 —— 几何回归模板式: 环心恒走真位
+      //     sp.y(贴边环完整可见域由 clip 上下缘放宽承接); 菱形锚(数据标记)本就真位不钳。 ——
       if (ringT && ringT.r > 0) {
         ctx.lineWidth = 2;   // C3: 模板 lw2(旧 1.5 -> 2, 保真二轮)
         ctx.globalAlpha = ringT.alpha;
         const ringRot = t / 300;   // C3 模板 demo:1297 同式
         for (const sp of spots) {
           ctx.strokeStyle = sp.color;
-          _qbFxPolyPath(ctx, tipX, ringY(sp), ringT.r, sides, ringRot);
+          _qbFxPolyPath(ctx, tipX, sp.y, ringT.r, sides, ringRot);
           ctx.stroke();
         }
       }
@@ -3103,7 +3101,7 @@ window.AQB_QB_TRAFFIC = {
         ctx.shadowColor = lvColor;
         const outerRot = t / 300 + 0.4;   // C3 模板 outer() rot+0.4 同式
         for (const sp of spots) {
-          _qbFxPolyPath(ctx, tipX, ringY(sp), (9 + 31 * ringT.pf) * os, sides, outerRot);
+          _qbFxPolyPath(ctx, tipX, sp.y, (9 + 31 * ringT.pf) * os, sides, outerRot);
           ctx.stroke();
         }
         ctx.shadowBlur = 0;
@@ -3111,21 +3109,19 @@ window.AQB_QB_TRAFFIC = {
       }
       // —— 粒子(V3: 三/四/五边碎片本体轨道语义色, N 外圈描边着 Lv 色 —— 白名单 partOuter;
       //     三阶段: 爆发 ×4.5 / 拖尾减速透明 / 0.55×beat 后零绘制; t=0 首帧最亮与判定线同帧;
-      //     尺寸 = size×life 随寿命线性缩小(P10, 模板 demo:1073) —— 近底镜像反弹(P3 拍板, F5):
-      //     y 越绘图区底缘按 2*(T+H) - y 折回 —— 末点贴底的低流量拍粒子不再集体被底缘裁没;
-      //     只反弹底缘, 左/上缘维持裁剪(与 clip 口径一致)。
+      //     尺寸 = size×life 随寿命线性缩小(P10, 模板 demo:1073)。底缘镜像反弹(P3 拍板/F5 的
+      //     2*(T+H)-y 折回)已随 26-11-26-0227 §03.3 P6 删除 —— 几何回归模板式: y 恒走
+      //     _qbFxParticleAt 真位, 贴底粒子不被折回也不被裁(clip 上下缘已放宽到画布边缘)。
       if (cfg.layers.particles === true) {
-        const yFloor = T + H;
         for (const sp of spots) {
           if (!sp.specs || !(sp.n > 0)) continue;
           const m = Math.min(sp.specs.length, sp.n);
           for (let i = 0; i < m; i++) {
             const ps = _qbFxParticleAt(t, fx.beatMs, fx.burstMs, sp.specs[i], carry, i, imp);
             if (!ps || !(ps.alpha > 0)) continue;
-            const py = ps.y > yFloor ? 2 * yFloor - ps.y : ps.y;
             ctx.globalAlpha = ps.alpha;
             ctx.fillStyle = sp.color;
-            _qbFxPolyPath(ctx, ps.x, py, sp.specs[i].size * ps.life, sp.specs[i].sides, ps.rot);
+            _qbFxPolyPath(ctx, ps.x, ps.y, sp.specs[i].size * ps.life, sp.specs[i].sides, ps.rot);
             ctx.fill();
             if (neon) {   // N 外圈描边(Lv 色, 纯描边不占辉光 blur 预算)
               ctx.globalAlpha = ps.alpha * q;
