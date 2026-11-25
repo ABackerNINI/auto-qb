@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 流量图保真二轮缺陷修补: 辉光常驻 + 视口裁剪 + 粒子三漂移 + 差异清单逐项落地</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-fidelity-patch">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-26-0227">
+<meta name="doc-updated" content="26-11-26-0245">
+<!-- 前序计划/附件为冻结历史件, 不做 meta 双向声明; 引用以正文文字锚点为准 (doc-forms「认领链」未声明天然豁免) -->
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .pick { color: var(--warn); font-weight: 600; }
+  .new { color: var(--no); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-fidelity-patch</div>
+<h1>WEBUI 流量图保真二轮缺陷修补: 辉光常驻 + 视口裁剪 + 粒子三漂移 + 差异清单逐项落地</h1>
+<p class="lede">本篇只回答: <strong>计划 26-11-22-2330 落地后真机复报的两个缺陷 + 逐函数代码比对新挖出的三处粒子形态漂移怎么修, 以及用户已勾选的六项模板差异怎么落地</strong>。取证分两轮: 第一轮(文档驱动)对照二轮计划的差异表与拍板记录; 第二轮(代码驱动)把模板 demo 每个特效函数与生产对应函数逐一比对, 挖出<strong>文档从未记录的三处粒子缺陷</strong>——这才是「其它特效不尽人意」的代码级根因。共 5 个实施缺陷 + 6 项勾选修法, 全部给出落点与守阵改判面。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-26-0227 · <b>doc-updated</b> 26-11-26-0245 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户 26-11-26 真机复报「辉光每拍闪现一次 / 曲线左侧每拍浮在图例上方且与辉光同步 / 其它特效也不尽人意, 对比模板再拟修补计划」→ grilling 两问拍板(D1 辉光改常驻、D2 先列清单逐项挑)→ R1 交付文档驱动清单后用户追问「清单是读文档还是读代码? 我需要找到实施的缺陷」并逐项勾选 P1-P8 → R2 补做<strong>逐函数代码级比对</strong>, 新发现三处粒子漂移 → 本计划改版。<br>
+  <b>本轮动作边界</b> 仅改本计划文件; 不改生产代码、不入池 issue、不改前序计划与附件、不立档案、不 commit/push。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>二轮保真 S1-S5 已落地(档案 Done), 但真机复报与逐函数代码比对共同暴露出: 二轮只对齐了特效的<strong>数值参数</strong>(alpha 系数、自旋速率、尺寸范围、粒子基数), 漏掉了几处<strong>形态/存续因子</strong>(辉光存续、裁剪域、粒子轨迹压缩、粒子寿命缩放、边数轮换)。这些漏项在文档里没有任何拍板记录, 是纯粹的实施缺陷, 不是「有意保留」。</p>
+<p>取证方法差异要讲清: <strong>文档驱动</strong>的清单(初版 §05)来自二轮计划 26-11-22-2330 的差异表/§05/§06, 只能复述已记录项; <strong>代码驱动</strong>的比对(R2 本版)逐个读 <code>qb_traffic_chart.js</code> 的 <code>_qbFxParticleAt</code>/<code>_qbFxSpawnSpecs</code>/<code>_qbDrawFxScan</code>/<code>_qbTailFrame</code>/<code>_qbDrawFxAnchor</code> 与模板 demo(26-11-12-1139 §04)的 <code>particles</code>/<code>seedParts</code>/<code>scanBeam</code>/<code>flowDots</code>/<code>line</code>, 才挖出真正没被记录的漂移。</p>
+
+<h3>目标(做到什么程度算成)</h3>
+<ul>
+  <li><strong>G1 辉光常驻</strong>: 双轨 <code>level&gt;0</code> 时曲线辉光在整个拍周期与拍间静默期持续可见(模板 demo:1407-1409), 不再每拍闪一下; reduce/关总开关/calm 档仍无辉光。</li>
+  <li><strong>G2 视口溢出归零</strong>: 曲线辉光只画当前锚视口内的点(齐 uPlot 原生曲线裁切), 不再把余量列的曲线段画到绘图区左缘外浮到图例上方; 缺口段按 <code>spanGaps:false</code> 断段不桥接。</li>
+  <li><strong>G3 粒子三漂移归零</strong>: 粒子轨迹恢复模板椭圆(<code>sin·d×0.7</code>)、尺寸随寿命线性缩小(<code>size×life</code>)、边数按序号 3/4/5 轮换(<code>3+(i%3)</code>)。</li>
+  <li><strong>G4 勾选六项落地</strong>: P1/P2/P4/P5/P6 按模板对齐(含「右向粒子/环不被裁剪」的附加约束), P3/P7/P8 明确不动; 每项给修法与守阵改判面。</li>
+  <li><strong>G5 不回归</strong>: I3(不闪/零 destroy)、I8(左移连续)、I10(双轨语义色)、I7(reduce 全关)、G7(背景静态零铺色)全保持; I9 辉光预算 ≤5、束体 ≤23/束+切片 ≤28/横线 ≤12 不抬。</li>
+</ul>
+
+<h3>设计底线(不变量, 本轮不动)</h3>
+<ul>
+  <li><strong>I9 辉光预算</strong>: 同帧 blur 描边 ≤5(环外圈 ≤2 + bandHalo 1 + 曲线辉光 2)保持; 常驻后每帧重绘整图, 不逐帧累加。</li>
+  <li><strong>I11 黑名单</strong>: 曲线本体、背景、网格、tooltip、图例、限速虚线恒静态; 曲线辉光色恒为轨语义色, 不借改版改成 Lv 色或给背景铺色。</li>
+  <li><strong>I1 / I4 / 调度</strong>: <code>animEnd = max(shiftRatio,0.6)×beat</code>、收敛窗 <code>[0,0.6×beat]</code>、单调无 overshoot 一律不动; 全部改动在绘制钩子面与粒子纯函数面, 不碰调度与数据面。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点: 五个实施缺陷(代码级根因, 引到行)</h2>
+
+<h3>缺陷一 <span class="new">NEW</span>: 曲线辉光每拍闪现</h3>
+<table>
+  <tr><th>面</th><th>模板 demo</th><th>生产 :3479-3511</th></tr>
+  <tr><td>辉光存续</td><td><code>line(arr,…,glow,blur)</code>(demo:1409)每帧重绘都带辉光, <code>glow=level&gt;0?trackCol:null</code>(demo:1407), 无时间窗。</td><td>辉光重描包在 <code>if(t&lt;fx.beatMs)</code>(:3479), 整段钩子在 <code>a.phase==="tail"</code> 直接 <code>return</code>(:3461)。</td></tr>
+  <tr><td>拍间</td><td>demo 自有 rAF 连续重绘, 无「拍间」概念。</td><td><code>animEnd</code>(缺省 0.6×beat)收敛 → <code>st.anim=null</code>(:3937) → 下一拍判定帧前钩子因无 anim 不画 → 拍间辉光消失(消失占比 = 1−0.6×beat/period, 短周期约 0.76、长窗 beat 触顶趋近 1.0), 每拍闪一次。</td></tr>
+  <tr><td>归因</td><td>模板原生观感</td><td class="bad">实施缺陷: 二轮 D4「辉光窗收敛到拍内 t&lt;beat」被照搬, 但生产 draw 钩子是事件驱动重绘(非 demo 连续 rAF), 拍内窗在拍间必然留空。</td></tr>
+</table>
+
+<h3>缺陷二 <span class="new">NEW</span>: 曲线左侧浮在图例上方(与辉光同步)</h3>
+<table>
+  <tr><th>面</th><th>模板 demo</th><th>生产 :3479-3511</th></tr>
+  <tr><td>裁切</td><td><code>line()</code> 内先 <code>clipPlot()</code>(demo:1021-1024)裁在绘图区内。</td><td>辉光重描段(:3493-3507)无自身 clip; 真正的 <code>ctx.clip()</code> 在 :3517-3519, 属锚辉光段(顶门 :3512 之后)。</td></tr>
+  <tr><td>遍历</td><td><code>disp[k]</code> 长度 N 恰为视口显示点数。</td><td>遍历 <code>for(i&lt;a.n)</code>(:3495), <code>a.n</code> 是<strong>全列长度</strong>; 尾锚视口下列 = [anchor−(span+margin), anchor] 含左侧 2 组距余量(:3582), 视口外点在 <code>valToPos</code> 下落到绘图区左缘外 → 带 blur 画到图例区上方, 与辉光同段同窗故严格同步。</td></tr>
+</table>
+<p class="aside">缺陷一、二同根: 都在二轮 S3 新增的 A1 辉光段 <code>_qbDrawFxAnchor</code> :3473-3511, 合并为一处重构(§03.1)。</p>
+
+<h3>缺陷三 <span class="new">NEW · 代码比对发现, 文档零记录</span>: 粒子纵向压缩丢失(椭圆变正圆)</h3>
+<table>
+  <tr><th>面</th><th>模板 demo</th><th>生产</th></tr>
+  <tr><td>y 位移</td><td><code>var yy = y + Math.sin(p.a) * d * 0.7</code>(demo:1072) —— 纵向压 0.7, 喷雾是<strong>椭圆</strong>(横向铺得开、纵向收敛)。</td><td><code>y: spec.y0 + Math.sin(spec.ang) * d</code>(<code>_qbFxParticleAt</code> :1062) —— 无 0.7, 喷雾是<strong>正圆</strong>。</td></tr>
+  <tr><td>文档</td><td>—</td><td class="bad">二轮 C8 只记「alpha / rot / 尺寸范围 / 基数」, 附件 :82 同样; 0.7 纵向因子从未进入任何计划或拍板记录。纯实施漂移。</td></tr>
+</table>
+
+<h3>缺陷四 <span class="new">NEW · 代码比对发现, 文档零记录</span>: 粒子随寿命缩小丢失</h3>
+<table>
+  <tr><th>面</th><th>模板 demo</th><th>生产</th></tr>
+  <tr><td>尺寸</td><td><code>poly(xx, yy, p.sz * life, …)</code>(demo:1073), <code>life = 1−t/(0.55beat)</code>(demo:1064) —— 碎片随寿命<strong>线性缩小</strong>, 消散感来自「变小+变淡」双通道。</td><td><code>_qbFxPolyPath(ctx, ps.x, py, sp.specs[i].size, …)</code>(:3112) —— 尺寸恒定, 只有 alpha 淡出(<code>_qbFxParticleAt</code> :1063), 少一个通道。</td></tr>
+  <tr><td>文档</td><td>—</td><td class="bad">二轮 C8「尺寸 1.6–4.2」只对齐了范围(<code>_qbFxSpawnSpecs</code> :1082 <code>1.6+rnd×2.6</code>), 漏了 ×life 衰减。纯实施漂移。</td></tr>
+</table>
+
+<h3>缺陷五 <span class="new">NEW · 代码比对发现, 文档零记录</span>: 粒子边数轮换丢失</h3>
+<table>
+  <tr><th>面</th><th>模板 demo</th><th>生产</th></tr>
+  <tr><td>边数</td><td><code>sides: 3 + (i % 3)</code>(demo:944) —— 同批碎片按序号<strong>3/4/5 规律轮换</strong>, 视觉有节奏。</td><td><code>sides: 3 + Math.floor(rnd() * 3)</code>(<code>_qbFxSpawnSpecs</code> :1081) —— 伪随机 3/4/5, 无节奏。</td></tr>
+  <tr><td>文档</td><td>—</td><td class="bad">无任何记录; 与 C8「几何碎片 3/4/5 边」口径的差别只在分配方式, 但观感可辨。纯实施漂移。</td></tr>
+</table>
+<p class="aside"><strong>为什么文档驱动清单漏了 3-5</strong>: 二轮盘点是「按差异表逐项对照」, 而 C8 那条只写了「自旋/alpha/尺寸/基数按模板」——注意力落在有明确数值的系数上, 像 <code>*0.7</code>、<code>*life</code>、<code>i%3</code> 这类嵌在表达式里的形态因子没有独立条目, 于是既没盘点、也没拍板、更没实现。这次逐函数读代码才补齐。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 缺陷一+二: 曲线辉光抽成「常驻、视口裁剪」独立函数</h3>
+<p>把辉光从 <code>_qbDrawFxAnchor</code> 的 <code>t&lt;beat</code> 块抽出, 落成独立方法 <code>_qbDrawFxCurveGlow(u)</code>, 挂 draw 钩子(系列之上、其余装饰之前, 钩子数组 :4242)。三点核心:</p>
+<table>
+  <tr><th>维度</th><th>改法</th></tr>
+  <tr><td>存续</td><td>去 <code>t&lt;fx.beatMs</code> 窗与 <code>phase==="tail"</code> 门; 判据改「<code>cfg.on===true</code> 且 (up/dl 轨 <code>u._qbBeat.tracks[k].level&gt;0</code>)」 —— level 拍间仍在, 不依赖 <code>a.fx</code>。每次 uPlot 重绘都重画辉光, 拍间画布保持最后一帧像素 → 视觉常驻。</td></tr>
+  <tr><td>裁剪</td><td>辉光段自身 <code>ctx.save(); ctx.beginPath(); ctx.rect(L,T,W,H); ctx.clip();</code> —— 用<strong>严格绘图区</strong>(不采 F5 的右缘放宽), 再 beginPath 重描, 末了 <code>ctx.restore()</code>。缺口 <code>null</code> 段仍断段 moveTo 不桥接。</td></tr>
+  <tr><td>预算与色</td><td><code>shadowColor</code>=轨语义色; <code>shadowBlur=blurCap×(dual lead/both?1:0.45)</code>; 帧末清 0; 曲线宽仍 <code>_qbFxCurveWidth</code>(2.4/calm 2)。峰值 ≤5 不叠加。</td></tr>
+</table>
+<p>原 :3473-3511 整段删除(含「拍内窗」「不得误收到 0.7」等失效注释), 模块注释 :75/:883-885 同步改为「全程常驻, 视口裁剪」。</p>
+
+<h3>3.2 缺陷三四五: 粒子三形态因子</h3>
+<table>
+  <tr><th>缺陷</th><th>落点</th><th>改法</th></tr>
+  <tr><td>三 · 纵向压缩</td><td><code>_qbFxParticleAt</code> :1062</td><td><code>y: spec.y0 + Math.sin(spec.ang) * d * 0.7</code>; 函数注释补「模板 demo:1072 椭圆喷雾, 纵向压 0.7」。</td></tr>
+  <tr><td>四 · 寿命缩小</td><td><code>_qbFxParticleAt</code> 返回值 + :3112</td><td>返回值加 <code>life: 1 − t/T</code>(T=0.55×beat, 与 alpha 同源); 绘制改 <code>_qbFxPolyPath(…, sp.specs[i].size * ps.life, …)</code>。calm/reduce 门不变。</td></tr>
+  <tr><td>五 · 边数轮换</td><td><code>_qbFxSpawnSpecs</code> :1081</td><td><code>sides: 3 + (i % 3)</code>(i 为清单内序号), 删原伪随机式; 确定性仍由 seed 驱动其余字段, 电池分布断言若钉了 sides 随机分布需同步改判。</td></tr>
+</table>
+
+<h3>3.3 用户勾选六项(P1/P2/P4/P5/P6 修, P3/P7/P8 不动)</h3>
+<table>
+  <tr><th>项</th><th>修法</th><th>关键约束 / 代价</th></tr>
+  <tr><td><strong>P1 粒子喷射角 + 右向不裁</strong></td><td><code>_qbFxSpawnSpecs</code> :1078 角度由 270° 左弧(<code>45+270(i+0.5)/n</code>)改模板 360° 全向(<code>TAU(i+0.5)/n + (rnd−0.5)×0.6</code>, demo:941); 粒子 clip 右缘保持放宽到画布边缘(:2966 <code>max(W, canvasW−L)</code>), 确保右向碎片可见。</td><td>右向碎片行程 <code>dist=rMax×(1.1~1.6)</code> 须不超过画布右缘到 tipX 的距离, 否则仍被裁 —— S4 真机量这个余量, 不足则把 dist 上限按可用余量钳(不改变 360° 方向性)。</td></tr>
+  <tr><td><strong>P2 短亮段 lw/alpha</strong></td><td>:3146-3148 短亮段由 <code>lw2 / alpha=q</code> 改模板 <code>lw3 / alpha=0.55×q×impact</code>(demo:1050); I11 白名单判据、I9 指令计数不变(只改 lw/alpha 数值)。</td><td>impact 耦合是模板式; 守阵 static 钉更新为 0.55 系数。</td></tr>
+  <tr><td><strong>P4 判定线小菱形</strong></td><td>neon 块内补 <code>poly(xJudge, y, 2.6, 4, t/420)</code> fill <code>rgba(trackCol,0.35)</code>(demo:1421) —— 与已补的 C10 N 小菱形(:3160-3167, r=2.2q+1)是两枚不同元素, 都保留。</td><td>本枚钉判定线 x(L+W), 与 P5 改后的 DOM 锚(随末点滑)分离, 正好形成模板「判定线小菱形 + 末点大菱形」双锚形态。</td></tr>
+  <tr><td><strong>P5 DOM 锚随末点滑</strong></td><td><code>_qbFxAnchorSync</code> :3425 x 由恒 <code>L+W</code> 改为动画期取 <code>tipX</code>(末点像素 x, 与画布 N 锚辉光同源), 静止期回落 L+W; 复用现有同步点 3(锚钩子顶部每帧画布提交顺路重写 :3458), <strong>不新增 rAF</strong>。</td><td>F2 原「DOM 锚恒钉判定线」是拍板项, 本次用户改判覆盖; 判定线位置由 P4 小菱形补上, 语义不丢。同步四处(判定帧/收敛帧/锚钩子/RO)都要走新口径, 守阵四同步点断言同步改。</td></tr>
+  <tr><td><strong>P6 去钳制/镜像 + 不裁</strong></td><td>删环心钳制 <code>ringY</code>(:3060-3065)与粒子底缘镜像(:3109), 几何回归模板式; 装饰 clip 上/下缘放宽到画布边缘(仿 F5 右缘放宽先例), 使贴边环/粒子不被裁。</td><td class="wr">张力: 放宽 clip 会让装饰进入轴标签/图例区(正是缺陷二的教训)。默认方案 = 环/粒子允许画到画布留白但真机核对不压轴标签; 若压, 则保留「轻钳到画布边缘」而非退回绘图区钳。I11 背景静态不破(只放宽装饰绘制域, 不铺底)。</td></tr>
+  <tr><td>P3 / P7 / P8</td><td colspan="2" class="wr">保留: 从属轨加亮(:3531-3556)不动; Lv.1 仍发粒子(13 粒)不动; 辉光色/bandHalo 色联动不动。非经新拍板不扩范围。</td></tr>
+</table>
+
+<h3>3.4 落点与文档回写汇总</h3>
+<table>
+  <tr><th>落点</th><th>改法</th></tr>
+  <tr><td><code>_qbDrawFxAnchor</code> :3473-3511</td><td>整段辉光块删除; 顶部注释 :3450-3456 删「曲线辉光回退」描述(保留锚辉光/from 属轨加亮段)。</td></tr>
+  <tr><td>新增 <code>_qbDrawFxCurveGlow(u)</code></td><td>按 3.1 实现; draw 钩子 :4242 插入调用, 置于系列原生描边之后、<code>_qbDrawFxAnchor</code> 之前。</td></tr>
+  <tr><td><code>_qbFxParticleAt</code> :1062 / <code>_qbFxSpawnSpecs</code> :1078/:1081 / :3112</td><td>按 3.2 + P1 改; 函数注释写明模板对照行号。</td></tr>
+  <tr><td>:3146-3148 / :3160-3167 / :3425 / :3060-3065 / :3109 / :2966</td><td>按 3.3 P2/P4/P5/P6 改。</td></tr>
+  <tr><td>附件 <code>webui-traffic-beat.md</code></td><td>「模板保真二轮收口」节追加「缺陷修补(2026-11-26)」子节: 辉光改常驻+视口裁剪、粒子三因子、P1/P2/P4/P5/P6 新口径; 与旧表述冲突处以本节为准。</td></tr>
+  <tr><td>守阵(§04 S3)</td><td>辉光窗断言改常驻; 新增视口裁剪断言 + 常驻 blur 预算断言; 粒子纵向 0.7/寿命 ×life/边数 i%3 各加静态断言; P1-P6 对应断言全改判(先红后绿)。</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>缺陷一+二: 重构 <code>_qbDrawFxCurveGlow</code>(去时间窗/去 tail 门/读 tracks level/严格 clip/帧末清 blur), 删旧段, draw 钩子接线, 注释与附件同步。</td><td>真机: 稳态流下拍内拍间辉光都在; hover/切窗口/切视图后不丢; calm/reduce/关总开关三档无辉光; 左缘图例区无浮出段。</td></tr>
+  <tr><td>S2</td><td>缺陷三四五: 粒子纵向 0.7 + 寿命 ×life + 边数 i%3 三改, 模块/函数注释补模板对照行号。</td><td>node 电池红绿: 粒子 y 行程 = 0.7×x 行程同相; 尺寸随 life 线性衰减到 0; 边数序列 = 3,4,5,3,4,5…; 原断言钉旧的先红后绿。</td></tr>
+  <tr><td>S3</td><td>勾选六项: P1(360°+右向不裁) / P2(lw3+0.55impact) / P4(判定线小菱形) / P5(DOM 锚随末点滑) / P6(去钳制镜像+不裁)。每项独立提交、守阵先红后绿。</td><td>每项真机观感对齐模板且无副作用: 右向粒子完整可见; 短亮段随 impact 变化; 双锚形态; 贴边环/粒子不裁且不压轴标签; P3/P7/P8 未动(git diff 可证)。</td></tr>
+  <tr><td>S4</td><td>守阵总收口: 静态钉/e2e 全改判 + 新增断言; <code>test.full</code> + 新基线切片; 真机五项对照 + I3/I8/I10/I7/G7 回归自检。</td><td>全绿基线入库; 五缺陷真机确认消失; 六勾选逐项确认; 无新增整块铺色/超预算 blur。</td></tr>
+</table>
+
+<h2><span class="no">§05</span>模板-生产差异清单(用户已逐项勾选)</h2>
+<p class="aside">初版清单为文档驱动(二轮计划差异表+拍板记录), R2 补入代码驱动发现的三处粒子漂移(标 <span class="new">NEW</span>)。勾选结论来自用户 2026-11-26 02:42 消息, 已落 §06 D3。</p>
+<table>
+  <tr><th>P</th><th>项</th><th>来源</th><th>用户勾选</th><th>落地</th></tr>
+  <tr><td>P1</td><td>粒子喷射角(270° 左弧 → 模板 360°)</td><td>文档(D2 保留项)</td><td class="pick">修 + 右向粒子不被裁剪</td><td>§03.3 P1</td></tr>
+  <tr><td>P2</td><td>判定线短亮段 lw/alpha(C12)</td><td>文档(D8 保留项)</td><td class="pick">修(按模板 lw3+impact)</td><td>§03.3 P2</td></tr>
+  <tr><td>P3</td><td>从属轨末段加亮(C13)</td><td>文档(D8 保留项)</td><td class="wr">保留</td><td>不动</td></tr>
+  <tr><td>P4</td><td>判定线 N 小菱形(r2.6)</td><td>文档(D3 保留项)</td><td class="pick">修(按模板补)</td><td>§03.3 P4</td></tr>
+  <tr><td>P5</td><td>常驻菱形锚位置(C7 分离观感)</td><td>文档(二轮记录)</td><td class="pick">修(DOM 锚随末点滑)</td><td>§03.3 P5</td></tr>
+  <tr><td>P6</td><td>环心钳制/粒子底缘镜像(A4)</td><td>文档(A4 适配)</td><td class="pick">修(去钳制镜像 + 不被裁剪)</td><td>§03.3 P6</td></tr>
+  <tr><td>P7</td><td>粒子基数 Lv.1 档(D5)</td><td>文档(保留 P9)</td><td class="wr">保留</td><td>不动</td></tr>
+  <tr><td>P8</td><td>辉光色 / Lv 色联动(I11)</td><td>文档(现行一致)</td><td class="wr">保留</td><td>不动</td></tr>
+  <tr><td class="new">P9</td><td class="new">粒子纵向压缩(椭圆 → 正圆)</td><td class="new">代码比对 NEW · 零记录</td><td class="pick">修(缺陷三)</td><td>§03.2</td></tr>
+  <tr><td class="new">P10</td><td class="new">粒子尺寸随寿命缩小</td><td class="new">代码比对 NEW · 零记录</td><td class="pick">修(缺陷四)</td><td>§03.2</td></tr>
+  <tr><td class="new">P11</td><td class="new">粒子边数 3/4/5 轮换</td><td class="new">代码比对 NEW · 零记录</td><td class="pick">修(缺陷五)</td><td>§03.2</td></tr>
+</table>
+<p class="aside">P9-P11 是代码比对新发现, 用户尚未逐项确认; 按「与模板对齐」的总意图默认纳入 S2, 若用户否决任一项, 从 S2 摘除即可(不影响其余项)。五个实施缺陷(辉光闪现/溢出 + P9-P11)与六项勾选(P1/P2/P4/P5/P6)合计 11 项修改, 互不重叠。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>日期</th><th>结论</th></tr>
+  <tr><td>D0</td><td>2026-11-26</td><td>用户复报原话: 「实施仍有问题, 与模板还是有差距, 流量曲线辉光每拍闪现一次; 流量曲线左侧每拍会显示在图例上方, 与辉光闪现同步。另外其它特效也不尽人意, 对比模板, 再拟一个修补计划」。</td></tr>
+  <tr><td>D1</td><td>2026-11-26</td><td>辉光修法 = 改回常驻(对齐模板 level&gt;0 全程观感), 放弃二轮 D4「拍内窗」省成本口径; 性能改走 §07 R1 兜底档。</td></tr>
+  <tr><td>D2</td><td>2026-11-26</td><td>范围 = 先列全量差异清单再逐项挑(R1 已交付文档驱动清单)。</td></tr>
+  <tr><td>D3</td><td>2026-11-26 02:42</td><td>用户逐项勾选: P1 修+右向粒子不裁 / P2 修 / P3 保留 / P4 修 / P5 修 / P6 修+不裁 / P7 保留 / P8 保留。同时追问「清单是读文档还是读代码? 我需要找到实施的缺陷」→ 触发 R2 逐函数代码比对, 新发现 P9/P10/P11 三处零记录漂移, 按「与模板对齐」总意图默认纳入 S2。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>R1</td><td>全曲线 blur 常驻性能</td><td>长窗稳态流下拍间重绘掉帧 / 帧耗时超阈值</td><td>D1 已推翻「拍内窗」省成本; 兜底: ①末段 N 点(如 24)加亮替代全曲线重描, 或 ②blur 窗收窄到 0.6×beat 但保留可见辉光底色; 实测进基线, 二选一记录。</td></tr>
+  <tr><td>R2</td><td>裁剪口径混淆</td><td>曲线辉光误用 F5「右缘放宽」→ 画进判定线右留白; 或 P6 装饰 clip 放宽进轴标签区</td><td>曲线辉光用严格 <code>rect(L,T,W,H)</code>, 静态钉钉死; P6 装饰 clip 放宽后真机核对不压轴标签, 压则改「轻钳到画布边缘」; 两者都是装饰绘制域, 不铺底。</td></tr>
+  <tr><td>R3</td><td>守阵红面遗漏</td><td>静态钉/e2e 仍按旧的窗式/随机式断言, 改版后红</td><td>§03.4 落点表逐行列改判面; 每步先红后绿双验; 收口 <code>test.full</code> + 新基线。</td></tr>
+  <tr><td>R4</td><td>「常驻」在 hover/resize/tail 清理帧被漏画</td><td>draw 钩子在各重绘路径调用面不一致</td><td>S1 覆盖四路重绘(判定帧/收敛帧/tail 清理帧/hover+resize)逐一确认辉光不丢; 若某路不触发主 canvas 重绘, 因画布不清空辉光保持末帧即可 —— 以真机为准记入基线。</td></tr>
+  <tr><td>R5</td><td>P5 DOM 锚随末点滑破坏「合成器动画零 rAF」原则</td><td>若误引入独立 rAF 更新 DOM transform</td><td>复用现有同步点 3(锚钩子顶部每次画布提交顺路重写), 不新增 rAF; 判定线位置由 P4 小菱形补上。守阵钉「四处同步点全覆盖 + 无新 rAF」。</td></tr>
+  <tr><td>R6</td><td>P1 右向粒子仍被裁</td><td>360° 后右向碎片行程超出画布右缘到 tipX 的余量</td><td>S3 真机量余量; 不足则按可用余量钳 dist 上限(不改变方向性); clip 右缘保持 F5 放宽到画布边缘。</td></tr>
+  <tr><td>R7</td><td>P9/P10/P11 未经用户逐项确认</td><td>用户否决某项</td><td>默认按「与模板对齐」总意图纳入 S2; 若否决, 从 S2 摘除该项即可, 不影响其余 10 项。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-26-0227</span> 初版(文档驱动): 用户真机复报两缺陷 +「其它特效不尽人意」→ 对照二轮计划 26-11-22-2330 差异表/拍板记录列文档驱动清单(P1-P8) → grilling 拍板 D1(辉光改常驻)/D2(先列清单逐项挑) → 立项。要点: S1-S3 两缺陷修法 + S4 条件步待勾选; 清单为文档框架+代码交叉核对。</li>
+  <li><span class="tag">R1 · 26-11-26-0245</span> 改版(代码驱动补漏): 用户追问「清单是读文档还是读代码? 我需要找到实施的缺陷」并逐项勾选 P1-P8(D3)→ 逐函数比对模板 demo 与生产代码, 新挖出三处文档零记录的粒子形态漂移(纵向压缩 0.7 / 寿命缩小 ×life / 边数 i%3 轮换, 列 P9-P11) → 改成 5 缺陷 + 6 勾选共 11 项修法。要点: §02 补缺陷三四五的代码级根因与「文档为何漏」; §03.2 粒子三因子修法 + §03.3 六勾选逐项修法(含 P1 右向不裁、P6 去钳制不裁的张力处置); §04 S1-S4 重排; §05 落实勾选; §06 D3; §07 补 R5-R7。本版仍零生产代码改动。</li>
+</ul>
+
+</div>
+</body>
+</html>
