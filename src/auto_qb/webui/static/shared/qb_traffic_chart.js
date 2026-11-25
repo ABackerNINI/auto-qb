@@ -72,7 +72,8 @@
  *
  * T6 综合表现层(S2-b, plan §03 T6 行/D17-D19 + §02 R5/R6/R7): 在 S2-a 引擎上补齐 T6 五层 ——
  * T2 光带爬升(cfg.layers.band: 末点插值 shown 的渐变光带两轨各自画, 读数过渡不占装饰预算;
- * N 数值光带辉光 bandHalo 仅 lead 一道, 同帧 blur 描边 = 环外圈 ≤2 + 光带 1 ≤ 3)+ T4 扫描束
+ * N 数值光带辉光 bandHalo 仅 lead 一道, 同帧 blur 描边 <=5: 环外圈 <=2 + 光带 1 + 曲线辉光 2
+ * (A1/D4 本阶段落地))+ T4 扫描束
  * (_qbDrawFxScan: 双相位六层束 —— 亚像素硬核/六层晕/色散/彗尾/梳齿/回声, 束体逐帧 ≤23 指令,
  * 回声越线 span=clamp(0.22×绘图宽,100,200) px 按 pow(1−d/span,0.85) 距离衰减、到点几何硬停;
  * 束体 clip 放宽到画布右缘 —— 判定线右侧留白是相位 A「滑入」与右向结构的可见域, 段尾自含
@@ -82,12 +83,14 @@
  * 暂停(§09 让位)。
  *
  * 常驻菱形锚(F2, plan 26-11-14-1313 §03 F2/D2): 末点旋转方块的**常驻环境层**改走 CSS 合成器
- * —— 两枚 .qb-fx-anchor DOM 方块挂 uPlot .u-wrap, keyframes 420ms linear infinite(模板 t/420
- * 同拍), 零 rAF/零重绘(D2: 旋转走合成器, 不进 draw 循环; 背景恒静态, 菱形是 DOM 元件不引入
+ * —— 两枚 .qb-fx-anchor DOM 方块挂 uPlot .u-wrap, keyframes 2639ms linear infinite(模板 rot=t/420
+ * 是弧度/ms, 一圈 2*pi*420=2639ms; 旧 420ms/圈系单位误读, 快约 6.3 倍 —— D6/C1), 零 rAF/零重绘
+ * (D2: 旋转走合成器, 不进 draw 循环; 背景恒静态, 菱形是 DOM 元件不引入
  * 画布铺底 —— G5/R4); 画布侧菱形本体移除(避免双画), N 锚辉光(anchorHalo)保留画布侧拍内脉冲
- * 且位置公式与 DOM 同源(判定线 x + 末点 y)。位置同步点收敛四处(R3): 判定帧 _qbBeatStart /
+ * (C7 改 tipX 末点滑动 x, 与 DOM 常驻锚短暂分离属预期)。位置同步点收敛四处(R3): 判定帧 _qbBeatStart /
  * 收敛帧 _qbBeatConverge / 锚钩子 _qbDrawFxAnchor 顶部(每次画布提交顺路重写)/ ResizeObserver;
- * _qbFxCfgSync 汇入门面(cfg.on / palette 变化即时生效)。门 = cfg.on===true 且图活跃, 缺口轨
+ * _qbFxCfgSync 汇入门面(cfg.on / palette 变化即时生效; D4 曲线宽 2.4/calm 2 也在该面现写)。
+ * 门 = cfg.on===true 且图活跃, 缺口轨
  * 隐藏(I10 模板 live 门同款); reduced-motion 双保险(cfg.on 已含 !reduce + CSS 媒体查询隐藏
  * —— P2: 隐藏不是静态方块); calm 档 border-radius 退化圆点(模板 isCalm 同款)。CSS 经
  * _qbChartInjectCss 单点注入(四皮肤零侵入); 元件随图建/随图清(_qbChartDestroy 显式清记录,
@@ -878,17 +881,17 @@ const _QB_FX_N_BLACKLIST = ["curveUp", "curveDl", "plotBg", "edgeBg", "grid", "t
 const _QB_FX_LV_COLORS = { 1: "#7AD9FF", 2: "#FEFFA9", 3: "#FF6BD6" };
 
 /* V1 三档配色 shadowBlur 上限(I9): glitch 14 / neon(常规) 10 / calm 0。同帧辉光(blur)描边
- * 另有 ≤3 次预算(S2-b 口径): 扩张环外圈(至多 2 次) + T2 数值光带辉光 bandHalo(仅 lead 轨
- * 1 道); 锚辉光用无 blur 低透明外圈菱形替代(白名单 anchorHalo), 粒子外圈/判定线短亮段/
- * 两条曲线恒纯描边(曲线不加 blur —— I9「光带 1 + 曲线各 1」的曲线分量生产侧让给环外圈)。 */
+ * 修订预算 <=5(S3 口径): 扩张环外圈(至多 2 次) + T2 数值光带辉光 bandHalo(仅 lead 轨 1 道)
+ * + 曲线辉光 2 道(A1/D4, 拍内 t<beat 全曲线重描, 轨语义色); 锚辉光用无 blur 低透明外圈六边环
+ * (白名单 anchorHalo), 粒子外圈/判定线短亮段不加 blur。曲线分量早期让给环外圈, 本阶段回退。 */
 const _QB_FX_BLUR_CAPS = { neon: 10, glitch: 14, calm: 0 };
 
 /* V2 冲击环边数映射(由 lead 等级决定): Lv.1 三边 / Lv.2 六边 / Lv.3 八边 */
 const _QB_FX_RING_SIDES = { 1: 3, 2: 6, 3: 8 };
 
-/* C1/D6 常驻菱形锚旋转周期(2π×420 取整 —— 模板 rot=t/420 是弧度/ms, 一圈 = 2π×420 ≈ 2639ms;
- * 旧 CSS 420ms/圈系单位误读, 快 6.3 倍)。本常量为 CSS 注入与注释的单点来源(接线改判在
- * 后续阶段接 —— 本阶段只立常量, CSS 仍 420ms)。 */
+/* C1/D6 常驻菱形锚旋转周期(2*pi*420 取整 —— 模板 rot=t/420 是弧度/ms, 一圈 = 2*pi*420 ~ 2639ms;
+ * 旧 CSS 420ms/圈系单位误读, 快约 6.3 倍)。本常量为 CSS 注入与注释的单点来源(S3 已接线:
+ * _qbChartInjectCss 用本常量现算动画周期, 不再写死 420ms)。 */
 const _QB_FX_ANCHOR_SPIN_MS = 2639;
 
 /* I9 视觉预算常量(R3: 全部按 up + dl 两轨合计, 不每轨各配一套): 粒子 ≤32 / 每轨半套 ≤16 /
@@ -1958,16 +1961,36 @@ window.AQB_QB_TRAFFIC = {
      * !fxOn 是 computed, 读它不带括号(getter 语义; 带括号 = 把 getter 的值当函数调, TypeError
      *   整页白屏, 守阵 test_frontend_computed_not_invoked_as_function 钉此形态)。
      * on 只进运行期配置对象, 不进持久化键(persistQbFx 只写 fx)。 */
+    /* D4 曲线宽单点(plan 26-11-22-2330 §3.3): 常规 2.4 / calm 2(克制档细线, 模板 isCalm 同款)。
+     * palette 切换经 _qbFxCfgSync 现写 u.series[1/2].width + redraw(uPlot 每帧读 series.width, 不
+     * 重建、不 destroy、不碰 loading) —— 若等下一拍才生效, 面板改档与曲线视觉会错拍一整个节拍,
+     * 故走配置同步面而非拍内钩子。入参显式 palette 供 cfgSync 用(避免二次读已改写的 CFG); 缺省
+     * 先读运行期 CFG(建图时 immediate watcher 已落初值), 再回落 fx 持久化值(桩/首帧防御)。 */
+    _qbFxCurveWidth(palette) {
+      const p = palette != null ? palette
+        : ((window.AQB_FX_CFG && window.AQB_FX_CFG.palette) != null
+          ? window.AQB_FX_CFG.palette : (this.fx && this.fx.palette));
+      return p === "calm" ? 2 : 2.4;
+    },
     _qbFxCfgSync() {
       const cfg = JSON.parse(JSON.stringify(this.fx));
       cfg.on = this.fxOn;
       window.AQB_FX_CFG = cfg;
       // F2 常驻菱形锚门面(cfg.on / palette 变化即时生效, 不等下一拍): 总开关翻关/reduce 翻入
       // 隐藏、翻开复显, calm 切档类即时对齐 —— 位置不在本面(四处同步点单管位置, R3 收敛口径)。
+      // D4 曲线宽与锚同步同面落笔: 宽度变化才 redraw(避免无关 fx 改动触发无谓重画), 不重建图。
+      const w = this._qbFxCurveWidth(cfg.palette);
       if (this._qbCharts) {
         for (const s of Object.keys(this._qbCharts)) {
           const uc = this._qbCharts[s];
-          if (uc && uc.root && uc.root.isConnected) this._qbFxAnchorSync(uc);
+          if (uc && uc.root && uc.root.isConnected) {
+            this._qbFxAnchorSync(uc);
+            if (uc.series && uc.series[1] && uc.series[1].width !== w) {
+              uc.series[1].width = w;
+              if (uc.series[2]) uc.series[2].width = w;
+              uc.redraw(false, true);
+            }
+          }
         }
       }
     },
@@ -2932,8 +2955,8 @@ window.AQB_QB_TRAFFIC = {
       //     **两轨都必须画**(读数过渡, 不占 I9 装饰预算; 无独立窗 —— 顶门 0.7×beat 内画,
       //     alpha 随收敛进度 pConv 在 0.6×beat 处自然归零, B1 模板保真二轮)。
       //     impact 窗 shown=prev 时光带零长, <0.75px 不落笔。N 数值光带辉光
-      //     bandHalo(白名单)只 lead 轨一道 —— 同帧 blur 描边 = 环外圈(≤2) + 光带(1), I9 辉光
-      //     预算修订 ≤5(环外圈 ≤2 + bandHalo 1 + 曲线辉光 2 预留 S3; blurCap×q, calm 档上限
+      //     bandHalo(白名单)只 lead 轨一道 —— 同帧 blur 描边 = 环外圈(<=2) + 光带(1), I9 辉光
+      //     预算修订 <=5(环外圈 <=2 + bandHalo 1 + 曲线辉光 2 已于 S3 落地; blurCap×q, calm 档上限
       //     0 自然退化为纯描边)。cfg.impact 滑杆(0-1)是峰值 alpha 的强度源(原型 S.impact
       //     同式)。 ——
       if (cfg.layers.band === true) {
@@ -3305,7 +3328,8 @@ window.AQB_QB_TRAFFIC = {
     },
     /* ================= 常驻菱形锚 DOM 层(F2, plan 26-11-14-1313 §03 F2/D2) =================
      * 末点旋转方块的常驻环境层: 两枚 .qb-fx-anchor DOM 方块挂 uPlot .u-wrap, 旋转走 CSS
-     * keyframes(420ms linear infinite, 注入单点 _qbChartInjectCss) —— 合成器动画, 零 rAF/
+     * keyframes(2639ms linear infinite, 注入单点 _qbChartInjectCss; 模板 rot=t/420 弧度/ms,
+     * 一圈 2*pi*420=2639ms, 旧 420ms 系单位误读) —— 合成器动画, 零 rAF/
      * 零重绘(D2: 不进 draw 循环; 背景恒静态, 菱形是 DOM 元件不引入画布铺底 —— G5/R4)。
      * 位置 = 判定线 x(bbox 右缘, 与画布 tipX 静止位/模板 xJudge 同源) + 末点 y(双轨 shown 的
      * 显示面换算, 公式与画布 yOf 同源; 动画期 yMax 读 anim.yMax 与画布钉档一致, 静止期读当前
@@ -3393,12 +3417,12 @@ window.AQB_QB_TRAFFIC = {
         }
       }
     },
-    /* draw 装饰段(系列之上): lead 策略从属轨描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽
-     * 半透明短段, 不着 Lv —— I10) -> N 锚辉光(白名单 anchorHalo, 无 blur 低透明外圈菱形 ——
-     * blur 预算让给环外圈与 T2 bandHalo; 辉光色走 T5 联动单点, grade 关恒 Lv.1 —— S2-b)。
+    /* draw 装饰段(系列之上): 曲线辉光回退(A1/D4: 拍内 t<beat 全曲线 blur 重描) -> lead 策略从属轨
+     * 描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽半透明短段, 不着 Lv —— I10) -> N 锚辉光(白名单
+     * anchorHalo, C7 模板式 6 边环随末点 tipX 滑动; 辉光色走 T5 联动单点, grade 关恒 Lv.1 —— S2-b)。
      * F2(plan 26-11-14-1313): 末点菱形**本体**移除画布侧(常驻层交 DOM .qb-fx-anchor, 本方法
-     * 顶部顺路重写其位置 —— 避免双画); 辉光保留拍内脉冲, 位置公式与 DOM 同源(判定线 x +
-     * 末点 y —— L0 期间不随 tipX 滑出判定线, 与 DOM 锚恒重合, R3 双源漂移即红)。clip 放宽
+     * 顶部顺路重写其位置 —— 避免双画); 画布只留拍内脉冲辉光, 与 DOM 常驻锚短暂分离属预期(C7 位置
+     * 改 tipX 随末点滑, DOM 锚仍钉判定线 x —— 模板亦如此, 二者不要求逐帧同位置)。clip 放宽
      * (F5)与 lead 从属轨加亮原样保留 —— 加亮段仍画在画布。 */
     _qbDrawFxAnchor(u, tk) {
       this._qbFxAnchorSync(u);   // F2 同步点之锚钩子: 每次画布提交顺路重写 DOM 锚位(位置/门/类)
@@ -3409,13 +3433,53 @@ window.AQB_QB_TRAFFIC = {
       if (!cfg || cfg.on !== true) return;
       const fx = a.fx;
       const t = a.clock;
-      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7×beat(I9 逐元素窗改判)
       const px = this._qbCanvasScale(u);
       const ctx = u.ctx;
       const L = u.bbox.left / px;
       const T = u.bbox.top / px;
       const W = u.bbox.width / px;
       const H = u.bbox.height / px;
+      const yOf = (v) => T + H * (1 - Math.min(v, a.yMax) / a.yMax);
+      // —— 曲线辉光回退(A1/D4, plan 26-11-22-2330 §3.3): 拍内窗 t < beat 且该轨 level>0 时按
+      //     u.data[1/2] 全曲线重描一遍(系列之上的 draw 钩子), 色走轨语义色, shadowColor=trackCol,
+      //     shadowBlur = blurCap x (dual lead/both ? 1 : 0.45) —— calm 档 blurCap=0 自然退化为普通
+      //     描边(I9 预算不增)。缺口 null 段 gStarted=false 断段重新 moveTo(与 spanGaps:false 同款,
+      //     禁止桥接 —— 与从属轨加亮同路); 帧末 shadowBlur=0。窗独立判断置于顶门之前 —— 顶门
+      //     0.7xbeat 只做锚段装饰的粗滤, 不得把曲线辉光误收到 0.7(拍内 0.7-1.0 段仍要有辉光)。 ——
+      if (t < fx.beatMs) {
+        const blurCap = _QB_FX_BLUR_CAPS[cfg.palette] != null
+          ? _QB_FX_BLUR_CAPS[cfg.palette] : _QB_FX_BLUR_CAPS.neon;
+        const glowBlur = Math.round(blurCap * ((cfg.dual === "lead" || cfg.dual === "both") ? 1 : 0.45));
+        ctx.shadowBlur = glowBlur;   // 单一施加点(两轨共用), 帧末清零 —— I9 非零赋值点恰 1
+        for (const k of ["up", "dl"]) {
+          if (!(st.tracks[k].level > 0)) continue;
+          const col = u.data[k === "up" ? 1 : 2];
+          const xs = u.data[0];
+          const trackCol = k === "up" ? tk.up : tk.down;
+          ctx.strokeStyle = trackCol;
+          ctx.shadowColor = trackCol;
+          ctx.lineWidth = this._qbFxCurveWidth(cfg.palette);
+          ctx.globalAlpha = 1;
+          ctx.beginPath();
+          let gStarted = false;
+          for (let i = 0; i < a.n; i++) {
+            const v = col[i];
+            if (v == null) { gStarted = false; continue; }
+            const x = L + u.valToPos(xs[i], "x");
+            const y = yOf(v);
+            if (!gStarted) {
+              ctx.moveTo(x, y);
+              gStarted = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          if (gStarted) ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+      }
+      if (!(t < fx.beatMs * _QB_FX_TOP_RATIO)) return;   // 顶门最大窗 0.7xbeat(仅锚段装饰; 曲线辉光独立)
       // F5(plan 26-11-14-1313): clip 右缘放宽到画布右缘(同 _qbDrawFx/_qbDrawFxScan 口径) ——
       // 末点在绘图区右缘的 N 锚辉光右半不再被切(F2 后画布只留辉光, 菱形本体在 DOM 常驻层);
       // 辉光位置与 DOM 同源(判定线 x), 近底不钳。
@@ -3423,7 +3487,6 @@ window.AQB_QB_TRAFFIC = {
       ctx.beginPath();
       ctx.rect(L, T, Math.max(W, canvasW - L), H);
       ctx.clip();
-      const yOf = (v) => T + H * (1 - Math.min(v, a.yMax) / a.yMax);
       const tr = st.tracks;
       const yUp = yOf(tr.up.shown);
       const yDl = yOf(tr.dl.shown);
@@ -3431,13 +3494,14 @@ window.AQB_QB_TRAFFIC = {
       const neon = cfg.neon === true && q > 0;
       const ens = Math.max(0, 1 - t / (fx.beatMs * _QB_FX_PART_RATIO));
       const lvColor = _qbFxLvColor(fx.lv, cfg.layers.grade === true);   // T5 联动单点(S2-b)
-      const rot = Math.PI / 4 + (Math.PI * 2 * t) / fx.beatMs;   // 旋转菱形(每拍一圈)
+      const imp = Math.min(1, Math.max(0, Number(cfg.impact)));
+      const xs = u.data[0];
+      const tipX = L + u.valToPos(xs[a.n - 1], "x");   // 末点滑动 x(x 轴真值换算, 同 lead 加亮段)
       // lead 策略从属轨: 末段描边加亮(读绘制面尾点插值 shown; y 钉定档下 yOf 与 uPlot 像素对位)
       if (cfg.dual === "lead") {
         const sub = fx.lead === "up" ? "dl" : "up";
         if (fx.act[sub]) {
           const col = u.data[sub === "up" ? 1 : 2];
-          const xs = u.data[0];
           const i0 = Math.max(0, a.n - 3);
           ctx.globalAlpha = 0.45 * ens;
           ctx.strokeStyle = sub === "up" ? tk.up : tk.down;
@@ -3461,18 +3525,20 @@ window.AQB_QB_TRAFFIC = {
           if (started) ctx.stroke();
         }
       }
-      // N 锚辉光(白名单 anchorHalo): 无 blur 低透明外圈菱形拍内脉冲 —— F2 后画布侧只留辉光,
-      // 菱形本体在 DOM 常驻层; 辉光位置与 DOM 同源(判定线 x + 末点 y, 不随 L0 tipX 滑动)。
+      // N 锚辉光(白名单 anchorHalo, C7 模板式): 6 边低透明外圈环拍内脉冲 —— F2 后画布侧只留辉光,
+      // 菱形本体在 DOM 常驻层; 几何 r=(7+4q)xrolexgapScale / rot=t/320 / alpha=0.5xqximpact,
+      // 位置 tipX(末点滑动 x)。与 DOM 常驻锚短暂分离属预期(模板同款), 不要求逐帧同位。
+      const haloRot = t / 320;
       for (const k of ["up", "dl"]) {
         if (!fx.act[k]) continue;
         const y = k === "up" ? yUp : yDl;
         const role = cfg.dual === "lead" && k !== fx.lead ? 0.6 : 1;
-        const r = 5 * role * fx.gapScale;
+        const r = (7 + 4 * q) * role * fx.gapScale;
         if (neon) {
-          ctx.globalAlpha = 0.35 * q;
+          ctx.globalAlpha = 0.5 * q * imp;
           ctx.strokeStyle = lvColor;
           ctx.lineWidth = 1;
-          _qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot);
+          _qbFxPolyPath(ctx, tipX, y, r, 6, haloRot);
           ctx.stroke();
         }
       }
@@ -4069,6 +4135,7 @@ window.AQB_QB_TRAFFIC = {
       this._qbChartInjectCss();
       this._qbAnchors[scope] = data.anchor;  // 悬停取值用(非响应式实例字段, 同 _qbAnchors 自身先例)
       const tk = this._qbChartTokens();
+      const curveW = this._qbFxCurveWidth();   // D4: 建图初值即对齐当前 palette(常规 2.4 / calm 2)
       const W = this._qbChartWs[scope] = host.clientWidth || 860;
       // 高度跟随宿主(流量形态里 .qb-chart-host 撑满抽屉可用高): 量到就用, 量不到(布局未定)回落 300;
       // 抽屉拖拽调高 -> 宿主高度变 -> ResizeObserver 重画, 见下
@@ -4104,13 +4171,13 @@ window.AQB_QB_TRAFFIC = {
         series: [
           { label: "时刻", value: (u, ts) => this.fmtTime(ts) },
           {
-            label: "上传", stroke: tk.up, width: 2,
+            label: "上传", stroke: tk.up, width: curveW,
             spanGaps: false,  // null 桶断线不连线(§5.2 拍板: 纯断线, 无最大跨越)
             points: { show: false, size: 6, filter: (u, sIdx) => _qbIsolatedIdxs(u, sIdx) },
             value: (u, v) => this.fmtSpeed(v),
           },
           {
-            label: "下载", stroke: tk.down, width: 2,
+            label: "下载", stroke: tk.down, width: curveW,
             spanGaps: false,
             points: { show: false, size: 6, filter: (u, sIdx) => _qbIsolatedIdxs(u, sIdx) },
             value: (u, v) => this.fmtSpeed(v),
@@ -4244,8 +4311,9 @@ window.AQB_QB_TRAFFIC = {
     /* uPlot 1.6.x 必要基础样式(官方 uPlot.min.css 的结构性子集; 不 vendor css 文件, 按计划
      * 以 token 化样式注入一次): 色值两处(十字虚线)走 --fg-dim 令牌, 换肤自动跟随;
      * 图例/标题规则不注入(本组件 legend 关闭/无标题)。
-     * 同单点追加常驻菱形锚(F2, plan 26-11-14-1313)的类样式: 旋转 = keyframes 420ms linear
-     * infinite(模板 t/420 同拍), 合成器动画零 rAF/零重绘(D2); reduced-motion 媒体查询隐藏
+     * 同单点追加常驻菱形锚(F2, plan 26-11-14-1313)的类样式: 旋转 = keyframes 2639ms linear
+     * infinite(模板 rot=t/420 弧度/ms, 一圈 2*pi*420=2639ms; 旧 420ms 系单位误读), 合成器动画
+     * 零 rAF/零重绘(D2); reduced-motion 媒体查询隐藏
      * (P2 拍板: 隐藏, 不是静态方块 —— 与 JS 门 cfg.on 的 !reduce 分量双保险);
      * calm 档退化为圆点(.qb-fx-anchor-calm, border-radius 50% —— 模板 isCalm 同款)。
      * 颜色不走这里: 语义色由 _qbFxAnchorEnsure 按 tk 内联(换肤重建即新令牌 —— I10)。 */
@@ -4269,7 +4337,7 @@ window.AQB_QB_TRAFFIC = {
         ".u-axis.u-off, .u-select.u-off, .u-cursor-x.u-off, .u-cursor-y.u-off, .u-cursor-pt.u-off { display: none; }",
         "/* aqb: 常驻菱形锚(F2, plan 26-11-14-1313) —— 位置(left/top)由 JS 在四处同步点写入,",
         "   旋转走 keyframes 合成器动画(零 rAF/零重绘 —— D2); left/top 变值才写(逐帧同步点不制造无谓布局)。 */",
-        ".qb-fx-anchor { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; pointer-events: none; will-change: transform; animation: aqb-fx-anchor-spin 420ms linear infinite; }",
+        `.qb-fx-anchor { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; pointer-events: none; will-change: transform; animation: aqb-fx-anchor-spin ${_QB_FX_ANCHOR_SPIN_MS}ms linear infinite; }`,
         ".qb-fx-anchor.qb-fx-anchor-calm { border-radius: 50%; }",
         "@keyframes aqb-fx-anchor-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
         "@media (prefers-reduced-motion: reduce) { .qb-fx-anchor { display: none; } }",

@@ -7,9 +7,9 @@
 - test_frontend_qb_fx_overlay_close_registry_and_reduced_motion: 数值面板收层七处登记 + IO 兜底 + reduced-motion 红线静态守阵(R8 S0-b, plan 26-11-12-1139 §05.6/§05.7/§05.9) —— lifecycle 点空白名单与 Esc 退栈链(紧跟 drawerMenu 之后: 后开先关, 面板开着 Esc 只关面板)/dialogs_meta escBusy/closeDrawer/drawerTab/换目标收口六处在位(shortcuts _kbOverlayBusy 末尾项归 test_drawer_dock_keyboard_w2 书写序守阵) + IO 观察 .qb-chart-host 在 _qbFxListen 开面板支路建/关面板支路断(ratio===0 走 fxClose 单点, 不挂 _qbChartDestroy 防换肤误关; 七处直写 visible=false 的断开由 state.js 'fxPanel.visible' watcher 统一汇到 _qbFxListen(false)) + reduce 红线: 判定单点内联 matchMedia 不引用 AQB_FX.reduced(flux-only 三套旧皮肤 ReferenceError)/有效值单点 fxOn = enabled && !reduce/change 监听 mounted 装beforeUnmount 摘/AQB_FX_CFG._qbFxCfgSync 附加 on 且 fx+fxReduce 两 watcher 汇入/面板总开关 :checked=fxOn + :disabled=fxReduce 置灰与说明行/有效值 on 不进持久化形状(QB_FX_DEFAULTS 无 on 键) + S4-a 轮追加 section 5(§05.9 第 6 项/第 9 项的电池级等价): openFxPanel 经 overlay_fit 单点钳位 + 图宿主右缘钳位(右缘 >=8px)/重开复位 alt/Alt 看穿三路(keydown+keyup 同处理器按 e.altKey 写态 + 面板不可见早退 + blur 失焦复位)/四皮肤 .fx-panel CSS 成对(fixed 本体/max-height 兜底/fx-alt/120ms 仅 opacity/reduce 零动画)/D20 渗色禁令(fx CSS 段剥注释零 --today-up/--today-down)
 - test_frontend_qb_beat_kernel_battery: 节拍内核 S1 电池 + 接缝静态钉(plan 26-11-12-1139 §03 节奏模型/L0/L1, §06 S1 行; 尾锚显式视口换代 26-11-22-0858) —— node 电池双发(new Function 取出口径): 节奏公式四组(multiplier 1/2/8 与 600s 长窗 -> beat 600/夹顶 1000, 下限 320 与非法 period 防御) + 每拍时间线(impact 0.12/shift=shiftRatio×beat 防御夹取/converge [0.12,0.6]/tail=min(period-beat,2000) 封顶非常驻, animEnd<=beat<=1000 全域扫 = I1) + easeOut 三次多项式单调无 overshoot(D9) + 0.75px 最小可见位移规则(短窗播平移/长窗瞬时/0.75 边界/量不到宽瞬时) + L1 双轨独立(上传 Δ=0 恒 Lv.1 下限(F1) + 下载 Lv.3/Δ 分档端点归属 0.005/0.05/0.30/真 0 与缺口轨恒静默/缺参向后兼容/复活轨直落真值/分母可视下限防爆炸/0->0 守卫) + 以显示值接续不回跳(I3) + 锚视口纯函数面 _qbAnchorJudge(J1-J10: 单调锚 anchor=max(st.anchor,tail) 旧窗响应晚到不回拖/组距标称与名义窗长变化 rewin/±2 组距滚动域恰边界 slide 保持/位移上界不含/J8 首拍锚起步/J9-J10 meta 缺席防御)+ _qbAnimAnchorAt(L1-L4: 在途锚现值单点 帧循环与打断续滑共用/clock=0=anchorFrom/clock>=shiftMs 钳 anchorTo/末帧 ulp 吸附/easeOut 特征值 0.875/零 mutate)+ _qbRetainHistory(L5-L7: t<新列头恰等不并入 与 keepLine 含界对称/keepLine 外弃/引用共享/防御空列与新头无 t)+ _qbTrimStaleHead 余量线(L8-L9c: 保留窗 span+margin=2 组距/尾点无 t 不剪/keepS 非法不剪/锚=视口锚优先 领先尾按锚修剪列仍覆盖视口左缘 无锚回落尾/摘要窗内桶数 余量列不计 缺 span_s/旧契约回落全列长) + 调度器面 S0-S20b(S0/S0b 桩忠实性含 redraw(false,true) 不重写 x pending —— 尾锚显式视口依赖此语义/S1-S2 平移全生命周期: 视口落滑动起点=上一收敛视口 左右缘双连续 + 逐帧锚单调不减两缘同步跨度恒名义窗 + 收敛帧 setData 后显式重申覆盖列全宽 auto + 锚记账落位/S3 打断接续 L1 值面与锚续滑面/S4 隐藏暂停恢复/S5 reduce 显式视口一次落笔(旧零 setScale 交 auto 随换代退役)/S6 enabled=false 不短路/S7 零变化拍 fx 在场 + 显式视口照常落笔/S7a 真 0 静默 + 显式视口照常/S7b 尾值不变滚窗平移照播尾点零改写/S8 长窗 gate 拒绝瞬时落地目标锚视口 恰一次 x+y —— 旧 auto 落地面退役 instant/长窗恒定压缩变体随补点退役消失/S9-S9c 换档瞬时(组距标称+名义窗长变化)/滚动域外(delta>2x step)/恰 2 组距边界仍平移/S10 销毁终止/S11 rescale 显式视口重申锚不动/S12-S12b 零变化连拍显式视口每拍同值落笔/S13-S13b 悬停读数面/S14 零位移打断续滑全链(在途锚直读 零回跳 —— 旧 _qbInheritedViewport 公式重建退役)/S15 真滚动打断单调锚到新尾/S16 rewin 打断瞬时落地新窗长锚视口/S17 单调锚尾回退不回拖/S18 instant 档瞬时落地目标锚视口 恒定压缩变体随补点退役消失/S19 建图拍底座 anchor=列尾真值 step=meta 组距标称 span=meta 名义窗长 + 建图初始视口播种 [锚-span,锚] 免首绘 auto 全列宽闪帧/S20b 余量列变异盲区封堵: 列含余量点 setData 的列全宽 auto 必须被收敛帧显式重申覆盖 重申行删除即红 —— 其余场景列恒真值无余量 auto 与锚视口同形拦不住/S20c 余量持峰: 余量列含真实峰值点 收敛帧 y 成对钉 终态 y == 全列钉值且动画期零泵动(y 钉行删除即红)) + 接缝静态钉 a-k(a 快路纯 setData 三列原样落袋->同帧 _qbBeatStart 补点构造/继承捕获退役/b 判定帧显式视口无条件落笔 vAnchor-j.span + y 成对钉 + 帧循环 anchor=a-_qbAnimAnchorAt(a) 单锚位守卫 + min=anchor-a.span max=anchor + y 成对 + 纯数值收敛帧先钉 y 再 redraw + yMax 全列扫描 + 收敛帧 setData+显式重申+y 成对钉+redraw(false,true)/c 右缘刻位过滤+标签逐帧现算+tick freeze 退役/d reduce 读有效值单点/e destroy 先 cancel/f beat 展示值复用单点/g BOM 纪律/h I3 反向钉/i tooltip 读数面接缝/j rescale 收口 setData 后 x 重申 + y 成对钉(y 紧跟 x, 按新 cap 全列重算 yMax, 钉 b 同款成对形态)/k 尾锚反向钉: 退役件 _qbRollJudge/_qbPadTailColumns/_qbInheritedViewport/_qbBeatVpRem/_qbPad 剥注释全文件零残留 + _qbAnchorJudge 单点消费 + st.anchor/step/span 记账 + 悬停索引直通 + yMax 全列 + anchorPrev/disp 单点 + 历史保留合并单点; 取数窗口分量钉在 wiring 电池)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 
-- test_frontend_qb_fx_visual_engine_battery: 视觉引擎 V + N 霓虹元素层 S2-a 电池 + 接缝静态钉(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行) —— node 电池真跑(同节拍内核范式): I6 图层顺序常量逐字(geometry/neon 恒在 curve 前、anchor 在后)+ I11 N 层白名单六元素(S2-b 增 bandHalo 数值光带辉光)/黑名单八元素逐字且零交集 + V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6; 四皮肤无 --qb-lv* 令牌已核查, 计划色值常量落 shared 层)+ 三档配色 blur 上限(neon 10/glitch 14/calm 0)+ V2 环边数映射(3/6/8)+ I9 预算常量(粒子 ≤32/每轨半套 ≤16/N 0.33×beat/粒子窗 0.55×beat/y 间距 26px/切片 ≤5/微震 3px/光点 ≤2/末段 6 桶) + D3 lead 仲裁(argmax 优先非缺口非静默轨/双轨静默 null/恰等取 up) + partCap(D5 模板基数 6+7×lv=13/20/27 x 密度, clamp 32 保留, 密度 ≤0 零粒子; P9 兼容 Lv.1 仍发射) + D3 三策略分配(both 对半各 ≤16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both) + D4 y 间距缩小(线性 /26 下限 0.4 不合并不取消) + N 回落 0.33×beat + 冲击环(C3 模板式: pf=t/(0.6×beat) 线性扩张 r=(4+24pf)×rScale×gapScale, alpha=0.85×(1−pf)×impact×rScale×gapScale, rScale 半套系数 both 0.5/lead 1/merge 1, pf≥1 null —— B3 环窗 0.6) + V3 粒子三阶段(爆发 ×4.5 闭式/拖尾 easeOut 减速位移步单调收缩/末态恰 dist/C8 模板式 alpha=0.78×(1−t/T)×impact 与 rot=t/260+idx 匀速单向 —— rot0/vr 退役/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边非圆点/同种子恒同/左向 270° 弧避开右向扇区 D2/尺寸 1.6-4.2 C8/行程界) + R6 撕裂切片(≤5/|offX| ≤3 x 向微震 dy0/ph 退役 —— C2/D3/长 10-80/同参数恒同) + 锚旋转周期常量 2639(C1/D6) + I9 逐元素窗常量(模板保真二轮 S2: 顶门最大窗 0.7/切片独立窗 0.25/束 fade 窗 0.7 —— 旧 0.55 单一顶门退役, 粒子 0.55/环 0.6 各自独立保留) + 伪随机确定性; 调度器 fx 面(真 mixin 方法 + 桩 uPlot 含 valToPos/bbox 全量): 判定帧 fx 生成门(cfg.on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/双轨真 0 零装饰 —— F1 后值>0 恒 >=Lv.1)+ both/lead/merge 三策略落 fx 清单 + D4 y 间距实测缩小 + 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘 + y 钉 31.5 成对)+ 次区相位(收敛帧衔接/光点 ≤4 alpha ≤0.35 位置在绘图区内/1px 量化节流零提交/窗尽收尾 anim null/拍内关 tail 下一帧收尾)+ merge+缺口轨落位退 lead 末点 y(F7: specs.merge[0].y0 === yOf(lead.shown), 与底边的假中点即红 —— 评审修复2; S2-b 起切片锚带改 R6 撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H, 断言带内且清单无条件生成)+ spawn 满额清单与密度解耦(F8: 密度 0.4 仍 14/13 —— D5 基数 27, cap=partCap(lv,1), 评审修复3) + R6 撕裂带 spawn 公式逐条紧断言(F9: halfBand=(0.08+0.30×min(1,Δ/0.5))×H + strat×hash01(尾桶,slot) + 带内钳边与梳齿绘图区钳 —— 评审 minor4: 半带系数与归一分母变异即红); 绘制面 ctx 桩电池(G0-G13, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor; 模板保真二轮 S2: stroke 记 strokeMeta 笔画元数据/fillText 记 {s,font,alpha}): blur 预算(非零赋值恰 1 施加点/带 blur stroke = spots 数 ≤2/逐帧扫帧末 shadowBlur 恒 0/palette=calm 恒不赋非零 —— 评审修复7, 变异自证删 blur 清零行必红; 旧场景 shown=prev 光带零长 bandHalo 不参与, 完整辉光预算在 scan_band 电池)+ neon=false 白名单断言面收窄(I11 例外注记 —— D7: lvBadge 常显 fillText 恰 1 + 判定帧全高冲击闪光 rgba Lv 色lw2 恰 1 笔不挂 neon 门; 环外圈辉光/短亮段/粒子外圈仍零 Lv 直色落笔, 锚段同验)+ 密度拍内即时(0.4→13/1→29/0.1→5 —— D5 基数 27 + N 小菱形每活性轨 +1 fill C10)+ 切片门 C2+calm 排除(非 calm 且 (glitch || lv≥2 —— neon 档 Lv.3 即画 5 条 2px 级/Lv.1 neon 零切片/拍内切 glitch 下一帧即画 2 条 1.5px 级/calm 档 Lv.3 亦零切片 —— 模板 demo:1086 isCalm() 早退同口径), 独立窗 0.25×beat; 计数按 x<绘图右缘滤除束体梳齿)+ 环旋转与外圈新式(G13: t=100 顶点逐点吻合 rot=t/300/外圈 rot+0.4 半径 9+31pf alpha 0.55(1-pf)impact, 主环 lw2; 环心观测 G8/G11 改 t=0 对径两点 + neon=false 摘 N 层噪声, 粒子镜像 G12 改 t=130 避闪光窗)+ draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点四点均值观测, 假中点即红)+ lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25] 对照 —— 评审修复6); 静态钉: I6/I11/V1/I9 常量行逐字 + 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect→drawClear→Pl.forEach[axes→series]→draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后系列前 —— drawClear 斜纹恒最底/drawAxes fx(挂 drawClear 会被网格盖住违 I6)/draw 限速→锚)+ 背景零铺色(fx 域剥注释后 fillRect 恰 1 处且为切片 1px 级、锚/次区域零 fillRect)+ I11 黑名单(fx 域零触碰 legend/cursor/series)+ I3 反向钉(fx 域零 destroy/new uPlot/loading)+ 生效条件门(spawn 与 fx 装饰段逐帧复核 cfg.on、tail 域复核 cfg.tail)+ 收敛帧次区衔接(phase tail/fxTail/cfg.tail 门)+ 装饰帧保障行 + 次区相位分支在 _qbBeatFrame(装饰帧挂调度器循环, 无独立循环) + S4-a 轮 F1e/G9(§10 双轨探针「上传零粒子零环、下载有反馈」两面; F1 后静默面收窄为真 0/缺口轨): F1e 上轨真 0(target==0 -> level 0)时 lead=dl 真零轨不参与仲裁/act.up=false/act.dl=true/次区资格只 dl —— 与 F1d 缺口轨(live=false)互补的「live=true 但真 0」面; B3 追加 F1e2(F1 下限 spawn 消费面: 值>0 delta=0 恒 Lv.1 -> act/次区资格全开 + 装饰清单在场)与 G0(fx/锚段 clip 实参记账: 右缘放宽到画布右缘宽 840, F5)/G11(环心钳制分支: 半径源改环终态(4+24)×rScale×gapScale=28(lead/merge), shown 经 yOf 越下界 305->钳 282/越上界 24.3->钳 38/区间内恒等不咬合 —— 评审 major: 近底 e2e 墨量探针对钳制删除假阴性, 钳制语义的机检面)/G12(粒子底缘镜像: 90° 单粒子 ps.y=318.6 越底 -> fill 顶点均值 = 折回值 301.4, 删镜像行必红); G9 绘制面计数(spawn 侧 alloc 照发 both 半套, spots 组装被 fx.act 门滤除 —— 真 0 注入态 13 vs 双活性对照 27(D5 基数), act 门删掉即翻倍) + 裁决轮追加 F1f/G10 并经评审 major 修正(calm 档零粒子: plan §04 原型 partCap 的 isCalm 口径, §10「克制档零粒子」原文补齐; 生产只采纳 calm 分量 —— 原型另有 leadLevel()<=1->0 门, Lv.1 发粒子系用户拍板维持现状/P9 未采纳; 唯一闸 = 绘制面 eff 逐帧门, spawn 恒满额清单与配色档解耦(F1f 钉, F8 同款 —— spawn 冻 palette 会让拍内切出 calm 余下冲击窗零粒子到下一拍才恢复且切片带 yCenter 漂移) + 拍内切 calm 下一帧零粒/切出恢复(G10 记账 ctx, neon 同参数 27 对照); isCalm 的 reduce 分量由 spawn 顶门 cfg.on !== true 承接)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_fx_visual_engine_battery: 视觉引擎 V + N 霓虹元素层 S2-a 电池 + 接缝静态钉(S2-a, plan 26-11-12-1139 §03 V 表/N 节/D1-D4, §06 S2 行) —— node 电池真跑(同节拍内核范式): I6 图层顺序常量逐字(geometry/neon 恒在 curve 前、anchor 在后)+ I11 N 层白名单六元素(S2-b 增 bandHalo 数值光带辉光)/黑名单八元素逐字且零交集 + V1 Lv 色表逐字(#7AD9FF/#FEFFA9/#FF6BD6; 四皮肤无 --qb-lv* 令牌已核查, 计划色值常量落 shared 层)+ 三档配色 blur 上限(neon 10/glitch 14/calm 0)+ V2 环边数映射(3/6/8)+ I9 预算常量(粒子 ≤32/每轨半套 ≤16/N 0.33×beat/粒子窗 0.55×beat/y 间距 26px/切片 ≤5/微震 3px/光点 ≤2/末段 6 桶) + D3 lead 仲裁(argmax 优先非缺口非静默轨/双轨静默 null/恰等取 up) + partCap(D5 模板基数 6+7×lv=13/20/27 x 密度, clamp 32 保留, 密度 ≤0 零粒子; P9 兼容 Lv.1 仍发射) + D3 三策略分配(both 对半各 ≤16 合计守恒全域扫/lead 全套从属零/merge 中点一次/未知回落 both) + D4 y 间距缩小(线性 /26 下限 0.4 不合并不取消) + N 回落 0.33×beat + 冲击环(C3 模板式: pf=t/(0.6×beat) 线性扩张 r=(4+24pf)×rScale×gapScale, alpha=0.85×(1−pf)×impact×rScale×gapScale, rScale 半套系数 both 0.5/lead 1/merge 1, pf≥1 null —— B3 环窗 0.6) + V3 粒子三阶段(爆发 ×4.5 闭式/拖尾 easeOut 减速位移步单调收缩/末态恰 dist/C8 模板式 alpha=0.78×(1−t/T)×impact 与 rot=t/260+idx 匀速单向 —— rot0/vr 退役/carryPx 随 L0 末点滑动) + 喷射清单(三/四/五边非圆点/同种子恒同/左向 270° 弧避开右向扇区 D2/尺寸 1.6-4.2 C8/行程界) + R6 撕裂切片(≤5/|offX| ≤3 x 向微震 dy0/ph 退役 —— C2/D3/长 10-80/同参数恒同) + 锚旋转周期常量 2639(C1/D6) + I9 逐元素窗常量(模板保真二轮 S2: 顶门最大窗 0.7/切片独立窗 0.25/束 fade 窗 0.7 —— 旧 0.55 单一顶门退役, 粒子 0.55/环 0.6 各自独立保留) + 伪随机确定性; 调度器 fx 面(真 mixin 方法 + 桩 uPlot 含 valToPos/bbox 全量): 判定帧 fx 生成门(cfg.on=false fx null 但 L0/L1 照常/reduce 无 anim/缺口轨 lead 单轨/双轨真 0 零装饰 —— F1 后值>0 恒 >=Lv.1)+ both/lead/merge 三策略落 fx 清单 + D4 y 间距实测缩小 + 装饰帧保障(无 shift 长窗 impact 窗零提交帧强制重绘 + y 钉 31.5 成对)+ 次区相位(收敛帧衔接/光点 ≤4 alpha ≤0.35 位置在绘图区内/1px 量化节流零提交/窗尽收尾 anim null/拍内关 tail 下一帧收尾)+ merge+缺口轨落位退 lead 末点 y(F7: specs.merge[0].y0 === yOf(lead.shown), 与底边的假中点即红 —— 评审修复2; S2-b 起切片锚带改 R6 撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H, 断言带内且清单无条件生成)+ spawn 满额清单与密度解耦(F8: 密度 0.4 仍 14/13 —— D5 基数 27, cap=partCap(lv,1), 评审修复3) + R6 撕裂带 spawn 公式逐条紧断言(F9: halfBand=(0.08+0.30×min(1,Δ/0.5))×H + strat×hash01(尾桶,slot) + 带内钳边与梳齿绘图区钳 —— 评审 minor4: 半带系数与归一分母变异即红); 绘制面 ctx 桩电池(G0-G16, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor; 模板保真二轮 S2: stroke 记 strokeMeta 笔画元数据/fillText 记 {s,font,alpha}): blur 预算(非零赋值恰 1 施加点/带 blur stroke = spots 数 ≤2/逐帧扫帧末 shadowBlur 恒 0/palette=calm 恒不赋非零 —— 评审修复7, 变异自证删 blur 清零行必红; 旧场景 shown=prev 光带零长 bandHalo 不参与, 完整辉光预算在 scan_band 电池)+ neon=false 白名单断言面收窄(I11 例外注记 —— D7: lvBadge 常显 fillText 恰 1 + 判定帧全高冲击闪光 rgba Lv 色lw2 恰 1 笔不挂 neon 门; 环外圈辉光/短亮段/粒子外圈仍零 Lv 直色落笔, 锚段同验)+ 密度拍内即时(0.4→13/1→29/0.1→5 —— D5 基数 27 + N 小菱形每活性轨 +1 fill C10)+ 切片门 C2+calm 排除(非 calm 且 (glitch || lv≥2 —— neon 档 Lv.3 即画 5 条 2px 级/Lv.1 neon 零切片/拍内切 glitch 下一帧即画 2 条 1.5px 级/calm 档 Lv.3 亦零切片 —— 模板 demo:1086 isCalm() 早退同口径), 独立窗 0.25×beat; 计数按 x<绘图右缘滤除束体梳齿)+ 环旋转与外圈新式(G13: t=100 顶点逐点吻合 rot=t/300/外圈 rot+0.4 半径 9+31pf alpha 0.55(1-pf)impact, 主环 lw2; 环心观测 G8/G11 改 t=0 对径两点 + neon=false 摘 N 层噪声, 粒子镜像 G12 改 t=130 避闪光窗)+ draw 侧 merge+缺口轨环心 = yOf(lead.shown)(x=tipX 顶点四点均值观测, 假中点即红)+ lead 加亮跨缺口重新 moveTo 不桥接([20,null,25] vs [20,22,25] 对照 —— 评审修复6) + S3 轮追加(G15 曲线辉光 A1: 拍内 t<beat 独立窗/t=800 顶门外仍画/两轨 trackCol blur 2 道计入 I9 <=5/calm blurCap=0 退化普通描边; G16 N 锚辉光 C7: 6 边/两轨各 6 顶点/alpha=0.5xqximpact/rot=t/320/tipX —— 机检归属本电池, CSS 逐字钉在锚电池); 静态钉: I6/I11/V1/I9 常量行逐字 + 钩子注册序 = 层序(vendor 1.6.32 源实证: 主渲染序 clearRect→drawClear→Pl.forEach[axes→series]→draw, Ci("drawAxes") 在 Dl.axes 末尾 = 网格后系列前 —— drawClear 斜纹恒最底/drawAxes fx(挂 drawClear 会被网格盖住违 I6)/draw 限速→锚)+ 背景零铺色(fx 域剥注释后 fillRect 恰 1 处且为切片 1px 级、锚/次区域零 fillRect)+ I11 黑名单(fx 域零触碰 legend/cursor/series)+ I3 反向钉(fx 域零 destroy/new uPlot/loading)+ 生效条件门(spawn 与 fx 装饰段逐帧复核 cfg.on、tail 域复核 cfg.tail)+ 收敛帧次区衔接(phase tail/fxTail/cfg.tail 门)+ 装饰帧保障行 + 次区相位分支在 _qbBeatFrame(装饰帧挂调度器循环, 无独立循环) + S4-a 轮 F1e/G9(§10 双轨探针「上传零粒子零环、下载有反馈」两面; F1 后静默面收窄为真 0/缺口轨): F1e 上轨真 0(target==0 -> level 0)时 lead=dl 真零轨不参与仲裁/act.up=false/act.dl=true/次区资格只 dl —— 与 F1d 缺口轨(live=false)互补的「live=true 但真 0」面; B3 追加 F1e2(F1 下限 spawn 消费面: 值>0 delta=0 恒 Lv.1 -> act/次区资格全开 + 装饰清单在场)与 G0(fx/锚段 clip 实参记账: 右缘放宽到画布右缘宽 840, F5)/G11(环心钳制分支: 半径源改环终态(4+24)×rScale×gapScale=28(lead/merge), shown 经 yOf 越下界 305->钳 282/越上界 24.3->钳 38/区间内恒等不咬合 —— 评审 major: 近底 e2e 墨量探针对钳制删除假阴性, 钳制语义的机检面)/G12(粒子底缘镜像: 90° 单粒子 ps.y=318.6 越底 -> fill 顶点均值 = 折回值 301.4, 删镜像行必红); G9 绘制面计数(spawn 侧 alloc 照发 both 半套, spots 组装被 fx.act 门滤除 —— 真 0 注入态 13 vs 双活性对照 27(D5 基数), act 门删掉即翻倍) + 裁决轮追加 F1f/G10 并经评审 major 修正(calm 档零粒子: plan §04 原型 partCap 的 isCalm 口径, §10「克制档零粒子」原文补齐; 生产只采纳 calm 分量 —— 原型另有 leadLevel()<=1->0 门, Lv.1 发粒子系用户拍板维持现状/P9 未采纳; 唯一闸 = 绘制面 eff 逐帧门, spawn 恒满额清单与配色档解耦(F1f 钉, F8 同款 —— spawn 冻 palette 会让拍内切出 calm 余下冲击窗零粒子到下一拍才恢复且切片带 yCenter 漂移) + 拍内切 calm 下一帧零粒/切出恢复(G10 记账 ctx, neon 同参数 27 对照); isCalm 的 reduce 分量由 spawn 顶门 cfg.on !== true 承接)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_scan_band_battery: T6 综合表现层 S2-b 电池 + 接缝静态钉(S2-b, plan 26-11-12-1139 §03 T4/T6 行/R6 节/D17-D19, §02 R5/R6/R7) —— node 电池真跑(同视觉引擎范式): R6 确定性伪随机(_qbFxHash01 同(拍,槽)恒同且恒 [0,1)/分布 45/35/20 ±0.05 —— plan §04 原型带符号 >> 版本实测 90% 落 [0,0.5) 色池失真, 生产改 Math.imul+>>> 雪崩, 分布断言守)/strat 分层采样恒 [0,1) 且第 i 条只在第 i 层内不聚集/tearRnd 三档(fixed 恒 0.5/random 连续调用不恒同/linked=hash01)/撕裂切片(2/3/5 按等级且 ≤5/长 10-80 随 Δ/alpha 线性式 (0.10+0.08×lv)×q×impact —— q/impact 由绘制侧逐帧乘, 表常量退役 C2/y 在撕裂带 ±(0.08+0.30×min(1,Δ/0.5))×H 内且钳绘图区/同参数恒同/fixed 跨拍序号同形/linked 跨拍序号异形)+ 梳齿(3/5/7 按等级/长 4-24 随 Δ/带内/fixed 等距恒长) + 回声数学(D19/R7: span=clamp(0.22×绘图宽,100,200) 且不超绘图宽/full 恢复整幅 s=w —— A2 回退, 模板 demo:1152-1158 对照档口径/100-150-200 直取; fall=pow(1−d/span,0.85) 且 d≥span 恒 0 几何硬停/单调不增; echoQ 0.18-0.45beat 匀速且 q=1 即到点) + 束包络 stops(双峰分立/贴近 <0.08 合并单峰/钳 [0.02,0.98]/NaN 退 0.5) + T5 联动单点(lvColor: grade 关恒 Lv.1, 开随等级, 非法等级退 Lv.3; beamWScale 已退役 A2 —— 六层晕恒 hw[0], 行为面 S9) + 束体指令计数(_qbDrawFxScan 记账 ctx: 逐帧扫 t=0..beat 步 30 ≤23 且 Lv.3 色散+回声双开窗恰 23/回声窗止 450ms 恰 21/色散窗止 500ms 恰 19/束 fade 窗 0.7×beat(B2 模板保真二轮 —— 550-690ms 恰 19, 700ms 起零)/palette=calm 0/layers.scan=false 0/impact=0 0; 相位 A 行程: x0 从判定线+1.2 格 easeOut 单调收敛、0.12beat(冲击窗)内抵达; 除回声外全部竖笔 x ≥ 判定线不横穿数据、回声 x ≥ 判定线−200(I9-R7 探针); 回声 1px 核 alpha ≤0.20 不变 + 9px 晕 0.34×fall(B4 模板保真二轮, 旧 0.20 晕上限退役)且 d=span 帧零回声指令而束体仍在)+ T2 光带(_qbDrawFx 记账 ctx: layers.band=true 双轨各一道渐变 stroke 于末点 x/shown=prev 零长不落笔/band=false 零渐变笔/bandHalo 仅 lead 一道 blur 描边 —— 同帧 blur stroke = 环外圈 2 + 光带 1 = 3 ≤ 5(I9 辉光预算修订 ≤5: 曲线辉光 2 预留 S3, S2 实测 3)/非零 blur 赋值点 ≤2/帧末 shadowBlur 恒清零)+ 横向线条(C2 门 glitch 下切片 5 条 2px 级且 x<右缘、束体+切片 5+23=28 合计(观测帧 t=210 = 切片窗 0.25×beat 与回声窗双开)、横向细线 5+7=12)+ 微震让位(_drawerAnimRaf 非零时切片零落笔, 归零恢复 —— §09)+ T5 grade=false 全域(描边/填充/渐变 stop/阴影色)无 Lv.3 色 + 冲击闪光白名单(S10, C4/D7: t<impactMs 判定线全高 lw2 alpha 0.75×(1−t/impactMs)×impact 恰 1 笔/窗外零笔/neon=false 仍在/calm 档亦显/impact=0 零笔 —— I9 装饰指令修订注记 +1 stroke 仅 impact 窗内, 几何面由视觉引擎电池 G13 ops 钉); 静态钉: 层开关接线点(cfg.layers.band/scan/grade 字面量 + _qbDrawFx 调用 _qbDrawFxScan 行在位)/束体绘制域(_qbDrawFxScan)剥注释后 fillRect 恰 1 处且为梳齿 1px 级、光带块零 fillRect/I3 反向钉扩 scan 域(零 destroy/new uPlot/loading)/切片微震让位门(!this._drawerAnimRaf 在切片条件内)/_qbFxLvColor(fx.lv, cfg.layers.grade === true) 恰 3 处(fx/锚/束)/束体常量行逐字(六层晕表/强度 0.78/条数表/回声八常量含 _QB_FX_ECHO_HALO_ALPHA=0.34; 束宽度感表与切片 alpha 表退役缺残留断言 —— A2/C2)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
-- test_frontend_qb_fx_anchor_battery: F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2, §04 S2b 行, R3) —— DOM 常驻层真跑(桩 uPlot 域对象 + DOM 桩元素 + 假 rAF 时钟, 同节拍内核范式): ensure 幂等建(恰两枚 .qb-fx-anchor 挂 .u-wrap, 类名 up/dl 可寻址; 颜色 = tk 语义色内联 I10; 初始隐藏; 再调零操作 —— 与 _qbFxBound 同款纪律) + 同步单点位置公式(判定线 x = bbox 右缘 + 末点 y = yOf(shown) 对当前 y 轴档; 门全开复显; 同位置重同步零改写 —— 变值才写) + K RO 面等价(bbox 宽变判定线 x 立即跟随) + 门三态(enabled=false / reduce(on=false) 隐藏、翻回复显; root 拆走隐藏; 死轨该轨隐藏活性轨照显 —— I10 模板 live 门同款) + D calm 档 .qb-fx-anchor-calm 挂/摘随同步对齐(模板 isCalm 同款) + E 四处同步点行为面(判定帧=显示末点 shown/收敛帧=终值 target/zero-change 早退拍同步仍执行按新档重算/锚钩子逐帧跟提交帧且 yMax 读 anim.yMax 与画布钉档同尺 —— I4) + G 门面 _qbFxCfgSync(翻关即时隐藏/翻开复显) + 销毁清面(_qbChartDestroy 清 u._qbFxAnchors, 元件随 u.destroy 拆 root —— 换肤重建零残留); 静态钉: CSS 注入单点四行逐字(.qb-fx-anchor 本体/8px+margin 居中+420ms linear infinite keyframes/calm border-radius:50%/prefers-reduced-motion display:none —— P2 隐藏不是静态方块) + 画布侧菱形本体移除(锚段零 _qbFxPolyPath(ctx, tipX) + N 锚辉光保留且位置与 DOM 同源(L+W) + clip(F5)/lead 加亮保留) + 四处同步点在位(判定帧在轨道推进后/收敛帧在 setData 后/锚钩子块首行/RO 在 setSize 后同回调) + 门面/建图/销毁接线(cfgSync 块内 sync、build 在 new uPlot 后 ensure、destroy 在 u.destroy 前清记录) + I3 反向钉扩锚 DOM 域(零 destroy/new uPlot/loading)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
+- test_frontend_qb_fx_anchor_battery: F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2, §04 S2b 行, R3) —— DOM 常驻层真跑(桩 uPlot 域对象 + DOM 桩元素 + 假 rAF 时钟, 同节拍内核范式): ensure 幂等建(恰两枚 .qb-fx-anchor 挂 .u-wrap, 类名 up/dl 可寻址; 颜色 = tk 语义色内联 I10; 初始隐藏; 再调零操作 —— 与 _qbFxBound 同款纪律) + 同步单点位置公式(判定线 x = bbox 右缘 + 末点 y = yOf(shown) 对当前 y 轴档; 门全开复显; 同位置重同步零改写 —— 变值才写) + K RO 面等价(bbox 宽变判定线 x 立即跟随) + 门三态(enabled=false / reduce(on=false) 隐藏、翻回复显; root 拆走隐藏; 死轨该轨隐藏活性轨照显 —— I10 模板 live 门同款) + D calm 档 .qb-fx-anchor-calm 挂/摘随同步对齐(模板 isCalm 同款) + E 四处同步点行为面(判定帧=显示末点 shown/收敛帧=终值 target/zero-change 早退拍同步仍执行按新档重算/锚钩子逐帧跟提交帧且 yMax 读 anim.yMax 与画布钉档同尺 —— I4) + G 门面 _qbFxCfgSync(翻关即时隐藏/翻开复显) + 销毁清面(_qbChartDestroy 清 u._qbFxAnchors, 元件随 u.destroy 拆 root —— 换肤重建零残留); 静态钉: CSS 注入单点四行逐字(.qb-fx-anchor 本体/8px+margin 居中+2639ms linear infinite keyframes/calm border-radius:50%/prefers-reduced-motion display:none —— P2 隐藏不是静态方块) + 画布侧菱形本体移除(F2: 锚段零 ctx.fill() 本体 + N 锚辉光新式 6 边/r=(7+4q)*role*gapScale/rot=t/320/alpha=0.5*q*impact/位置 tipX + clip(F5)/lead 加亮保留) + 曲线宽/palette 联动(2.4/calm 2, _qbFxCfgSync 现写 series.width+redraw) + 曲线辉光拍内窗(t<beat, blurCap 语义色, 缺口断段, calm 退化) + 四处同步点在位(判定帧在轨道推进后/收敛帧在 setData 后/锚钩子块首行/RO 在 setSize 后同回调) + 门面/建图/销毁接线(cfgSync 块内 sync、build 在 new uPlot 后 ensure、destroy 在 u.destroy 前清记录) + I3 反向钉扩锚 DOM 域(零 destroy/new uPlot/loading)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_fx_panel_wiring_battery: 面板接线 S3 电池 + 接缝静态钉(S3, plan 26-11-12-1139 §05.3/§05.4/§05.9/§06 S3 行, D21) —— node 电池双发(真 mixin 方法 + 桩 uPlot/记账 ctx, 同节拍内核范式): 预览一拍六条语义逐条真跑(1) 不动窗口: needsShift=false/dx0=0 + 预览全程零 setScale("x") + xs/u.scales.x 逐帧零变化 + 末帧 setData 交还 auto; 2) 假 Δ 贴近真实量级: 相对 Δ 恰 clamp(0.18+0.35×密度,0.10,0.50) 且方向按轨 up 减/dl 加、密度 0->0.18 Lv.2 不固定拉满 Lv.3、target 钳 [0,yMax] 零跳轴(贴轴 Δ 被轴档压制 —— 计划伪代码值域钳的生产域适配)、零流量 up 减钳 0 诚实静默、死轨不造假复活; 3) 连点重启: previewToken 递增 + anim 携带当前 token(帧循环令牌门失效旧帧) + 从当前显示值接续不回跳 + 还原点继承首拍捕获; 4) 真值抢占: 真拍 setData 整组落袋 + 判定帧取消预览/镜像清/新拍以中断显示值接续照常收敛 + 对偶(真拍主区在途预览忽略、次区相位可被接管); 5) 不写 store: 预览三方法域零 persistQbFx/localStorage(静态钉) + 末帧还原真值 + 状态机复位真值对齐 + 在途重排走 _qbPreviewRestore 假 target 不落真值面; 6) 同预算: spawn 走真拍同一条 _qbFxSpawn(cap ≤32/半套 ≤16/切片 ≤5/梳齿 ≤7) + 记账 ctx 预览帧束体 ≤23、束+切片 ≤28(glitch 双开、分域计数合成 —— _qbDrawFx 内部调 scan 同 ctx 直数会重复计束) + 有墨量防空转(峰值 ≥19) + 连点 5 次单一 fx 粒子合计 ≤32)+ ease 消费(§05.3 ease 行 + D21 例外条款: _qbFxCurve 单点 out/linear/未知回落 + _qbFxLinear 恒等夹取 + _qbFxShown 单次施加(修正 S1 帧循环预 easeOut 的双重施加, 对齐计划 §03 公式与 §04 演示) + out vs linear 收敛序列形状不同(out 前载 clock200 帧 18.43 vs 13.33) + 拍中改 ease 当前拍不换式(冻结引用不变逐帧一致) + 下一拍起用(判定帧重读) + 预览同款冻结)+ 字段贯通收口(shift=instant 下一拍 L0 不播但 L1 照常收敛 + 拍中改档不中断; shiftRatio 拍中改在途时间线不变下一拍生效; enabled 面板全链 fxCheck 写唯一字段 -> persistQbFx 真落盘 -> _qbFxCfgSync 同步 on=false -> 下一拍装饰零绘制但 L0 照滚 + enabled=false 预览空操作; tail/impact/tear/echoSpan/layers/palette/particles/dual/neon 归 S2-a/S2-b 既有电池)+ 状态行镜像(fxBeatAt 只写当前 scope 真拍/预览不写 + fxPreviewing 翻转沿 + qbFxBeatAgeText 三态: —/4.2 s 前/时钟未追上钳 0.0)+ 缺省 scope=qbCurScope; 静态钉: 预览三方法域零持久化零定时器(不自动循环 —— D21)/ease 消费单点唯一(_qbFxCurve 定义1+调用2 恰两判定帧、cfg.ease 恰 2 处、S1 预折算行退场、L0 dx 行恒 easeOut)/shift=instant 消费点在判定帧(零消费字段补齐)/预览接缝(令牌门 + _qbPreviewEnd 先于 _qbBeatConverge + 重排预览支路 + _qbBeatCancel 清镜像 + 预览收口 x 显式重申 + y 成对钉在位钉 —— B 案例列与锚视口同形的行为电池盲区)/状态行(模板 qbFxBeatAgeText + v-if fxPreviewing「· 预览中」+ state.js 三镜像字段显式建 + 1s 时钟开面板装/关面板与 beforeUnmount 双清)/双入口单状态源(总开关唯一入口 :checked=fxOn + fxCheck('enabled') 唯一写入、chart 零 fx.enabled 赋值面、contextmenu 只 openFxPanel —— D24 终态); 行为面另含评审修正轮 4 断言: 连点早退(!moving/!n)同走还原核心(假值不留痕的早退面, minor1)/连点 rAF 单飞钉(删 _qbBeatCancel 变异即红)/令牌门兜底触发同步清镜像(minor2)/ease+shift+shiftRatio 处理器全链 fxPick/fxRange->store->CFG(minor4) + S4-a 轮追加: N 块字段闭环 15 控件(§05.9 第 1 项电池级: fxPick 六下拉/fxRange 三滑杆/fxCheck 六复选含 layers.* 四键, 逐控件 -> fx 写入 + 单键 JSON 落盘(fxRange 验 @change 落盘一次) + watch 等价 -> CFG 同步 + fxPick 非法枚举回落现值不落盘)/静态钉 g(fx-panel.html 15 控件绑定串全量 —— 处理器/字段键改名 = 死控件, 行为电池直接调方法测不到模板漂移)。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE 口径)
 - test_frontend_qb_traffic_drawer_page_guard: 流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图出现在设置页」) —— drawerVisible 两形态先挡非主内容页且状态位不随切页翻(回页连数据/窗口选择一起回来) + 轮询与建图 active 同源含 page 判据(面板不在 DOM 还拉还画 = 对空气取数) + openDrawerTraffic 先切回主内容页 + state.js drawerVisible watcher 退场销毁图/进场补拉(种子详情支路 !s 的 $nextTick _dtSync 回页变体重挂, 归 test_drawer_seed_reentry_variant_remount)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做; 缺口/缝判据点列适配 26-11-18-0037 阶段 3) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算 —— schema=2 显式空值点与旧契约 null 桶转列后同判); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点; schema=2 形态 26-11-18-0037 阶段 3: 链末按列值判(显式空值点不算观测)/右沿 = 末点真值 t(旧等距外推退役)/尾组真值点链到右沿->null/全空值点空态面->null) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
@@ -3028,18 +3028,19 @@ const at = (u, t) => { u._qbBeat.anim.clock = t; draw(u); };
   u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
   u._qbBeat.anim = mkAnim(fxLead);
   drawAnchor(u);
-  const hi = [yOfT(20), yOfT(25)];   // 加亮段只落这两桶(末 3 桶窗)
+  const hi = [yOfT(20), yOfT(25)];   // 加亮段 + 曲线辉光各落这两桶(末 3 桶窗), 故 2x2=4 笔
   const seg = u.ctx.ops.filter((o) => hi.some((y) => Math.abs(o[1] - y) < 1e-6));
-  ok("G5 加亮缺口 [20,null,25]: moveTo+moveTo 零 lineTo 桥接(gap 后重新起笔)",
-    seg.length === 2 && seg.every((o) => o[2] === "M"));
+  ok("G5 加亮缺口 [20,null,25]: 加亮段与曲线辉光均 moveTo+moveTo 零 lineTo 桥接(gap 后重新起笔 —— A1/spanGaps:false 同款)",
+    seg.length === 4 && seg.every((o) => o[2] === "M"));
   const u2 = mkDrawU([0, 0, 0, 0, 30], [null, null, 20, 22, 25]);
   u2._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
   u2._qbBeat.anim = mkAnim(fxLead);
   drawAnchor(u2);
   const hi2 = [yOfT(20), yOfT(22), yOfT(25)];
   const seg2 = u2.ctx.ops.filter((o) => hi2.some((y) => Math.abs(o[1] - y) < 1e-6));
-  ok("G5 对照连续 [20,22,25]: moveTo + lineTo x2(逐段描边原样)",
-    seg2.length === 3 && seg2[0][2] === "M" && seg2[1][2] === "L" && seg2[2][2] === "L");
+  ok("G5 对照连续 [20,22,25]: 辉光段与加亮段各 moveTo + lineTo x2(逐段描边原样)",
+    seg2.length === 6 && seg2[0][2] === "M" && seg2[1][2] === "L" && seg2[2][2] === "L"
+    && seg2[3][2] === "M" && seg2[4][2] === "L" && seg2[5][2] === "L");
   global.window.AQB_FX_CFG = CFG0;
 }
 // —— G6: 密度拍内即时(修复3): 逐帧 partCap 现算, 拍内改 cfg.particles 下一帧粒子数即变 ——
@@ -3290,6 +3291,56 @@ const at = (u, t) => { u._qbBeat.anim.clock = t; draw(u); };
     u.ctx.fillTexts.length === 1 && u.ctx.fillTexts[0].s === "Lv.3 · lead 上传"
     && u.ctx.strokeMeta.some((s) => s.w === 2 && s.alpha > 0));
 }
+// —— G15/G16(A1/D4 + C7 机检归属: 本视觉引擎电池; CSS 逐字钉在锚电池) ——
+// G15 曲线辉光: 拍内 t<beat 独立窗 / 两轨 trackCol blur 描边 / calm 退化(blurCap=0) ——
+{
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u._qbBeat.anim = mkAnim(mkFx());
+  drawAnchor(u);   // t=100, dual=both: 曲线辉光 2 道 + 锚辉光 2 道, 仅前者带 blur
+  ok("G15 曲线辉光: 两轨 level>0 -> 2 道 trackCol blur 描边(帧末清零, 计入 I9 <=5)",
+    u.ctx.blurSets.filter((v) => v > 0).length === 1 && u.ctx.strokesWhileBlur === 2
+    && u.ctx.strokeVals.indexOf("#UP") >= 0 && u.ctx.strokeVals.indexOf("#DN") >= 0
+    && u.ctx.shadowBlur === 0);
+  const u2 = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u2._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u2._qbBeat.anim = mkAnim(mkFx(), { clock: 800 });   // 0.8xbeat: 顶门外、拍内
+  drawAnchor(u2);
+  ok("G15 拍内窗 t=800(0.8xbeat): 辉光仍在, 顶门 0.7 只压锚段装饰(独立判断)",
+    u2.ctx.strokesWhileBlur === 2 && u2.ctx.strokeVals.length === 2);
+  global.window.AQB_FX_CFG = Object.assign({}, CFG0, { palette: "calm" });
+  const u3 = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u3._qbBeat = mkBeatSt(LIVE_UP, LIVE_DL);
+  u3._qbBeat.anim = mkAnim(mkFx(), { clock: 100 });
+  drawAnchor(u3);
+  global.window.AQB_FX_CFG = CFG0;
+  ok("G15 calm 退化: blurSets 恒 0(零 blur 描边)但两轨仍 trackCol 普通描边",
+    u3.ctx.blurSets.every((v) => v === 0) && u3.ctx.strokesWhileBlur === 0
+    && u3.ctx.strokeVals.indexOf("#UP") >= 0 && u3.ctx.strokeVals.indexOf("#DN") >= 0);
+}
+// G16 N 锚辉光新式(C7): 6 边环 / r=(7+4q) / rot=t/320 / alpha=0.5xqximpact / tipX ——
+//    轨 level 置 0 摘曲线辉光, 只观测锚辉光(fx.act 仍真, 与 level 解耦)。
+{
+  const noGlowUp = Object.assign({}, LIVE_UP, { level: 0 });
+  const noGlowDl = Object.assign({}, LIVE_DL, { level: 0 });
+  const u = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeatSt(noGlowUp, noGlowDl);
+  u._qbBeat.anim = mkAnim(mkFx(), { clock: 0 });   // rot=0, q=1, imp=0.7 -> alpha 0.35
+  drawAnchor(u);
+  ok("G16 C7 六边环: 两轨各 6 顶点(共 12 ops) + alpha=0.5x1x0.7=0.35 + Lv 语义色 lw1",
+    u.ctx.ops.length === 12 && u.ctx.strokeMeta.length === 2
+    && u.ctx.strokeMeta.every((s) => s.w === 1 && Math.abs(s.alpha - 0.35) <= 1e-9 && s.style === "#FF6BD6"));
+  const u2 = mkDrawU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u2._qbBeat = mkBeatSt(noGlowUp, noGlowDl);
+  u2._qbBeat.anim = mkAnim(mkFx(), { clock: 320 });
+  drawAnchor(u2);
+  const r0 = 7 + 4 * 1;
+  const r320 = 7 + 4 * (1 - 320 / 330);
+  ok("G16 rot=t/320 + tipX: t=0 首顶点 x=tipX+11=871, t=320 首顶点 x=tipX+r320xcos(1)(逐帧滑动)",
+    Math.abs(u.ctx.ops[0][0] - (860 + r0)) <= 1e-6
+    && Math.abs(u2.ctx.ops[0][0] - (860 + r320 * Math.cos(1))) <= 1e-6
+    && Math.abs(u2.ctx.ops[0][0] - u.ctx.ops[0][0]) > 0.1);
+}
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -3326,7 +3377,7 @@ def test_frontend_qb_fx_visual_engine_battery():
         + merge+缺口轨落位退 lead 末点 y(F7, specs.merge[0].y0 === yOf(lead.shown), 假中点即红
         —— 评审修复2; 切片锚带中心同退且清单无条件生成)/spawn 满额清单与密度解耦(F8, 密度 0.4
         仍 14/13 —— D5 基数 27, 评审修复3)/梳齿 fixed 档恒 7(F10, C11 模板对照档; linked 仍 3/5/7);
-    13. 绘制面 ctx 桩电池(G0-G13, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor; S2 起 stroke
+    13. 绘制面 ctx 桩电池(G0-G16, 记账式 2d context 真 _qbDrawFx/_qbDrawFxAnchor; S2 起 stroke
         另记 strokeMeta 笔画元数据, fillText 记 {s,font,alpha,x,y}): clip 实参记账
         (G0: fx/锚段右缘放宽到画布右缘宽 840 —— F5)+ blur 预算
         (非零赋值恰 1 施加点/带 blur stroke = spots 数 <=2/逐帧扫帧末 shadowBlur 恒 0/palette=calm
@@ -3351,7 +3402,10 @@ def test_frontend_qb_fx_visual_engine_battery():
         alpha=0.55×(1−pf)×impact Lv 色 —— 旧 q 衰减与恒 +3px 外圈回潮即红)
         + 顶门 0.7 行为采样(G14: t=570 ∈ (0.55,0.7)×beat 环仍落笔 lw2 alpha>0 + lvBadge fillText
         恰 1 —— 顶门接线回退 0.55 即红) + 小菱形 alpha(fill 记录面: G13 恰 1 笔/G10 calm 恰 2 笔
-        均 = 0.7×q×impact)+ lvBadge 位置右对齐(G4: x=L+W-4/y=T+4);
+        均 = 0.7×q×impact)+ lvBadge 位置右对齐(G4: x=L+W-4/y=T+4)
+        + S3 轮 G15/G16 机检归属本电池(G15 曲线辉光 A1: 两轨 level>0 -> 2 道 trackCol blur 描边
+        帧末清零, 拍内窗 t=800 顶门外仍画, calm 档 blurCap=0 退化为普通描边; G16 N 锚辉光 C7:
+        两轨各 6 顶点共 12 ops, alpha=0.5xqximpact=0.35, rot=t/320 首顶点随 t 滑动, tipX 末点换算);
     14. S4-a 盘点轮补双面(plan §10 双轨探针「上传零粒子零环、下载有反馈」; F1 后静默面 =
         真 0/缺口轨, 注入态构造): F1e(上轨真 0 = target==0 -> level 0: lead=dl 真零轨不参与仲裁/
         act.up=false/act.dl=true/次区资格只 dl —— 与 F1d 缺口轨(live=false)互补的
@@ -7292,8 +7346,8 @@ def test_frontend_qb_stream_merge_degrade_and_badge_battery():
 
 # ==================== F2 常驻菱形锚 node 电池 + 接缝静态钉(S2b, plan 26-11-14-1313 §03 F2/D2,
 # §04 S2b 行, R3) ====================
-# DOM 常驻层(.qb-fx-anchor x2 挂 .u-wrap) + CSS keyframes 420ms(注入单点) + 四处位置同步点 +
-# 画布侧菱形本体移除(anchorHalo 保留且与 DOM 同源)。无 node 静默跳过(同 _NODE_QB_TRAFFIC 口径)。
+# DOM 常驻层(.qb-fx-anchor x2 挂 .u-wrap) + CSS keyframes 2639ms(注入单点) + 四处位置同步点 +
+# 画布侧菱形本体移除(anchorHalo 改 C7 新式 tipX; 曲线辉光 A1 拍内窗)。无 node 静默跳过(同 _NODE_QB_TRAFFIC 口径)。
 _NODE_QB_FX_ANCHOR_PROBE = r"""
 const fs = require("fs");
 global.window = {};
@@ -7422,7 +7476,8 @@ const drain = () => { let g = 0; while (rafMap.size && g++ < 200) { nowMs += 50;
 function mkCtx() {
   return {
     globalAlpha: 1, strokeStyle: "", fillStyle: "", lineWidth: 1, canvas: { width: 900 },
-    save() {}, restore() {}, scale() {}, beginPath() {}, rect() {}, clip() {},
+    shadowColor: "", shadowBlur: 0,
+    save() {}, restore() {}, scale() {}, beginPath() {}, closePath() {}, rect() {}, clip() {},
     moveTo() {}, lineTo() {}, stroke() {}, fill() {},
   };
 }
@@ -7595,6 +7650,27 @@ function mkCtx() {
   ok("G 销毁清面: 图记录 _qbFxAnchors 清(元件本体在 u.root 内随 u.destroy 拆 —— 换肤重建零残留)",
     self._qbCharts.global === null && u._qbFxAnchors === null && u.destroyed === true);
 }
+// —— H: 曲线宽 palette 联动(D4): cfgSync 现写 series.width + redraw(不重建/destroy/loading) ——
+{
+  const u = mkU([0, 0, 0, 0, 30], [0, 0, 0, 0, 60]);
+  u._qbBeat = mkBeat(10, 55);
+  u.series = [{}, { width: 2 }, { width: 2 }];
+  const s3 = Object.assign({}, methods, { _qbPollMs: () => 3000, _qbCharts: { global: u },
+    fxReduce: false, fx: JSON.parse(JSON.stringify(CFG)) });
+  Object.defineProperty(s3, "fxOn", { get() { return this.fx.enabled === true && !this.fxReduce; } });
+  self._qbCharts = { global: u };
+  self._qbFxAnchorEnsure(u, TK);
+  const beforeRedraw = u.redrawCount;
+  s3._qbFxCfgSync();
+  ok("H 曲线宽默认档: neon -> 2.4 两轨 + 恰一次 redraw(不重建/destroy)",
+    u.series[1].width === 2.4 && u.series[2].width === 2.4
+    && u.redrawCount === beforeRedraw + 1 && !u.destroyed);
+  s3.fx.palette = "calm";
+  s3._qbFxCfgSync();
+  ok("H palette=calm: series.width 即时 2(不等下一拍) + 变化才 redraw",
+    u.series[1].width === 2 && u.series[2].width === 2 && u.redrawCount === beforeRedraw + 2);
+  global.window.AQB_FX_CFG = CFG;
+}
 const okCount = checks.filter((c) => c[1]).length;
 console.log(JSON.stringify({
   total: checks.length, ok: okCount,
@@ -7626,13 +7702,18 @@ def test_frontend_qb_fx_anchor_battery():
 
     接缝面(静态钉):
     a. CSS 注入单点(_qbChartInjectCss 四行逐字): .qb-fx-anchor 本体(8px 方块 + margin 居中 +
-    pointer-events:none + will-change:transform + animation 420ms linear infinite)/
+    pointer-events:none + will-change:transform + animation ${_QB_FX_ANCHOR_SPIN_MS}ms linear infinite)/
     .qb-fx-anchor-calm(border-radius:50% —— 模板 isCalm 同款)/@keyframes aqb-fx-anchor-spin
-    (rotate 0->360deg —— 模板 t/420 同拍)/@media(prefers-reduced-motion: reduce) display:none
+    (rotate 0->360deg —— 模板 rot=t/420 是弧度/ms, 一圈 2*pi*420=2639ms; 旧 420ms 系单位误读)/@media(prefers-reduced-motion: reduce) display:none
     (P2: 隐藏不是静态方块; 与 cfg.on 的 !reduce 分量双保险);
-    b. 画布侧菱形本体移除(F2 避免双画): 锚段无 "_qbFxPolyPath(ctx, tipX"(本体填充面删除),
-    N 锚辉光保留且位置与 DOM 同源("_qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot)" —— 判定线 x);
+    b. 画布侧菱形本体移除(F2 避免双画): 锚段零 ctx.fill() 本体填充面, 旧 "_qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot)" 回潮即红;
+    N 锚辉光新式(C7): "_qbFxPolyPath(ctx, tipX, y, r, 6, haloRot)" 6 边 + "r = (7 + 4 * q) * role * fx.gapScale"
+    + "haloRot = t / 320" + "ctx.globalAlpha = 0.5 * q * imp" + tipX = L + valToPos(xs[a.n - 1], "x")(末点滑动 x, 同 lead 加亮段 x 轴换算);
     锚段 clip 放宽(F5)与 lead 从属轨加亮保留(ctx.clip() 在位);
+    b2. 曲线宽/palette 联动(D4): 建图两轨 width 走 _qbFxCurveWidth()(常规 2.4 / calm 2),
+    _qbFxCfgSync 现写 u.series[1/2].width + redraw(不重建/destroy/碰 loading —— 下一拍才生效会与面板即时契约错拍);
+    曲线辉光(A1): 锚钩子内 "if (t < fx.beatMs)" 拍内窗独立判断(不被顶门 0.7 收窄), "ctx.shadowColor = trackCol"
+    + shadowBlur=blurCap*(lead/both?1:0.45)(calm 0 自然退化) + 缺口 "gStarted = false; continue;" 断段不桥接 + 帧末 shadowBlur=0;
     c. 四处同步点在位: 判定帧(_qbBeatStart 块内 sync 在轨道推进之后)/收敛帧(_qbBeatConverge
     setData 之后)/锚钩子(_qbDrawFxAnchor 块首行)/ResizeObserver(u.setSize 之后同回调内);
     d. 门面接线: _qbFxCfgSync 块内 _qbFxAnchorSync(on/palette 变化即时生效) + _qbChartBuild
@@ -7644,12 +7725,15 @@ def test_frontend_qb_fx_anchor_battery():
     # —— a. CSS 注入单点(四皮肤零侵入 —— 经既有 _qbChartInjectCss) ——
     for line in (
         '.qb-fx-anchor { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;'
-        ' pointer-events: none; will-change: transform; animation: aqb-fx-anchor-spin 420ms linear infinite; }',
+        ' pointer-events: none; will-change: transform; animation: aqb-fx-anchor-spin ${_QB_FX_ANCHOR_SPIN_MS}ms linear infinite; }',
         ".qb-fx-anchor.qb-fx-anchor-calm { border-radius: 50%; }",
         "@keyframes aqb-fx-anchor-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
         "@media (prefers-reduced-motion: reduce) { .qb-fx-anchor { display: none; } }",
     ):
         assert line in js, f"缺/漂移常驻菱形锚注入 CSS: {line}"
+    assert "animation: aqb-fx-anchor-spin ${_QB_FX_ANCHOR_SPIN_MS}ms linear infinite;" in js, \
+        "CSS 周期必须走 _QB_FX_ANCHOR_SPIN_MS 现算单点(2639ms; 旧 420ms 单位误读不得回潮)"
+    assert "animation: aqb-fx-anchor-spin 420ms" not in js, "旧 420ms 字面周期残留(单位误读回潮即红)"
     inject_blk = re.search(r"_qbChartInjectCss\(\) \{\n(.*?)\n    \},", js, re.S)
     assert inject_blk and "aqb-fx-anchor-spin" in inject_blk.group(1), \
         "锚 CSS 必须经 _qbChartInjectCss 单点注入(四皮肤零侵入)"
@@ -7657,12 +7741,40 @@ def test_frontend_qb_fx_anchor_battery():
     anb = re.search(r"_qbDrawFxAnchor\(u, tk\) \{\n(.*?)\n    \},", js, re.S)
     assert anb, "缺 _qbDrawFxAnchor(draw 锚段)"
     anb_code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", anb.group(1), flags=re.S))
-    assert "_qbFxPolyPath(ctx, tipX" not in anb_code, \
-        "画布侧菱形本体必须移除(F2 避免双画 —— 常驻层交 DOM .qb-fx-anchor)"
-    assert "_qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot);" in anb_code, \
-        "N 锚辉光(anchorHalo)必须保留且位置与 DOM 同源(判定线 x —— R3 双源位置漂移即红)"
+    assert "ctx.fill()" not in anb_code, \
+        "画布侧菱形本体必须移除(F2 避免双画 —— 常驻层交 DOM .qb-fx-anchor; 辉光只用 stroke)"
+    assert "_qbFxPolyPath(ctx, L + W, y, r * 1.8, 4, rot);" not in anb_code, \
+        "N 锚辉光旧式(4 边/r*1.8/L+W)必须退场(C7 新式回潮即红)"
+    for frag in (
+        "_qbFxPolyPath(ctx, tipX, y, r, 6, haloRot);",
+        "const r = (7 + 4 * q) * role * fx.gapScale;",
+        "const haloRot = t / 320;",
+        "ctx.globalAlpha = 0.5 * q * imp;",
+        'const tipX = L + u.valToPos(xs[a.n - 1], "x");',
+    ):
+        assert frag in anb_code, f"N 锚辉光新式(C7)缺/漂移: {frag}"
     assert "ctx.clip();" in anb_code, "锚段 clip 放宽(F5)必须保留(lead 加亮/辉光仍画在画布)"
     assert 'cfg.dual === "lead"' in anb_code, "lead 策略从属轨描边加亮(D3-a)必须保留"
+    # —— b2. 曲线宽/palette 联动(D4) + 曲线辉光拍内窗(A1) ——
+    assert 'return p === "calm" ? 2 : 2.4;' in js, \
+        "曲线宽单点 _qbFxCurveWidth 必须常规 2.4 / calm 2(D4)"
+    assert js.count("width: curveW,") == 2, \
+        "建图两轨 width 必须走当前 palette 的 curveW(建图初值即对齐 —— D4)"
+    cfg_blk = re.search(r"_qbFxCfgSync\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert cfg_blk and "uc.series[1].width = w;" in cfg_blk.group(1) \
+        and "uc.series[2].width = w;" in cfg_blk.group(1) \
+        and "uc.redraw(false, true);" in cfg_blk.group(1), \
+        "palette 切换必须经 _qbFxCfgSync 现写 series.width + redraw(不重建/destroy/碰 loading —— D4)"
+    assert "if (t < fx.beatMs)" in anb_code and "const glowBlur = Math.round(blurCap * (" in anb_code, \
+        "曲线辉光必须拍内 t<beat 独立窗 + blurCap 语义色(D4/A1, 不被顶门 0.7 收窄)"
+    for frag in (
+        "ctx.shadowColor = trackCol;",
+        "ctx.shadowBlur = glowBlur;",
+        "if (!(st.tracks[k].level > 0)) continue;",
+        "gStarted = false; continue;",
+        "if (gStarted) ctx.stroke();",
+    ):
+        assert frag in anb_code, f"曲线辉光(A1)缺/漂移: {frag}"
     # —— c. 四处同步点 ——
     bsb = re.search(r"_qbBeatStart\(scope, u\) \{\n(.*?)\n    \},", js, re.S)
     assert bsb and "this._qbFxAnchorSync(u);" in bsb.group(1), \

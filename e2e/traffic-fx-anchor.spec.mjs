@@ -15,7 +15,8 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *   A. 存在 + 持续旋转 + 与末点像素对齐 + 换肤重建不残留:
  *      · 存在: 图宿主内恰两枚 .qb-fx-anchor(up/dl 可寻址), 颜色 = tk 语义色内联
  *        (与 --today-up/--today-down 现值一致 —— I10)。
- *      · 持续旋转(D2 核心: 零 rAF/零重绘 —— 旋转走 CSS keyframes 420ms 合成器动画): 页面侧
+ *      · 持续旋转(D2 核心: 零 rAF/零重绘 —— 旋转走 CSS keyframes 2639ms 合成器动画; 模板
+ *        rot=t/420 是弧度/ms, 一圈 2*pi*420=2639ms, 旧 420ms 系单位误读 —— D6): 页面侧
  *        rAF 只**读** getComputedStyle().transform 采样, 不驱动任何动画 —— 采样窗内矩阵值
  *        >= 2 个不同 = 旋转真的在走; 全同 = keyframes 没接上或被 reduced-motion 关掉, 即红。
  *      · 像素对齐(R3 的 e2e 钉): 锚中心 == (判定线 x, 末点 y) —— 判定线 = bbox 右缘
@@ -138,6 +139,7 @@ const ANCHOR_SNAP_EXPR = `(() => {
       bg: getComputedStyle(el).backgroundColor,
       radius: getComputedStyle(el).borderRadius,
       display: getComputedStyle(el).display,
+      dur: getComputedStyle(el).animationDuration,
       act: { x: r.left + r.width / 2 - wr.left, y: r.top + r.height / 2 - wr.top },
       exp: { x: L + W, y: T + H * (1 - Math.min(shown, yMax) / yMax) },
     };
@@ -166,7 +168,7 @@ test.describe('F2 常驻菱形锚 · 存在/旋转/对齐/换肤不残留(plan 2
   installRuntimeErrorGuard(test);
 
   for (const skin of SKINS) {
-    test(`[${skin}] 恰两枚语义色锚, 420ms 合成器旋转持续在走, 与末点像素对齐, 换肤重建零残留 @fast`, async ({ page }) => {
+    test(`[${skin}] 恰两枚语义色锚, 2639ms 合成器旋转持续在走, 与末点像素对齐, 换肤重建零残留 @fast`, async ({ page }) => {
       await stubFlags(page);
       await stubTrafficStill(page);
       await openApp(page, skin);
@@ -192,8 +194,9 @@ test.describe('F2 常驻菱形锚 · 存在/旋转/对齐/换肤不残留(plan 2
           .toBeLessThanOrEqual(0.75);
       }
 
-      /* 持续旋转(D2: CSS keyframes 合成器动画; 页面 rAF 只读不驱动): 700ms 窗(>420ms 周期)
-       * 内 transform 矩阵 >= 2 个不同值; 全同 = keyframes 没接上, 即红。
+      /* 持续旋转(D2: CSS keyframes 合成器动画; 页面 rAF 只读不驱动): 700ms 窗(2639ms 周期的
+       * 一段, 远小于一圈)内 transform 矩阵 >= 2 个不同值; 全同 = keyframes 没接上, 即红。
+       * 本断言只验「在转」, 与转速无关 —— 周期 2639ms 由下方 animationDuration 逐字钉住。
        * A2 口径(计划 26-11-14-1313)核对: 本用例桩为 base 固定 + interval_s=30 —— 700ms
        * 采样窗整段落在拍间(无真拍在场, 数据静止零变化拍零 rAF), 窗内连续矩阵变化钉住的
        * 正是「拍间不停」; 拍窗内的锚位同步面由像素对齐断言与 S2b 四处同步点电池承接。 */
@@ -218,7 +221,11 @@ test.describe('F2 常驻菱形锚 · 存在/旋转/对齐/换肤不残留(plan 2
       }).toBe(true);
       const matCount = await page.evaluate(() => window.__ar.mats.size);
       expect(matCount, `700ms 采样窗内 transform 矩阵应 >= 2 个不同值(实测 ${matCount}) —— `
-        + '旋转是 CSS keyframes 420ms 合成器动画(D2), 停转/未接线即红').toBeGreaterThanOrEqual(2);
+        + '旋转是 CSS keyframes 2639ms 合成器动画(D2), 停转/未接线即红').toBeGreaterThanOrEqual(2);
+      /* 周期逐字钉(D6): 模板 rot=t/420 弧度/ms -> 一圈 2639ms; computed 值 2.639s。
+       * 与上面的「在转」断言速度无关不同, 本条专钉周期, 旧 420ms/0.42s 回潮即红。 */
+      expect([snap.up.dur, snap.dl.dur], '锚 CSS 动画周期应为 2639ms(computed 2.639s; 旧 420ms 单位误读)')
+        .toEqual(['2.639s', '2.639s']);
 
       /* 换肤重建不残留: 旧锚打标记 -> 派发 theme.js 契约事件(整图 destroy->build) ->
        * 旧标记元素已拆、锚仍恰两枚且对齐(新令牌新元件) */
