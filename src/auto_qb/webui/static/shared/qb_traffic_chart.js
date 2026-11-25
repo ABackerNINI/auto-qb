@@ -3497,7 +3497,11 @@ window.AQB_QB_TRAFFIC = {
      * 非零赋值点恰 1 —— I9 预算峰值 <=5 不叠加); 曲线宽仍 _qbFxCurveWidth(常规 2.4 / calm 2,
      * calm blurCap=0 自然退化普通描边)。yMax: 动画期取 anim.yMax(L1 收敛插值面钉档), 拍间/tail
      * 回落 u.scales.y.max(同 _qbFxAnchorSync 口径)。双轨 level 均 <=0(真 0/缺口轨)早退零操作
-     * (不 touch ctx 状态)。 */
+     * (不 touch ctx 状态)。!transform 配平(G17): 本函数压两笔 save(_qbCanvasScale 的 save+scale
+     * 与下方 clip 自身的 save), 结尾必须配对**两笔** restore —— uPlot 1.6.x 渲染循环无顶层
+     * save 兕底, 少还一笔会把 ctx.scale(pxRatio) 泄漏到后续渲染并逐帧叠加, pxRatio>1(真机
+     * Windows 125%/150% 显示缩放)时全图逐帧放大错位(真机「彻底不正常乱跳」根因) ——
+     * pxRatio=1 时 scale(1,1) 无害, 故桩/e2e/全量守阵均不红, 此钉只能由 G17 计数面抓住。 */
     _qbDrawFxCurveGlow(u, tk) {
       const cfg = window.AQB_FX_CFG;
       if (!cfg || cfg.on !== true || !u.bbox || !u.ctx || !u.data || !u.data.length) return;
@@ -3549,7 +3553,8 @@ window.AQB_QB_TRAFFIC = {
       }
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
-      ctx.restore();
+      ctx.restore();   // 解 clip 自身 save
+      ctx.restore();   // 解 _qbCanvasScale 的 save+scale(pxRatio) —— 少这笔 pxRatio>1 时 scale 跨帧泄漏(G17)
     },
     /* draw 装饰段(系列之上): lead 策略从属轨描边加亮(D3-a: 只加亮描边 + 小锚点; 语义色加宽半透明
      * 短段, 不着 Lv —— I10) -> N 锚辉光(白名单

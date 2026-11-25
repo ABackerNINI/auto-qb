@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 7/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `rowh-sig-and-transition-geometry.md` … `svg-chart-mapping.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `row-shadow-zeroed-by-rowlang.md` … `surface-color-family-single-point.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [row-shadow-zeroed-by-rowlang.md](row-shadow-zeroed-by-rowlang.md) | 皮肤 CSS 给行加 box-shadow 会被 row_lang flat 归零 | 行高亮不生效, box-shadow 无效, 右键目标不可见, row_lang, ctx-src |
 | [rowh-sig-and-transition-geometry.md](rowh-sig-and-transition-geometry.md) | 行高签名混入视图态因子 + 容器过渡期几何不可采信: 千级下切页/关抽屉秒级卡死 | 切标签页卡死, 关抽屉卡死, 能滚不能点, 行高签名, viewMode, ResizeObserver, _winCtnSync, 假 bump, 全量量齐 |
 | [rowwin-reprobe-sig-top-drift.md](rowwin-reprobe-sig-top-drift.md) | rowwin reprobe 去重签名嵌布局读数(表顶) = 抖动假失配 | gBCR 超量, reprobe 重探, 皮肤相关探测数, 重开窗 |
 | [rowwin-stale-rowh-pad-jump.md](rowwin-stale-rowh-pad-jump.md) | 行窗口化引擎按 `_rowHs` 逐行存值累加前缀和, padTop = `pre[start]/z - gap`。两根因让「pad 替换」不等于「等高替换」: ①`_rowHs` 只在行渲染在场时刷新, 行高变过且已滚出窗口的行存值永不修正; ②占位基准(已实测行全局均值)每量到一行就微动 δ, 而 pad 区上百行未渲染行全按它估高, 被连坐搬 δ×N。两者都表现为 scrollY 不变、渲染行整体跳 ±数px, e2e 像素级判据(T7 前置带 / S-A 公式落点)当场撞红。 | 陈旧行高, 行高存值, 窗口滑动跳变, pad 超量替换, 内容跳数px, _rowHs, _measureRowH, 滚出窗口, 视觉跳变, 像素判据, 占位基准, 估算漂移, _rowH, preheat, 预热滚动 |
@@ -21,4 +22,3 @@
 | [stale-predicate-inverted.md](stale-predicate-inverted.md) | 同一对象上成对出现的 `active`(本图此刻该不该显示/拉)与 `stale`(在途响应是否**已过期**→丢弃)是**互为反义**的两个谓词; 机械改名/整行重写时把 `stale` 的 `!(...)` 敲成 `!!(...)`, 语义整个翻面 —— 恰在「本图正在被看」时判「已过期」。静态字符串守阵对此天然失明(`!` 与 `!!` 的差别只在运行时语义), 症状是**卡在加载态**: 无报错、无红、控制台干净, 只有用户看得见。 | 改 stale 谓词, 机械改名, 双重取反, 图加载不出来, 一直显示正在加载, loading 不复位, 谓词极性, _qbLoad, _QB_SCOPES, active 与 stale |
 | [sticky-scrollpad-inset.md](sticky-scrollpad-inset.md) | sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会同时中招(两档极端不露缝, 只有中途露)。修法 = 负 inset 抵消 padding(top:-14px / bottom:-20px), 或把 padding 移出滚动容器(结构性大改, 一般不值)。守阵量「吸顶条顶缘 == 滚动容器可视顶缘」的几何齐平。 | 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl, 负 inset, sticky 缝隙 |
 | [surface-color-family-single-point.md](surface-color-family-single-point.md) | 同一个视觉区域(面板 / 表区)的各层表面(列头底、行板底、悬停、落影)若被多处各写一遍——表头 `--bg-card`、行板 skin 卡底 `--bg-row`、行板透明露面板、页面级吸顶列头的 `--shadow-1` 落影——就会在主题切换时露出肉眼可见的色带 / 横条, 工具与截图都不易定位, 只有像素采样能实锤。修法是把该区域的表面色收口成**一个令牌族单点**(shared/dt_table.css: 表头 `--tbl-head-bg`、行板 `--tbl-face-bg` 默认 `var(--bg)`, 落影 `box-shadow:none`), 变体只声明密度/几何令牌; 页面级组件的观感语义(吸顶列头=「第二根导航」)被嵌入面复用时, 页面观感(box-shadow/sticky top)必须显式剥离。 | 表头异色, 异色背景, 色带, 横条, 表头下方颜色不一样, 背景不一致, 主题下表头发白, 抽屉表格底色, --bg-card, --bg-row, box-shadow 落影, 吸顶列头阴影, 三皮肤观感分叉 |
-| [svg-chart-mapping.md](svg-chart-mapping.md) | 内联 SVG 图表(viewBox + aspect-ratio)的鼠标坐标换算若假设"SVG 铺满容器", 一旦 CSS 把高度压扁(preserveAspectRatio 居中 letterbox)映射整体错位; 共享 CSS 里残留的固定 height 会以特异性压过主题的 aspect-ratio 静默复现此症。 | 改图表悬停, 改 SVG 尺寸, 改图表 CSS, 图表 tooltip 不跟手, 十字线偏移, 图看起来偏窄, letterbox |

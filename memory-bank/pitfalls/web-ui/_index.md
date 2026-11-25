@@ -12,12 +12,12 @@
 
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
-| [1](_index-1.md) | `add-partial-receipt.md` … `color-mix-alpha-weight.md` | 14 |
-| [2](_index-2.md) | `columns-persist.md` … `ctx-menu-item-state-tip.md` | 14 |
-| [3](_index-3.md) | `ctx-sub-clamp-host-settle.md` … `dur-cell-padding-rowheight.md` | 14 |
-| [4](_index-4.md) | `esc-attr-quote-dead-class.md` … `header-cell-gutter.md` | 14 |
-| [5](_index-5.md) | `hover-keynav-fight.md` … `kbd-tab-set-sync.md` | 14 |
-| [6](_index-6.md) | `layout-css.md` … `row-shadow-zeroed-by-rowlang.md` | 14 |
-| [7](_index-7.md) | `rowh-sig-and-transition-geometry.md` … `svg-chart-mapping.md` | 14 |
-| [8](_index-8.md) | `table-resizer-handle.md` … `variant-singleton-shadow.md` | 14 |
-| [9](_index-9.md) | `vif-host-node-stale.md` … `wording-audit-surface.md` | 8 |
+| [1](_index-1.md) | `add-partial-receipt.md` … `clip-path-clips-outer-glow.md` | 14 |
+| [2](_index-2.md) | `color-mix-alpha-weight.md` … `ctx-menu-edge-clamp.md` | 14 |
+| [3](_index-3.md) | `ctx-menu-item-state-tip.md` … `drawer-switch-flicker.md` | 14 |
+| [4](_index-4.md) | `dur-cell-padding-rowheight.md` … `head-response-rebuild-content-length.md` | 14 |
+| [5](_index-5.md) | `header-cell-gutter.md` … `kbd-row-kind-dispatch.md` | 14 |
+| [6](_index-6.md) | `kbd-tab-set-sync.md` … `reannounce-inactive-gate.md` | 14 |
+| [7](_index-7.md) | `row-shadow-zeroed-by-rowlang.md` … `surface-color-family-single-point.md` | 14 |
+| [8](_index-8.md) | `svg-chart-mapping.md` … `unsaved-guard-reload-keys.md` | 14 |
+| [9](_index-9.md) | `variant-singleton-shadow.md` … `wording-audit-surface.md` | 9 |

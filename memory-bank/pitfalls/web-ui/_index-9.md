@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 9/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `vif-host-node-stale.md` … `wording-audit-surface.md`(共 8 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `variant-singleton-shadow.md` … `wording-audit-surface.md`(共 9 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [variant-singleton-shadow.md](variant-singleton-shadow.md) | 详情面板变体文件头把核心层三件套收进模块级单点(`const T = reg.dtHtml` / `const R = reg.dtRaw` / `const H = reg.helpers`), 变体函数内再声明同名局部即遮蔽 —— dt12「空间树图」的 layoutMap 曾把局部 H 声明成 `mapEl.clientHeight`, 同函数尾 `H.rowFocusKey(...)` 对数字取属性抛 TypeError(2026-10-09 用户报障「选择空间树图后无显示、切换种子后回到经典」): 树图块只在 layoutMap 里绘制故永远空白, 抛错经核心 `_dtRender` catch 走「渲染抛错回落 classic」分支把该页签选择复位并落盘, 用户选择跨会话静默丢失。守阵 `test_drawer_tpl_variant_no_singleton_shadowing` 全禁: 凡变体声明了 T/R/H 单点, 该名在全文件(单点声明行外)禁止再被任何声明语句绑定(含多声明符列表 `let a = 1, H = 2` 与解构); 未声明单点的名不查(15 号无 H 单点, 其局部 H=22 合法)。写变体代码时局部名一律另起(如 mapH/RH), 注释里复述根因也要避开声明形态(守阵扫的是文件原文, 注释含 `const ... H =` 同样自证违例)。 | 改 drawer_tpl 变体, 写变体局部变量, 空间树图不显示, 选模板无显示, 换种子回到经典, 模板选择被重置, H.rowFocusKey is not a function, TypeError, 遮蔽, shadowing, dt12, layoutMap, squarify, 树图空白, 回落 classic, render failed fallback |
 | [vif-host-node-stale.md](vif-host-node-stale.md) | 详情面板 aside 被 v-if 拆掉重建后, 变体宿主换了新节点, 而核心层模块级缓存 `_dtMounted` 仍持**旧节点**引用 —— 挂载函数看到"已挂"直接返回, 变体渲染进新宿主无人接管, 页签整幅空白; general/content 页签无独立通知源(不像 traffic/files 有数据轮询触发重渲), **永不自愈**。处置 = watch(drawerVisible) 种子支路进场补 `$nextTick(_dtSync)` 重挂, `_dtSync` 幂等(已挂且 `isConnected` 才跳过)。 | 切设置页返回详情面板空白, v-if 重建, 宿主节点失效, _dtMounted, 变体宿主, detached 引用, $nextTick 重挂, watch drawerVisible, 种子支路, 页签空白, 永不自愈, isConnected, 挂载缓存 |
 | [vue-reactivity.md](vue-reactivity.md) | Vue Options API 的四类静默白屏(computed 当函数 / 带参 computed / 三者同名 / methods 里裸调用跨模块 methods)与 SVG 属性大小写 —— 都**没有运行时提示**。 | 改前端模板, 改 computed, 改 methods, 改 SVG, 加图标, 白屏, 整块不渲染, 裸调用, 漏 this |
 | [wallclock-bucket-as-display-semantics.md](wallclock-bucket-as-display-semantics.md) | 流量图 raw 段窗曾把样本数据栅格化进挂钟桶再展示(归桶/桶值缓存/尾桶持有/封口/回填五件套), 桶面一旦成型就被当成「数据的结构」—— 后续每次显示语义小改(桶宽表/补尾格/rewin 判据/轮询节奏)都要动这套读侧机器, 而三台时钟(桶栅格锚挂钟 / 样本按采样节拍 / 前端轮询节拍)的裂缝只能靠持有面(held 克隆)糊住。26-11-18-0037 换代才看清: 存储 v4 天文件本来就是逐样本槽, 桶化只是读侧表现层 —— 表现层语义与数据结构分层, 换显示语义(挂钟桶 → 样本分组点列)本不必动存储, 只该动装配纯函数。教训的普适形态: 数据结构只存测量事实, 一切「为了显示而做的变换」留在装配层。 | 显示语义改造, 桶化, 栅格, 挂钟桶, 读侧契约, 三台时钟, 时间轴对齐, 表现层, 存储结构, 数据装配, 桶面退役 |

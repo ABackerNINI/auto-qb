@@ -1,13 +1,14 @@
 # web-ui — 前端 / WEB UI 纪律 · 卷 2/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `columns-persist.md` … `ctx-menu-item-state-tip.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `color-mix-alpha-weight.md` … `ctx-menu-edge-clamp.md`(共 14 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [color-mix-alpha-weight.md](color-mix-alpha-weight.md) | color-mix 混入带 alpha 的颜色且不写权重会产出半透明色 | color-mix, 半透明合成, tint 合成, 不透明基色, 吸左首格 |
 | [columns-persist.md](columns-persist.md) | 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。 | 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY |
 | [combobox-focusout-close.md](combobox-focusout-close.md) | 自绘下拉(combobox)收层判据 —— @focusout 合帧 + label/清空钮/面板根/组件根的 @click.stop 与 @mousedown.prevent、焦点纪律按区域设、净空限高与容器预留、落点归属; 完整多轮取证与教训见 [attachments/combobox-focusout-close-details.md](attachments/combobox-focusout-close-details.md)。 | 自绘下拉收起, combobox, focusout, blur 收层, label 转发激活, for 属性回焦, 下拉闪烁重现, 点窗口其它位置不收, 下拉撑变形, 浮层限高, add-pop, 转发 click, 合帧守卫, 开层撤销, label click.stop, label mousedown.prevent, 按住时长, 合帧窗竞态, 人手点击 delay, 清空按钮, 点 x 下拉没了, 过滤词变化重限高, 删字撑变形, 旧页签残留, 资源代际, SPA 静态资源, 强刷, 收层守卫, _popBlurShouldHold, mousedown 记录器, 组合框是表单最后一项, 下拉伸出对话框, 弹窗内滚动, 预留空间, padding-bottom, pop-open, 设定位置弹窗太小, 保存路径下拉显示不全, 需要滚动, 净空为负, 点面板头, 面板头, pop-head, 空态文案, pop-empty, 面板内非交互区, 点一下就消失, 面板自己收了, 面板根 prevent, 区域级不变量, 落点归属, 公共祖先, click target 是祖先, mousedown mouseup 不同元素, 按下与抬起, 组件根 click.stop, 拖选收层, 点一下就关 |
 | [component-ref-ownership.md](component-ref-ownership.md) | 把带 DOM ref 的模板块从根模板抽成子组件时(combobox 五处收敛 issue 26-10-20-2230), 模板里的字符串 `ref="x"` 会注册到**子组件实例**的 `$refs`, 而量测/滚动方法是**根方法**、读的是根实例 `$refs` —— 两边对不上, 且 Vue 不报错: 限高(_fitAddPop)与滚动跟随(_hiScroll)静默失效, 控制台零线索。修法 = 经**方法函数 ref** 把元素代写到根 `$refs`(`:ref="comboBindMenu"` → `this.$root.$refs[name] = el`), 跨组件边界且全生命周期(开/关/重渲染)可靠; `:ref="null/undefined"` 安全(不注册), `:ref=""` 会注册空字符串键。另: 组件方法名全局唯一(_scan_mixin_wiring 扫 methods 段跨文件重名), comboOn*/comboBind* 前缀。 | 组件 ref, $refs, 字符串 ref, 方法函数 ref, 跨组件 ref, 根实例 $refs, 拆组件收敛, combobox 组件, aq-combo-input, _fitAddPop, _hiScroll, 限高失效, 滚动跟随失效, ref 归属, 子组件实例 |
@@ -21,4 +22,3 @@
 | [css-zoom-coordinate-space.md](css-zoom-coordinate-space.md) | html{zoom!=1}(分数布局)下窗口化几何输入 window.scrollY / scrollHeight / getBoundingClientRect 全按**视觉空间**(缩放后)报数, 而占位件 style.height / getComputedStyle().height / computed rowGap 是**布局空间**(缩放前) —— 前缀和(视觉)直接写进 style 会再被 zoom 缩一遍, pad 恒短 (1-z) 倍, 贴文档底后 padTop 差约 (1-z)×视觉总高(flux 实测 ~1900px), 渲染行整体落在视口上方全不可见。窗口选行与前缀和在视觉空间内自洽, pad 是唯一不闭环出口, 所以错位只在文档底附近爆发、scrollBy ±1 跟随但不自愈。 | zoom 0.9, 分数布局, DPR 1.25, 窗口化错位, 行全在视口上方, 贴文档底, pad 短一截, getBoundingClientRect 视觉空间, offsetHeight 取整, computed zoom 不继承, style.height 布局空间, rowGap 布局 |
 | [ctx-menu-branch-parity.md](ctx-menu-branch-parity.md) | `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」(不报错、不白屏, 纯"菜单里没这个选项")。 | 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项 |
 | [ctx-menu-edge-clamp.md](ctx-menu-edge-clamp.md) | 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达 | 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘 |
-| [ctx-menu-item-state-tip.md](ctx-menu-item-state-tip.md) | 抽屉右键菜单「合并页签」项的勾误绑「该项是否出现」的形态判据(种子详情恒真)⇒勾永远在; 同项的 `:title` 经 .aq-tip 委托层(z90)自绘后恒被 .ctx-menu(z100)盖住⇒看不见的提示。两条都不报错、静态锚全绿, 只有用户看得见。 | 合并页签, 勾一直是勾选状态, 勾选态不随状态变, ctx-tick, dtMenuMergeOn, dtMergeOn, 被右键菜单覆盖的 tooltip, 被遮挡的提示, .aq-tip, .ctx-menu |
