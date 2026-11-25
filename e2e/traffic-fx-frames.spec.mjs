@@ -97,10 +97,11 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * C(裁剪面机制探针, F5/plan 26-11-14-1313, A6 的真机面; B5 改渲染对齐记账): 原版在 rAF
  *   渲染间读右缘带像素 —— 本环境实测渲染管线落定后的画布读不到装饰墨(B5 取证: 装饰墨只在
  *   渲染管线内可观测, rAF 渲染间读数恒 0 假阴性), 像素探针不可落地。改为包住 drawAxes 钩子
- *   + ctx.rect 记账(只读运行时包装, 与 vm 内部时序探针同类), 直接钉 F5 改的那件事本身:
- *   fx 段 clip 实参 = rect(L, T, max(W, canvasW-L), H) —— 右缘放宽到画布右缘、下缘不放宽。
- *   与电池 G0 的 clip 实参记账同契约, 在真浏览器真渲染路径上复核; 近底环心钳制(P3)与粒子
- *   镜像由电池 G11/G12 钉。仍走预览拍(窗口/轴冻结, 几何不漂移)。
+ *   + ctx.rect 记账(只读运行时包装, 与 vm 内部时序探针同类), 直接钉裁剪域口径本身(P6,
+ *   plan 26-11-26-0227 §03.3 + F5 先例): fx 段主 clip = rect(L, 0, max(W, canvasW-L), canvasH)
+ *   —— 右缘放宽到画布右缘(F5)且上下缘放宽到画布上下缘(P6, 贴边环/粒子不被裁); 束体自含
+ *   clip 只右缘放宽(上下缘 = 绘图区)。与电池 G0 的 clip 实参记账同契约, 在真浏览器真渲染
+ *   路径上复核; 环心钳制与粒子底缘镜像已退役(P6), 几何回归模板式由电池 G11/G12 反向钉。仍走预览拍(窗口/轴冻结, 几何不漂移)。
  *
  * 【26-11-18-0037 阶段 3 改写: 判定帧节拍源 = SSE 事件到达(T4a 后架构)】
  * 旧量具的拍源是「轮询落袋」(每请求恰推进一格的 GET 桩); T4a 后取数主路 = SSE 流
@@ -181,8 +182,9 @@ async function stubTrafficColumn(page, interval, vals) {
     route.fulfill({ json: makePayload(b0, interval, vals) }));
 }
 
-/** C 用: base 固定 + up 贴底小值(dl 顶格抬 yMax -> up 落绘图区底部 ~2% 处, 近底环探针前提)。
- * up=4200 = yMax(210000) x 2%: 环心上抬钳制 [T+rMax, T+H-rMax] 与底缘镜像反弹都有实料可验;
+/** C 用: base 固定 + up 贴底小值(dl 顶格抬 yMax -> up 落绘图区底部 ~2% 处, 近底装饰实料前提)。
+ * up=4200 = yMax(210000) x 2%: P6 去钳制/去镜像后环心/粒子恒走真位, 贴底装饰经放宽后的
+ * clip(上下缘 = 画布缘)完整可见 —— 近底轨迹仍为 clip 域探针提供实料;
  * 预览假 Δ(impact 0.425 档)target=4200x(1-0.425)=2415 > 0(真 0 不触发)。 */
 async function stubTrafficBottom(page) {
   const interval = 30;
@@ -719,20 +721,20 @@ test.describe('节拍动效 · 预览拍帧级探针(§05.9 面板拍 + G5 背�
   }
 });
 
-test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; B5 渲染对齐记账)', () => {
+test.describe('节拍动效 · 裁剪面机制探针(F5+P6/A6, plan 26-11-14-1313 + 26-11-26-0227 §03.3; B5 渲染对齐记账)', () => {
   installRuntimeErrorGuard(test);
 
   for (const skin of SKINS) {
-    test(`[${skin}] 预览拍 fx/锚段 clip 实参 = 右缘放宽到画布右缘且下缘不放宽; 预览逐帧出装饰 @fast`, async ({ page, request }) => {
+    test(`[${skin}] 预览拍 fx 段主 clip = P6 上下缘放宽到画布缘 + F5 右缘放宽, 束体自含 clip 只右缘放宽; 预览逐帧出装饰 @fast`, async ({ page, request }) => {
       /* B5 改版说明(量具面对齐本环境): 原版在 rAF 渲染间读右缘带像素 —— 本环境(Windows
        * 无 testbed, headless 软件光栅)实测渲染管线落定后的画布读不到装饰墨(B5 取证: 装饰
        * 墨只在渲染管线内可观测, rAF 渲染间读数恒 0 假阴性; 真滚窗拍/预览两条路径同样),
        * 像素探针在此不可落地。改为**渲染对齐记账**: 包住图的 drawAxes 钩子 + ctx.rect 记
-       * 账(运行时包装, 只读不改生产逻辑 —— 与 vm 内部时序探针同类), 直接钉 F5 改的那一
-       * 件事本身: fx 段 clip 实参 = rect(L, T, max(W, canvasW-L), H) —— 右缘放宽到画布右
-       * 缘(width >= W 且右沿 = 画布右缘)、下缘不放宽(height = H)。与电池 G0 的 clip 实
-       * 参记账同契约, 在真浏览器真渲染路径上复核。预览的假 Δ 让每帧都有提交重绘, 记账
-       * 逐渲染可读; 近底环心钳制(P3)与粒子镜像由电池 G11/G12 钉。 */
+       * 账(运行时包装, 只读不改生产逻辑 —— 与 vm 内部时序探针同类), 直接钉裁剪域口径本身
+       * (P6 + F5): fx 段主 clip = rect(L, 0, max(W, canvasW-L), canvasH) —— 右缘放宽到画布右
+       * 缘(F5)且上下缘放宽到画布上下缘(P6); 束体自含 clip 只右缘放宽(上下缘 = 绘图区)。
+       * 与电池 G0 的 clip 实参记账同契约, 在真浏览器真渲染路径上复核。预览的假 Δ 让每帧都
+       * 有提交重绘, 记账逐渲染可读; 环心钳制与粒子镜像已退役(P6), 由电池 G11/G12 反向钉。 */
       await pumpStop(request).catch(() => null);
       await stubFlags(page);
       await stubTrafficBottom(page);
@@ -748,8 +750,8 @@ test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; 
       const panel = page.locator('.fx-panel');
       await expect(panel).toBeVisible({ timeout: 5_000 });
 
-      /* 渲染对齐记账器: 包 drawAxes 钩子, 记录每次渲染的 fx 段 clip 实参(_qbDrawFx/_qbDrawFxAnchor
-       * 各一次 rect)与 anim 态; bbox 每帧现读。 */
+      /* 渲染对齐记账器: 包 drawAxes 钩子, 记录每次渲染的 fx 段 clip 实参(_qbDrawFx 产
+       * 主 clip + 束体自含 clip 恰 1-2 笔)与 anim 态; bbox/画布尺寸每帧现读。 */
       await page.evaluate(`(() => {
         const vm = ${INST};
         const u = vm._qbCharts && vm._qbCharts.torrent;
@@ -781,7 +783,7 @@ test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; 
               clip: cp.rects.slice(),
               L: uu.bbox.left / px, T: uu.bbox.top / px,
               W: uu.bbox.width / px, H: uu.bbox.height / px,
-              cw: uu.ctx.canvas.width / px,
+              cw: uu.ctx.canvas.width / px, ch: uu.ctx.canvas.height / px,
             });
             if (isPreview) cp.sawPreview = true;
             if (cp.sawPreview && !a) cp.done = true;
@@ -803,11 +805,12 @@ test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; 
       expect(previewFrames.length, '预览渲染必须有带 fx 的采样帧(F5 记账要逐渲染核对 clip 实参)')
         .toBeGreaterThanOrEqual(3);
 
-      /* F5 机制钉: 每个 fx 渲染的 clip 实参 = rect(L, T, max(W, canvasW-L), H):
-       *   · width = max(W, canvasW-L) 且右沿 = 画布右缘 —— 右缘放宽在位(F5 回潮 = width 恰
-       *     W / 右沿 = 绘图区右缘, 即红);
-       *   · height = H(下缘不放宽 —— 轴标区零墨的机制面);
-       *   · x/y = 绘图区左上(不外溢到 y 轴/顶栏)。 */
+      /* F5+P6 机制钉: fx 段每个渲染的 clip 实参分两类 ——
+       *   · 主 clip = rect(L, 0, max(W, canvasW-L), canvasH): width = max(W, canvasW-L) 且右沿
+       *     = 画布右缘(F5 右缘放宽; 回潮 = width 恰 W / 右沿 = 绘图区右缘, 即红), 上/下缘 =
+       *     画布顶/底缘(P6; 回潮 = 上沿 T / 高恰 H, 即红);
+       *   · 束体自含 clip = rect(L, T, max(W, canvasW-L), H): 只右缘放宽, 上下缘保持绘图区。
+       *   判别式: 上沿 = 0(画布顶缘)者为 P6 主 clip, 上沿 = T 者为束体自含 clip。 */
       /* 装饰段逐元素窗(模板保真二轮 S2 口径): 粒子 <=0.55xbeat / 环 0.6xbeat / 束 fade 与
        * 顶门 0.7xbeat / 切片 0.25xbeat —— 窗内绘制才落 clip; 逐元素窗的有界断言在电池面
        * (visual_engine/scan_band), 本探针只核每个 fx 渲染的 clip 实参机制; 窗后 fx 在场而零
@@ -816,17 +819,25 @@ test.describe('节拍动效 · 裁剪面机制探针(F5/A6, plan 26-11-14-1313; 
       expect(clipped.length, '冲击窗内的预览渲染必须 >= 3 帧(装饰路径真的在画)').toBeGreaterThanOrEqual(3);
       for (let i = 0; i < clipped.length; i++) {
         const f = clipped[i];
+        expect(f.clip.length, `第 ${i} 渲染 clip 笔数必须 1-2(主 clip 恒有; 冲击窗内束体自含 clip 在场)`)
+          .toBeLessThanOrEqual(2);
         for (const [x, y, w, h] of f.clip) {
+          const isMain = Math.abs(y) <= 1;   // P6 主 clip 上缘 = 画布顶缘(束体自含 clip 上缘 = T > 0)
           expect(Math.abs(x - f.L), `第 ${i} 渲染 clip 左沿 ${x} 必须 = 绘图区左沿 ${f.L}`).toBeLessThanOrEqual(1);
-          expect(Math.abs(y - f.T), `第 ${i} 渲染 clip 上沿 ${y} 必须 = 绘图区上沿 ${f.T}`).toBeLessThanOrEqual(1);
           expect(w, `第 ${i} 渲染 clip 宽 ${w} 必须 = max(W=${f.W}, canvasW-L=${f.cw - f.L})`
             + '(F5 右缘放宽到画布右缘)').toBeGreaterThanOrEqual(f.W - 1);
           expect(Math.abs(w - Math.max(f.W, f.cw - f.L)), `第 ${i} 渲染 clip 宽 ${w} 必须恰 = `
             + `max(W, canvasW-L) = ${Math.max(f.W, f.cw - f.L)}`).toBeLessThanOrEqual(1);
           expect(Math.abs(x + w - f.cw), `第 ${i} 渲染 clip 右沿 ${x + w} 必须 = 画布右缘 ${f.cw}`
             + '(右缘留白是装饰可见域 —— F5)').toBeLessThanOrEqual(1);
-          expect(Math.abs(h - f.H), `第 ${i} 渲染 clip 高 ${h} 必须 = 绘图区高 ${f.H}`
-            + '(下缘未放宽 —— 轴标区零墨机制面)').toBeLessThanOrEqual(1);
+          if (isMain) {
+            expect(Math.abs(h - f.ch), `第 ${i} 渲染主 clip 高 ${h} 必须 = 画布高 ${f.ch}`
+              + '(P6: 上下缘放宽到画布缘 —— 退回绘图区上下沿即红)').toBeLessThanOrEqual(1);
+          } else {
+            expect(Math.abs(y - f.T), `第 ${i} 渲染束体 clip 上沿 ${y} 必须 = 绘图区上沿 ${f.T}`).toBeLessThanOrEqual(1);
+            expect(Math.abs(h - f.H), `第 ${i} 渲染束体 clip 高 ${h} 必须 = 绘图区高 ${f.H}`
+              + '(束体只右缘放宽 —— P6 不动束体上下缘)').toBeLessThanOrEqual(1);
+          }
         }
       }
     });
