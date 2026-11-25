@@ -1074,20 +1074,23 @@ function _qbFxParticleAt(t, beat, burstMs, spec, carryPx, idx, impact) {
 
 /* 粒子喷射清单(V3): n 个三/四/五边多边形碎片(非圆点 —— Beat Saber 碎片/Phigros 几何碎片),
  * 边数 = 3+(i%3) 按清单序号规律轮换(P11, 模板 demo:944 同式; 伪随机分配退役 —— 视觉节奏可辨),
- * 喷射角均匀铺满左向 270° 弧(45°..315°, 0°=+x 指向右缘外 —— 末点贴判定线, 右向碎片全被绘图
- * 区裁剪白费; D2 拍板保留左弧)加 ±5° 抖动, 尺寸 1.6-4.2px(C8 模板式 1.6+rnd×2.6)/ 行程
- * 1.1-1.6 × 环最大半径。自旋不进清单: rot = t/260+idx 绘制侧现算(C8 匀速单向, rot0/vr
+ * 喷射角 360° 全向(模板 demo:941 TAU*(i+0.5)/n + (rnd-0.5)*0.6 弧度抖动 —— P1, 旧左向 270°
+ * 弧随 26-11-26-0227 §03.3 改判退役; 右向碎片的可见域由 F5 clip 右缘放宽 + 行程钳承接), 尺寸
+ * 1.6-4.2px(C8 模板式 1.6+rnd×2.6)/ 行程 1.1-1.6 × 环最大半径; 传入 maxDist(画布右缘到 tip
+ * 的可用余量, R6)时行程上限静态钳到余量 —— 生成时一次算定, 不逐帧(方向性不变, 只收行程);
+ * 缺省(桩/直调面)不钳。自旋不进清单: rot = t/260+idx 绘制侧现算(C8 匀速单向, rot0/vr
  * 伪随机双向自旋字段退役)。确定性: 同种子恒同清单(node 电池真跑)。 */
-function _qbFxSpawnSpecs(n, x0, y0, rMax, seed) {
+function _qbFxSpawnSpecs(n, x0, y0, rMax, seed, maxDist) {
   const rnd = _qbFxRand(seed);
   const out = [];
   for (let i = 0; i < n; i++) {
-    const ang = (45 + (270 * (i + 0.5)) / n + (rnd() - 0.5) * 10) * Math.PI / 180;
+    const ang = ((Math.PI * 2 * (i + 0.5)) / n + (rnd() - 0.5) * 0.6);   // P1: 模板 demo:941 同式
+    const d = rMax * (1.1 + 0.5 * rnd());
     out.push({
       x0, y0, ang,
       sides: 3 + (i % 3),
       size: 1.6 + rnd() * 2.6,
-      dist: rMax * (1.1 + 0.5 * rnd()),
+      dist: typeof maxDist === "number" ? Math.max(0, Math.min(d, maxDist)) : d,
     });
   }
   return out;
@@ -2850,14 +2853,19 @@ window.AQB_QB_TRAFFIC = {
       const alloc = _qbFxAlloc(cfg.dual, cap, lead);
       const seed = Math.floor(xs[n - 1]) || 1;
       const tipX0 = g.L + g.W + dxPx;
+      // P1/R6(plan 26-11-26-0227 §03.3): 360° 全向后右向碎片可见, 行程上限静态钳到画布右缘到
+      // tip 的可用余量(生成时一次算定, 不逐帧; 方向性不变)。canvas 宽不可知(桩环境)不钳 ——
+      // 行程界断言走无 maxDist 直调面。
+      const maxDist = u.ctx && u.ctx.canvas && u.ctx.canvas.width
+        ? Math.max(0, u.ctx.canvas.width / g.px - tipX0) : undefined;
       // merge 落位 y: 两轨皆 live 才取中点; 任一缺口退 lead 轨末点 y —— 缺口轨 shown=null 会被
       // yOf 换算成绘图区底边 T+H, 中点成了「与真实末点无关的假落位」(I10/D4)
       const yMerge = bothLive ? (yUp + yDl) / 2 : yOf(tr[lead].shown);
       const specs = {};
-      if (alloc.up > 0) specs.up = _qbFxSpawnSpecs(alloc.up, tipX0, yUp, rMax, seed);
-      if (alloc.dl > 0) specs.dl = _qbFxSpawnSpecs(alloc.dl, tipX0, yDl, rMax, seed ^ 0x9E3779B9);
+      if (alloc.up > 0) specs.up = _qbFxSpawnSpecs(alloc.up, tipX0, yUp, rMax, seed, maxDist);
+      if (alloc.dl > 0) specs.dl = _qbFxSpawnSpecs(alloc.dl, tipX0, yDl, rMax, seed ^ 0x9E3779B9, maxDist);
       if (alloc.merge > 0) {
-        specs.merge = _qbFxSpawnSpecs(alloc.merge, tipX0, yMerge, rMax, seed ^ 0x5BD1E995);
+        specs.merge = _qbFxSpawnSpecs(alloc.merge, tipX0, yMerge, rMax, seed ^ 0x5BD1E995, maxDist);
       }
       // R6 横向线条清单(撕裂切片 + 梳齿): **判定帧一次生成, 同拍逐像素冻结**(只判定帧重算 ——
       // §03 R6 冻结纪律; random 对照档也因此拍内不闪)。强度(n/带宽/长度/alpha)由 lead 等级
