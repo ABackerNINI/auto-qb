@@ -1046,13 +1046,16 @@ function _qbFxRingAt(t, beat, rScale, gapScale, impact) {
 /* V3 粒子三阶段运动/亮度(纯函数): 爆发期 [0, burstMs) 速度 ×4.5(= impact 窗), 拖尾期
  * [burstMs, 0.55×beat) 名义速度 ×1 并 easeOut 减速; t ≥ 0.55×beat -> null(零绘制)。
  * 速度 v 由末态行程反解: 4.5v×burstMs + v×trailMs = dist(easeOut(1)=1)。亮度(C8 模板式)
- * 0.78×(1 − t/T)×impact(模板 demo:1073 同式, t=0 首帧最亮与判定线闪光同帧 —— I9); 自旋
+ * 0.78×(1 − t/T)×impact(模板 demo:1073 同式, t=0 首帧最亮与判定线闪光同帧 —— I9); life = 1 − t/T
+ * 与 alpha 同源(绘制侧尺寸 = size×life 随寿命线性缩小 —— 模板 demo:1064/1073, P10); y 位移
+ * 纵向压 0.7(模板 demo:1072 椭圆喷雾, 横向铺得开/纵向收敛 —— P9); 自旋
  * t/260+idx 匀速单向(模板同式; rot0/vr 伪随机双向自旋字段退役 —— C8); carryPx = L0 视口
  * 回摆带来的末点位移(粒子随末点滑动, 与曲线不脱钩); idx = 粒子在清单中的序号(绘制侧
  * specs[i] 的 i, 自旋相位的唯一来源)。 */
 function _qbFxParticleAt(t, beat, burstMs, spec, carryPx, idx, impact) {
   const T = beat * _QB_FX_PART_RATIO;
   if (!(t >= 0) || !(t < T)) return null;
+  const life = 1 - t / T;
   const trailMs = Math.max(T - burstMs, 1e-9);
   const v = spec.dist / (4.5 * burstMs + trailMs);
   const d = t <= burstMs
@@ -1061,14 +1064,16 @@ function _qbFxParticleAt(t, beat, burstMs, spec, carryPx, idx, impact) {
   const imp = Math.min(1, Math.max(0, Number(impact) || 0));
   return {
     x: spec.x0 + Math.cos(spec.ang) * d + carryPx,
-    y: spec.y0 + Math.sin(spec.ang) * d,
-    alpha: 0.78 * (1 - t / T) * imp,
+    y: spec.y0 + Math.sin(spec.ang) * d * 0.7,
+    alpha: 0.78 * life * imp,
+    life,
     d,
     rot: t / 260 + (idx | 0),
   };
 }
 
 /* 粒子喷射清单(V3): n 个三/四/五边多边形碎片(非圆点 —— Beat Saber 碎片/Phigros 几何碎片),
+ * 边数 = 3+(i%3) 按清单序号规律轮换(P11, 模板 demo:944 同式; 伪随机分配退役 —— 视觉节奏可辨),
  * 喷射角均匀铺满左向 270° 弧(45°..315°, 0°=+x 指向右缘外 —— 末点贴判定线, 右向碎片全被绘图
  * 区裁剪白费; D2 拍板保留左弧)加 ±5° 抖动, 尺寸 1.6-4.2px(C8 模板式 1.6+rnd×2.6)/ 行程
  * 1.1-1.6 × 环最大半径。自旋不进清单: rot = t/260+idx 绘制侧现算(C8 匀速单向, rot0/vr
@@ -1080,7 +1085,7 @@ function _qbFxSpawnSpecs(n, x0, y0, rMax, seed) {
     const ang = (45 + (270 * (i + 0.5)) / n + (rnd() - 0.5) * 10) * Math.PI / 180;
     out.push({
       x0, y0, ang,
-      sides: 3 + Math.floor(rnd() * 3),
+      sides: 3 + (i % 3),
       size: 1.6 + rnd() * 2.6,
       dist: rMax * (1.1 + 0.5 * rnd()),
     });
@@ -3097,9 +3102,10 @@ window.AQB_QB_TRAFFIC = {
         ctx.shadowColor = "transparent";
       }
       // —— 粒子(V3: 三/四/五边碎片本体轨道语义色, N 外圈描边着 Lv 色 —— 白名单 partOuter;
-      //     三阶段: 爆发 ×4.5 / 拖尾减速透明 / 0.55×beat 后零绘制; t=0 首帧最亮与判定线同帧) ——
-      //     近底镜像反弹(P3 拍板, F5): y 越绘图区底缘按 2*(T+H) - y 折回 —— 末点贴底的低流量
-      //     拍粒子不再集体被底缘裁没; 只反弹底缘, 左/上缘维持裁剪(与 clip 口径一致)。
+      //     三阶段: 爆发 ×4.5 / 拖尾减速透明 / 0.55×beat 后零绘制; t=0 首帧最亮与判定线同帧;
+      //     尺寸 = size×life 随寿命线性缩小(P10, 模板 demo:1073) —— 近底镜像反弹(P3 拍板, F5):
+      //     y 越绘图区底缘按 2*(T+H) - y 折回 —— 末点贴底的低流量拍粒子不再集体被底缘裁没;
+      //     只反弹底缘, 左/上缘维持裁剪(与 clip 口径一致)。
       if (cfg.layers.particles === true) {
         const yFloor = T + H;
         for (const sp of spots) {
@@ -3111,7 +3117,7 @@ window.AQB_QB_TRAFFIC = {
             const py = ps.y > yFloor ? 2 * yFloor - ps.y : ps.y;
             ctx.globalAlpha = ps.alpha;
             ctx.fillStyle = sp.color;
-            _qbFxPolyPath(ctx, ps.x, py, sp.specs[i].size, sp.specs[i].sides, ps.rot);
+            _qbFxPolyPath(ctx, ps.x, py, sp.specs[i].size * ps.life, sp.specs[i].sides, ps.rot);
             ctx.fill();
             if (neon) {   // N 外圈描边(Lv 色, 纯描边不占辉光 blur 预算)
               ctx.globalAlpha = ps.alpha * q;
