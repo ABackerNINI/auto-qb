@@ -51,3 +51,9 @@
 - 2026-11-26 22:06 S0 前置落档: collect-only 基线 7042 tests collected; 仓库根锚实测 83 处(69 文件, 比计划写的 64 多 19, 留 S2a 处理, 本批不管); tracked 数 tests 366 / e2e 90 / tests-real 65 / assets 17 / tools 34 / scripts 31 / resources 64; 冻结清单要点: 活口径最密集 tests-real/e2e/pytest.ini/scripts/sim_/qb_capture, 纯冻结豁免组 env.sh(全库无活口径引用)
 
 - 2026-11-27 01:25 仓库目录结构重构 S0-S5 全落地: 测试树三分 + 根瘦身 + docker 归置 + pytest 合并 + 文档回写, 全量绿基线切片已落
+
+- 2026-11-27 02:13 修复 issue 26-11-27-0134: playwright 配置注释改指实际 manifest 语法守阵, issue 翻 Done; 定向与全量验证通过(见 kb.baseline), 只读评审零发现
+
+- 2026-11-27 02:39 完成 playwright 注释失效引用修复：接缝终审 1 条 minor（基线增量未对账）已补完整对账并过 review.check；kb.check、doc.links、kb.docmap 与 diff 检查全绿。
+
+- 2026-11-27 02:49 提交前齐平：已同步 268e07f3；ship.gate 全绿；review.pack 实算 14 行、基哈希 8a42b9880bd7，评审快照未漂移。

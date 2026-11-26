@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="repo-layout-refactor">
 <meta name="doc-refs" content="memory-bank/plans/26-11-26-0503-plan-repo-layout-refactor.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="playwright.config.mjs 注释引用不存在的 test_extension_proxy.py">
 <meta name="issue-summary" content="配置注释第44行称 tests/test_extension_proxy.py 会跑 node --check, 该文件 S2a 前就不存在(实际为 test_extension_proxy_{manifest,options,page_fetch}.py), 纯注释失效引用">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-27-0134-docs-playwright-config-stale-ref</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-27 01:34</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
 </div>
 
@@ -113,12 +113,17 @@
 <section id="s3">
   <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
   <p>把注释里的 <code>tests/test_extension_proxy.py</code> 更新为三个实际文件路径（或概括为「extension proxy 相关测试」），保留「不能改 type module」的结论与原因不变。纯注释改动，零行为影响。</p>
+  <p><strong>实际修法（2026-11-27 01:57）：</strong>精确指向真正执行语法守阵的 <code>tests/unit/test_extension_proxy_manifest.py::test_js_syntax_passes_node_check</code>，保留根 <code>package.json</code> 不能改为 <code>"type": "module"</code> 的结论与原因。</p>
+  <p><strong>定向验证：</strong><code>node --check playwright.config.mjs</code> 通过；<code>commands run test.one -- tests/unit/test_extension_proxy_manifest.py</code> 7 passed；<code>git diff --check</code> 通过。</p>
+  <p><strong>全量验证：</strong><code>commands run test.full</code> 通过，实测数字见 <code>memory-bank/testing/baselines/26-11-27-0202-playwright-config-stale-ref.md</code>。</p>
 </section>
 
 <section id="s4">
   <h2><span class="no">§04</span>状态变更日志</h2>
   <ul>
     <li>2026-11-27 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    <li>2026-11-27 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-27 — 状态 In Progress → Done（kb.status）</li>
   </ul>
 </section>
 

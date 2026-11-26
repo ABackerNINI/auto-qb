@@ -41,8 +41,9 @@ const BOOT_FIRST_ONLY = ['**/boot-first-two-hop.spec.mjs'];
  *   · 桩服务由本配置的 webServer 自动拉起, 不需要人工先起 `scripts/ui_harness.py`。
  *
  * 为什么是 `.mjs` 而不是 `.js`: 根 `package.json` 是 `"type": "commonjs"`(不能改成 module ——
- * tests/test_extension_proxy.py 会对 extensions 下的 .js 跑 `node --check`, 改 type 会让它们被按
- * ESM 解析)。仓库既有约定就是**显式扩展名**: ESM 用 `.mjs`、确需 CJS 的脚本用 `.cjs`, 同一原因。
+ * tests/unit/test_extension_proxy_manifest.py::test_js_syntax_passes_node_check 会对 extensions 下的
+ * .js 跑 `node --check`, 改 type 会让它们被按 ESM 解析)。仓库既有约定就是**显式扩展名**: ESM 用
+ * `.mjs`、确需 CJS 的脚本用 `.cjs`, 同一原因。
  */
 export default defineConfig({
   testDir: './tests/e2e',
