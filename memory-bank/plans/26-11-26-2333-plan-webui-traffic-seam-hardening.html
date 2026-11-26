@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 流量图合并缝结构收口计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-traffic-seam-hardening">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-26-2333">
+<meta name="doc-updated" content="26-11-27-0004">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-26-webui-traffic-seam-hardening.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-traffic-seam-hardening</div>
+<h1>WEBUI 流量图合并缝结构收口计划</h1>
+<p class="lede">本篇只回答: 流量图三个症状(一拍双跳 / 曲线偶尔整体跳变 / 两检查点之间折线·一拍两条线段)的根因判在哪里、为什么不第三次全量重构、以及合并缝按哪三条结构不变量、哪六批收口。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-26-2333 · <b>doc-updated</b> 26-11-27-0004 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 本会话(2026-11-26)两路只读取证(代码直读, 锚 <code>0c2ab2ec</code>; 16 份历史设计/修补/档案/issue 文档互证)+ grilling 两轮六问用户拍板(§06); 承接 26-11-15-1104 / 26-11-18-0037 / 26-11-22-0858 / 26-11-22-2330 / 26-11-26-0227 五轮结论, 现行拍语义单点 = <a href="../conventions/attachments/webui-traffic-beat.md">conventions/attachments/webui-traffic-beat.md</a>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>流量图经历一轮重构(计划 26-11-15-1104 立项 → 26-11-18-0037 七批落地)与三轮修补(26-11-22-0858 显式视口换代、26-11-22-2330 模板保真二轮、26-11-26-0227 缺陷修补)后, 用户仍观察到三个症状, 且长短窗都有(D1)。本轮取证结论: <b>骨架是成立的, 病灶集中在一条从未立过契约的「合并缝」上</b>。</p>
+
+<h3>目标</h3>
+<ul>
+  <li>三个症状根除, 且「一拍一段 / 一拍一格 / 对账不改形状」从稳态巧合变成结构保证。</li>
+  <li>「其它一些问题」一并盘清: S0 真机取证把取证盘出的 8 条嫌疑点逐条裁决, 属实收编、不属实记档。</li>
+  <li>还欠账: 26-11-18-0037 档案步 9/10(Docker testbed e2e + 真机冒烟)从未补跑 —— SSE 路径至今没有真机背书, 本轮 S0 必须先还。</li>
+</ul>
+
+<h3>设计底线(本轮不动的东西)</h3>
+<ul>
+  <li>骨架四件不动: 0858 显式视口三不变量、0037 样本分组点列契约、拍调度内核(L0 左移 + L1 收敛)、装饰面口径(2330 + 0227 全部现行权威条目)。</li>
+  <li>存储格式、配置键、采样周期、per-scope 传输面均不动。</li>
+</ul>
+
+<h3>本轮新立的三条结构不变量</h3>
+<table>
+  <tr><th>编号</th><th>不变量</th><th>违反即不可表达的落点</th></tr>
+  <tr><td><b>INV-1</b> 单一粒度</td><td>显示列任意时刻 = 组脊柱点列 + 至多一个「活尾组」点(组距粒度), 原始样本永不直接入列; 活尾组值 = 组内已落样本真实均值(Σdelta/Σdt), 组闭合即落为脊柱点。k=1 窗(1m/5m)退化为直通, 走同一代码路径。</td><td>前端唯一入列口(<code>_qbStreamFrame</code> / <code>_qbStreamOnLoad</code> 合流处)强制折叠, 事件原始点在该口之后不存在第二形态。</td></tr>
+  <tr><td><b>INV-2</b> 一拍一格</td><td>判定帧每拍视口至多前进一格; 积压 2~4 格拆步追平(连续多拍、每拍一格、动画连续); 积压 &gt;4 格或真换窗(step/span 名义变化)→ rewin 瞬时落地。一拍内至多一次可见值变化(活尾组值收敛一次; 幅度在静默阈值内的对账差值直接吸收, 不建拍)。</td><td>判定帧进门单点(<code>_qbBeatStart</code> 前的 gate)统一裁决, 数据到达侧无第二条起拍路径。</td></tr>
+  <tr><td><b>INV-3</b> 对账零形状改写</td><td>GET 装配输出的形状 = 显示列形状(脊柱 + 活尾组), 对账只补精度不改形状; 摊配/校正对已派发点的任何值改写必须经 SSE 修正帧重发(同 t 异值), 不允许「只在 GET 里变」。</td><td>事件源承担重发义务(traffic_sample_events); 前端 <code>_qbStreamFrame</code> 尾位同 t 异值已可原位改写(<code>:1265</code>), F2 补中段改写分支使修正帧全列可落地。</td></tr>
+</table>
+<div class="aside">方法论与 0858 同款: 不加第 N 层补丁, 用「坏状态不可表达」的结构不变量消灭一类缺陷。0858 治的是视口隐式派生态, 本轮治的是事件/GET 合并缝的隐式双粒度。</div>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>管线现状(代码直读, 锚 0c2ab2ec)</h3>
+<p>后端每采样 tick(生产 1.5s)经 SSE per-scope 通道推 1 帧原始样本点(<code>traffic_sample_events.py:12-18</code>); 前端显示列 = <b>GET 的组粒度点列</b>(30s 对账整列替换 + 尾点回并, <code>qb_traffic_chart.js:2545</code>) + <b>SSE 原始样本尾点</b>拼接; 每次数据到达起一拍(beat = clamp(period×0.4, 320, 1000), <code>qb_traffic_chart.js:628-633</code>), 拍内做视口左移(L0)+ 尾点值收敛(L1); 锚位移 &gt; 2 组距或 step/span 名义变化 → rewin 瞬时(<code>qb_traffic_chart.js:748-751</code>); 绘制层每判定帧 <code>setData</code> 整体重建(<code>:4246</code>), 动画只是视口平移 + 尾点插值的覆盖层。</p>
+
+<h3>根因矩阵(症状 → 机制 → 证据 → 触发条件 → 置信度)</h3>
+<table>
+  <tr><th>编号</th><th>机制</th><th>证据(逐字位)</th><th>触发条件</th><th>置信</th></tr>
+  <tr><td>S1-1</td><td>对账/断档 GET 把已显示的中段值成组改写(setData 瞬时生效), 同拍尾点又走 L1 收敛 → 一拍内「中段瞬跳 + 尾点再收敛」两次变化。数据根源: 摊配是对已派发点的追溯改写且不重发, 事件显示与 GET 真值必然不一致</td><td><code>qb_traffic_chart.js:2490-2491</code> seq 断档 <code>st.seq = seq; this._qbStreamPullNow(scope);</code>; <code>:2545</code> <code>st.tail = st.tail.filter((p) =&gt; p.t &gt; cut);</code> 整列替换+尾点回并; <code>traffic_sample_events.py:36-38</code> 摊配追溯改写不重发</td><td>断档重拉(3s 节流)/ 30s 对账 / 静默沿重拉, 落在滑动拍内</td><td class="bad">高</td></tr>
+  <tr><td>S1-2</td><td>收敛窗内第二判定帧改向: 尾点先向 target1 收敛、中途改向 target2</td><td><code>:3692-3696</code> 打断续滑 anchorHold + <code>:3902</code> 收敛进度重读</td><td>两帧间隔 &lt; beat(重连后积压帧连发、断档帧+GET 同拍)</td><td class="wr">中</td></tr>
+  <tr><td>S1-3</td><td>纵轴瞬时重定无过渡, 与 L1 叠加成双跳</td><td><code>:3712-3722</code> 判定帧全列扫峰 + <code>:3755-3756</code> setScale 成对</td><td>新峰值帧</td><td class="wr">中</td></tr>
+  <tr><td>S2-1</td><td>rewin 瞬时落地(视口+整列一次落笔无动画)</td><td><code>:748-751</code> 判据; <code>:2499</code> <code>const live = !document.hidden;</code> 隐藏期只合并不建图</td><td>隐藏回场首拍 delta=隐藏时长 / 真换窗</td><td class="bad">高</td></tr>
+  <tr><td>S2-2</td><td>stride 自适应无迟滞: 1 个新缺口标记就翻 k, meta interval_s 变 → 前端 step 变化即 rewin</td><td><code>traffic_group_assembly.py:154-161</code> <code>k_need = ceil(n_samples / (500 - n_marks))</code>; <code>traffic_qb.py:270-274</code> meta interval = stride×si; 前端 <code>:748-751</code></td><td>24h 窗 si=1s 时 k=173, 新增 1 个缺口标记即 174</td><td class="bad">高</td></tr>
+  <tr><td>S2-3</td><td>对账折叠改写中段值与密度(与 S1-1 同源)</td><td>同 S1-1</td><td>每 30s 对账</td><td class="bad">高</td></tr>
+  <tr><td>S2-4</td><td>两源 t 基准差: 事件点 t=实测样本 ts, GET 组点 t=槽位 ts, ≤250ms → 对账后尾段横移一跳</td><td>traffic_sample_events.py「已知有界偏差」节</td><td>对账落袋</td><td class="wr">中</td></tr>
+  <tr><td>S3-1</td><td>rewin 阈值是严格大于: 恰 2 组距位移不 rewin, 一拍滑两格 = 两条线段</td><td><code>qb_traffic_chart.js:751</code> <code>delta &gt; step * 2</code></td><td>停顿恰 2 拍(主循环节拍抖动/丢一帧后恢复)、隐藏恰 2 个采样周期</td><td class="bad">高</td></tr>
+  <tr><td>S3-2</td><td>积压合并单次判定: 隐藏期/连发帧合并后回场首帧一次消化全部积压, 2 格=滑两段, &gt;2 格=rewin</td><td><code>:2499-2526</code> 合并即时、回场一次判定</td><td>页面隐藏回场 / 两帧同 tick 到达</td><td class="bad">高</td></tr>
+  <tr><td>S3-3</td><td>k&gt;1 长窗双粒度设计语义: SSE 刻意发 per-tick 原始点(0037 的「有意偏离」), 检查点间距是组距 k×si、事件尾点间距是 si → 长窗常态就是折线, 30s 对账又塌直</td><td><code>traffic_sample_events.py:16-18</code> per-tick 每系列恰 1 点; 附件 webui-traffic-beat.md「有意偏离」节</td><td>30m+ 窗(k&gt;1)常态; 1m/5m(k=1)不受此条影响</td><td class="bad">高(结构性)</td></tr>
+  <tr><td>S3-4</td><td>GET 尾点回并多点: cut 滞后时一次回并多点, 位移多步</td><td><code>:2545-2552</code></td><td>对账滞后</td><td>低</td></tr>
+</table>
+
+<p>取证口径: 上表置信列的含义 —— 「高」= 机制在代码直读中确定存在且触发条件现实;<b>本轮立项轮未做真机复现</b>, 全部候选机制是代码直读 + 文档互证的闭环推理结论, 尚无真机观测证实哪一条在真实环境主导。归窗、机制裁决与 S4 清单 8 条的属实性判断由 S0 真机取证承担(§04); S0 证据落地前不改代码。</p>
+
+<h3>S4 嫌疑清单(S0 逐条裁决, 不预设属实)</h3>
+<table>
+  <tr><th>#</th><th>嫌疑点</th><th>证据位</th></tr>
+  <tr><td>1</td><td>GET 换列后 t=0 把旧显示值写进新列尾, 末段端点一帧错位(靠收敛帧纠正)</td><td><code>qb_traffic_chart.js:3796</code></td></tr>
+  <tr><td>2</td><td>cap 从头部剪 + 隐藏期不剪 → 长隐藏回场余量列被剪穿, 短暂左缺口(与 Open issue 26-11-22-1401 同族)</td><td><code>:1267-1268</code> + <code>:2499</code></td></tr>
+  <tr><td>3</td><td>静默判据 si 下限夹取 1.5s → si&lt;1.5s 配置下徽标/重拉迟钝</td><td><code>:2575-2580</code></td></tr>
+  <tr><td>4</td><td>组帧 t 取首个成员真值 t, 时钟漂移下组帧与 GET 组点错位</td><td><code>runtime_stream.py:230</code></td></tr>
+  <tr><td>5</td><td>零变化拍也起 fx-only rAF 循环(纯帧成本, 非症状源)</td><td><code>:3770-3782</code></td></tr>
+  <tr><td>6</td><td>修剪线锚用目标锚(在途滑动时领先视口), delta=2 时左缘恰好压线、边界无余量</td><td><code>:2513-2516</code>(调用位, 取 <code>u._qbBeat.anchor</code> 目标锚; 定义 <code>:1306</code>)</td></tr>
+  <tr><td>7</td><td>cellPx 按名义窗点数计、与实际列长(含余量)解耦, 短窗真滑/长窗恒瞬时无中间态</td><td><code>:766-776</code></td></tr>
+  <tr><td>8</td><td>1m 窗无前端特判, k=1 稳定 → 1m 的折线只能来自积压合并/停顿恢复(S3-1/S3-2)</td><td>排除项(归窗用)</td></tr>
+</table>
+
+<div class="aside"><b>历史判定史与本轮边界</b>: 「x 轴抖动」历史上有四层已判根因(1313 G4 栅格 ceil / 1104 G-B auto range / 0936 snap-rem 钳零 / 0858 隐式视口), 均已修; 其中 0936 的取证在旧挂钟几何下完成, 0858 换代后 L0 ulp 吸附(<code>:694-711</code>)仍在生效路径但无新取证。「尾段失真/跳变」历史根因(holding 相位碰撞 / 尾桶克隆 / qB 字段口径混杂 / ctx.scale 泄漏)已随各轮修掉。issue 26-11-22-1401(瞬态左缺口)仍 Open, 与 S4-2 同族, 本轮 S6 一并复核(不在本计划认领, 修复落地面确认后再翻状态)。0037 档案步 9/10(Docker testbed e2e + 真机冒烟)欠账未还 —— 本轮 S0 补。</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p><b>主线</b>: 不做第三次全量重构(骨架四件没有出事, 重构成本接近 0037 七批 21 文件而收益边际), 也不做最小点修(双粒度缝与摊配改写的结构性根源保留, 复发概率高)。走<b>合并缝结构收口</b>: 给缝立 INV-1/2/3 三条不变量, 外加一束边界点修, 前置一轮真机取证(D2/D5 拍板)。</p>
+
+<table>
+  <tr><th>修法</th><th>内容</th><th>落点</th><th>不变量</th></tr>
+  <tr><td><b>F1</b> 前端活尾组折叠</td><td>SSE 保持 per-scope 原始样本不变; 前端按当前窗组距维护「进行中组」单点(组内已落样本真实均值 Σdelta/Σdt), 组闭合落为脊柱点; 显示列任意时刻单一形状(脊柱 + 一个活尾点)。k=1 窗直通同一代码路径。前端首次消费 <code>meta.stride</code>(无 stride/agg 段窗回落现行为)。</td><td><code>qb_traffic_chart.js</code> 显示列合流处(<code>_qbStreamFrame</code>/<code>_qbStreamOnLoad</code>)</td><td>INV-1</td></tr>
+  <tr><td><b>F2</b> 修正帧重发</td><td>摊配/校正改写已派发点时, 事件源对受影响槽位发修正点(同 t 异值, 按 scope 合并成单帧多点, seq 正常递增); 前端 <code>_qbStreamFrame</code> 尾位同 t 异值已可原位改写(<code>:1265</code>); F2 前端增量 = 补中段同 t 改写分支(现走乱序旧点丢弃 <code>:1270</code>)。<b>D7 按需化</b>: S0 摊配改写幅度证据超静默阈值才实施; 未实施前由 INV-2 静默吸收承载。</td><td><code>traffic_sample_events.py</code> + <code>runtime_stream.py</code> + <code>qb_traffic_chart.js:1258-1288</code></td><td>INV-3</td></tr>
+  <tr><td><b>F3</b> GET 装配形状对齐</td><td>GET 装配输出形状 = 脊柱 + 活尾组(尾组恒真值语义本就在, 补「进行中组点」输出); 保证 GET 列与事件折叠列逐位等价。</td><td><code>traffic_group_assembly.py</code> + <code>traffic_qb.py</code></td><td>INV-3</td></tr>
+  <tr><td><b>F4</b> 拍门与拆步</td><td>判定帧进门单点: 积压格数 = ceil(delta/step); ≤1 正常起拍; 2~4 拆步追平(每拍一格连续播, 追平期间新到达在下一判定帧重算剩余格数, 目标动态延展); &gt;4 格或 step/span 名义变化 → rewin。恰 2 格从「单拍滑两段」变「两拍各滑一段」(S3-1 根除)。</td><td><code>qb_traffic_chart.js</code> <code>_qbBeatStart</code> 进门前 gate</td><td>INV-2</td></tr>
+  <tr><td><b>F5</b> 点修束</td><td>① stride 迟滞: 新 k 需连续 2 次对账一致才切换(缺口标记数滞回带); ② 纵轴过渡: y 重定挪到收敛帧或加 0.12×beat 过渡窗, 与「纯数值收敛帧先钉 y」既有口径合流; ③ GET 换列后 prev 取新列尾同 t 点(S4-1); ④ 修剪线锚改用显示锚, delta=2 时左缘留余量(S4-6)。</td><td><code>traffic_group_assembly.py</code> / <code>qb_traffic_chart.js</code></td><td>—</td></tr>
+  <tr><td><b>F6</b> S0 裁决收编</td><td>S4 嫌疑清单 8 条按真机/桩面证据逐条裁决: 属实的收编进 F5 或入池 issue, 不属实的记档销案。</td><td>—</td><td>—</td></tr>
+</table>
+
+<div class="aside"><b>为什么 F1 选前端折叠而不是后端按窗发组粒度</b>(D3 拍板): SSE 流是 per-scope 订阅、与窗口无关 —— 后端不知道前端在看哪个窗, 组粒度增量要求传输面改成 per-window(换窗重订阅、服务端每观察者×窗维护状态), 动了 0037 有意解耦的设计。前端折叠只多一个小型活组公式(Σdelta/Σdt), 用 fixture 电池钉住与 Python 装配同源, 传输面零改动。</div>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th>批</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S0</b> 真机取证与嫌疑盘点</td><td>dev.webui + 浏览器自动化, 长短窗各观察; 挂临时诊断探针(判定帧间隔/同拍双判定计数/积压格数分布/对账改写幅度/修正帧量/降级轮询触发率/rewin 频度); 三症状归窗归时机; S4 清单 8 条逐条裁决; 顺带补 0037 档案 Docker testbed e2e + 真机冒烟两步欠账。qB 离线则记 BLOCKED 改约窗口, 不用桩数据冒充真机判据。</td><td>症状→机制归窗清单回填本计划 §02; 0037 欠账销案; 探针基线计数留档(供 S6 对照); S0 证据同时裁决 F2 按需化(D7)与降级轮询去留候选(§08)。</td></tr>
+  <tr><td><b>S1</b> GET 装配对齐(F2 按需)</td><td>F3 必做; F2 按 D7 按需化 —— S0 摊配改写幅度超静默阈值才实施, 否则静默吸收承载。对账等价电池: 同一批样本槽流(含缺口/台阶/断连/摊配)走事件折叠与 GET 装配, 断言逐位等价; F2 实施时补修正帧守阵(改写必重发、seq 连续、断档兜底不回归)。</td><td>对账等价电池绿; 既有后端电池零回归; F2 实施时修正帧守阵绿。</td></tr>
+  <tr><td><b>S2</b> 前端活尾组折叠</td><td>F1; JS/Python parity fixture 电池: 同一批样本喂两侧, 断言脊柱列与活尾组值逐位一致; 显示列单一粒度静态钉(入列口之后无原始点第二形态)。</td><td>parity 电池绿; INV-1 静态钉绿; 现有前端 node 电池/e2e 零回归(除按契约适配的断言改写)。</td></tr>
+  <tr><td><b>S3</b> 拍门与拆步追平</td><td>F4; 行为级不变量电池(红绿双验), 确定性场景: 稳态单帧 / 恰停 2 拍 / 积压 3 格 / 积压 5 格 / 隐藏 30s 回场 / 断档帧+对账 GET 同拍 / 重连积压连发 / stride 翻动。</td><td>任意场景下单拍视口位移 ≤1 格或 rewin; 单拍新增线段 ≤1 或 rewin; 无回跳; 「恰 2 格拆两拍」断言在阵。</td></tr>
+  <tr><td><b>S4</b> 点修束</td><td>F5 四件, 各带守阵(stride 迟滞电池 / y 过渡帧序断言 / 换列尾点对齐断言 / 修剪线余量断言)。</td><td>四守阵绿; 对应 S1/S2 症状复现桩转绿。</td></tr>
+  <tr><td><b>S5</b> S0 裁决收编</td><td>F6: S0 裁决为属实的嫌疑点修复(收编进 F5 或单列小批)或入池 issue; 不属实记档销案。</td><td>8 条嫌疑全部有终态(修/入池/销案)。</td></tr>
+  <tr><td><b>S6</b> 收口</td><td>全量 + e2e + 真机冒烟三判据: ①1m/5m 稳态 ≥10 分钟无双跳无折线; ②30m+ 稳态 ≥10 分钟检查点间无折线、对账时无塌直跳变; ③探针计数(同拍双判定/积压&gt;4/对账改写&gt;静默阈值)恒 0; issue 1401 场景复核。基线切片 + 计划翻 Done。</td><td>三判据全过 + 全量绿(数字走 kb.baseline); 1401 复核有结论。</td></tr>
+</table>
+
+<div class="aside">每批收尾按 code-review skill 批次判定走只读评审, 修复增量照扳机复评; 全量数字只写基线切片。S0-S6 待显式开工 —— 「继续/接着做」不构成开工授权。</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— 本计划经两轮 grilling 全部拍板(§06)。实施中若出现新决策点, 按协议追加 grilling 轮并回填本节与 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D#</th><th>问题</th><th>结论(2026-11-26, grilling 两轮)</th></tr>
+  <tr><td>D1</td><td>症状观察面</td><td>长短窗都见过 → 计划两条路径都布防(k=1 与 k&gt;1), S0 真机归窗。</td></tr>
+  <tr><td>D2</td><td>修复取向: 是否再次全量重构</td><td><span class="good">合并缝结构收口</span>(采推荐); 否决第三次全量重构、最小点修。</td></tr>
+  <tr><td>D3</td><td>INV-1 单一粒度怎么落</td><td><span class="good">前端活尾组折叠</span>(采推荐; 含后端修正帧重发 + GET 装配对齐); 否决后端按窗发组粒度、保留双粒度加过渡。</td></tr>
+  <tr><td>D4</td><td>INV-2 拍门口径</td><td><span class="good">一拍至多一格 + 拆步追平 + 积压&gt;4 格或真换窗 rewin</span>(采推荐); 否决积压一律 rewin、只改阈值 ≥2。</td></tr>
+  <tr><td>D5</td><td>「其它一些问题」清单</td><td>无具体清单 → S0 一并排查取证盘出的嫌疑点。</td></tr>
+  <tr><td>D6</td><td>建件</td><td>立任务档案 + 计划(Open)+ active-context 切片三件, 零代码改动。</td></tr>
+  <tr><td>D7</td><td>复杂度取向: 是否简化重构(2026-11-27 补拍)</td><td><span class="good">A 维持现功能、按本计划推进</span>; 否决产品级瘦身拍板轮(B)与激进 qB 式无动画形态(C); 动效/装饰层定性为已拍板的产品功能(以成熟标尺看超配, 非工程债务, 判定依据见 §08); F2 修正帧降级为按需。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>JS 活组公式与 Python 装配漂移(两套实现语义分叉)</td><td>任一侧公式改动未同步另一侧</td><td>parity fixture 电池钉同源; 规约: 公式改动必须两侧同批改、同批评审。</td></tr>
+  <tr><td>修正帧风暴(断档/大摊配改写大量点)</td><td>长停顿恢复后首轮回拉</td><td>修正帧按 scope 合并成单帧多点(载荷仍小); seq 正常递增, seq 断档重拉兜底保留。</td></tr>
+  <tr><td>拆步追平期间新数据继续到达</td><td>追平中样本持续落地</td><td>每拍判定帧重算剩余格数, 追平目标动态延展; 追平中到达的对账 GET 走既有打断续滑路径。</td></tr>
+  <tr><td>meta.stride 前端首次消费的兼容面</td><td>旧 schema 响应 / agg 段窗无 stride</td><td>无 stride 回落现行为; 修正帧仅 schema=2 流生效; 兼容分支带守阵。</td></tr>
+  <tr><td>恰 2 格从「滑两段」变「两拍各滑一段」的时延</td><td>停顿恰 2 拍</td><td>多一拍(1.5s)换连续观感, 判据写进电池; 不再回退。</td></tr>
+  <tr><td>隐藏期积压 &gt;4 格回场 rewin 跳一下</td><td>长隐藏回场</td><td>保留诚实瞬时落地(与现状一致不劣化); 若 S0 观感判定不可接受, 追加 grilling 再定。</td></tr>
+  <tr><td>S0 真机环境不可用(qB 离线)</td><td>本机无真机 qB</td><td>记 BLOCKED 改约窗口; 不用桩数据冒充真机判据; S1-S4 桩面批次可先行, S6 真机判据不豁免。</td></tr>
+</table>
+
+<h2><span class="no">§08</span>复杂度对照与简化拍板(2026-11-27)</h2>
+
+<p>实施前增加一轮整体复杂度审查(用户提问「现有设计是否过于复杂、参考成熟方案是否需要简化重构」)。结论: <b>不做简化重构, 维持现功能按本计划推进(D7)</b>; 数据面收口按 §04 不变。取证与判定留档如下。</p>
+
+<h3>复杂度库存(实测, rg 行数口径; 流量图文件在 0c2ab2ec→60a54cc2 间零变动, 数字仍现行)</h3>
+<table>
+  <tr><th>面</th><th>规模</th><th>说明</th></tr>
+  <tr><td>前端渲染(拍调度+动画+装饰)</td><td>qb_traffic_chart.js 4471 行</td><td>复杂度大头</td></tr>
+  <tr><td>后端供数(事件/装配/缓存/路由)</td><td>2010 行(5 文件)</td><td>克制</td></tr>
+  <tr><td>守卫面</td><td>11973 行(node 电池 8140 + e2e 3833: 7 spec 3732 + lib 101)</td><td>守卫:生产 ≈ 1.84:1</td></tr>
+  <tr><td>——其中动效/装饰 e2e</td><td>2368 行(占 e2e 62%)</td><td>fx-frames 1547 + fx-panel 509 + fx-anchor 312</td></tr>
+</table>
+
+<h3>成熟方案对照</h3>
+<ul>
+  <li><b>uPlot(vendor 库)官方立场</b>: 流式本身简单(「you can live-stream data with uPlot at 60fps」), 但 Non-Features 明确两条 —— 「No transitions or animations - they're always pure distractions」与「No general-purpose data parsing, aggregation, or statistical processing(聚合在库外提前做好)」。前者否定动效层的必要性; 后者恰是后端组装配的现行形态(<a href="https://github.com/leeoniya/uplot">uPlot README</a>)。</li>
+  <li><b>qBittorrent 自带速率图(语义基准)</b>: 客户端环形缓冲 + 定时重绘, 无动画、无降采样、无对账 —— 最简形态, 代价是无历史窗、无 1.5s 持久采样。26-11-15 取证轮实读记录在拍语义附件(qB speedwidget.cpp:134-139)。</li>
+  <li><b>算术约束</b>: 24h 窗 @1.5s = 57,600 原始样本 vs 前端 500 点预算 —— 服务端降采样是唯一解, qB 式客户端环在本产品需求下不可行。</li>
+</ul>
+
+<h3>逐层判定</h3>
+<table>
+  <tr><th>层</th><th>判定</th></tr>
+  <tr><td>数据供数层(后端 2010 行)</td><td><span class="good">不超配</span> —— 服务端降采样+有界载荷是约束下的必然形态, 聚合在库外符合 uPlot 官方建议。</td></tr>
+  <tr><td>双源合并缝</td><td><span class="bad">唯一真偏离</span> —— 成熟方案没有「两条粒度拼接再对账」形态; 本计划 F1-F3 即删除该偏离, 是简化不是加机制。</td></tr>
+  <tr><td>拍调度 L0/L1 + FX 装饰栈(渲染文件主体)</td><td><span class="wr">以成熟标尺超配</span> —— 但属历轮拍板的产品功能(26-11-12 起逐拍/模板保真多次 D 拍板), 2330/0227 刚按用户拍板落地; 是否裁剪是产品决定(D7: 维持), 不是工程债务。</td></tr>
+  <tr><td>守阵面 1.84:1</td><td>符合本项目生产标准; <span class="wr">8140 行单文件电池可按域拆分</span>(纯维护性, 实施轮顺带)。</td></tr>
+  <tr><td>文档/契约税</td><td>拍语义附件 6 代收口节(2 代已退役)、<code>interval_s</code> 双义 —— 低成本清理项。</td></tr>
+</table>
+
+<h3>D7 取向 A 的落地动作</h3>
+<ol>
+  <li>本计划 S0-S6 原样推进。</li>
+  <li>白捡清理(实施轮顺带, 不改行为): F2 按 D7 降级按需(§03/§04 已同步); 8140 行 node 电池按域拆文件; 拍语义附件退役节(挂钟桶面两代)压缩。</li>
+  <li>S0 探针增加复杂度使用度证据(降级轮询触发率 / rewin 频度 / 摊配改写幅度)—— 降级轮询去留、F2 是否实施由该证据裁决, 未拍板不删。</li>
+</ol>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-26-2333</span> 初版: 两路只读取证(代码直读锚 0c2ab2ec + 16 份历史文档互证)+ grilling 两轮 D1-D6 拍板后入库 Open; 三症状根因矩阵(§02)、三条合并缝不变量(§01)、六项修法(§03)、六批实施(§04); S0-S6 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-26-2339</span> 增补取证口径声明: 候选机制未经真机复现, 归窗与裁决归 S0(子代理对账轮)</li>
+  <li><span class="tag">R2 · 26-11-27-0004</span> 增补 §08 复杂度对照与简化拍板(库存实测/成熟方案对照/逐层判定)+ D7 取向 A 回填 §06 + F2 按需化同步 §03/§04 + S0 探针补复杂度使用度证据</li>
+</ul>
+
+</div>
+</body>
+</html>
