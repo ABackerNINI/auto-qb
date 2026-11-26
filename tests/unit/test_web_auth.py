@@ -11,14 +11,17 @@
 - test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
 - test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性 / *.localhost 后缀判定)
+- test_auth_default_port_host_matrix: HTTP 80 / HTTPS 443 缺省端口、Host 无端口与显式同/异端口正负矩阵(直接断言 helper 布尔值)
 - test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签(签发层回空串 + 路由层转 503)
 - test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token 查询串兜底已删除(密钥正确也不再是凭证)
+- test_sse_ticket_external_headers_matrix: skip=true + 远端下 valid/invalid 票据 × 外部 Host/本机 Host+外部 Origin × 两张 SSE/集合外路径; 无票 403、错票 401、有效票仅 SSE 消费
 - test_start_web_server_config_disables_proxy_headers: uvicorn Config 显式 proxy_headers=False(B-03, 防反代 XFF 改写 client.host 造成免鉴权误判)
 - test_start_web_server_config_raises_h11_incomplete_event_cap: uvicorn Config 显式调大 h11 未完成事件上限(组级路由请求行携带整组 key, 大组超 16KB 缺省即被传输层判非法 -> 「启动整组报错」)
 - test_oversized_request_line_reaches_app_not_transport_400: 真实 uvicorn 下 >16KB 请求行(组 key 真实形态)必须打到应用层, 不得被传输层判 "Invalid HTTP request received." 回裸 400(分片到达: 头停在未完成态且缓冲已超 16KB —— h11 判非法的确切条件, 一次性完整到达不触发)
 - test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token 通道不得回潮
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 - test_non_ascii_token_encodes_both_sides: 非 ASCII 密钥比较前双侧 UTF-8 编码 —— 匹配放行/不匹配 401(不再 TypeError 兜 500, issue 26-11-08-0827)
+- test_compare_digest_utf8_bytes_spy: ASCII/非 ASCII token 匹配与错配均恰调一次 compare_digest, 参数顺序为提交/配置 token 的 UTF-8 bytes
 ### T2a 覆盖率第三轮
 - test_sse_ticket_quota_expired_slot_is_recycled: 满额后全部过期 -> 先清过期再判满, 清理释放名额后照常签发(新票不重号)
 """
@@ -99,6 +102,41 @@ def test_non_ascii_token_encodes_both_sides(web_env):
     with pytest.raises(HTTPException) as ei:
         require_token(_req(), "Bearer ascii-wrong")
     assert ei.value.status_code == 401, "ASCII 侧不匹配照旧 401"
+
+
+@pytest.mark.parametrize(
+    ("configured_token", "submitted_token", "allowed"),
+    [
+        ("ascii-k3y", "ascii-k3y", True),
+        ("ascii-k3y", "ascii-wrong", False),
+        ("密钥-k3y", "密钥-k3y", True),
+        ("密钥-k3y", "别的密钥", False),
+    ],
+)
+def test_compare_digest_utf8_bytes_spy(web_env, monkeypatch, configured_token, submitted_token, allowed):
+    """ASCII/非 ASCII × 匹配/错配: compare_digest 恰一次, 双侧 UTF-8 bytes 且顺序固定"""
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server import auth as auth_mod
+
+    mgr, _client = web_env
+    mgr.web.token = configured_token
+    calls = []
+
+    def spy(left, right):
+        calls.append((left, right))
+        return left == right
+
+    monkeypatch.setattr(auth_mod.secrets, "compare_digest", spy)
+    require_token = auth_mod.make_require_token(mgr)
+    request = _auth_request(path="/api/status", client=("203.0.113.9", 50000))
+    if allowed:
+        assert require_token(request, f"Bearer {submitted_token}") is None
+    else:
+        with pytest.raises(HTTPException) as ei:
+            require_token(request, f"Bearer {submitted_token}")
+        assert ei.value.status_code == 401
+    assert calls == [(submitted_token.encode("utf-8"), configured_token.encode("utf-8"))]
 
 
 def test_config_public_endpoint_no_auth(web_env):
@@ -374,10 +412,38 @@ def test_auth_host_origin_parsing_helpers():
     assert _hostname_allowed("127.0.0.1", empty_allowed) and _hostname_allowed("api.localhost", empty_allowed)
 
 
-def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET"):
+def test_auth_default_port_host_matrix():
+    """HTTP/HTTPS 缺省端口、Host 无端口与显式同/异端口矩阵, 直接断言 helper True/False"""
+    from auto_qb.webui.server.auth import _allowed_hostnames, _host_header_parts, _origin_allowed
+
+    allowed = _allowed_hostnames("127.0.0.1")
+    cases = [
+        ("127.0.0.1", "http://127.0.0.1", True),
+        ("127.0.0.1", "https://127.0.0.1", True),
+        ("127.0.0.1:80", "http://127.0.0.1", True),
+        ("127.0.0.1:443", "https://127.0.0.1", True),
+        ("127.0.0.1:80", "http://127.0.0.1:80", True),
+        ("127.0.0.1:443", "https://127.0.0.1:443", True),
+        ("127.0.0.1:8080", "http://127.0.0.1:8080", True),
+        ("127.0.0.1:8080", "http://127.0.0.1:8081", False),
+        ("127.0.0.1:80", "https://127.0.0.1", False),
+        ("127.0.0.1:443", "http://127.0.0.1", False),
+    ]
+    for host, origin, expected in cases:
+        hostname, host_port = _host_header_parts(host)
+        assert hostname == "127.0.0.1"
+        assert _origin_allowed(origin, allowed, host_port) is expected, (host, origin)
+
+
+def _auth_request(
+    path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET", origin=None
+):
     """构造 require_token 直调用的 Request(绕开 TestClient 的流式端点阻塞)"""
     from starlette.requests import Request as StarletteRequest
 
+    headers = [(b"host", host.encode())]
+    if origin:
+        headers.append((b"origin", origin.encode()))
     scope = {
         "type": "http",
         "asgi": {
@@ -390,7 +456,7 @@ def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("
         "raw_path": path.encode(),
         "query_string": query.encode(),
         "root_path": "",
-        "headers": [(b"host", host.encode())],
+        "headers": headers,
         "client": client,
         "server": ("127.0.0.1", 8080),
     }
@@ -461,6 +527,49 @@ def test_sse_ticket_in_require_token_and_query_token_removed(web_env):
     with pytest.raises(HTTPException) as ei:
         require_token(_auth_request(query=f"{_LEGACY_QS_PARAM}={mgr.web.token}"), "")
     assert ei.value.status_code == 401
+
+
+def test_sse_ticket_external_headers_matrix(web_env):
+    """skip=true + 远端: 票据凭证 × 外部 Host/Origin × SSE/集合外路径的安全矩阵"""
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import make_require_token
+
+    mgr, _client = web_env
+    mgr.config.web.skip_local_verify = True
+    require_token = make_require_token(mgr)
+    remote = ("203.0.113.9", 50000)
+    header_cases = (
+        {
+            "host": "attacker.com"
+        },
+        {
+            "host": "127.0.0.1:8080",
+            "origin": "https://attacker.com"
+        },
+    )
+    paths = ("/api/events", "/api/traffic/qb/stream", "/api/state")
+    for headers in header_cases:
+        for path in paths:
+            # POST 让本机 Host + 外部 Origin 也进入写方法同源闸; 凭证裁决与路由方法无关
+            ticket = mgr.web.issue_event_ticket()
+            request = _auth_request(path=path, query=f"ticket={ticket}", client=remote, method="POST", **headers)
+            if path == "/api/state":
+                with pytest.raises(HTTPException) as ei:
+                    require_token(request, "")
+                assert ei.value.status_code == 401
+                assert mgr.web.consume_event_ticket(ticket) is True, "集合外路径不得消费有效票据"
+            else:
+                assert require_token(request, "") is None
+                assert mgr.web.consume_event_ticket(ticket) is False, "SSE 有效票据必须已消费"
+            with pytest.raises(HTTPException) as ei:
+                require_token(
+                    _auth_request(path=path, query="ticket=invalid", client=remote, method="POST", **headers), ""
+                )
+            assert ei.value.status_code == 401, "无效票据也是凭证, 不得落入无凭证跨站闸 403"
+            with pytest.raises(HTTPException) as ei:
+                require_token(_auth_request(path=path, client=remote, method="POST", **headers), "")
+            assert ei.value.status_code == 403
 
 
 def test_start_web_server_config_disables_proxy_headers(web_env, monkeypatch):

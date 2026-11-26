@@ -375,3 +375,9 @@ Stage 1 子代理自身不提交；各步评审后的本地提交由主会话执
 - **后续撞车切换条件**: 任一后续批次开跑前若检出同 target 的活跃 `mutmut run`/`mutants.py` 进程、`only_mutate` 被改成别的目标，或默认仓出现别的 target 的 `mutants/*.meta`，立即停用默认仓；按当次 `kb.time` stamp 建立 `/root/auto-qb-tests/mutation/webui-server-auth-<stamp>` 专用镜像、children 降为 2，重新 setup/同步两池，并让该同一路径贯穿后续 S1–S6、verify 与复跑 report。本批未触发切换。
 - **本批结果**: 仅回写计划、常驻锚与本任务档案；未跑任何变异，未改 `src/`/`tests/`，未碰生产配置或运行数据，工作树保持已改未提交。
 - **Review 记录**: Stage 1 三轮评审累计 6 送检/4 过检/2 REFUTE；3 条 major 已修，verify workers 遗漏自主修正；收口复评 1 条引文过检但事实不成立（commit.py:432/587 明确支持 --no-push），零 actionable。
+- **B2 实施**: 仅改 `tests/unit/test_web_auth.py`，新增 `test_auth_default_port_host_matrix`、`test_sse_ticket_external_headers_matrix`、`test_compare_digest_utf8_bytes_spy`，同步头部测试计划清单；`src/`、第二池文件、deselect 表、生产配置与运行数据均未改。格式化、两文件定向池与快速基线均通过，实测数字留最终切片（见 `kb.baseline`）。
+- **B2 Review**: 本地分支态探针 ref 不存在，跳过 sync；首轮 `ship.gate` 全绿后 `review.pack` 取锚 `d575c47e7e49`、114 行、基哈希 `88fd6d11cf3f`。按正确性/安全/测试缺口三分面串行评审，共 3 次派遣、1 条 major 送检且引文过检：`test_auth_default_port_host_matrix` 把 Host 无端口时任意显式 Origin 端口放行固化为安全期望。处置为只删该参数行，保留 Host 无端口默认端口正例及显式端口同/异、跨 scheme 负例，不越权改生产逻辑；定向池复绿。修复触发第二轮 `ship.gate`（全绿）与 `review.pack`，终态 113 行、基哈希 `a0998f703024`，增量复评零发现。累计 1 送检/1 过检、修 1、入池 0、零 actionable；未新建 issue、未改源码。
+
+- 2026-11-27 06:56 B2 补齐 Web 鉴权三类安全矩阵，定向池与快速基线通过；三分面评审 1 条过检但属既有生产设计，本批零 actionable，随本批本地入库
+
+- 2026-11-27 07:05 B2 终态：删除 Host 无端口时任意显式 Origin 端口放行的可疑正例；定向池复绿，两轮闸门全绿，增量复评零发现，113 行基哈希 a0998f703024，随本批本地入库
