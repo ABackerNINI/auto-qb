@@ -99,12 +99,13 @@ _SPEC.loader.exec_module(mod)
 
 
 def _load_script(name: str):
-    """scripts/ 不是包, 按路径加载(与 test_qb_capture.py 同款做法); 经 sys.modules 去重,
+    """scripts/ 与 tools/sim/ 都不是包, 按路径加载(与 test_qb_capture.py 同款做法); 经 sys.modules 去重,
     同一 pytest 进程里其它测试文件先加载过的模块直接复用, 不重复执行模块体。"""
     cached = sys.modules.get(name)
     if cached is not None:
         return cached
-    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    base = ROOT / ("tools/sim" if name == "qb_capture" else "scripts")
+    spec = importlib.util.spec_from_file_location(name, base / f"{name}.py")
     m = importlib.util.module_from_spec(spec)
     sys.modules[name] = m
     spec.loader.exec_module(m)

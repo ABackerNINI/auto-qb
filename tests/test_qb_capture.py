@@ -1,4 +1,4 @@
-"""test_qb_capture 测试计划: 真机语料抓取器(scripts/qb_capture.py)
+"""test_qb_capture 测试计划: 真机语料抓取器(tools/sim/qb_capture.py)
 
 范围: 语料计划 26-09-21-0024 的 W1/W2 —— 脱敏(形态守恒/单射)与等价类守恒(头号验收)。
 不连 qB、不碰网络、不写仓库外文件: 全部用合成输入直接打函数。
@@ -41,8 +41,8 @@ sys.path.insert(0, str(_REPO / "src"))
 
 
 def _load_capture():
-    """scripts/ 不是包, 按路径加载(与 sim_qb 等脚本一致的做法)"""
-    spec = importlib.util.spec_from_file_location("qb_capture", _REPO / "scripts" / "qb_capture.py")
+    """tools/sim/ 不是包, 按路径加载(与 sim_qb 等脚本一致的做法)"""
+    spec = importlib.util.spec_from_file_location("qb_capture", _REPO / "tools" / "sim" / "qb_capture.py")
     mod = importlib.util.module_from_spec(spec)
     sys.modules["qb_capture"] = mod
     spec.loader.exec_module(mod)
@@ -443,7 +443,7 @@ def test_write_corpus_end_to_end_minimal(tmp_path):
     c.trackers_map = {_FAKE_HASH: [{"url": "https://tracker.example.com/announce"}]}
     c.disk_map = {_FAKE_HASH: {"ShowA/a.mkv": {"exists": True, "size": 100}}}
 
-    # run_full 收尾序列(scripts/qb_capture.py run_full 尾部): raw 快照 -> 脱敏 -> 终态重取
+    # run_full 收尾序列(tools/sim/qb_capture.py run_full 尾部): raw 快照 -> 脱敏 -> 终态重取
     c.acc_torrents = c._final_torrents()
     c._raw_torrents = {h: dict(v) for h, v in c.acc_torrents.items()}
     c._raw_files = {h: [dict(f) for f in v] for h, v in c.files_map.items()}
@@ -469,7 +469,7 @@ def test_write_corpus_end_to_end_minimal(tmp_path):
         for t in f.get("tags") or []:
             assert t not in ("MISSING", "SiteA", "zSkipChecked"), f"流内标签必须已伪名化: {t!r}"
     # fs_delta 也必须脱敏: 真 hash / 真文件名不得以明文进 .gz
-    # !no_credentials 跳过 .gz(scripts/qb_capture.py 的凭据扫描), 这条断言是它唯一的补位
+    # !no_credentials 跳过 .gz(tools/sim/qb_capture.py 的凭据扫描), 这条断言是它唯一的补位
     assert _FAKE_HASH not in raw_txt and "ShowA" not in raw_txt, "真 hash / 真文件名漏进 sync-stream.jsonl.gz"
     ph = san.infohash(_FAKE_HASH)
     assert set(frames[1]["fs_delta"]) == {ph}

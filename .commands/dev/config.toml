@@ -10,7 +10,7 @@ when    = "连真机 qBittorrent，关掉自动任务只开 WEB UI"
 note    = "前台长跑，Ctrl-C 停；常用 --qb-port / --web-port / --no-open（--help 看全量）。--web-port 默认 0 = 由脚本取号, 启动行打印实绑地址; 需要固定 origin(如测 localStorage)时才显式传具体口"
 
 [tasks."dev.sim"]
-run     = ["uv run python scripts/sim_qb.py <args>"]
+run     = ["uv run python tools/sim/sim_qb.py <args>"]
 timeout = 3600
 when    = "起假 qBittorrent WebUI 客户端做仿真（--self-test 自检）"
 note    = "同样前台长跑；参数很多，先 --help"

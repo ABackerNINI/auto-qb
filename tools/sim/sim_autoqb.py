@@ -13,7 +13,7 @@
     graceful_stop() 就能让 auto-qb 走完 `except KeyboardInterrupt -> finally -> 状态落盘`。
 
 用法(与 `python -m auto_qb <config>` 等价, 只是多了信号处理 + 可选的 FS mock):
-    python scripts/sim_autoqb.py <config.yml> [--dry-run]
+    python tools/sim/sim_autoqb.py <config.yml> [--dry-run]
 
 FS mock 注入(语料回放, 计划 §07):
     通过**环境变量**开关, 不占 argv —— auto_qb 自己的参数解析不能被动到:

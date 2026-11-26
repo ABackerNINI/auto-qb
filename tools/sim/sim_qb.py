@@ -5,8 +5,8 @@
 进程内替身上根本测不到(实测: 增量 3.3 ms vs 全量 205 ms, 差 62 倍)。
 
 用法:
-    python scripts/sim_qb.py --n 5000 --beat 1.5 --active 0.10      # 起服务(前台)
-    python scripts/sim_qb.py --n 50 --duration 20 --self-test       # 自检(含真机往返实测)
+    python tools/sim/sim_qb.py --n 5000 --beat 1.5 --active 0.10      # 起服务(前台)
+    python tools/sim/sim_qb.py --n 50 --duration 20 --self-test       # 自检(含真机往返实测)
 
 产物全部落在 `--root` 指定的工作根下(默认 R:\\auto-qb-sim), 按运行 ID 分目录:
     <root>/runs/<时间戳-场景ID>/{fs,config.yml,data,trace.jsonl,writes.jsonl,

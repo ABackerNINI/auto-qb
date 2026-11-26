@@ -18,7 +18,7 @@ GroupingMixin(387 行)整体迁入, 经四个刷新相位被内核广播(plan §
 !打标经 ctx.maintenance.add_tags(模块句柄经 ctx 取, 不 import 兄弟模块): MISSING 标签
   的添加/去重/日志语义单点在 maintenance 模块。
 
-group_key_of 纯函数随迁(scripts/qb_capture.py 语料抓取器 import 同一份公式, 单一事实源)。
+group_key_of 纯函数随迁(tools/sim/qb_capture.py 语料抓取器 import 同一份公式, 单一事实源)。
 """
 import logging
 import os
@@ -49,7 +49,7 @@ TRANSITIONAL_SKIP_LIMIT = 3
 def group_key_of(save_path: str, file_map: Mapping[str, int]) -> Tuple[str, Tuple[str, ...]]:
     """归组 key 的单一事实源: (规范化 save_path, 排序后的文件相对路径元组)
 
-    与 _assign_to_group 共用。抽成模块级纯函数是为了让 scripts/ 侧的语料抓取器
+    与 _assign_to_group 共用。抽成模块级纯函数是为了让 tools/sim/ 侧的语料抓取器
     (真值分组 / 等价类守恒校验) import 同一份公式, 避免复制副本与 :150 悄悄分叉 ——
     否则 CORPUS.group_exact 会拿"错误的期望"判"正确的实现"(稳定假红或假绿)。
     纯函数, 无状态, 不读 self; 行为与抽取前完全一致。

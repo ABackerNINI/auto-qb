@@ -16,7 +16,7 @@
 ## 1. 一句话心智模型
 
 ```
-scripts/sim_run.py  ──起──>  scripts/sim_qb.py（假 qB，回环随机端口）──造数层──> 合成档 | 语料回放
+tools/sim/sim_run.py  ──起──>  tools/sim/sim_qb.py（假 qB，回环随机端口）──造数层──> 合成档 | 语料回放
                     ──拉起─>  python -m auto_qb <本次生成的 config.yml>（真进程，经 sim_autoqb.py 包装）
                     ──收尾─>  统计层 summary.json/txt  +  完整层四路流水
 ```
@@ -47,18 +47,18 @@ scripts/sim_run.py  ──起──>  scripts/sim_qb.py（假 qB，回环随机�
 
 | 脚本 | 作用 |
 |---|---|
-| `scripts/sim_qb.py` | 仿真服务端。可独立运行供人工观察（`--self-test` 跑 8 项自检） |
-| `scripts/sim_run.py` | **驱动器**：建树 → 生成配置 → 起服务 → 拉起 auto-qb → 注入场景 → 出两层日志 → 判 verdict |
-| `scripts/sim_autoqb.py` | auto-qb 子进程启动包装（装 SIGBREAK 处理器）。**必须经它启动**，否则拿不到 `state.json` |
-| `scripts/sim_baseline.py` | 一键跑 P1–P7 并固化阈值到 `plans/…baseline.json`；语料档用 `--corpus <dir>`（写 `corpus.*`） |
-| `scripts/qb_capture.py` | **语料抓取器**（连真机 qB，只读）。`capture` 抓语料 / `self-test` 离线自检（不连 qB） |
-| `scripts/sim_fsmock.py` | **进程内 FS mock**：拦 `os.path.exists` / `getsize` / `shutil.disk_usage`，让语料档回放**不物化任何文件**（7.2） |
+| `tools/sim/sim_qb.py` | 仿真服务端。可独立运行供人工观察（`--self-test` 跑 8 项自检） |
+| `tools/sim/sim_run.py` | **驱动器**：建树 → 生成配置 → 起服务 → 拉起 auto-qb → 注入场景 → 出两层日志 → 判 verdict |
+| `tools/sim/sim_autoqb.py` | auto-qb 子进程启动包装（装 SIGBREAK 处理器）。**必须经它启动**，否则拿不到 `state.json` |
+| `tools/sim/sim_baseline.py` | 一键跑 P1–P7 并固化阈值到 `plans/…baseline.json`；语料档用 `--corpus <dir>`（写 `corpus.*`） |
+| `tools/sim/qb_capture.py` | **语料抓取器**（连真机 qB，只读）。`capture` 抓语料 / `self-test` 离线自检（不连 qB） |
+| `tools/sim/sim_fsmock.py` | **进程内 FS mock**：拦 `os.path.exists` / `getsize` / `shutil.disk_usage`，让语料档回放**不物化任何文件**（7.2） |
 
 ### 3.2 最小示例
 
 ```bash
 # 500 种子跑 40 秒，开 WEB 观测通道（强烈建议常开，见 4.4）
-uv run python scripts/sim_run.py --scenario SMOKE --n 500 --duration 40 --web-port 18100
+uv run python tools/sim/sim_run.py --scenario SMOKE --n 500 --duration 40 --web-port 18100
 ```
 
 结束后打印 verdict + checks，并给出产物目录。**退出码 0 = OK，1 = FAIL**（WARN 目前不会产生）。
@@ -68,33 +68,33 @@ uv run python scripts/sim_run.py --scenario SMOKE --n 500 --duration 40 --web-po
 ```bash
 # ---- 安全 ----
 # S1 dry-run 零写
-uv run python scripts/sim_run.py --scenario S1 --n 300 --duration 30 --dry-run --web-port 18101
+uv run python tools/sim/sim_run.py --scenario S1 --n 300 --duration 30 --dry-run --web-port 18101
 # S5 断连降级（当前 FAIL = 已知缺陷 BUG-01）
-uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
+uv run python tools/sim/sim_run.py --scenario S5 --n 300 --duration 45 \
     --abort-after 12 --abort-duration 10 --web-port 18111
 # S6/S7/S8 一次跑齐（数据面只读 + WEB 并发只读 + 限速保护）
-uv run python scripts/sim_run.py --scenario S6S7S8 --n 300 --duration 36 \
+uv run python tools/sim/sim_run.py --scenario S6S7S8 --n 300 --duration 36 \
     --web-port 18120 --web-poll 4
 
 # ---- 破坏性 ----
 # D1 外部删种子（不带文件）     D2 带文件
-uv run python scripts/sim_run.py --scenario D1 --n 300 --duration 30 --delete-torrents 3:20:no  --web-port 18201
-uv run python scripts/sim_run.py --scenario D2 --n 300 --duration 30 --delete-torrents 3:20:yes --web-port 18202
+uv run python tools/sim/sim_run.py --scenario D1 --n 300 --duration 30 --delete-torrents 3:20:no  --web-port 18201
+uv run python tools/sim/sim_run.py --scenario D2 --n 300 --duration 30 --delete-torrents 3:20:yes --web-port 18202
 # D3 auto-qb 主动删除（经其自带 WEB UI 投递命令）
-uv run python scripts/sim_run.py --scenario D3 --n 300 --duration 40 --web-delete 4 --web-port 18203
+uv run python tools/sim/sim_run.py --scenario D3 --n 300 --duration 40 --web-delete 4 --web-port 18203
 # D4 外部删文件 → 缺文件保护（头号场景）
-uv run python scripts/sim_run.py --scenario D4 --n 500 --duration 40 --delete-files 5:0 --web-port 18204
+uv run python tools/sim/sim_run.py --scenario D4 --n 500 --duration 40 --delete-files 5:0 --web-port 18204
 # D5 批量删除 + 重复投递 / 两相幂等
-uv run python scripts/sim_run.py --scenario D5 --n 1000 --duration 48 \
+uv run python tools/sim/sim_run.py --scenario D5 --n 1000 --duration 48 \
     --delete-torrents 3:500:no --redeliver-removed 6 --web-port 18205
-uv run python scripts/sim_run.py --scenario D5 --n 200 --duration 60 --interval 15 \
+uv run python tools/sim/sim_run.py --scenario D5 --n 200 --duration 60 --interval 15 \
     --two-phase --with-rules --web-port 18206
 
 # ---- 性能 / 基线 ----
-uv run python scripts/sim_baseline.py                     # 全量 P1–P7（约 8 分钟）
-uv run python scripts/sim_baseline.py --only P1,P3 --merge # 只跑部分并合并进已有基线
-uv run python scripts/sim_baseline.py --dry                # 只打印将执行的命令
-uv run python scripts/sim_baseline.py --corpus <语料目录> --merge   # 语料档阈值（写 corpus.*，见 7.4）
+uv run python tools/sim/sim_baseline.py                     # 全量 P1–P7（约 8 分钟）
+uv run python tools/sim/sim_baseline.py --only P1,P3 --merge # 只跑部分并合并进已有基线
+uv run python tools/sim/sim_baseline.py --dry                # 只打印将执行的命令
+uv run python tools/sim/sim_baseline.py --corpus <语料目录> --merge   # 语料档阈值（写 corpus.*，见 7.4）
 ```
 
 > ⚠ `--source=corpus:<dir>` 时上面「安全 / 破坏性」那些**场景注入参数不生效**
@@ -255,7 +255,7 @@ for l in open(r'R:\auto-qb-sim\runs\<run>\writes.jsonl',encoding='utf-8'):
 每次运行的 `config.yml` 都留在产物目录里，可直接：
 
 ```bash
-uv run python scripts/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
+uv run python tools/sim/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
 ```
 
 注意产物只保留最近 `--keep-last`（默认 10）次 —— **要留证据先加大这个值或把目录拷走**。
@@ -287,7 +287,7 @@ uv run python scripts/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
 3. **溯** —— 有 FAIL 才翻完整层：按 5.1 用 `sim-events.jsonl` 当时间锚点，按 5.2 选剧本。
 4. **改** —— 只改 `scripts/` 或造数逻辑；改完**重跑同一条命令**确认 verdict 翻转。
 5. **记** —— 新坑写进 `memory-bank/pitfalls.md`；新缺陷/待办写进 `TODO.md`；
-   阈值变化跑 `scripts/sim_baseline.py --merge` 重新固化（**语料档另跑 `--corpus <dir>`**，两套不混用）。
+   阈值变化跑 `tools/sim/sim_baseline.py --merge` 重新固化（**语料档另跑 `--corpus <dir>`**，两套不混用）。
 
 **语料档额外一步**：跑完先看 `CORPUS.group_exact` 是不是 0 —— 它是**头号判据**，比其余判据更值得先确认。
 它绿了才说明"抓取 → 脱敏 → 回放 → auto-qb 自己归组"整条链路是忠实的。
@@ -307,10 +307,10 @@ uv run python scripts/sim_autoqb.py "R:\auto-qb-sim\runs\<run>\config.yml"
 ### 7.1 抓一份语料
 
 ```bash
-uv run python scripts/qb_capture.py capture --from-config config.yml \
+uv run python tools/sim/qb_capture.py capture --from-config config.yml \
     --out auto-qb-data/corpus/<日期-标签> --profile normal --minutes 10 \
     --full-every 600 --probe-fs on                      # 首次真机跑建议 --sample 200 --probe-fs off
-uv run python scripts/qb_capture.py self-test --out <语料目录>   # 离线自检(不连 qB)
+uv run python tools/sim/qb_capture.py self-test --out <语料目录>   # 离线自检(不连 qB)
 ```
 
 语料 = 一条原始流（首帧即 T0 / 末帧必是一份全量）+ 流里没有的按 hash 元数据（`files/trackers`）+ 真值分组（`groups.json`）。
@@ -320,11 +320,11 @@ uv run python scripts/qb_capture.py self-test --out <语料目录>   # 离线自
 
 ```bash
 # 静态回放(不推进游标, 与 T0 同构 —— 分组比对最干净):  --replay-speed 0
-uv run python scripts/sim_run.py --scenario C1 --source=corpus:<语料目录> \
+uv run python tools/sim/sim_run.py --scenario C1 --source=corpus:<语料目录> \
     --replay-speed 0 --web-port 8099 --duration 25
 
 # 时间轴回放(按录制时间轴推进, 3 倍速)
-uv run python scripts/sim_run.py --scenario C2 --source=corpus:<语料目录> \
+uv run python tools/sim/sim_run.py --scenario C2 --source=corpus:<语料目录> \
     --replay-speed 3 --web-port 8098 --duration 25
 ```
 
@@ -352,7 +352,7 @@ uv run python scripts/sim_run.py --scenario C2 --source=corpus:<语料目录> \
 `sim_run` 在语料档**只查 `corpus.` 前缀，不回落到裸 id**（合成阈值拿去判语料会同时产生假红与假绿）。
 
 ```bash
-uv run python scripts/sim_baseline.py --corpus <语料目录> --merge   # 固化语料档阈值
+uv run python tools/sim/sim_baseline.py --corpus <语料目录> --merge   # 固化语料档阈值
 # 首次固化会把既有合成档基线另存为 …synthetic.json
 ```
 

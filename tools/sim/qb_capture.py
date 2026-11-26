@@ -21,12 +21,12 @@
       绝不写入 meta.json / 语料 / warnings.jsonl (计划 §05 字段分档 / §10 风险表)。
 
 用法示例:
-  uv run python scripts/qb_capture.py capture --from-config config.yml \
+  uv run python tools/sim/qb_capture.py capture --from-config config.yml \
       --out auto-qb-data/corpus/2026-09-21-a --profile normal --minutes 10
-  uv run python scripts/qb_capture.py capture --host 127.0.0.1 --port 16585 \
+  uv run python tools/sim/qb_capture.py capture --host 127.0.0.1 --port 16585 \
       --user u --pass p --out <dir> --profile perf --interval-ms 100 --minutes 20 \
       --full-every 600 --qps 20 --sanitize strict
-  uv run python scripts/qb_capture.py self-test --out <dir>
+  uv run python tools/sim/qb_capture.py self-test --out <dir>
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ from pathlib import Path
 import requests
 
 # ---- 仓库内导入 (src/ 归组纯函数是唯一被本计划放行的 src/ 改动, 见 §04 第 5 步) ----
-_REPO = Path(__file__).resolve().parent.parent
+_REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 from auto_qb.core.modules.grouping_mod import group_key_of  # noqa: E402
 from auto_qb.infra import utils  # noqa: E402
@@ -659,7 +659,7 @@ class Capture:
         (self.out / ".gitignore").write_text("*\n!.gitignore\n!README.md\n", encoding="utf-8")
         (self.out / "README.md").write_text(
             "# 真机语料目录 —— 请勿提交\n\n"
-            "本目录由 `scripts/qb_capture.py` 生成, 含真实 PT 资源清单的**脱敏副本**。\n"
+            "本目录由 `tools/sim/qb_capture.py` 生成, 含真实 PT 资源清单的**脱敏副本**。\n"
             "盐未落盘, 故本目录内容无法与任何真实资源关联; 但仍**严禁** `git add` / 提交 / 外传。\n"
             "已随目录附带 `.gitignore`(`*` 全忽略), 请勿删除。\n\n"
             "存放位置应为已 gitignore 的目录(如 `auto-qb-data/corpus/`), 且**至少再拷一份**到另一块盘"

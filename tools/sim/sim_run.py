@@ -7,9 +7,9 @@
       autoqb.log                   完整层(auto-qb 子进程输出全文)
 
 用法:
-    python scripts/sim_run.py --scenario P3 --n 5000 --duration 60
-    python scripts/sim_run.py --scenario S1 --n 500 --duration 20 --dry-run
-    python scripts/sim_run.py --scenario D4 --n 500 --duration 40 --delete-files 5:0
+    python tools/sim/sim_run.py --scenario P3 --n 5000 --duration 60
+    python tools/sim/sim_run.py --scenario S1 --n 500 --duration 20 --dry-run
+    python tools/sim/sim_run.py --scenario D4 --n 500 --duration 40 --delete-files 5:0
 
 统计层设计要点(见计划第 07 节): 每项 check 自带 `值 + op + 阈值 + result`;
 阈值未固化时记 BASELINE 而非 FAIL(否则首次跑满屏红, 反而掩盖真问题);
@@ -36,7 +36,7 @@ BASELINE = "BASELINE"
 
 # W4 固化后的阈值表: sim_baseline.py 生成, 键 = check id。文件不存在则全记 BASELINE。
 BASELINE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memory-bank", "plans",
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "memory-bank", "plans",
     "26-09-19-1433-sim-client-5000.baseline.json"
 )
 

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import requests
 
-_REPO = Path(__file__).resolve().parent.parent
+_REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 from auto_qb.core.modules.grouping_mod import group_key_of  # noqa: E402
 from auto_qb.infra import utils  # noqa: E402

@@ -1,4 +1,4 @@
-"""test_sim_corpus 测试计划: 语料回放(scripts/sim_fsmock.py · scripts/sim_qb.py 的语料侧)
+"""test_sim_corpus 测试计划: 语料回放(tools/sim/sim_fsmock.py · tools/sim/sim_qb.py 的语料侧)
 
 范围: 语料计划 26-09-21-0024 的 W3 —— FS mock / 窗口合并语义 / piece hash 派生 / 语料加载与配置派生。
 不连 qB、不起服务、不写仓库外文件。
@@ -61,13 +61,13 @@ import pytest
 
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO / "src"))
-sys.path.insert(0, str(_REPO / "scripts"))
+sys.path.insert(0, str(_REPO / "tools" / "sim"))
 
 import sim_qb_core  # noqa: E402  (R3: 边界判定实现所在模块, monkeypatch 目标随拆分同步)
 
 
 def _load(name: str):
-    spec = importlib.util.spec_from_file_location(name, _REPO / "scripts" / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(name, _REPO / "tools" / "sim" / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
@@ -220,7 +220,7 @@ def test_sim_is_within_red_on_fold_without_sep(monkeypatch):
 def test_safe_delete_rejects_path_outside_fs_root(tmp_path):
     """B2 逃逸: `safe_delete_files` 对落在 fs_root 之外的目标必须拒绝(从 `--self-test` 下沉, 进 CI)
 
-    !为什么要下沉: 这一段原本只在 `python scripts/sim_qb.py --self-test` 里跑 —— 要真起 HTTP 服务
+    !为什么要下沉: 这一段原本只在 `python tools/sim/sim_qb.py --self-test` 里跑 —— 要真起 HTTP 服务
     **且**真装 qbittorrentapi(没装就整段 `return 0` 跳过), **CI 从不执行** ⇒ 平台语义回归抓不到
     (pitfalls「Windows 全绿 / Linux 全红」!5. 的根因就是这个盲区)。这里改成直接打方法, 不起服务。
     比原自检多钉两条: 1. 拒绝时**文件没被真删**(别把"拒了"做成"删了") 2. **记进 violations**

@@ -8,9 +8,9 @@
 固化后同一批指标就成了硬判据, 回归时能真正变红。
 
 用法:
-    uv run python scripts/sim_baseline.py                 # 全量(约 6-8 分钟)
-    uv run python scripts/sim_baseline.py --only P1,P3    # 只跑部分
-    uv run python scripts/sim_baseline.py --dry           # 只打印将执行的命令
+    uv run python tools/sim/sim_baseline.py                 # 全量(约 6-8 分钟)
+    uv run python tools/sim/sim_baseline.py --only P1,P3    # 只跑部分
+    uv run python tools/sim/sim_baseline.py --dry           # 只打印将执行的命令
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
+REPO = os.path.dirname(os.path.dirname(HERE))
 BASELINE_PATH = os.path.join(REPO, "memory-bank", "plans", "26-09-19-1433-sim-client-5000.baseline.json")
 
 # 场景 -> (sim_run 参数, 采集哪些指标, 阈值余量系数)
@@ -308,7 +308,7 @@ def main(argv=None) -> int:
                 "说明": "仿真测试性能基线(W4 固化)。thresholds 由实测值x余量系数推出, "
                       "sim_run.py 启动时读取; 不存在时统计层对应项记 BASELINE(不算 FAIL)。",
                 "生成时间": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "生成命令": "uv run python scripts/sim_baseline.py",
+                "生成命令": "uv run python tools/sim/sim_baseline.py",
                 "机器": "Windows 本机 / R 盘 / 回环 HTTP",
             },
         "thresholds": thresholds,
