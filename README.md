@@ -115,7 +115,7 @@ commands run env.sync    # 一次装齐全部依赖(含托盘 / Web UI / 测试)
 
 ### 2. 配置
 
-**推荐用 Web UI 图形化配置**:`minimal.yml` 已默认开启 Web UI,开箱只需要填好 qBittorrent 连接信息,其余全部在浏览器里点选完成:
+**推荐用 Web UI 图形化配置**:`examples/minimal.yml` 已默认开启 Web UI,开箱只需要填好 qBittorrent 连接信息,其余全部在浏览器里点选完成:
 
 ```yaml
 config:
@@ -124,7 +124,7 @@ config:
         port: 8080
         username: <USERNAME>
         password: (你的 qB 口令)
-    web:                  # 本程序 Web UI(minimal.yml 已默认开启)
+    web:                  # 本程序 Web UI(examples/minimal.yml 已默认开启)
         enabled: true
         port: 8080        # 与 qB WebUI 同端口时请改开一个
         token: (留空)     # 访问密钥; 留空 = 首次启动随机生成
@@ -138,19 +138,19 @@ config:
 >
 > ⚠️ **安全提示**:默认只监听 `127.0.0.1`(仅本机可访问)。改为 `0.0.0.0` 等对外地址会把**可删除种子、可改配置**的管理界面暴露到网络,请务必配合防火墙 / 反向代理 / 额外鉴权使用。
 
-偏好直接编辑 YAML 时,也可以根据**已有种子的 tracker 自动导出配置模板**(先在 `minimal.yml` 填好连接信息):
+偏好直接编辑 YAML 时,也可以根据**已有种子的 tracker 自动导出配置模板**(先在 `examples/minimal.yml` 填好连接信息):
 
 ```bash
-# 读取 minimal.yml 的连接信息, 把生成的模板写入 config.yml
+# 读取 examples/minimal.yml 的连接信息, 把生成的模板写入 config.yml
 # ⚠️ 注意: 该命令会写入(覆盖)指定的输出文件
-uv run auto-qb minimal.yml --export-yaml config.yml
+uv run auto-qb examples/minimal.yml --export-yaml config.yml
 
 # 加 --only-missing 只导出尚未配置的 tracker, 生成最小骨架(同样会覆盖输出文件)
-uv run auto-qb minimal.yml --export-yaml config.yml --only-missing
+uv run auto-qb examples/minimal.yml --export-yaml config.yml --only-missing
 
 # 缺失站点默认按种子共现合并: 同一颗种子上出现的多个缺失域名并为一个站点;
 # 加 --split-trackers 拆回逐域名条目(需配合 --export-yaml, 两种导出模式均生效)
-uv run auto-qb minimal.yml --export-yaml config.yml --only-missing --split-trackers
+uv run auto-qb examples/minimal.yml --export-yaml config.yml --only-missing --split-trackers
 ```
 
 > 全部配置项的字段说明与完整示例见[配置参考](docs/configuration.md);直接编辑 YAML 后需重启程序生效。

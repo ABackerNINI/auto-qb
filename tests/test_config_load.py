@@ -14,7 +14,7 @@
 - test_load_tracker_groups: groups 解析回填 TrackerConfig, 未配置默认空列表
 - test_config_schema_version_load_and_migrate_dispatch: schema_version 缺失=v1 加载成功; 非法/未来版本经迁移分派报 ConfigError(报清两个版本号)
 - test_load_web_ctx_menu_passthrough: web.ctx_menu 原样 dict 透传(合法形状回读逐位相等; 缺省 None = 默认布局)
-- test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
+- test_example_minimal_yml_passes_fail_fast: examples/minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
 - test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
 - test_loader_defaults_tracker_config_keys_absent: load_tracker_config 键全缺省 -> TrackerConfig 字段默认(而非 None)
 - test_loader_defaults_tracker_hr_output_chain: load_tracker_hr 输出键全缺省 -> HRRule 字段默认(回退链末段)
@@ -285,10 +285,10 @@ def test_load_tracker_groups():
 
 
 def test_example_minimal_yml_passes_fail_fast():
-    """minimal.yml 必须过 fail-fast 校验(README 快速开始的入口配置)。
+    """examples/minimal.yml 必须过 fail-fast 校验(README 快速开始的入口配置)。
     曾因 add_episode_tags 旧布尔形态漂移: 校验红是小事, 真坑是 enabled 默认 false 被静默解析成关。
     除"能加载"外钉住 README 承诺的开箱语义: Web UI 默认开启 + 集数标签默认开启。"""
-    config = load_config(str(ROOT / "minimal.yml"))
+    config = load_config(str(ROOT / "examples" / "minimal.yml"))
     assert config.web.enabled is True
     assert config.add_episode_tags.enabled is True
 

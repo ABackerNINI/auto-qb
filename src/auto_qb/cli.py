@@ -215,7 +215,7 @@ def main():
         parser.error("--export-yaml 的输出路径与配置文件相同: 导出会按模板格式重排重写该文件"
                      "(注释丢失/键序重排), 请指定其它输出路径")
     if args.export_yaml and _is_same_path(args.export_yaml, DEFAULT_CONFIG_FILE):
-        # R1#9 第二守卫: --config 指向其它文件(如 minimal.yml)时, 输出仍可能命中默认生产
+        # R1#9 第二守卫: --config 指向其它文件(如 examples/minimal.yml)时, 输出仍可能命中默认生产
         # 配置路径, 同样会被 yaml.dump 重排重写, 拒绝导出(原因与第一守卫一致)
         parser.error(f"--export-yaml 的输出路径与默认配置文件 {DEFAULT_CONFIG_FILE} 相同: "
                      "导出会按模板格式重排重写该文件(注释丢失/键序重排), 请指定其它输出路径")

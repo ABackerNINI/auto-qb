@@ -62,7 +62,7 @@ docker exec auto-qb cat /data/web.token
 
 ## 4. 配置详解(容器场景)
 
-示例配置 `docker/config.example.yml` 以 `minimal.yml` 为底, 按容器场景改了**五处**, **这五处不要改回去**:
+示例配置 `docker/config.example.yml` 以 `examples/minimal.yml` 为底, 按容器场景改了**五处**, **这五处不要改回去**:
 
 | 键 | 容器值 | 为什么 |
 |---|---|---|

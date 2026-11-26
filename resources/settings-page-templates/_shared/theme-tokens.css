@@ -415,7 +415,7 @@
 
 /* ---- 主题: orbit ---- */
 /* auto-qb 新版 WEB UI · 主题: 品牌轨道 (暗色 · 品牌定制)
- * 从品牌标识(favicon / assets/icons: orbit 轨道弧 + 绿色种子点)提炼: 墨绿底 + 种子绿 accent。
+ * 从品牌标识(favicon / resources/icons: orbit 轨道弧 + 绿色种子点)提炼: 墨绿底 + 种子绿 accent。
  * 同时验证自定义主题通道 —— 新增主题 = 复制本文件改色 + theme.js 注册表加一行。
  * 分层绿(多层表面而非单一大 accent 面)避免"深底单酸绿"的模板感。
  */

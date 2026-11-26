@@ -1,5 +1,5 @@
 ---
-# 容器化示例配置 (plan 26-09-25-2241 · D3): 以 minimal.yml 为底, 按容器场景改了五处
+# 容器化示例配置 (plan 26-09-25-2241 · D3): 以 examples/minimal.yml 为底, 按容器场景改了五处
 #   1. data_dir: /data —— 对齐 compose.yaml 的 named volume
 #   2. qbittorrent.host: host.docker.internal —— qB 跑宿主机时容器内的访问入口(D4 案 1; Linux 宿主由 compose extra_hosts 补)
 #   3. web.host: "0.0.0.0" —— 容器里 127.0.0.1 等于自断访问(端口映射探不到)

@@ -81,7 +81,7 @@ def collect_files(repo_root: Path) -> list[Path]:
     """扫描面内全部候选文件; 守阵 _scan 与 FROZEN 生成器共用这一份口径。
 
     根级文件按后缀**自动收集**, 不再靠白名单枚举 —— 白名单会随时间漂移: 评审发现
-    根级 hatch_build.py / .github / .vscode 配置曾被漏扫, 与规范「覆盖文件」声明静默不符。
+    hatch_build.py(原根级, 现 scripts/) / .github / .vscode 配置曾被漏扫, 与规范「覆盖文件」声明静默不符。
     用户运行时配置 config.yml 走 EXCLUDE_FILES 显式排除(红线面, 只读不纳管)。
     """
     files: list[Path] = []

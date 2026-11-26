@@ -1,6 +1,6 @@
 """test_hatch_build 测试计划: wheel BUILD_ID 侧车钩子守阵 (计划 26-09-22-2318 v2 §4.2 双路径)。
 
-守什么: `hatch_build.py` 的两件事 —— build_id_from_git 三态(g<hash> 净树 / g<hash>.dirty 脏树 /
+守什么: `scripts/hatch_build.py` 的两件事 —— build_id_from_git 三态(g<hash> 净树 / g<hash>.dirty 脏树 /
 None git 不可得)与 BuildHook.initialize 的 extra_metadata 映射方向({源文件: dist-info 相对目标},
 写反则 wheel 静默丢 BUILD_ID, 与 release.build note 记档的静默陷阱同型)。subprocess.run 经
 monkeypatch 注入 —— 零真实 git 调用、零子进程; 钩子本体用 stub self(root=...) 调未绑定方法。
@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "hatch_build.py"
+SCRIPT = ROOT / "scripts" / "hatch_build.py"
 
 
 def _mod():
@@ -58,7 +58,7 @@ def _mod():
             ):
                 sys.modules.setdefault(name, m)
         spec = importlib.util.spec_from_file_location("hatch_build_hook", SCRIPT)
-        assert spec and spec.loader, f"缺少 hatch_build.py: {SCRIPT}"
+        assert spec and spec.loader, f"缺少 scripts/hatch_build.py: {SCRIPT}"
         mod = importlib.util.module_from_spec(spec)
         sys.modules["hatch_build_hook"] = mod
         spec.loader.exec_module(mod)
@@ -100,7 +100,7 @@ def test_build_id_from_git_clean(monkeypatch):
 
 def test_build_id_from_git_dirty(monkeypatch):
     mod = _mod()
-    _patch_git(monkeypatch, mod, _Proc(0, "abc1234\n"), _Proc(0, " M hatch_build.py\n"))
+    _patch_git(monkeypatch, mod, _Proc(0, "abc1234\n"), _Proc(0, " M scripts/hatch_build.py\n"))
     assert mod.build_id_from_git("somewhere") == "gabc1234.dirty"
 
 

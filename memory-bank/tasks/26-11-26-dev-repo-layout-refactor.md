@@ -34,7 +34,7 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 
-| S0 | 前置快照与各 clone WIP 核验 | Open |
+| S0 | 前置快照与各 clone WIP 核验 | Done |
 | S1 | 根瘦身批(assets/minimal/sim+qb_capture/hatch_build/env.sh/config/.dockerignore) | Open |
 | S2 | 测试树批(tests/unit + tests/e2e + tests/real) | Open |
 | S3 | pytest.ini 并入 pyproject | Open |
@@ -48,3 +48,4 @@
 立项轮:全库引用面盘点 + grilling 一轮九问拍板(D1–D11,R1 扩围 qb_capture 三件)+ 计划 26-11-26-0503 入库 Open + 本档案立档 + wrap 切片;零代码改动,落盘件随本专题入库。
 
 - 2026-11-26 05:21 立项轮: 全库引用面盘点 + grilling 九问拍板(D1-D11, R1 扩围 qb_capture 三件) + 计划 26-11-26-0503 入库 Open + 档案立档; 零代码改动
+- 2026-11-26 22:06 S0 前置落档: collect-only 基线 7042 tests collected; 仓库根锚实测 83 处(69 文件, 比计划写的 64 多 19, 留 S2a 处理, 本批不管); tracked 数 tests 366 / e2e 90 / tests-real 65 / assets 17 / tools 34 / scripts 31 / resources 64; 冻结清单要点: 活口径最密集 tests-real/e2e/pytest.ini/scripts/sim_/qb_capture, 纯冻结豁免组 env.sh(全库无活口径引用)
