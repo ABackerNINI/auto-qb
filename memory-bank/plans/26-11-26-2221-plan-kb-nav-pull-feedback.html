@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>kb.nav 拉取按钮结果可区分</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-nav-pull-feedback">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-26-2221">
+<meta name="doc-updated" content="26-11-26-2241">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-26-memory-bank-kb-nav-pull-feedback.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: kb-nav-pull-feedback</div>
+<h1>kb.nav 拉取按钮结果可区分</h1>
+<p class="lede">本篇只回答: 怎么让 kb.nav 顶栏「拉取」按钮在「无更新」「真更新」「本地领先」三种成功结果下给出可区分的反馈。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-26-2221 · <b>doc-updated</b> 26-11-26-2241 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「kb.nav 的拉取按钮无法区分无更新与更新成功，grilling 后修改」 · 三轮 grilling 拍板 D1–D14 · 前序专题 <code>tasks/26-11-11-memory-bank-nav-pull-retry.md</code>（容错层，本轮只动反馈层）。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>后端 <code>classify_pull()</code> 早已分出四态，message 也有「已是最新 xxx」/「已快进到 xxx」/「本地领先…」之别，但 <code>/api/pull</code> 响应只有 <code>{ok, message}</code>，前端 <code>doPull()</code> 成功分支三态一律显示「已更新」1600ms、message 从不呈现 —— 用户点完按钮不知道究竟拉到了新提交还是本来就是最新。目标：三态在按钮上文案可区分、按钮不换行不抖动、失败路径不变。</p>
+<p><b>不变量</b>：①仅快进语义不动（分叉/重叠/离线一律失败、绝不 rebase），②失败仍走 <code>showError</code> overlay，③CSRF 头 <code>X-Nav-Action</code> 与 POST 方法不变，④静态导出 / file:// 仍隐藏按钮，⑤不新增依赖。命中立档阈值 4（需产出计划）。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>后端 <code>nav_server.py:353-366</code> 四态分类；<code>:412-422</code> 三态只把差异写进 message；<code>:484</code> 只回 <code>{ok, message}</code>。前端 <code>nav_page.html:2301-2305</code> 成功三态统一「已更新」+ <code>.ok</code> 绿 1600ms；<code>:137-148</code> 按钮 <code>inline-flex</code> + 13px 图标 + <code>flex:none</code>，无 <code>white-space</code> 约束。守阵 <code>tests/test_kb_nav_shell.py:594-608</code> 只钉「成功 refresh / 失败 showError」，零三态文案断言。</p>
+<p>真机锚点：基线 <code>26-11-11-0659</code> 记录过「已是最新 90764579」——后端能算出来，只是前端没显示。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>：后端把分类结果作为结构化字段随响应返回，前端按字段切换按钮标签文案；失败态统一 <code>error</code>，仍由 overlay 承载原因。落点两文件 + 一组守阵，单批实施（D1/D6/D7/D8/D11/D12/D13/D14）。</p>
+<table><tr><th>面</th><th>改动</th><th>拍板</th></tr>
+<tr><td>响应契约</td><td><code>/api/pull</code> 回 <code>{ok, message, kind}</code>：三成功态各一个 kind，所有失败（含 diverged）统一 <code>error</code></td><td>D1/D6</td></tr>
+<tr><td>前端反馈</td><td>按 kind 切「已是最新 / 已更新 / 本地领先」，3000ms 后复位「拉取」；绿色 <code>.ok</code> 三态通用</td><td>D2/D7/D11/D12/D14</td></tr>
+<tr><td>按钮样式</td><td><code>.pullbtn</code> 加 <code>white-space:nowrap</code>，<code>#pullLabel</code> 加 4 字 <code>min-width</code> 防宽度跳变</td><td>D13</td></tr>
+<tr><td>守阵</td><td>server 契约 + shell 静态 + node 回放 doPull 三层</td><td>D9</td></tr></table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table><tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td><code>pull_ff_only</code> 返回 <code>(ok, message, kind)</code>；每个 return 分支带 kind，diverged 与所有失败统一 <code>error</code>；handler 把 kind 写进 JSON</td><td>server 守阵断言四态 kind；<code>tests/test_kb_nav_server.py</code> 全绿</td></tr>
+<tr><td>S2</td><td><code>doPull()</code> 成功分支按 <code>d.kind</code> 选文案；3000ms 复位；CSS 加 nowrap + min-width</td><td>shell 静态断言三态文案 + nowrap + min-width；node 回放三态显示不同文案</td></tr>
+<tr><td>S3</td><td>同步两份测试文件头部 docstring「测试计划」清单</td><td>清单与新增守阵一一对应，无遗漏</td></tr>
+<tr><td>S4</td><td>分批评审 → kb.wrap 切片 → test.full → 基线切片 → kb.check/kb.docmap</td><td>评审零 blocker，全量绿，闸门绿</td></tr></table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无。三轮 grilling 已把 D1–D14 全部拍板（见 §06），前沿为空。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table><tr><th>#</th><th>结论</th><th>日期</th></tr>
+<tr><td>D1</td><td>加结构化 <code>kind</code> 字段，复用 classify_pull 结果，不解析 message 文本</td><td>2026-11-26</td></tr>
+<tr><td>D2</td><td>复用按钮标签反馈，失败维持 overlay 不变</td><td>2026-11-26</td></tr>
+<tr><td>D3</td><td>仅快进红线不动（分叉/重叠/离线失败、绝不 rebase）</td><td>2026-11-26</td></tr>
+<tr><td>D4</td><td>建 plan HTML + task 档案（用户明示授权新建文件）</td><td>2026-11-26</td></tr>
+<tr><td>D5</td><td>用户授权读 skill 代码（nav_server.py / nav_page.html）</td><td>2026-11-26</td></tr>
+<tr><td>D6</td><td>失败统一 <code>kind:"error"</code>（含 diverged），前端失败仍走 showError</td><td>2026-11-26</td></tr>
+<tr><td>D7</td><td>成功态时长调长至 3000ms，文案短且保证不换行</td><td>2026-11-26</td></tr>
+<tr><td>D8</td><td>前端用短文案，不显示 hash（用户改判：hash 通常用不到）</td><td>2026-11-26</td></tr>
+<tr><td>D9</td><td>三层守阵：server 契约 + shell 静态 + node 回放 doPull</td><td>2026-11-26</td></tr>
+<tr><td>D10</td><td>新立 task 档案，不续写旧容错档（旧档状态漂移属范围外，不碰）</td><td>2026-11-26</td></tr>
+<tr><td>D11</td><td>成功态反馈时长 3000ms（2400/3000/4000 三档取中）</td><td>2026-11-26</td></tr>
+<tr><td>D12</td><td>三态文案：up-to-date「已是最新」/ fast-forward「已更新」/ ahead-only「本地领先」</td><td>2026-11-26</td></tr>
+<tr><td>D13</td><td><code>.pullbtn</code> 加 <code>white-space:nowrap</code>，<code>#pullLabel</code> 加 4 字 <code>min-width</code> 防抖</td><td>2026-11-26</td></tr>
+<tr><td>D14</td><td>三态成功都用 <code>.ok</code> 绿色，状态语义靠文案区分</td><td>2026-11-26</td></tr></table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table><tr><th>触发</th><th>处置</th></tr>
+<tr><td>旧消费方只读 <code>{ok, message}</code></td><td>新增字段是超集，不改既有字段语义；失败 message 原文不变</td></tr>
+<tr><td>3 秒复位定时器与连续点击竞态</td><td>沿用现有 <code>btn.disabled</code> 闸门；新一次拉取开始前先清旧 timer（node 回放验证）</td></tr>
+<tr><td>窄屏按钮宽度跳变 / 换行</td><td><code>nowrap</code> + <code>min-width</code> 兜底，守阵钉两条 CSS</td></tr>
+<tr><td>误改仅快进语义</td><td>不改 merge/rebase/fetch 任何调用；server 守阵钉死分叉/重叠失败路径</td></tr></table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-26-2221</span> 三轮 grilling D1–D14 拍板入库；零代码改动，S1–S4 待显式开工。</li>
+  <li><span class="tag">R1 · 26-11-26-2241</span> S1-S4 全落地收口: 后端 kind 三态 + 前端文案/timer/CSS + 三层守阵; 评审 2 轮 1 minor 修, 复评零 actionable, 全量绿见 kb.baseline; 计划翻 Done</li>
+</ul>
+
+</div>
+</body>
+</html>

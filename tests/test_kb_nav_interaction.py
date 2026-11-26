@@ -55,6 +55,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_pin_row_click_opens_drawer_via_shared_path: 置顶区条目单击与主表共用同一 openRowDetail 单点 (同 renderDrawer / 同 sel 高亮), 不再单开原文
 - test_working_zone_collapse_toggle: 工作专区折叠按钮 (原生 button / aria-expanded + aria-controls / 折叠箭头) 切换主体可见性并持久化 (mb-nav-working-collapsed), 折叠不重建 innerHTML 保焦点 (node 回放真实 JS)
 - test_ctx_menu_working_batch: 右键「加入/移出正在处理」data-act=working + 冻结 links 快照 + 批量文案带 N + toggleWorkingBatch 幂等 + saveWorking 落盘 + 移出按钮早退不误开抽屉 (node 回放真实 JS)
+- test_do_pull_three_states_distinct: 拉取成功三态按 kind 切不同短文案 (up-to-date/fast-forward/ahead-only) + 3000ms 复位 + 连点清旧 timer, 失败仍 showError (node 回放真实 doPull)
 """
 
 from __future__ import annotations
@@ -889,3 +890,81 @@ def test_ctx_menu_working_batch(tmp_path) -> None:
     assert got.get("remove") == "", f"全达态再触发 -> 批量移出: {got}"
     assert got.get("mixed") == "c.md,b.md", f"混合加入过滤已达态、只加未达态且保持序 (幂等): {got}"
     assert got.get("remove2") == "", f"再次全达态 -> 批量移出: {got}"
+
+
+# --------------------------------------------------------------------------- 拉取三态反馈 (26-11-26)
+
+
+def test_do_pull_three_states_distinct(tmp_path) -> None:
+    """2026-11-26 用户报「拉取按钮无法区分无更新与更新成功」。后端回 {ok, message, kind},
+    doPull 按 kind 切三态短文案 (已是最新 / 已更新 / 本地领先), 3000ms 后复位; 连点先清旧 timer
+    免得旧复位覆盖新反馈。失败态仍 showError overlay。node 回放真实 doPull 函数体 + PULL_OK_LABEL。"""
+    text = SHELL.read_text(encoding="utf-8")
+    pull_block = re.search(r"async function doPull\(\) \{(.*?)\n\}", text, re.S)
+    assert pull_block, "doPull() 不见了? 拉取交互搬家要同步本守阵"
+    assert "const PULL_OK_LABEL" in text and "const PULL_RESET_MS = 3000" in text, "缺文案映射 / 时长常量"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+
+    label_src = re.search(r"const PULL_OK_LABEL = (\{[^;]*\});", text).group(1)
+    probe = tmp_path / "pull_states_probe.js"
+    probe.write_text(
+        "const PULL_OK_LABEL = " + label_src + ";\n"
+        "const PULL_RESET_MS = 3000;\n"
+        "const PULL_HEADER = 'X-Nav-Action';\n"
+        "let nextReply = null;\n"
+        "const errors = [];\n"
+        "const timers = {};\n"
+        "let timerSeq = 0;\n"
+        "function esc(s) { return String(s); }\n"
+        "function showError(title, msg, hint) { errors.push(title + ':' + msg); }\n"
+        "async function refresh(silent) {}\n"
+        "const labelEl = { textContent: '拉取' };\n"
+        "const cls = new Set();\n"
+        "const btn = { disabled: false, classList: { add: n => cls.add(n), remove: n => cls.delete(n) } };\n"
+        "const els = { pullBtn: btn, pullLabel: labelEl };\n"
+        "function $(id) { return els[id]; }\n"
+        "function setTimeout(fn, ms) { const id = ++timerSeq; timers[id] = { fn, ms }; return id; }\n"
+        "function clearTimeout(id) { delete timers[id]; }\n"
+        "globalThis.fetch = async (url, opts) => ({ status: 200, json: async () => nextReply });\n"
+        "async function doPull() {" + pull_block.group(1) + "\n}\n"
+        "const results = [];\n"
+        "for (const kind of ['up-to-date', 'fast-forward', 'ahead-only']) {\n"
+        "  nextReply = { ok: true, message: '后端原文', kind };\n"
+        "  labelEl.textContent = '拉取'; cls.clear(); for (const k of Object.keys(timers)) delete timers[k];\n"
+        "  await doPull();\n"
+        "  results.push(kind + '=' + labelEl.textContent + '/' + cls.has('ok') + '/' + Object.values(timers)[0].ms);\n"
+        "}\n"
+        "nextReply = { ok: false, message: '本地已分叉', kind: 'error' };\n"
+        "labelEl.textContent = '拉取'; cls.clear(); for (const k of Object.keys(timers)) delete timers[k];\n"
+        "await doPull();\n"
+        "results.push('error=' + labelEl.textContent + '/' + cls.has('err') + '/' + errors.length);\n"
+        "/* 连点: 第一次成功的 timer 未到期就再拉一次, 旧 timer 必须被清, 新 timer 保留且文案是新态 */\n"
+        "for (const k of Object.keys(timers)) delete timers[k];\n"
+        "nextReply = { ok: true, message: '后端原文', kind: 'up-to-date' };\n"
+        "await doPull();\n"
+        "const oldTimerId = btn._pullTimer;\n"
+        "nextReply = { ok: true, message: '后端原文', kind: 'ahead-only' };\n"
+        "await doPull();\n"
+        "results.push('rapid=' + labelEl.textContent + '/' + (timers[oldTimerId] === undefined) + '/' + "
+        "Object.values(timers).length + '/' + Object.values(timers)[0].ms);\n"
+        "console.log(results.join('|'));\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run(
+        [node, str(probe)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=NODE_PROBE_TIMEOUT,
+    )
+    assert out.returncode == 0, out.stderr
+    got = out.stdout.strip()
+    assert "up-to-date=已是最新/true/3000" in got, f"无更新态文案/时长不符: {got}"
+    assert "fast-forward=已更新/true/3000" in got, f"真更新态文案/时长不符: {got}"
+    assert "ahead-only=本地领先/true/3000" in got, f"本地领先态文案/时长不符: {got}"
+    assert "error=拉取/true/1" in got, f"失败态应回落标签+红色+showError: {got}"
+    assert "rapid=本地领先/true/1/3000" in got, f"连点应清旧 timer 且新态文案/时长保留: {got}"

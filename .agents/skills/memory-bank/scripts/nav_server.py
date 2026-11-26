@@ -376,20 +376,23 @@ def pick_remote(root: Path) -> str:
     return names[0] if names else ""
 
 
-def pull_ff_only(root: Path) -> tuple[bool, str]:
-    """仅快进把当前 clone 同步到主线远端; 返回 (ok, 一行结果)。
+def pull_ff_only(root: Path) -> tuple[bool, str, str]:
+    """仅快进把当前 clone 同步到主线远端; 返回 (ok, 一行结果, 结果类别)。
+
+    结果类别: up-to-date / ahead-only / fast-forward 三态各一; 所有失败(含 diverged)统一 error。
+    前端按类别切换按钮文案 (26-11-26 D1/D6), message 仍是给人看的一行原文, 不解析。
 
     步骤与 sync.py 同源: fetch(把对象拉进对象库) → ls-remote 取远端真值 → rev-list 算领先/落后 →
     可快进才 merge --ff-only。任何不能快进的情形都返回 ok=False + 一行原因, 不改动工作区 / 历史。
     """
     if _out(_git(root, "rev-parse", "--is-inside-work-tree")) != "true":
-        return False, "不在 git 工作树里 —— 本目录不是仓库"
+        return False, "不在 git 工作树里 —— 本目录不是仓库", "error"
     remote = pick_remote(root)
     if not remote:
-        return False, "找不到远端 —— git remote -v 核对"
+        return False, "找不到远端 —— git remote -v 核对", "error"
     branch = _out(_git(root, "rev-parse", "--abbrev-ref", "HEAD"))
     if not branch or branch == "HEAD":
-        return False, "当前处于游离 HEAD —— 无法确定要同步的分支"
+        return False, "当前处于游离 HEAD —— 无法确定要同步的分支", "error"
     _git(root, "fetch", remote, branch)  # 只为把远端 tip 的对象拉进对象库; 成败不判(离线时 ls-remote 也为空)
     ls_proc = _git(root, "ls-remote", remote, branch)
     rsha = ""
@@ -399,27 +402,27 @@ def pull_ff_only(root: Path) -> tuple[bool, str]:
             rsha = parts[0]
             break
     if not rsha:
-        return False, ("拿不到远端 %s/%s (离线?)%s —— 联网后重试" % (remote, branch, retry_note(ls_proc)))
+        return False, ("拿不到远端 %s/%s (离线?)%s —— 联网后重试" % (remote, branch, retry_note(ls_proc))), "error"
     head = _out(_git(root, "rev-parse", "HEAD"))
     if not head:
-        return False, "本地没有任何提交 (空仓库)"
+        return False, "本地没有任何提交 (空仓库)", "error"
     raw = _out(_git(root, "rev-list", "--left-right", "--count", "%s...HEAD" % rsha))
     try:
         behind, ahead = (int(x) for x in raw.split())
     except ValueError:
-        return False, "算不出领先 / 落后 (fetch 未落稳?) —— 重试"
+        return False, "算不出领先 / 落后 (fetch 未落稳?) —— 重试", "error"
     kind = classify_pull(head, rsha, behind, ahead)
     if kind == "up-to-date":
-        return True, "已是最新 %s" % head[:8]
+        return True, "已是最新 %s" % head[:8], "up-to-date"
     if kind == "ahead-only":
-        return True, "本地领先远端 %d 个提交, 无需拉取" % ahead
+        return True, "本地领先远端 %d 个提交, 无需拉取" % ahead, "ahead-only"
     if kind == "diverged":
         return False, ("本地已分叉 (领先 %d / 落后 %d) —— 仅快进不自动 rebase / merge; "
-                       "需人工合流后重试" % (ahead, behind))
+                       "需人工合流后重试" % (ahead, behind)), "error"
     proc = _git(root, "merge", "--ff-only", rsha)
     if proc.returncode != 0:
-        return False, ("快进被拒 —— %s%s; 本地改动可能与远端新提交重叠, 先提交或移出后重试" % (_last_line(proc.stderr), retry_note(proc)))
-    return True, "已快进到 %s" % _out(_git(root, "rev-parse", "HEAD"))[:8]
+        return False, ("快进被拒 —— %s%s; 本地改动可能与远端新提交重叠, 先提交或移出后重试" % (_last_line(proc.stderr), retry_note(proc))), "error"
+    return True, "已快进到 %s" % _out(_git(root, "rev-parse", "HEAD"))[:8], "fast-forward"
 
 
 class NavHandler(BaseHTTPRequestHandler):
@@ -480,8 +483,8 @@ class NavHandler(BaseHTTPRequestHandler):
         if length:  # 消费请求体, 免得连接上残留字节
             self.rfile.read(length)
         with _PULL_LOCK:
-            ok, message = pull_ff_only(self.root)
-        self._send_json(200, {"ok": ok, "message": message})
+            ok, message, kind = pull_ff_only(self.root)
+        self._send_json(200, {"ok": ok, "message": message, "kind": kind})
 
     def _send_bytes(self, code: int, body: bytes, ctype: str) -> None:
         self.send_response(code)

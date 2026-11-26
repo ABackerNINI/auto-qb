@@ -40,17 +40,18 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_static_map_serves_file_and_api: GET / 与 /api/data 200 (壳文本 / JSON 契约), 正常 memory-bank 文件 200 且 .md 给 text/plain
 - test_static_map_blocks_traversal: ../ / %2e%2e / ..%2f / %5c 反斜杠变体一律 403/404 且不泄漏目标内容; 未知文件 404
 - test_classify_pull_cases: 仅快进分类 (up-to-date / fast-forward / ahead-only / diverged) 纯逻辑钉死
-- test_pull_ff_only_rejects_non_repo: 非 git 工作树 → 失败
-- test_pull_ff_only_rejects_detached_head: 游离 HEAD → 失败
-- test_pull_ff_only_offline_reports_unreachable: ls-remote 拿不到远端 → 失败(离线提示; 远端名按 [nav] remotes 候选序挑出)
+- test_pull_ff_only_rejects_non_repo: 非 git 工作树 → 失败 + kind=error
+- test_pull_ff_only_rejects_detached_head: 游离 HEAD → 失败 + kind=error
+- test_pull_ff_only_offline_reports_unreachable: ls-remote 拿不到远端 → 失败 + kind=error (离线提示; 远端名按 [nav] remotes 候选序挑出)
 - test_pick_remote_reads_remotes_config: [nav] remotes 候选序读配置即生效 (批9b 外置)
 - test_pick_remote_fallback_single_remote_and_hint: 删配置回落 ("origin",) + 必打提示行一次
 - test_pick_remote_fallback_names0_without_origin: 候选序无命中退 names[0] (兜底口径不变)
 - test_pick_remote_malformed_remotes_falls_back: 形态不对回落+提示 (禁静默)
 - test_pick_remote_explicit_empty_remotes_uses_first_remote: 显式空列表 = 直接取第一个远端, 不提示
-- test_pull_ff_only_diverged_refuses_without_merge: 分叉 → 失败, 且**绝不执行 merge**(仅快进口径)
-- test_pull_ff_only_ahead_only_is_noop: 本地领先(未推送) → 成功且不执行 merge
-- test_pull_ff_only_fast_forwards: 纯落后 → merge --ff-only, 回报新 HEAD
+- test_pull_ff_only_diverged_refuses_without_merge: 分叉 → 失败 kind=error, 且**绝不执行 merge**(仅快进口径)
+- test_pull_ff_only_ahead_only_is_noop: 本地领先(未推送) → 成功 kind=ahead-only 且不执行 merge
+- test_pull_ff_only_fast_forwards: 纯落后 → merge --ff-only, 回报新 HEAD + kind=fast-forward
+- test_pull_ff_only_up_to_date_kind: 齐平 → 成功 kind=up-to-date, 不 merge (26-11-26 三态可区分)
 - test_retryable_three_tiers: _git 重试判据三档 (网络失败即重试 / 非幂等写绝不重试 / 只读救超时与瞬时签名)
 - test_git_retries_transient_failure_then_succeeds: Gitee 抖动首次失败第二次成功, 同一调用内自愈
 - test_git_gives_up_after_three_attempts_with_note: 三次全败取最后一次, 失败行带「已重试 2 次」
@@ -58,7 +59,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_git_once_maps_timeout_and_spawn_failure_to_minus_one: 直驱真实 _git_once, 超时/OSError 必须 rc=-1 哨兵码
 - test_pull_endpoint_requires_action_header: 缺 / 错 X-Nav-Action 头 → 403 (CSRF 护栏)
 - test_pull_endpoint_rejects_non_pull_routes: GET /api/pull 与 POST 未知路径 → 404
-- test_pull_endpoint_reports_result: 带头 → 200 + {ok, message} 原样回传
+- test_pull_endpoint_reports_result: 带头 → 200 + {ok, message, kind} 原样回传 (三态 + error)
 - test_graph_route_serves_component: GET /nav_graph.js 200 + javascript (关系图组件 2026-11-07 拆分后按路由发货)
 - test_gen_static_inlines_graph_and_prefix: --gen-static 落地件是**单文件** (组件内联、无 src 引用) 且链接前缀按 out_dir 实际深度现算
 """
@@ -168,8 +169,8 @@ def test_classify_pull_cases() -> None:
 
 def test_pull_ff_only_rejects_non_repo(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(nav_server, "_git", lambda root, *a: _proc(1, "", "fatal: not a git repository"))
-    ok, msg = nav_server.pull_ff_only(tmp_path)
-    assert ok is False and "git 工作树" in msg
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is False and "git 工作树" in msg and kind == "error"
 
 
 def test_pull_ff_only_rejects_detached_head(tmp_path: Path, monkeypatch) -> None:
@@ -181,8 +182,8 @@ def test_pull_ff_only_rejects_detached_head(tmp_path: Path, monkeypatch) -> None
         }
     )
     monkeypatch.setattr(nav_server, "_git", runner)
-    ok, msg = nav_server.pull_ff_only(tmp_path)
-    assert ok is False and "游离 HEAD" in msg
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is False and "游离 HEAD" in msg and kind == "error"
 
 
 def test_pull_ff_only_offline_reports_unreachable(tmp_path: Path, monkeypatch) -> None:
@@ -199,8 +200,8 @@ def test_pull_ff_only_offline_reports_unreachable(tmp_path: Path, monkeypatch) -
         }
     )
     monkeypatch.setattr(nav_server, "_git", runner)
-    ok, msg = nav_server.pull_ff_only(tmp_path)
-    assert ok is False and "拿不到远端" in msg and "gitee" in msg
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is False and "拿不到远端" in msg and "gitee" in msg and kind == "error"
 
 
 def test_pick_remote_reads_remotes_config(tmp_path: Path, monkeypatch) -> None:
@@ -260,8 +261,8 @@ def test_pull_ff_only_diverged_refuses_without_merge(tmp_path: Path, monkeypatch
         }
     )
     monkeypatch.setattr(nav_server, "_git", runner)
-    ok, msg = nav_server.pull_ff_only(tmp_path)
-    assert ok is False and "分叉" in msg
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is False and "分叉" in msg and kind == "error"
     assert not any(call and call[0] == "merge" for call in calls), "分叉时绝不能执行 merge"
 
 
@@ -278,8 +279,8 @@ def test_pull_ff_only_ahead_only_is_noop(tmp_path: Path, monkeypatch) -> None:
         }
     )
     monkeypatch.setattr(nav_server, "_git", runner)
-    ok, msg = nav_server.pull_ff_only(tmp_path)
-    assert ok is True and "无需拉取" in msg
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is True and "无需拉取" in msg and kind == "ahead-only"
     assert not any(call and call[0] == "merge" for call in calls), "本地领先不该 merge"
 
 
@@ -304,8 +305,27 @@ def test_pull_ff_only_fast_forwards(tmp_path: Path, monkeypatch) -> None:
         }
     )
     monkeypatch.setattr(nav_server, "_git", runner)
-    ok, msg = nav_server.pull_ff_only(tmp_path)
-    assert ok is True and "已快进到" in msg and remote[:8] in msg
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is True and "已快进到" in msg and remote[:8] in msg and kind == "fast-forward"
+
+
+def test_pull_ff_only_up_to_date_kind(tmp_path: Path, monkeypatch) -> None:
+    """齐平 → 成功 kind=up-to-date 且不 merge; 这是「无更新」与「已快进」可区分的守阵 (26-11-26 D12)。"""
+    runner, calls = _fake_git(
+        {
+            ("rev-parse", "--is-inside-work-tree"): _proc(0, "true\n"),
+            ("remote", ): _proc(0, "origin\n"),
+            ("rev-parse", "--abbrev-ref", "HEAD"): _proc(0, "develop\n"),
+            ("fetch", ): _proc(0, ""),
+            ("ls-remote", ): _proc(0, "a" * 40 + "\trefs/heads/develop\n"),
+            ("rev-parse", "HEAD"): _proc(0, "a" * 40 + "\n"),
+            ("rev-list", ): _proc(0, "0\t0\n"),
+        }
+    )
+    monkeypatch.setattr(nav_server, "_git", runner)
+    ok, msg, kind = nav_server.pull_ff_only(tmp_path)
+    assert ok is True and "已是最新" in msg and kind == "up-to-date"
+    assert not any(call and call[0] == "merge" for call in calls), "齐平不该 merge"
 
 
 def test_retryable_three_tiers() -> None:
@@ -354,7 +374,7 @@ def test_git_gives_up_after_three_attempts_with_note(tmp_path: Path, monkeypatch
         }
     )
     monkeypatch.setattr(nav_server, "_git_once", runner)
-    ok, msg = nav_server.pull_ff_only(tmp_path)
+    ok, msg, _kind = nav_server.pull_ff_only(tmp_path)
     assert ok is False and "拿不到远端 gitee/develop" in msg and "已重试 2 次" in msg
     assert sum(1 for call in calls if call and call[0] == "ls-remote") == 3, "ls-remote 应正好尝试 3 次"
 
@@ -419,16 +439,20 @@ def test_pull_endpoint_rejects_non_pull_routes(nav_port: int) -> None:
 
 
 def test_pull_endpoint_reports_result(nav_port: int, monkeypatch) -> None:
-    """带头 → 200 + {ok, message}; 服务把 pull_ff_only 的业务结果原样回给前端 (业务失败也是 200)。"""
-    monkeypatch.setattr(nav_server, "pull_ff_only", lambda root: (False, "本地已分叉 (领先 1 / 落后 2) —— 仅快进"))
-    code, body = _post(nav_port, "/api/pull", {nav_server.PULL_HEADER: "pull"})
-    assert code == 200
-    data = json.loads(body.decode("utf-8"))
-    assert data["ok"] is False and "分叉" in data["message"]
-
-    monkeypatch.setattr(nav_server, "pull_ff_only", lambda root: (True, "已快进到 deadbeef"))
-    code, body = _post(nav_port, "/api/pull", {nav_server.PULL_HEADER: "pull"})
-    assert code == 200 and json.loads(body.decode("utf-8")) == {"ok": True, "message": "已快进到 deadbeef"}
+    """带头 → 200 + {ok, message, kind}; 服务把 pull_ff_only 的业务结果原样回给前端 (业务失败也是 200)。
+    26-11-26 D1/D6: kind 三态各一 + 失败(含分叉)统一 error, 前端据此切按钮文案。"""
+    cases = [
+        ((False, "本地已分叉 (领先 1 / 落后 2) —— 仅快进", "error"), False, "error"),
+        ((True, "已快进到 deadbeef", "fast-forward"), True, "fast-forward"),
+        ((True, "已是最新 aabbccdd", "up-to-date"), True, "up-to-date"),
+        ((True, "本地领先远端 2 个提交, 无需拉取", "ahead-only"), True, "ahead-only"),
+    ]
+    for triple, ok, kind in cases:
+        monkeypatch.setattr(nav_server, "pull_ff_only", lambda root, t=triple: t)
+        code, body = _post(nav_port, "/api/pull", {nav_server.PULL_HEADER: "pull"})
+        assert code == 200
+        data = json.loads(body.decode("utf-8"))
+        assert data["ok"] is ok and data["kind"] == kind and data["message"] == triple[1]
 
 
 def test_graph_route_serves_component(nav_port: int) -> None:

@@ -135,11 +135,13 @@
   /* [hidden] 兜底必写: .pullbtn 的 display 会盖掉 UA 的 [hidden]{display:none} (静态/file 模式要隐藏) */
   .pullbtn[hidden] { display: none; }
   .pullbtn {
-    display: inline-flex; align-items: center; gap: 6px; flex: none;
+    display: inline-flex; align-items: center; gap: 6px; flex: none; white-space: nowrap;
     background: var(--paper-2); color: var(--dim); border: 1px solid var(--hair-2);
     border-radius: 6px; padding: 6px 14px; font: 12.5px var(--sans); cursor: pointer;
     transition: color .15s, border-color .15s;
   }
+  /* 三态文案 2-4 字, 给标签留 4 字宽防按钮宽度跳变 (26-11-26 D13) */
+  #pullLabel { min-width: 4em; }
   .pullbtn:hover { color: var(--ink); border-color: var(--cyan); }
   .pullbtn:disabled { opacity: .55; cursor: default; }
   .pullbtn svg { width: 13px; height: 13px; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
@@ -2287,7 +2289,11 @@ async function refresh(silent) {
 }
 
 /* 拉取 (仅快进): POST /api/pull 让服务端同步本仓库; 成功即刷新数据, 失败弹提示。
-   服务端只做 merge --ff-only —— 分叉 / 本地改动重叠 / 离线都会回 ok:false + 一行原因, 不 rebase。 */
+   服务端只做 merge --ff-only —— 分叉 / 本地改动重叠 / 离线都会回 ok:false + 一行原因, 不 rebase。
+   成功三态按响应 kind 切短文案 (26-11-26 D1/D8/D12): 无更新 / 真更新 / 本地领先各不同, 不带 hash;
+   message 是给人看的原文, 前端不解析。失败态不在此表, 仍走 showError overlay。 */
+const PULL_OK_LABEL = { "up-to-date": "已是最新", "fast-forward": "已更新", "ahead-only": "本地领先" };
+const PULL_RESET_MS = 3000;
 async function doPull() {
   const btn = $("pullBtn");
   if (btn.disabled) return;
@@ -2295,14 +2301,15 @@ async function doPull() {
   btn.classList.remove("ok", "err");
   btn.classList.add("busy");
   $("pullLabel").textContent = "同步中";
+  if (btn._pullTimer) { clearTimeout(btn._pullTimer); btn._pullTimer = null; }  /* 连点: 旧复位不覆盖新反馈 */
   try {
     const res = await fetch("/api/pull", { method: "POST", headers: { [PULL_HEADER]: "pull" } });
     const d = await res.json().catch(() => null);
     if (d && d.ok) {
       btn.classList.add("ok");
-      $("pullLabel").textContent = "已更新";
+      $("pullLabel").textContent = PULL_OK_LABEL[d.kind] || "已更新";
       await refresh(true);
-      setTimeout(() => { btn.classList.remove("ok"); $("pullLabel").textContent = "拉取"; }, 1600);
+      btn._pullTimer = setTimeout(() => { btn.classList.remove("ok"); $("pullLabel").textContent = "拉取"; btn._pullTimer = null; }, PULL_RESET_MS);
     } else {
       btn.classList.add("err");
       $("pullLabel").textContent = "拉取";

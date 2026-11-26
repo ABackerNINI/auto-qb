@@ -593,7 +593,8 @@ def test_log_filters_polling(nav_port: int, capsys) -> None:
 
 def test_shell_has_pull_button() -> None:
     """拉取按钮: 顶栏控件 + POST /api/pull + CSRF 自定义头; 静态 / file 模式隐藏 (无服务端可拉);
-    doPull 成功刷新数据、失败走提示浮层 —— 少任一处即功能缺失或退化。"""
+    doPull 成功刷新数据、失败走提示浮层; 三态成功按 kind 切短文案 + 3000ms 复位 + nowrap/min-width 不换行不抖动 ——
+    少任一处即功能缺失或退化 (26-11-26 三态可区分)。"""
     text = SHELL.read_text(encoding="utf-8")
     assert 'id="pullBtn"' in text, "缺拉取按钮 #pullBtn"
     assert '"/api/pull"' in text, "按钮必须请求 /api/pull"
@@ -606,6 +607,16 @@ def test_shell_has_pull_button() -> None:
     assert 'method: "POST"' in body, "拉取必须用 POST (GET 会被跨站 <img> 直接触发)"
     assert "refresh(" in body, "同步成功后必须刷新数据"
     assert "showError(" in body, "同步失败必须提示 (仅快进失败要让人看见原因)"
+    # 26-11-26 D1/D7/D8/D12/D13: 三态可区分 + 不换行不抖动
+    assert 'const PULL_OK_LABEL' in text, "缺三态文案映射表"
+    for kind, label in (("up-to-date", "已是最新"), ("fast-forward", "已更新"), ("ahead-only", "本地领先")):
+        assert '"%s": "%s"' % (kind, label) in text, "缺 %s → %s 映射" % (kind, label)
+    assert "PULL_OK_LABEL[d.kind]" in body, "doPull 未按响应 kind 切文案 (三态仍不可区分)"
+    assert "PULL_RESET_MS = 3000" in text and "PULL_RESET_MS" in body, "成功态时长非 3000ms"
+    assert "btn._pullTimer" in body and "clearTimeout" in body, "连点未清旧 timer (复位会覆盖新反馈)"
+    css = re.search(r"<style>(.*?)</style>", text, re.S).group(1)
+    assert "white-space: nowrap" in css and ".pullbtn" in css, "按钮缺 nowrap (文案会换行)"
+    assert "#pullLabel" in css and "min-width: 4em" in css, "标签缺 min-width (三态切换宽度跳变)"
 
 
 def test_shell_has_graph_component() -> None:
