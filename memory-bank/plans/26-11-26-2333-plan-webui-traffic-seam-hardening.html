@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="webui-traffic-seam-hardening">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-26-2333">
-<meta name="doc-updated" content="26-11-27-0004">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-26-webui-traffic-seam-hardening.md">
+<meta name="doc-updated" content="26-11-27-0526">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-26-webui-traffic-seam-hardening.md, memory-bank/reports/26-11-27-0526-report-webui-traffic-seam-hardening.html">
 <style>
   :root {
     --bg: #10151a;
@@ -72,7 +72,7 @@
 <h1>WEBUI 流量图合并缝结构收口计划</h1>
 <p class="lede">本篇只回答: 流量图三个症状(一拍双跳 / 曲线偶尔整体跳变 / 两检查点之间折线·一拍两条线段)的根因判在哪里、为什么不第三次全量重构、以及合并缝按哪三条结构不变量、哪六批收口。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-26-2333 · <b>doc-updated</b> 26-11-27-0004 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-26-2333 · <b>doc-updated</b> 26-11-27-0526 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 本会话(2026-11-26)两路只读取证(代码直读, 锚 <code>0c2ab2ec</code>; 16 份历史设计/修补/档案/issue 文档互证)+ grilling 两轮六问用户拍板(§06); 承接 26-11-15-1104 / 26-11-18-0037 / 26-11-22-0858 / 26-11-22-2330 / 26-11-26-0227 五轮结论, 现行拍语义单点 = <a href="../conventions/attachments/webui-traffic-beat.md">conventions/attachments/webui-traffic-beat.md</a>
 </div>
 
@@ -140,6 +140,28 @@
 </table>
 
 <div class="aside"><b>历史判定史与本轮边界</b>: 「x 轴抖动」历史上有四层已判根因(1313 G4 栅格 ceil / 1104 G-B auto range / 0936 snap-rem 钳零 / 0858 隐式视口), 均已修; 其中 0936 的取证在旧挂钟几何下完成, 0858 换代后 L0 ulp 吸附(<code>:694-711</code>)仍在生效路径但无新取证。「尾段失真/跳变」历史根因(holding 相位碰撞 / 尾桶克隆 / qB 字段口径混杂 / ctx.scale 泄漏)已随各轮修掉。issue 26-11-22-1401(瞬态左缺口)仍 Open, 与 S4-2 同族, 本轮 S6 一并复核(不在本计划认领, 修复落地面确认后再翻状态)。0037 档案步 9/10(Docker testbed e2e + 真机冒烟)欠账未还 —— 本轮 S0 补。</div>
+
+<h3>S0 真机裁决回填(26-11-27, S0b 批; 数据面单点 = attachments/s0b-probe-26-11-27.md + s0b-raw/ 41 份 JSON)</h3>
+<table>
+  <tr><th>症状</th><th>主根因(归窗)</th><th>真机依据(探针实测)</th></tr>
+  <tr><td>① 一拍双跳</td><td><b>S1-1</b>(摊配追溯改写不重发, S2-3 同源)+ 伴随 S1-3 纵轴重定</td><td>值改写仅非零流量期实测(w6 2 点 maxRel=1.0 / w8 1 点 58% 列峰); 稳态 accChanged=0; 同拍双判定 9.8%-10.3% 存在但稳态零改写 → S1-2 降级为条件性放大器</td></tr>
+  <tr><td>② 曲线整体跳变</td><td><b>S2-1</b>(rewin 瞬时落地), 触发器 S3-2(合并回场一次判定)</td><td>rewin 全程 10 次全归因(首载 2 / 隐藏回场 delta=20 格 1 / 切窗 6 / 停顿恢复 3.08 格 1; w1-w4 会话 7 + w8 补跑 3); 稳态 0/40min; S2-2 stride 翻 k 未取证(seq 断档全程 0)</td></tr>
+  <tr><td>③ 检查点之间折线</td><td><b>S3-3</b>(k&gt;1 双粒度结构性), S3-1 rewin 侧半实证</td><td>30m 窗每次对账整列换格 dropped≈407-410、24h 窗当窗 dropped 20-25(列浅, 整列即全列)实证(组界随窗滑动全列失配, 组距 k×si vs 尾点间距 si); 恰 2.00 格 slide 形态未直接采到(时间敏感, 未取证)</td></tr>
+</table>
+<h4>S4 清单八条裁决(F6 输入)</h4>
+<table>
+  <tr><th>#</th><th>裁决</th><th>依据</th><th>去向</th></tr>
+  <tr><td>1</td><td>未取证</td><td>机制代码面成立(L1 prev=旧 shown 跨换列收敛); 前提面实证(尖峰改写 2-3 点), 伪象帧未逐帧采到; 稳态值恒等不可见(accChanged=0)</td><td>收编候选 F5③(已列 §03)</td></tr>
+  <tr><td>2</td><td>未取证</td><td>触发需尾点超 cap≈564 点, 本次隐藏 30s 仅 +20 点未达; 机制代码面成立(cap 头剪 + 隐藏期不剪均在)</td><td>与 Open issue 26-11-22-1401 同族, S6 复核</td></tr>
+  <tr><td>3</td><td>未取证</td><td>夹取确认存在(<code>_QB_POLL_MIN_MS=1500</code>); 触发需 si&lt;1.5s 配置, 本轮 si=1.5s 生产对齐未触发</td><td>挂起, 不收编</td></tr>
+  <tr><td>4</td><td><b>属实</b>(复现过)</td><td>k=1 窗每 30s 对账 dropped 20-39 点 = 组帧 t(实测 ts) vs GET 槽位 t 错位常态实证; 漂移分量未单独标定</td><td>F3 对账等价电池覆盖</td></tr>
+  <tr><td>5</td><td><b>属实</b>(代码直读确证)</td><td>零变化拍 fx-only rAF 路径代码确证(!slide 且 !needsTail 分支 fx 非空即起 rAF); 触发 = 活跃轨值&gt;0 的拍(常态); 帧成本幅度未量化</td><td>非症状源, 不收编(D7 已拍板动效层为产品功能)</td></tr>
+  <tr><td>6</td><td>未取证</td><td>触发点 delta=2 格稳态 0 次(四窗 backlog (2,3] 桶全零); 机制代码面成立(修剪线用目标锚); 伪象未采到</td><td>收编候选 F5④(已列 §03)</td></tr>
+  <tr><td>7</td><td>未取证</td><td>渲染参数面(cellPx)未探针; 行为面旁证: 四窗稳态 rewin=0、积压恒 ≤2 格, 无反例也无实证</td><td>挂起, S6 对照</td></tr>
+  <tr><td>8</td><td><b>属实</b>(复现过)</td><td>w8@1m 稳态干净(0 rewin / 0 值改写 / dropped 纯密度); 位移异常全部来自停顿恢复(3.08 格 rewin)与隐藏回场(20 格 rewin)</td><td>归窗排除项成立</td></tr>
+</table>
+<p><b>F2 按需化裁决: 实施</b>。阈值出处 = <code>qb_traffic_chart.js:805 _QB_FX_DELTA_SILENT = 0.005</code>(还原后现行行号; 探针期为 :934; 既有代码唯一以值变化幅度定义的静默阈值, INV-2「幅度在静默阈值内的对账差值直接吸收」以此为基准); 实测摊配改写幅度 = 非零流量期单点改写达列峰 58%(w8@30m maxRel=0.5807)至 100%(w6@24h maxRel=1.0), 超阈值两个数量级以上 → S1-F2 批应派。D7 三证据(降级触发率: 稳态 0, 注入面才可达, degradedMs=60010 实测吻合 / rewin 频度: 稳态 0, 全程 10 次全归因 / 摊配改写幅度: 稳态 0, 尖峰期 58%-100% 列峰)均支持取向 A 维持; 探针基线计数留档见报告(供 S6 对照)。</p>
+<p><b>计划外嫌疑(本批不修, 待 S5 处置)</b>: 落盘面 04:55:53 起两系列日文件停写(flush_interval=60s 到点未落盘), GET 内存面样本连续(30m 窗 26.6 分钟无 &gt;6s 空洞)、应用日志无异常 —— 采样/GET 面与落盘面脱节, 原因未查。</p>
 
 <h2><span class="no">§03</span>方案总览</h2>
 
@@ -241,6 +263,7 @@
   <li><span class="tag">R0 · 26-11-26-2333</span> 初版: 两路只读取证(代码直读锚 0c2ab2ec + 16 份历史文档互证)+ grilling 两轮 D1-D6 拍板后入库 Open; 三症状根因矩阵(§02)、三条合并缝不变量(§01)、六项修法(§03)、六批实施(§04); S0-S6 待显式开工。</li>
   <li><span class="tag">R1 · 26-11-26-2339</span> 增补取证口径声明: 候选机制未经真机复现, 归窗与裁决归 S0(子代理对账轮)</li>
   <li><span class="tag">R2 · 26-11-27-0004</span> 增补 §08 复杂度对照与简化拍板(库存实测/成熟方案对照/逐层判定)+ D7 取向 A 回填 §06 + F2 按需化同步 §03/§04 + S0 探针补复杂度使用度证据</li>
+  <li><span class="tag">R3 · 26-11-27-0526</span> S0b 真机裁决回填: 三症状归窗清单入 §02 + S4 清单八条三态裁决(属实 3/不属实 0/未取证 5) + F2 按需化裁决为实施(实测改写幅度列峰 58%-100%, 超静默阈值 0.005 两个数量级) + D7 三证据判读 + 计划外嫌疑(落盘面停写)记档待 S5</li>
 </ul>
 
 </div>

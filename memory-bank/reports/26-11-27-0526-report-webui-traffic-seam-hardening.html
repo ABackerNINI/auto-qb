@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>S0b 真机取证裁决报告: 三症状归窗 + S4 八条 + F2 按需化 + 探针基线</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-traffic-seam-hardening">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-27-0526">
+<meta name="doc-updated" content="26-11-27-0526">
+<meta name="doc-refs" content="memory-bank/plans/26-11-26-2333-plan-webui-traffic-seam-hardening.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: webui-traffic-seam-hardening</div>
+<h1>S0b 真机取证裁决报告: 三症状归窗 + S4 八条 + F2 按需化 + 探针基线</h1>
+<p class="lede">本篇只回答: 计划 26-11-26-2333 §02 的三症状在真机上各归哪个根因、S4 嫌疑清单八条各判三态的哪一态、F2 修正帧按计划口径该不该实施, 以及探针基线计数留档供 S6 对照 —— 快照冻结于 26-11-27 S0b 批, 后续 S 批只引用不改写。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-27-0526 · <b>doc-updated</b> 26-11-27-0526 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 计划 <a href="../plans/26-11-26-2333-plan-webui-traffic-seam-hardening.html">26-11-26-2333 §04 S0 行</a>取证半程(接续 S0b-1 探针采集批); 数据面单点 = <a href="../reports/attachments/s0b-probe-26-11-27.md">attachments/s0b-probe-26-11-27.md</a> + <code>attachments/s0b-raw/</code> 41 份原始 JSON; 分支 feat/traffic-seam-hardening(纯本地, 未 commit)<br>
+  <b>回填</b> 归窗清单 + S4 八条裁决 + F2 裁决已同步回填计划 §02(变更记录 R3 · 26-11-27-0526)
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<ul>
+  <li><b>F2 修正帧重发: 实施</b>(一字结论)。阈值出处 = <code>qb_traffic_chart.js:805 _QB_FX_DELTA_SILENT = 0.005</code>(还原后现行行号; 探针期工作区为 :934; 既有代码唯一以值变化幅度定义的静默阈值); 实测摊配改写幅度 = 非零流量期单点改写达<b>列峰 58%</b>(w8@30m, maxRel=0.5807)至<b>列峰 100%</b>(w6@24h, maxRel=1.0), 超阈值两个数量级以上 → 按计划口径「超静默阈值才实施」判定实施, <b>主会话应派 S1-F2 批</b>。</li>
+  <li><b>S4 清单八条: 属实 3 / 不属实 0 / 未取证 5</b>。属实 = S4-4(两源 t 基准差)、S4-5(零变化拍 fx-only rAF)、S4-8(1m 折线只来自积压合并/停顿恢复, 排除项成立); 不属实 = 0 条(八条无一被证据反例推翻); 未取证 = S4-1/2/3/6/7(机制代码面均成立, 触发条件或伪象缺真机面, 见 §03)。</li>
+  <li><b>三症状归窗</b>: ①一拍双跳 → <b>S1-1</b>(摊配追溯改写不重发, S2-3 同源)+ 伴随 S1-3 纵轴重定; ②曲线整体跳变 → <b>S2-1</b>(rewin 瞬时落地), 触发器 S3-2(合并回场一次判定); ③检查点之间折线 → <b>S3-3</b>(k&gt;1 双粒度结构性), S3-1 rewin 侧半实证。回填计划 §02(R3)。</li>
+  <li><b>D7 三证据判读</b>: 降级触发率(稳态 0, 注入面才可达, degradedMs=60010 实测吻合 60s 设计值)、rewin 频度(稳态 0/40min, 全程 10 次逐一归因: 首载 2/隐藏回场 1/切窗 6/停顿恢复 1)、摊配改写幅度(稳态 0, 尖峰期 58%-100% 列峰) —— 三证据均支持 D7 取向 A(维持现功能按计划推进); 摊配幅度证据同时把 F2 从「按需」落为「实施」。</li>
+  <li><b>探针还原核验</b>: 还原后 <code>commands run test.one -- tests/unit/test_webui_static_dom_panel_traffic.py</code> 实测 17/17 passed; 全库电池 7036 passed + 6 skipped(<code>commands run test.full</code>, 现行基线切片 26-11-27-0125, 2026-11-27 01:23 实测); <code>git diff</code> qb_traffic_chart.js 归零。</li>
+  <li><b>计划外嫌疑(本批不修)</b>: 落盘面 04:55:53 起两系列日文件停写而 GET 内存面正常 —— 待 S5 处置, 见 §04。</li>
+</ul>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>三症状归窗清单(真机探针面)</h3>
+<table>
+  <tr><th>症状</th><th>主根因(归窗)</th><th>真机依据(探针实测)</th><th>次要分量</th></tr>
+  <tr><td>① 一拍双跳</td><td><b>S1-1</b> 摊配追溯改写不重发(S2-3 同源)</td><td>值改写仅非零流量期出现: w6(24h 窗)2 点 maxAbs=857 maxRel=1.0; w8(30m 窗)1 点 maxAbs=1680 maxRel=0.5807; 稳态 accChanged=0(四窗合计 87 笔对账, s0b-raw/w4-24h-end.json: c.accLoads=87)</td><td>S1-3 纵轴重定实测(尖峰期列峰 0→非零, y 档位随对账/判定帧重定); S1-2 前提面(同拍双判定 9.8%-10.3%)存在但稳态零改写 → 降级为条件性放大器</td></tr>
+  <tr><td>② 曲线整体跳变</td><td><b>S2-1</b> rewin 瞬时落地</td><td>rewin 全程 10 次逐一归因(w1-w4 会话 7 + w8 补跑 3, 逐条事件列见 s0b-raw 各窗 events): 首载 2 / 隐藏 30s 回场 delta=20 格 1 / 切窗 6(w1-w4 会话 5 + w8 切 30m 1) / 停顿恢复 delta=3.08 格 1(w8); 四窗纯稳态 rewin=0/40min</td><td>S3-2 合并回场一次判定为触发器(隐藏回场 + 停顿恢复均经合并路径); S2-2 stride 翻 k 未取证(seq 断档全程 0, 缺口标记面无触发)</td></tr>
+  <tr><td>③ 检查点之间折线</td><td><b>S3-3</b> k&gt;1 双粒度结构性</td><td>30m 窗每次 30s 对账整列换格 dropped≈407-410(w3 当窗 410 / w8 407-409; 24h 窗列浅, 当窗 dropped 20-25 即整列, s0b-raw/w4-24h-end.json events t&gt;1832162); 组界随窗滑动全列失配: 检查点间距 k×si vs 事件尾点间距 si; k=1 窗 dropped 20-39 点纯密度(t 基准差), 值不改</td><td>S3-1 rewin 侧半实证(3.08 格跨严格阈值 delta&gt;2×step); 恰 2.00 格 slide 形态未直接采到; S3-4 回并多点伪象未裁(tailMerged 有计数 w6=8, 位移多步未观测)</td></tr>
+</table>
+
+<h3>S4 清单八条裁决(F6 输入)</h3>
+<table>
+  <tr><th>#</th><th>嫌疑点(计划 §02 原文摘要)</th><th>裁决</th><th>依据(验证层标注)</th><th>去向</th></tr>
+  <tr><td>1</td><td>GET 换列后旧显示值写进新列尾, 末段端点一帧错位(靠收敛帧纠正)</td><td class="wr">未取证</td><td>机制: 代码直读成立(L1 track prev=旧 shown 跨换列收敛, <code>_qbFxTrackNext</code> 路径)。前提面: 真机实证(尖峰期对账改写 2-3 点)。伪象帧: 未逐帧采到(探针未挂帧级端点值面)。稳态值恒等下不可见(accChanged=0)</td><td>收编候选 F5③(GET 换列后 prev 取新列尾同 t 点, 已列计划 §03)</td></tr>
+  <tr><td>2</td><td>cap 头剪 + 隐藏期不剪 → 长隐藏回场余量列被剪穿, 短暂左缺口</td><td class="wr">未取证</td><td>机制: 代码直读成立(cap 截断 + <code>live=!document.hidden</code> 隐藏期不剪均在)。触发: 未达 —— 本次隐藏 30s 仅增 ~20 点, cap=_QB_RAW_POINTS_MAX+64≈564 点未触及。左缺口伪象未观测</td><td>与 Open issue 26-11-22-1401 同族, S6 复核</td></tr>
+  <tr><td>3</td><td>静默判据 si 下限夹取 1.5s → si&lt;1.5s 配置下徽标/重拉迟钝</td><td class="wr">未取证</td><td>机制: 代码直读确证(<code>_QB_POLL_MIN_MS=1500</code> 夹取存在, 静默阈=3×si 随之抬底)。触发: 未配置 —— 本轮 si=1.5s 生产对齐, si&lt;1.5s 场景未跑</td><td>挂起, 不收编</td></tr>
+  <tr><td>4</td><td>组帧 t 取首个成员真值 t, 时钟漂移下组帧与 GET 组点错位</td><td class="good">属实</td><td>真机复现过: k=1 窗(1m/5m)每 30s 对账 dropped 20-39 点 = 组帧 t(实测样本 ts)与 GET 组点 t(槽位 ts)错位的常态直接表现(w1 maxDropped=39/804 点, w2 198/4867)。漂移分量未单独标定(短程观察漂移可忽略, 机制不依赖漂移)</td><td>F3 对账等价电池覆盖(t 基准差列为断言面)</td></tr>
+  <tr><td>5</td><td>零变化拍也起 fx-only rAF 循环(纯帧成本, 非症状源)</td><td class="good">属实</td><td>代码直读确证(本轮复读): <code>!slide &amp;&amp; !needsTail</code> 早退分支中 fx 非空即 <code>requestAnimationFrame</code>(needsShift=false/needsTail=false 的 fx-only anim); 触发 = 活跃轨值&gt;0 的拍(真机常态存在)。帧成本幅度未量化(探针未挂 rAF 计数面)</td><td>非症状源, 不收编(D7 已拍板动效层为产品功能); 仅记录</td></tr>
+  <tr><td>6</td><td>修剪线锚用目标锚(领先视口), delta=2 时左缘恰好压线、边界无余量</td><td class="wr">未取证</td><td>机制: 代码直读成立(修剪线 <code>aT=_qbBeat.anchor</code> 目标锚, margin=2×组距)。触发: delta=2 格稳态 0 次 —— 四窗 backlog (2,3] 桶全零(稳态积压恒 ≤2 格以下), 伪象未采到</td><td>收编候选 F5④(修剪线锚改显示锚 + delta=2 留余量, 已列计划 §03)</td></tr>
+  <tr><td>7</td><td>cellPx 按名义窗点数计、与实际列长解耦, 短窗真滑/长窗恒瞬时无中间态</td><td class="wr">未取证</td><td>渲染参数面(cellPx)未探针。行为面旁证: 四窗稳态 rewin=0、积压 (0,1] 占 55-75%、(1,2] 占 20-40%、(2,3] 恒 0 —— 未现反例也无直接实证</td><td>挂起, S6 对照</td></tr>
+  <tr><td>8</td><td>1m 窗无前端特判, k=1 稳定 → 1m 的折线只能来自积压合并/停顿恢复(S3-1/S3-2)</td><td class="good">属实</td><td>真机复现过: w8@1m 显式切窗稳态干净(0 rewin / 0 值改写 / dropped 纯密度); 位移异常全部来自停顿恢复(3.1s 停顿 → 恢复拍 3.08 格 → rewin)与隐藏回场(30s → 20 格 rewin) —— 排除项成立</td><td>归窗排除项成立(归窗清单引用)</td></tr>
+</table>
+<div class="aside">三态口径: <b>属实</b> = 机制成立且效应有真机观测(或纯代码结构断言经本轮复读确证); <b>不属实</b> = 证据反例; <b>未取证</b> = 机制代码面成立但触发条件或伪象缺真机面, 说明缺什么(见各条依据)。八条无一不属实。</div>
+
+<h3>F2 按需化裁决</h3>
+<table>
+  <tr><th>项</th><th>内容</th></tr>
+  <tr><td>计划口径</td><td>「S0 摊配改写幅度证据超静默阈值才实施; 未实施前由 INV-2 静默吸收承载」(计划 §03 F2 行)</td></tr>
+  <tr><td>阈值出处</td><td><code>qb_traffic_chart.js:805</code>(还原后现行; 探针期 :934) <code>_QB_FX_DELTA_SILENT = 0.005</code> —— 全文件唯一以值变化幅度(delta)定义的静默阈值(另一含 "SILENCE" 的常量 <code>_QB_STREAM_SILENCE_X=3</code> 是停流判据, 与值改写幅度无关); INV-2「幅度在静默阈值内的对账差值直接吸收, 不建拍」以此为基准</td></tr>
+  <tr><td>实测幅度</td><td>摊配对已派发点的值改写仅在非零流量期出现: w6@24h 2 点 maxAbs=857(=当列峰值, maxRel=1.0); w8@30m 1 点 maxAbs=1680(maxRel=0.5807); 稳态(零流量)四窗合计 87 笔对账 changed=0</td></tr>
+  <tr><td>判定</td><td><b class="good">实施</b> —— 实测幅度为阈值(0.5%)的 116-200 倍, 远超静默阈值; 静默吸收承载不了尖峰期改写(INV-3 违约面同时实证: 修正帧量 0/全程, 改写只发生在 GET 里)</td></tr>
+  <tr><td>直接后果</td><td>主会话应派 S1-F2 批(修正帧重发 + 前端中段改写分支 + 修正帧守阵)</td></tr>
+</table>
+
+<h3>D7 复杂度使用度三证据判读</h3>
+<table>
+  <tr><th>证据</th><th>实测</th><th>判读</th></tr>
+  <tr><td>降级轮询触发率</td><td>纯稳态 40 分钟 0 触发; 注入面(拦截 stream 路由 3 连败)可达: retry=3(3s/轮)→ degradedEnter → <b>degradedMs=60010</b>(60s 静默重试设计值实测吻合)→ 流恢复即退役</td><td>降级轮询路径低频但真实可达, 恢复节奏成立 → 去留候选维持「保留」; E7 设计行为真机成立</td></tr>
+  <tr><td>rewin 频度</td><td>稳态 0/40min(四窗); 全程 10 次逐一归因(首载 2/隐藏回场 1/切窗 6/停顿恢复 1)</td><td>rewin 是场景驱动而非稳态噪声; 瞬时落地语义在真机只出现在真实场景边界</td></tr>
+  <tr><td>摊配改写幅度</td><td>稳态 0 值改写(87 笔对账 changed=0); 非零流量期单点幅度 = 列峰 58%-100%</td><td>机制真实且大幅 → F2 从「按需」落为「实施」(见上表)</td></tr>
+</table>
+<p>三证据均支持 D7 取向 A(维持现功能、按本计划推进): 复杂机制(降级轮询/rewin/摊配)在稳态零占用, 但在各自场景面行为与设计值吻合 —— 是「低频正确」而非「死代码」。</p>
+
+<h3>探针基线计数留档(供 S6 对照; 聚合自 s0b-raw/ 41 份 JSON)</h3>
+<table>
+  <tr><th>面</th><th>w1-1m</th><th>w2-5m</th><th>w3-30m</th><th>w4-24h</th><th>备注</th></tr>
+  <tr><td>判定帧间隔 beatGapMs n / p50 / p95 / max</td><td>408 / 1506 / 1516 / 30169</td><td>832 / 1506 / 1516 / 30169</td><td>1260 / 1507 / 1516 / 30169</td><td>1684 / 1507 / 1516 / 30169</td><td>判定帧跟随采样节拍(1.5s); 唯一 &gt;3s gap = 页面隐藏 30s 期(rAF 停)</td></tr>
+  <tr><td>同拍双判定 doubleJudge</td><td>40/409 (9.8%)</td><td>82/833 (9.8%)</td><td>130/1261 (10.3%)</td><td>172/1685 (10.2%)</td><td>对账 GET 落袋拍与 SSE 帧拍同拍; 稳态未造成值改写</td></tr>
+  <tr><td>积压格数 0 / (0,1] / (1,2] / (2,3] / &gt;3</td><td>20 / 224 / 164 / 0 / 1</td><td>41 / 466 / 325 / 0 / 1</td><td>65 / 864 / 331 / 0 / 1</td><td>86 / 1267 / 331 / 0 / 1</td><td>稳态恒 ≤2 格; &gt;3 格仅隐藏回场 1 次; exact-2.0 = 0</td></tr>
+  <tr><td>rewin 事件</td><td colspan="4">全程 10 次(w1-w4 会话 7 + w8 补跑 3): 首载 2 + 隐藏回场(delta=20 格)1 + 切窗 6(5+1) + 停顿恢复(delta=3.08 格)1</td><td>纯稳态 0/40min</td></tr>
+  <tr><td>对账 30s 笔数 当窗增量(相邻快照差分): 笔数 / changed&gt;0 / dropped&gt;0 / maxDropped</td><td>21 / 0 / 20 / 39</td><td>21 / 0 / 21 / 198</td><td>24 / 0 / 24 / 410</td><td>21 / 0 / 21 / 25</td><td>四窗合计 87 笔(s0b-raw/w4-24h-end.json: c.accLoads=87); k=1 窗 dropped=纯密度(t 基准差); k&gt;1 窗 dropped≈整列(30m 407-410; 24h 列浅整列即 20-25)</td></tr>
+  <tr><td>对账 30s 笔数 终态累计(同上口径): 笔数 / changed&gt;0 / dropped&gt;0 / maxDropped</td><td>21 / 0 / 20 / 39</td><td>42 / 0 / 41 / 198</td><td>66 / 0 / 65 / 410</td><td>87 / 0 / 86 / 410</td><td>计数器跨窗累计未 reset, w2-w4 累计含此前各窗</td></tr>
+  <tr><td>尖峰期值改写</td><td colspan="4">w6: changed=2, maxAbs=857, maxRel=1.0; w8@30m: changed=1, maxAbs=1680, maxRel=0.5807</td><td>改写幅度 = 列峰 58%-100%</td></tr>
+  <tr><td>修正帧 corrPoints / seq 断档 seqGap</td><td colspan="4">0 / 0(全部窗位, 含断连/降级/尖峰)</td><td>INV-3 违约面实证(改写只发生在 GET, 无重发)</td></tr>
+  <tr><td>降级路径</td><td colspan="4">稳态 0 触发; 注入周期: retry=3 → degradedEnter → degradedMs=60010 → degradedExit(流恢复即退役); w5 终态计数 degradedEnter=2 / degradedExit=1(s0b-raw/w5-30m-end.json: c) —— 第二周期 t≈627s 无注入 3 连败再入降级, 至窗终未退出, 归因未查</td><td>60s 设计值实测吻合</td></tr>
+  <tr><td>页面隐藏 30s 回场</td><td colspan="4">对账 dropped≈309(密度改写集中爆发) + rewin delta=20 格</td><td>S2-1/S3-2 实证</td></tr>
+  <tr><td>停顿恰 2 拍(w8@1m)</td><td colspan="4">暂停 dev 服 3.1s(可逆) → 恢复拍 3.08 格 → rewin(delta&gt;2×step 严格阈值被跨过)</td><td>恰 2.00 格 slide 形态未直接采到</td></tr>
+  <tr><td>尖峰峰值</td><td colspan="4">dl≈2.9KB/s(μTP 环回 + alt_speed 遗留压制; 250KB/s 计划幅度未达成, 机制证据不依赖幅度)</td><td>纵轴重定实证: 列峰 0→非零后 y 档位重定</td></tr>
+</table>
+<p class="cm">口径注: 探针计数器跨窗累计未 reset —— 本表 w2-w4 列为该窗终态快照累计值(含此前各窗); 对账笔数已并出「当窗增量」行(相邻快照差分, 四窗合计 87); beatGapMs/backlog 各行 n 同为快照累计值。</p>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<h3>方法</h3>
+<ul>
+  <li>真机面: 测试 qB 主实例 36595(v5.2.3, firewalled)+ 副实例 36596 做种, real-fake 8M 种子, dl 限速; 观察服 = <code>dev.run -- tmp-analysis/s0b-webui.yml</code>(最小配置 + <code>qb_traffic.enabled: true</code> + main_tick 1.5S 对齐生产; dev.webui 无 qb_traffic 段不可用)。观察页 playwright chromium headless 1600×900, /flux/ → 种子页签 → 抽屉 → 流量页签逐窗切窗。</li>
+  <li>探针面: <code>qb_traffic_chart.js</code> 模块级单例 <code>window.__AQB_TRAFFIC_PROBE</code>(dump/summary/mark/reset/copy + visibilitychange 监听)+ 8 处观察挂点(判定帧记账/SSE 帧量/seq 断档/修正点扫描/对账改写幅度/降级进出/重试轮), 全带 <code>S0b-probe</code> 注释标记。八窗(w1-w8)各 ≥10 分钟稳态 + 场景注入(隐藏回场/断网/换窗往返/定点暂停/尖峰/降级), 每窗 start/场景/end 快照落盘 41 份原始 JSON。</li>
+  <li>裁决方法: 探针数据为主, 辅以本轮代码复读交叉验证(S4-1/2/3/5/6 的机制面逐一复读确认; 行号以探针还原前工作区为准(_QB_FX_DELTA_SILENT 探针期 :934, 还原后现行 :805), 计划内引用为锚 0c2ab2ec 旧行号)。三态裁决口径见 §02 aside。</li>
+</ul>
+<h3>局限与未取证项</h3>
+<ul>
+  <li><b>未取证清单</b>: ①delta 恰 2.00 格 slide-2-格形态(S3-1 的「恰 2 拍不 rewin」半边; 需暂停 ≤1.5s 且相位精确对齐, 实测恢复拍含 +1.5s 采样等待, 位移下限 ≈3 格); ②S4-1 端点一帧错位(缺帧级端点值探针面); ③S4-2 长隐藏剪穿(触发需尾点超 cap≈564 点, 本次 30s 隐藏仅 +20 点); ④S4-3 si&lt;1.5s 配置面(本轮 si=1.5s 生产对齐); ⑤S4-6 delta=2 触发点(稳态 0 次, (2,3] 桶四窗全零); ⑥S4-7 cellPx 渲染参数面(未探针); ⑦250KB/s 量级大幅尖峰(μTP 环回爬坡 + alt_speed 遗留压制, 峰值 2.9KB/s; 机制证据不依赖幅度); ⑧30d+ agg 段窗(计划 S0 行口径 = 长短窗各 2, 不在清单); ⑨真 taskkill 面断连(红线禁令, 断连证据改用路由拦截/断网替代; SSE 既连面 setOffline 无效这一事实已如实记录)。</li>
+  <li><b>w5-w7 窗位偏差</b>: 三窗实跑在默认 24h 窗(playwright 全新 context 空 localStorage, 抽屉默认窗=24 时, cells≈0.01 特征 + acc newLen=17 互证); 恰 2 拍与尖峰已在 w8 于正确窗位补跑, w5 降级场景窗位无关(有效)。</li>
+  <li><b>环境扰动记录</b>: dev.run 引擎 timeout=3600s 到点强杀一次(w5 后半段作废, 重启补跑); 36595 的 dl_limit 恢复未生效(49152, 原值 1024, setPreferences 不落原因未深查); 种子与 dl-8M 目录保留(real.seed 标准产物, 需回收走 real.seed.rm)。</li>
+</ul>
+
+<h2><span class="no">§04</span>计划外嫌疑(本批不修, 待 S5 处置)</h2>
+<p><b>落盘面停写</b>: 两个系列的日文件 mtime 同停在 04:55:53(重启后 12 分钟), <code>flush_interval=1M</code>(60s)到点未落盘; 同期 GET 内存面样本连续(30m 窗 26.6 分钟无 &gt;6s 空洞, 横跨该时刻), 应用日志无任何异常。现象 = 采样/GET 面与落盘面脱节, 原因未查(超出本批取证范围)。本批全部结论基于 GET+事件面, 不依赖落盘面, 不受影响。<b>处置建议</b>: S5 批接手排查(flush 路径是否被异常吞掉/句柄面), 暂不入池(归属 S5 排查后再定)。</p>
+
+<h2><span class="no">§05</span>探针改动面与还原指引(指针)</h2>
+<ul>
+  <li>探针改动面: 唯一源码文件 <code>src/auto_qb/webui/static/shared/qb_traffic_chart.js</code>(模块级单例节 + 8 处挂点, 全带 <code>S0b-probe</code> 注释标记, grep 可枚举; 逐挂点清单见 <a href="../reports/attachments/s0b-probe-26-11-27.md">attachments/s0b-probe-26-11-27.md §2</a>)。</li>
+  <li>还原指引(单点): 同附件 §2「还原指引」节 —— 删除 <code>===== S0b</code> 至 <code>===== S0b probe end =====</code> 整节 + grep <code>S0b-probe</code> 命中的挂点行 + 清理 tmp-analysis 一次性脚本; 还原后 <code>commands run test.one -- tests/unit/test_webui_static_dom_panel_traffic.py</code> 应回 17 passed。本批(S0b-2)已按该指引执行还原, 结果见 §01 与提交面核验(git diff 该文件归零)。</li>
+  <li>原始 JSON 留档: <code>attachments/s0b-raw/</code> 41 份(自 gitignored 临时区复制入库); tmp-analysis/ 原件为临时区, 随还原清理。</li>
+</ul>
+
+</div>
+</body>
+</html>
