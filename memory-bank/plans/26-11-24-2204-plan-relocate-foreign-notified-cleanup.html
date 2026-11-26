@@ -7,9 +7,9 @@
 <title>外部旧路径种子通知账启动自愈</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-foreign-notified-cleanup">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-24-2204">
-<meta name="doc-updated" content="26-11-27-0251">
+<meta name="doc-updated" content="26-11-27-0327">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-24-backend-relocate-foreign-notified-cleanup.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>外部旧路径种子通知账启动自愈</h1>
 <p class="lede">本篇只回答: 外部旧路径种子通知账(relocate.foreign.notified)在 job 终态/清空历史后永久滞留,如何在不推翻 D4「终态 mismatch 重落 + 恰重发一次」拍板的前提下,用启动接管期的孤儿账自愈清掉陈旧条目。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-24-2204 · <b>doc-updated</b> 26-11-27-0251 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-24-2204 · <b>doc-updated</b> 26-11-27-0327 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-24 会话只读取证 + 用户逐项 grilling 拍板(D1–D8);取证对象 <code>D:\Projects\auto-qb-long-seeding</code>(工作树),当前 clone 仅落文档
 </div>
 
@@ -149,6 +149,7 @@
   <li><span class="tag">R0 · 26-11-24-2204</span> 初版:来自会话只读取证(61 条陈旧账、job=0、终态边沿已过)与用户 grilling 的 D1–D8;定 A 窄版启动自愈,保留 D4 重落重告警。</li>
   <li><span class="tag">R1 · 26-11-24-2212</span> 评审修订:① D4 拍板引用补全为 <code>26-11-21-1326-refactor-relocate-foreign-notified-cleanup</code>(同时间戳另有一件 view-stale-gate-off,此前引用有歧义);② 补明 <code>enabled=false</code> 时 <code>_load_jobs</code> 不被调用、存量账不自愈的边界(§01/§03 D7/§07)。两条均经引文校验与源码复核属实。</li>
   <li><span class="tag">R2 · 26-11-27-0251</span> 补 D9: 换代走写面的建键风险与只读判在收窄</li>
+  <li><span class="tag">R3 · 26-11-27-0327</span> S4 真机验收 RM04-38 PASS，计划收口</li>
 </ul>
 
 </div>

@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-11-24
 **Updated:** 2026-11-27
-**Summary:** 外部旧路径种子通知账启动自愈与探测确认 UX 记账
+**Summary:** 外部旧路径种子通知账启动自愈（RM04-38 真机清 3 留 2 + WebUI 换代 PASS，本专题收口）与探测确认 UX 记账（另 issue 未完成）
 **Topics:** backend-relocate-foreign-notified-cleanup
-**Refs:** memory-bank/plans/26-11-24-2204-plan-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-24-2150-bug-relocate-probe-reask-ui-loop.html, memory-bank/testing/baselines/26-11-24-2221-relocate-foreign-notified-cleanup-and-confirm-ux-accounting.md, memory-bank/testing/baselines/26-11-27-0250-relocate-foreign-startup-cleanup.md
+**Refs:** memory-bank/plans/26-11-24-2204-plan-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-24-2150-bug-relocate-probe-reask-ui-loop.html, memory-bank/testing/baselines/26-11-24-2221-relocate-foreign-notified-cleanup-and-confirm-ux-accounting.md, memory-bank/testing/baselines/26-11-27-0250-relocate-foreign-startup-cleanup.md, memory-bank/testing/real-baselines/26-11-27-0324-real-rm04-foreign-startup-selfheal.md
 
 ## 本篇只回答
 
@@ -48,7 +48,7 @@
 | T3 | grilling 出启动自愈计划并落 D1–D8 决策 | Done(2026-11-24) |
 | T4 | 评审、闸门、全量测试、基线/切片/档案回写并随本专题入库 | Done(2026-11-24) |
 | T5 | 按计划实现启动自愈清理函数与接线 | Done(2026-11-27) |
-| T6 | 补测试并用测试 qB `real.up` 验收 | Open |
+| T6 | 补测试并用测试 qB `real.up` 验收 | Done(2026-11-27) |
 
 ## 进度日志
 
@@ -59,3 +59,5 @@
 - 2026-11-24 22:22 只读诊断旧路径外部种子滞留与确认回环根因: 新建探测确认 UX issue 与启动自愈窄版清理计划, 保留 D4 终态重告警语义; 两轮评审零 actionable, kb.check/kb.docmap/ship.gate 全绿, 全量测试全绿见 kb.baseline 26-11-24-2221; 实现与测试 qB real.up 验收留作后续
 
 - 2026-11-27 02:50 按计划实现启动自愈清理函数/接线/D4 交叉守阵，全量测试全绿并落新基线; 三轮评审零 blocker、1 条 minor 已修、检 1/1; 真机 real.up 验收留阶段 5
+
+- 2026-11-27 03:26 RM04-38 真机验收 PASS：清 3 留 2（孤儿 A/终态 A/mismatch 清，B `rm04c38done` 与活跃 A `rm04c38active` 留、字段无漂移）+ WebUI 换代 `stale_rows=0`（B 行 `[foreign, B, rm04c38done]`），本专题收口；本批真机用例已在阶段 5a 评审零 blocker，证据见 memory-bank/testing/real-baselines/26-11-27-0324-real-rm04-foreign-startup-selfheal.md
