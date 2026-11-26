@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { SKINS } from './harness.mjs';
+import { SKINS, SKINS_ALL } from './harness.mjs';
 import { installRuntimeErrorGuard } from './lib/errors.mjs';
 import { openApp } from './lib/gestures.mjs';
 import { INST, readInst } from './lib/vm.mjs';
@@ -213,6 +213,71 @@ test.describe('A4 栅格稳定性 · 1m 窗 2s 桶连续观测: 变长点列精�
           + `${frames[i - 1].splitsN} 允许 ≤2s 细化凹口(与首刻位同款 —— 连续滑动的密度切换), `
           + `大幅回跳(>2s)= split 集中段 pop 回潮`)
           .toBeGreaterThanOrEqual(frames[i - 1].splitsN - 2);
+      }
+    });
+  }
+});
+
+test.describe('R2 横向溢出 · 1m 逐拍菱形锚出界必须裁在图表层', () => {
+  installRuntimeErrorGuard(test);
+  test.use({ deviceScaleFactor: 1.5 });
+
+  for (const skin of SKINS_ALL) {
+    test(`[${skin}] 连续 3 拍正文与图根无横向滚动 @fast`, async ({ page, request }) => {
+      test.setTimeout(60_000);
+      await pumpStop(request).catch(() => null);
+      await stubFlags(page);
+      await stubTrafficColumn(page);
+      await openApp(page, skin);
+      await openTorrentTraffic(page);
+      await waitStreamLive(page);
+
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        window.__qbOverflowWatch = { frames: [], anchors: new Set(), done: false };
+        const tick = () => {
+          const s = window.__qbOverflowWatch;
+          const u = vm._qbCharts && vm._qbCharts.torrent;
+          const body = document.querySelector('.drawer-body');
+          const plot = document.querySelector('.uplot');
+          if (u && u._qbBeat && u._qbBeat.anchor != null) s.anchors.add(u._qbBeat.anchor);
+          if (u && body && plot) {
+            const plotRect = plot.getBoundingClientRect();
+            const anchors = [...plot.querySelectorAll('.qb-fx-anchor')]
+              .filter((el) => getComputedStyle(el).display !== 'none');
+            const anchorRight = anchors.reduce((right, el) =>
+              Math.max(right, el.getBoundingClientRect().right), plotRect.right);
+            s.frames.push({
+              bodyClient: body.clientWidth,
+              bodyScroll: body.scrollWidth,
+              plotClient: plot.clientWidth,
+              plotScroll: plot.scrollWidth,
+              anchorOut: anchorRight - plotRect.right,
+              visibleAnchors: anchors.length,
+            });
+            if (s.anchors.size >= 4) s.done = true;
+          }
+          if (!s.done) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      })()`);
+      await pumpStart(request, {
+        scope: 'torrent:' + (await readInst(page, 'vm.drawer.hash')),
+        si: 2,
+        t0: pumpT0(2),
+      });
+      await expect.poll(() => readInst(page, 'window.__qbOverflowWatch.done'), {
+        message: '未采满初始锚 + 3 拍(SSE 或锚推进链路断了)',
+        timeout: 30_000,
+      }).toBe(true);
+      const frames = await page.evaluate(() => window.__qbOverflowWatch.frames);
+      expect(frames.length, '逐帧采样器不得空转').toBeGreaterThanOrEqual(4);
+      expect(frames.some((f) => f.visibleAnchors > 0), '必须观察到常驻菱形锚').toBe(true);
+      expect(frames.some((f) => f.anchorOut > 1),
+        '必须真实观察到动画锚越过图根右缘(否则裁剪断言没有命中缺陷形态)').toBe(true);
+      for (const [i, f] of frames.entries()) {
+        expect(f.bodyScroll, `第 ${i} 帧详情正文横向溢出`).toBeLessThanOrEqual(f.bodyClient);
+        expect(f.plotScroll, `第 ${i} 帧 uPlot 图根横向溢出`).toBeLessThanOrEqual(f.plotClient);
       }
     });
   }

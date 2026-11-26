@@ -4441,7 +4441,8 @@ window.AQB_QB_TRAFFIC = {
         "/* aqb: uPlot 基础样式注入(结构性子集, 色值 token 化; 见 qb_traffic_chart.js) */",
         ".uplot, .uplot *, .uplot *::before, .uplot *::after { box-sizing: border-box; }",
         ".uplot { font-family: ui-monospace, Consolas, monospace; line-height: 1.5; width: min-content; }",
-        ".u-wrap { position: relative; user-select: none; }",
+        // 动画锚会越出图根用于滑入; 在装饰层裁剪, 不把溢出传给抽屉。
+        ".u-wrap { position: relative; user-select: none; overflow: clip; }",
         ".u-over, .u-under { position: absolute; }",
         ".uplot canvas { display: block; position: relative; width: 100%; height: 100%; }",
         ".u-axis { position: absolute; }",
