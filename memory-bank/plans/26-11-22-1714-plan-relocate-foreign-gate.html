@@ -7,9 +7,9 @@
 <title>relocate 收尾簇七件修复: 等值面假依赖自锁/差集拍频漏接/观测性文案/副本收编</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-foreign-gate">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-22-1714">
-<meta name="doc-updated" content="26-11-22-1714">
+<meta name="doc-updated" content="26-11-26-2347">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-22-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>relocate 收尾簇七件修复: 等值面假依赖自锁/差集拍频漏接/观测性文案/副本收编</h1>
 <p class="lede">本篇只回答: S4 真机验收与勘察面发现的 relocate 收尾簇 7 个入池 issue(2 bug / 2 feat / 2 refactor / 1 question)怎么修、按什么批次提交与验收 —— 七件一簇一份计划, 修法均经代码勘察落锚。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-22-1714 · <b>doc-updated</b> 26-11-22-1714 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-22-1714 · <b>doc-updated</b> 26-11-26-2347 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> grilling 会话 2026-11-22(两轮 12 问, 全部按推荐落定, 见 §06)+ 7 个入池 issue(S4 真机验收计划 26-11-21-1600 × 6、勘察面 × 1)+ 只读代码勘察(等值面/游标消费面/confirm 强探测/续任判定/循环依赖, 行号取证 2026-11-22)
 </div>
 
@@ -196,6 +196,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-22-1714</span> 初版。来源: grilling 两轮 12 问(全部按推荐落定, D1-D12)+ 7 个入池 issue + 只读代码勘察。要点: F1 判别口径定为 per-file「任一文件落 scope 下」(覆盖纯落进/混合/兄弟三态, 混合态宁拦勿漏); F2 定为累积游标 + 消费即排空并改名 pending_added_diff(修订 0434 D12); 批次 D2 三分; 真机复验清单五项列 §04 批3。</li>
+  <li><span class="tag">R1 · 26-11-26-2347</span> 真机 S4 五项复验按限定口径全判通过（①②限定口径见真机基线切片），七件修复计划全闭环</li>
 </ul>
 
 </div>

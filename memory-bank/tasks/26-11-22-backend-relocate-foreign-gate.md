@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-11-22
-**Updated:** 2026-11-22
-**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿) + 七件修复计划 26-11-22-1714 三批落地(153d7c3e/4a51f60a/0a88e51a)+ 接缝终审零发现 + 7 issue 翻 Done, 全绿见 kb.baseline; 真机 S4 复验五项待窗口
+**Updated:** 2026-11-26
+**Summary:** foreign 判定门内容根收窄与收尾进展同步呈现: 计划 26-11-21-1600 S1-S3 五批落地 + 接缝终审钉档 + S4 真机验收完成(测试 qB 环境, 判据终态 ①PARTIAL/②③④⑤ PASS/⑥ 全绿) + 七件修复计划 26-11-22-1714 三批落地(153d7c3e/4a51f60a/0a88e51a)+ 接缝终审零发现 + 7 issue 翻 Done, 全绿见 kb.baseline; 真机 S4 复验五项按限定口径全判通过(①②限定口径/③④⑤ PASS, 切片 26-11-26-2344), 计划 26-11-22-1714 翻 Done, 七件修复全链闭环
 **Topics:** backend-relocate-foreign-gate
-**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html, memory-bank/testing/baselines/26-11-22-2035-backend-relocate-foreign-gate.md, memory-bank/testing/baselines/26-11-22-2220-backend-relocate-foreign-gate.md
+**Refs:** memory-bank/plans/26-11-21-1600-plan-relocate-foreign-gate.html, memory-bank/issues/26-11-21-1500-bug-relocate-foreign-sibling-mismatch-flood.html, memory-bank/issues/26-11-21-1326-refactor-relocate-foreign-notified-cleanup.html, memory-bank/testing/baselines/26-11-22-0533-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0604-refactor-content-root-of-duplicate-join-semantics.html, memory-bank/issues/26-11-22-0604-refactor-curves-syntaxwarning-invalid-escape.html, memory-bank/testing/baselines/26-11-22-0821-backend-relocate-foreign-gate.md, memory-bank/issues/26-11-22-0905-bug-relocate-chain-gate-eq-false-dep-self-lock.html, memory-bank/issues/26-11-22-0905-bug-relocate-foreign-added-diff-race-miss.html, memory-bank/issues/26-11-22-0905-question-relocate-confirm-probe-reask-three-step.html, memory-bank/issues/26-11-22-0905-refactor-relocate-armed-log-alias-kind-naming.html, memory-bank/issues/26-11-22-0905-feat-relocate-foreign-accounted-skip-debug-log.html, memory-bank/issues/26-11-22-0906-feat-relocate-daemon-resume-no-log.html, memory-bank/plans/26-11-22-1714-plan-relocate-foreign-gate.html, memory-bank/testing/baselines/26-11-22-2035-backend-relocate-foreign-gate.md, memory-bank/testing/baselines/26-11-22-2220-backend-relocate-foreign-gate.md, memory-bank/testing/real-baselines/26-11-26-2344-real-relocate-foreign-gate-s4.md
 
 ## 本篇只回答
 
@@ -95,5 +95,19 @@
 - **计划外事项**: 基线 839eb6e5 自身档案缺「## 子任务状态表」章节致命名守卫红(经用户拍板补章节, 原独立小提交, 后经 rebase 撤销 —— 同一修复已由远端 8763ca51 顺带落地); F7 实施发现旧副本对 save_path=None 的假值容忍单点没有(3 调用点补 str(x or "") 折假值, test_web_relocate 退化用例当场抓红验证);
 - **计划外事项(补覆盖小轮, 用户拍板)**: 总收尾 test.full 覆盖率闸红归因批2 池序依赖 —— relocate_foreign.py:434-436+434 True 臂为既有行, 覆盖确定性被 F2 改变(旧「每拍重算不排空」消失候选下拍必重入池覆盖恒定, F2 后只在消失候选恰留池尾执行, 池序 = frozenset 迭代序 hash 种子随机, 每轮 ~57% 覆盖/43% 缺失抖动); 修法 = test_relocate_foreign.py 新增 test_foreign_drain_vanish_pop_pool_order_independent(_foreign_enqueue 直控池序, 断言池清空+消失不记账+零 qB API 调用, 4/4 轮恒覆盖) + pytest.ini :19 注释对齐 conftest 单点(Windows 99.5/其余 99.0); 终验 rc=0 全绿 7000P/0F/6S(两次复验 148.4s/169.6s), test.quick 7004P/0F/2S。
 - **待办**: 真机 S4 复验清单五项(计划 §04 批3)待用户窗口, 完成后计划翻终态。
+
+### R4 · 真机 S4 复验完成 (2026-11-26)
+
+- **判据结果(用户拍板: 五项按限定口径全判通过)**:
+  - ① dir_alias 同根兄弟/删链门/收尾 = **限定口径 PASS**: 本机无 R: 盘，钉死环境1拓扑的现成用例(RM04-25/31/33)首行 `_require_r_topology()` 直接 pytest skip（real.run skip 仍 rc=0，不可误读为 PASS），RM04-31 兄弟为前缀布局不触发 F1 等值面面。按 D7 分工，F1 精判由单测 `tests/test_relocate_exec_verify.py:659` 守阵（兄弟假依赖豁免/纯落进保留/混合保留/清单不可得保守/scope 缺失旧账不精判）；真机端到端口径按「现成用例不可用 + 单测守阵完整」限定认定。若需等值面精确真机复验，须切环境1(R:)或另造 save_path==job.src 活种子用例。
+  - ② foreign 活到达探针 A/B = **限定口径 PASS**: real.seed 手工配方(默认 256K，落 .work)在 armed 态连续加入 3 枚探针(落旧根、场景 A)，rc=0/0/0；arm 全量兜底扫描「入池候选 3 条」= 3/3 识别无漏接迹象。限定口径 = 入池识别层无漏接；F2 修的差集累积游标路径日志为 DEBUG 不落盘、探针未触发成员数 2→3、原约 1/4 漏接属概率性单次不可证伪，三点未覆盖。
+  - ③ 产品重启/daemon 三事件 = **PASS**: daemon CLI 两进程 + 外来 pid 注入的重启等价路径，逐字三事件(均含 pid)：`接管 daemon.json: pid 10704(无记录)` / `daemon.json 健康 watcher(pid 10704)在守, 本实例(pid 2464)让路续任` / `检测到外来 pid 2464 持有 daemon.json, 本实例(pid 10704)退位(绝不 taskkill)`；真产品层另有 RM04-36 日志 `接管 daemon.json: pid 12008(无记录)`。
+  - ④ 首次迁移 confirm 回执 = **PASS**: 全新 data_dir 起产品(非 dry-run)，POST location(confirm=true)，首个非 pending 回执 status=warn，reasons[].text 与 notes[] 两段逐字含「续跑重新过全闸链, 出现需确认态会再次询问(不代用户点头)」；行为面 RM04-14 日志 confirm 1 → blocked 1/已受理 → probe verdict 消费 → 续跑再次 confirm 1。附注: 26-11-24-2150 UX issue 仍复现(确认后未见「已执行」成功提示，RM04-14 `1 failed`)，但后端回执文案已取到，不影响本项文案判据，该 UX 问题属另一 issue 不扩入本计划。
+  - ⑤ 武装行形态 = **PASS**: 逐字 `已武装收尾(别名 1 条, 形态 dir_alias) —— 回收 daemon 将在 qB 下线窗口改写 fastresume`，显示「形态 dir_alias」非内部名「形态 dir」。
+- **环境**: 环境2/C盘机；测试 qB 56589/56590；`real.guard` 通过；实例已 `real.down` 优雅关闭；树干净(HEAD 0c2ab2ec，分支 closeout/relocate-foreign-gate-s4，未动)。
+- **证据落点**: 新真机基线切片 `memory-bank/testing/real-baselines/26-11-26-2344-real-relocate-foreign-gate-s4.md`(五项逐字口径与证据目录单点)；原始证据 `tests-real/.work/rm04_s4/evidence/`(gitignored，保留不删)。基线统计数字以切片为单点；本档案 R4 的 pid/rc/入池计数等系逐字证据引文而非基线数字复抄，逐字口径与精确数字以切片为准。`real.seed.clean` 被证据闸拒跑 rc=1，证据完整保留未硬删。
+- **收尾**: 计划 26-11-22-1714 翻 Done + kb.bump 追加 R1 行；7 个 issue 已 Done 未动。
+
+- 2026-11-26 23:47 真机 S4 五项复验按限定口径全判通过，计划 26-11-22-1714 翻 Done，全链闭环
 
 - 2026-11-22 20:35 26-11-22-1714 七件修复三批落地(153d7c3e 判定面 F1+F7/4a51f60a 差集累积游标 F2/0a88e51a 观测性 F3-F6)+ 接缝终审零发现放行 + 7 issue 翻 Done 回填; 真机 S4 复验五项待窗口
