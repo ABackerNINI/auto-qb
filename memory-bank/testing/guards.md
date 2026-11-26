@@ -13,9 +13,9 @@
 
 > **批次守阵外迁存档**: 主循环/WEB解耦 · 后端高风险动作 · S2-S6 四批次 · 仿真/语料/平台语义 · src 结构卫生 · 规则表达式内核 · 配置键面 · 提提交水线包 · 流量聚合封口 · 种子状态 A 系 —— 原文 → [attachments/guards-batches-archive.md](attachments/guards-batches-archive.md) (节标题同名, 检索按守阵名)。
 
-## 知识库结构(`tests/test_memory_bank_*.py`, 检查器在 skill 的 `check_kb_structure.py`)
+## 知识库结构(`tests/unit/test_memory_bank_*.py`)
 
-> 守卫清单与逐条结论由测试本身维护, 此处只留指针: 见 `tests/test_memory_bank_*.py`(四分)与 [file-conventions.md「`tests/test_memory_bank_*.py` 守知识库结构」](file-conventions.md); 逐条「钉住的结论 + 红验」表见 [attachments/guards-batches-archive.md](attachments/guards-batches-archive.md)「知识库结构守卫」; 检查器在 `.agents/skills/memory-bank/scripts/check_kb_structure.py`。
+> 守卫清单与逐条结论由测试本身维护, 此处只留指针: 见 `tests/unit/test_memory_bank_*.py`(四分)与 [file-conventions.md「`tests/unit/test_memory_bank_*.py` 守知识库结构」](file-conventions.md); 逐条「钉住的结论 + 红验」表见 [attachments/guards-batches-archive.md](attachments/guards-batches-archive.md)「知识库结构守卫」; 检查器在 `.agents/skills/memory-bank/scripts/check_kb_structure.py`。
 
 ## 前端 / WEB UI
 

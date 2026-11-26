@@ -55,7 +55,7 @@ user-invocable: true
 2. **选择池必须是「定向的几个测试文件」**, 别用全 `tests/` —— 宽池的代价落在内存(挤兑容器 12G, R5), 不在结论上(§07 对照五)。
 3. **`process_isolation = "forkserver"`** —— 默认 `fork` 会让注册表类守阵假红(同一份 `mutants/` 树手跑却是绿的, 极难归因)。容器 Linux 下 forkserver 原生可用(2026-11-12 冒烟轮 155 变异全跑, 注册表无假红)。
 4. **文本层守阵必须 `--deselect`** —— mutmut 把变异体写进同一份文件, 「读源码文本做断言」的守阵在基线就红, 整轮直接中断(结构性劣势, gremlins 没有)。当前清单见包的 `set_conf.py` 的 `DEFAULT_DESELECT`。新增/改名文本层守阵时**同步核这张表**; 漂移由包内 `test_mutants.py` 的 `DeselectTableTest` 对差守阵兜底(文件或函数改名即判红)。flaky 用例(端口绑定/并发类)另表维护在 `FLAKY_DESELECT`, run 与 verify 都自动 deselect。
-5. **必带 `-n 0 --no-cov`** —— 抵消 `pytest.ini` 的 addxdist `-n 8` 与覆盖率闸; 否则报错 / 零变异 / 子集跑必不达标。
+5. **必带 `-n 0 --no-cov`** —— 抵消 `pyproject [tool.pytest.ini_options]` 的 addopts `-n 8` 与覆盖率闸; 否则报错 / 零变异 / 子集跑必不达标。
 6. **`--max-children` 别拉满** —— 容器 8 vCPU 配额(nproc=8), 默认取 `os.cpu_count()` 会打挂; 包级轮用默认 3(4 路并发峰值曾 OOM, WSL 实测; 容器内存面同构, 纪律不因换宿主放宽)。
 7. **基线不绿不开跑** —— 工具会直接跳过(实测 `skipping mutation testing because N baseline test(s) failed`); 先修基线。
 8. **镜像别放慢盘(WSL 时代是 `/mnt/*` 9p 禁令)** —— 容器形态下**天然满足**: 容器根 fs = overlayfs, 无宿主盘挂载

@@ -1,7 +1,7 @@
 # 文档与代码的一致性
 
 > 摘要: 文档与代码冲突时的裁决顺序、`🚧` 标注到底是什么意思、示例配置文件自己也会漂移, 以及哪些历史记录不必再查。
-> 触发: 文档与代码不符, 看到 🚧 标注, 回写知识库, 想删"已实现"的标注, 示例配置过时, 抄示例当底子, minimal.yml, 新示例 yml, 退役文件引用清理
+> 触发: 文档与代码不符, 看到 🚧 标注, 回写知识库, 想删"已实现"的标注, 示例配置过时, 抄示例当底子, examples/minimal.yml, 新示例 yml, 退役文件引用清理
 
 **Refs:** memory-bank/tasks/26-10-06-docs-ui-smoke-comment-residue.md, memory-bank/tasks/26-11-12-backend-stale-ref-utf8-pin.md
 
@@ -42,7 +42,7 @@
 
 ### 抄既有示例/文档里的配置当新配置的底子前, 先过一遍 fail-fast 校验 —— 示例文件自己可能已经过时
 
-- **触发**: 写新的示例配置 / 测试 yml, 顺手拿 `minimal.yml` 或 README 里的配置片段当底子。
+- **触发**: 写新的示例配置 / 测试 yml, 顺手拿 `examples/minimal.yml` 或 README 里的配置片段当底子。
 - **判别**: 示例文件**没有守卫测试盯着**, schema 演进后无人回写 —— 旧键名 / 旧值形态过不了当前
   fail-fast 校验(校验单点 `config.validate_config`, 分节实现在 `config/validation/`),
   且旧写法还可能被解析器**静默忽略** = 功能实际是关的。抄之前先 `load_config()` 验一遍就知道。

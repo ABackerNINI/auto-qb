@@ -16,7 +16,7 @@
 3. **逗号多名字形态**: `from .. import curves, utils` —— 名字在列表中段/尾部都会漏, 必须按**行**扫含名字的 from 行
 4. **mock/patch/setattr 字符串**: `mock.patch("auto_qb.qbmanager.time.sleep")` / `monkeypatch.setattr("auto_qb.utils.urlparse", ...)` —— 字符串里的模块路径, 编译期查不出
 5. **TYPE_CHECKING 块与函数内延迟导入**: 顶层 grep 命中不了 `if TYPE_CHECKING:` 与函数体内的 `from .x import` —— 按**文件**扫而非按行
-6. **动态加载脚本**: `importlib.util.spec_from_file_location("qb_capture", "scripts/qb_capture.py")` —— test 动态加载的脚本自己还有一套 import (W4a 最后一个漏网点)
+6. **动态加载脚本**: `importlib.util.spec_from_file_location("qb_capture", "tools/sim/qb_capture.py")` —— test 动态加载的脚本自己还有一套 import (W4a 最后一个漏网点)
 
 ## 清点时的天然陷阱
 

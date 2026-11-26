@@ -89,7 +89,7 @@
 - **触发**: 想验证优雅退出。
 - **判别**: `terminate()` = TerminateProcess, `finally` **不跑**;
   `CTRL_BREAK_EVENT` 也只得到 `0xC000013A`。
-- **处置**: 用 `scripts/sim_autoqb.py` 启动包装(子进程装 `SIGBREAK → KeyboardInterrupt`),
+- **处置**: 用 `tools/sim/sim_autoqb.py` 启动包装(子进程装 `SIGBREAK → KeyboardInterrupt`),
   并加 `graceful_exit` **硬判据**。
 
 ### 反向对照必做

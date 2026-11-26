@@ -1,16 +1,16 @@
 # real.seed.clean 是整目录清空 .work, 不是「种子残留清理」—— clean 前先确认无待留证据
 
-> 摘要: `real.seed.clean` 真实语义 = **整目录清空 tests-real/.work**(不止种子残留;「已清空」即其正常输出)—— 误判为「只扫种子残留」会把 .work 下全部测量证据(gitignored, shutil 直删不进回收站, git 不可恢复, memory-bank 无副本)连带清掉(2026-11-12 实际发生: S0/S5 原始测量证据与复用脚本全丢; 蒸馏数字因已誊写档案不受影响, 但原始证据自此不可复核)。同族第二坑: 复用既有测量脚本先跑后改, 输出路径指向旧目录会原地覆盖旧证据。
+> 摘要: `real.seed.clean` 真实语义 = **整目录清空 tests/real/.work**(不止种子残留;「已清空」即其正常输出)—— 误判为「只扫种子残留」会把 .work 下全部测量证据(gitignored, shutil 直删不进回收站, git 不可恢复, memory-bank 无副本)连带清掉(2026-11-12 实际发生: S0/S5 原始测量证据与复用脚本全丢; 蒸馏数字因已誊写档案不受影响, 但原始证据自此不可复核)。同族第二坑: 复用既有测量脚本先跑后改, 输出路径指向旧目录会原地覆盖旧证据。
 > 触发: real.seed.clean, seed.clean, .work, 测量证据, 证据丢失, 覆盖, results, 输出路径, 复用脚本, shutil, 清壳, 归档, rmNN, 整扫, 证据保护闸, rmNN 内层, B-严格
 **Refs:** memory-bank/issues/26-11-12-2345-chore-real-seed-clean-evidence-guard.html, memory-bank/tasks/26-11-11-webui-group-hash-ref.md (R3 节, 2026-11-12)
 
 ### clean 前先确认 .work 无待留证据(整树直删, 不可恢复)
 
 - **触发**: 测量/压测收尾跑 `real.seed.clean --yes` 清理种子与目录壳。
-- **判别**: 它清的是 **tests-real/.work 整树**(不只种子残留), 输出「已清空」是正常输出、不代表只清了种子; 目标面 gitignored + shutil 直删不进回收站, git 不可恢复, memory-bank 无副本 —— 删了就是永久丢。
+- **判别**: 它清的是 **tests/real/.work 整树**(不只种子残留), 输出「已清空」是正常输出、不代表只清了种子; 目标面 gitignored + shutil 直删不进回收站, git 不可恢复, memory-bank 无副本 —— 删了就是永久丢。
 - **处置**: **clean 前先 ls 盘点**(纪律升级 2026-11-21: 整扫与 --dir 指名都适用 —— 目标若不是本轮亲手建的目录, 先 `ls` 盘点其中非本轮所建的子目录/散件; 蒸馏数字要在事前誊写进档案, 誊写在案的数字不受目录丢失影响)。证据保护闸已落地(2026-11-13, issue 26-11-12-2345): clean 对 .work 顶层 seeds/rmNN 之外的内容自动拒跑(rc=1); **rmNN 内层有文件同样整单拒跑**(2026-11-21, issue 26-11-21-0638 落地 B-严格闸): 拒跑信息逐个列出 rmNN 的内层文件数与前 5 个路径(盘点白送), 零文件空壳照旧收掉 —— **闸不再放行 rmNN 整树**, rmNN 内层的证据留存从「靠人工」升为「闸强制」, 要清哪个 rmNN 仍用 --dir 显式指名(**--dir 指名的子树本身不设闸**, 指名前 ls 盘点纪律不变); 「逐案 evidence 落 case 根」的旧惯例目录(rmNN case root)本身就是**历史证据沉积层** —— 更早轮的散件会沉积在里面, 整树清一次带走一批(片F/G 已按盘点纪律执行零复发)。
-- **复发**: 1 (2026-11-19, RM04 片E R26 重跑轮: `real.seed.clean --dir tests-real/.work/rm04 --yes` 把 .work/rm04 整树清空 22 文件 83KB, 连更早轮散落在 case 根下的历史证据层(rm04_06/10/14-21 逐案 evidence/auto-qb log)一并清掉 —— 幸 20 份在 rm04-sliceA/prev-run-archive/rm04-evidence-old/ 有片A 归档副本, 真损失仅 2 份无文档引用散件(rm04_06_recovery_path.txt/rm04_19diag.log)。为什么没命中: 路由没到(坑档检索未跑), 且读档后没把「--dir 指名」与「先搬走」纪律连起来 —— 误以为 --dir 定点=只清本轮 footprint。增量面已并入上方处置行)
-- **复发**: 2 (2026-11-21, RM11 S6 真机复验轮收尾: `real.seed.clean --yes` 裸跑整扫把 tests-real/.work/rm04/async/ 全部取证(24 evidence json + 3 产品日志副本)与 rm04 顶层 11 份 tee 日志共 38 份连锅端, 无归档副本 —— 切片 26-11-21-0446 数字全靠执行时逐字段打印的实测誊录减损。为什么没命中: 执行代理只读了 RM11 计划 §07-R9 对本坑的转述句没读坑原文, 把「保护闸会拦」误当保障, 「--dir 指名前先 ls 盘点」纪律没进执行序列 —— 且本轮实际唯一需清的只有 rm04_36 空目录壳, 裸 clean 属多余动作。直接放大器 = 证据保护闸只查 .work 顶层名、rmNN 内层不设防(issue 26-11-21-0638 已修: rmNN 内层有文件整扫即整单拒跑, 见上方处置行))
+- **复发**: 1 (2026-11-19, RM04 片E R26 重跑轮: `real.seed.clean --dir tests/real/.work/rm04 --yes` 把 .work/rm04 整树清空 22 文件 83KB, 连更早轮散落在 case 根下的历史证据层(rm04_06/10/14-21 逐案 evidence/auto-qb log)一并清掉 —— 幸 20 份在 rm04-sliceA/prev-run-archive/rm04-evidence-old/ 有片A 归档副本, 真损失仅 2 份无文档引用散件(rm04_06_recovery_path.txt/rm04_19diag.log)。为什么没命中: 路由没到(坑档检索未跑), 且读档后没把「--dir 指名」与「先搬走」纪律连起来 —— 误以为 --dir 定点=只清本轮 footprint。增量面已并入上方处置行)
+- **复发**: 2 (2026-11-21, RM11 S6 真机复验轮收尾: `real.seed.clean --yes` 裸跑整扫把 tests/real/.work/rm04/async/ 全部取证(24 evidence json + 3 产品日志副本)与 rm04 顶层 11 份 tee 日志共 38 份连锅端, 无归档副本 —— 切片 26-11-21-0446 数字全靠执行时逐字段打印的实测誊录减损。为什么没命中: 执行代理只读了 RM11 计划 §07-R9 对本坑的转述句没读坑原文, 把「保护闸会拦」误当保障, 「--dir 指名前先 ls 盘点」纪律没进执行序列 —— 且本轮实际唯一需清的只有 rm04_36 空目录壳, 裸 clean 属多余动作。直接放大器 = 证据保护闸只查 .work 顶层名、rmNN 内层不设防(issue 26-11-21-0638 已修: rmNN 内层有文件整扫即整单拒跑, 见上方处置行))
 
 ### 复用既有测量脚本: 第一步核对输出路径
 

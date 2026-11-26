@@ -25,6 +25,6 @@
 
 ### AST 节点位置切片在含 CJK 行上错位 / 活值判别只看顶层漏嵌套调用 (26-11-09 踩到)
 
-- **触发**: 对源码做 AST 定位的**机械改写**(把 tests-real 全部 `wait_until` 调用点的活值 f-string desc 包 lambda, issue 26-11-08-0044), 用 `node.col_offset/end_col_offset` 当字符下标去切 `str` 源行; 或写判别式扫描(「desc 内嵌函数调用 = 活值需惰性」)只查插值表达式**顶层**节点。
+- **触发**: 对源码做 AST 定位的**机械改写**(把 tests/real 全部 `wait_until` 调用点的活值 f-string desc 包 lambda, issue 26-11-08-0044), 用 `node.col_offset/end_col_offset` 当字符下标去切 `str` 源行; 或写判别式扫描(「desc 内嵌函数调用 = 活值需惰性」)只查插值表达式**顶层**节点。
 - **判别**: f-string 节点的 `col_offset/end_col_offset` 在含中文的行是 **UTF-8 字节偏移**而非字符下标 —— 每个 3 字节中文字符偏 2(2 字节字符偏 1), 并非固定偏一位, 拿它切 `str` 行必错位; 改写后 `compile` 全绿也可能插入位置静默错位。判别式扫描还有两个静默漏判面: 只查插值**顶层**节点会漏列表推导内嵌调用(`qb.torrent(h)` 在推导里被判静态); `node.func.id` 只命中直连名, **`M.wait_until` / `base.wait_until` 等 Attribute 形态整类漏掉**(26-11-09 第 3 轮评审抓出, 全部靠评审人核兜住)。
 - **处置**: 定位一律 **`ast.get_source_segment(src, node)`** 取原文(内部已做位置换算, 实测可靠), 再按「该行内唯一子串」替换, 不用 col_offset 手切; token 级需求用 `tokenize`(位置恒为字符偏移)。判别式扫描**递归深扫**(`any(isinstance(n, ast.Call) for n in ast.walk(插值节点))`), 不看顶层; 匹配调用点时同时覆盖直连名与 Attribute 形态(`getattr(func, "attr", None) == "wait_until"` 兜住 `M.wait_until`)。判据: `compile` 过不等于位置正确 —— 机械改写必须逐改写点对照原文等价性(git diff 逐 hunk 人核), 批量转换前先在单文件上演练。

@@ -111,7 +111,7 @@
 - **处置**: **必须同步此文件** —— 新增顶层段必须落到「某模块 `sections()` 认领 or `KERNEL_SECTIONS` or
   `RESTART_SECTIONS`」之一(守阵 `test_modules_p6`), 段变了之后做什么由认领模块 apply 自判。
 
-### `tests/test_memory_bank_*.py` 守知识库结构(不覆盖 src)
+### `tests/unit/test_memory_bank_*.py` 守知识库结构(不覆盖 src)
 
 - **触发**: 改 `memory-bank/` 结构或会话协议。
 - **判别**: 它守 —— `_index.md` 登记项 ↔ `tasks/*.md` **双向一致** /

@@ -1,6 +1,6 @@
 # flaky 根因类目覆盖表
 
-> 摘要: 每轮 flaky 冒头**先对表归因再修**的静态参照系 —— 十类根因 × 本仓库证据(坑档/实测) × 治理动作 × 治理阶段; 冒出无主类目先补类目再登记; tests-real 真时序轨的职责边界也在这里。
+> 摘要: 每轮 flaky 冒头**先对表归因再修**的静态参照系 —— 十类根因 × 本仓库证据(坑档/实测) × 治理动作 × 治理阶段; 冒出无主类目先补类目再登记; tests/real 真时序轨的职责边界也在这里。
 > 触发: flaky 归因, 根因类目, 覆盖表, 分类学, 十类, async-wait, 时序, 并发竞态, 顺序依赖, 平台差异, 随机数, 端口资源, 共享状态, 网络, UI randomness, 无主类目
 
 > 口径单点: 计划 [26-11-05-0118](../plans/26-11-05-0118-plan-flaky-test-governance.html) §03(十类, 分类学参照 Tahir et al. 2023)。
@@ -25,12 +25,12 @@
 | 随机数 | flaky-random-salt-hash-identity | 种子纪律(pytest-randomly 顺带重置 seed)+断言避开恒等映射 | S5 |
 | 端口/资源 | fixed-port-test-collision(已治) / consecutive-port-run(已治) / fake-server-reuse-bind(已治) / tests/_test_ports 单点(free_port / hold_run / http_server 三入口) | 绑定位固定口守阵(.bind( 位 + 构造位绑定族, 配置值位不拦) + 假服裸 ThreadingHTTPServer 守阵 | S1 |
 | 共享状态 | fake-config-shared-mutables / importlib-sys-modules-dataclass(已治) | conftest 隔离单点+巡检暴露新例 | S5 |
-| 网络 | 仅 tests-real 真网络面 | 真机轨职责, 不改造(见下「边界」) | — |
+| 网络 | 仅 tests/real 真网络面 | 真机轨职责, 不改造(见下「边界」) | — |
 | UI randomness | iab-click-rerender-flake(已治) | 归入 e2e 清理与台账 | S4 |
 
-## tests-real 真时序轨职责边界
+## tests/real 真时序轨职责边界
 
-**真实时序是 tests-real 的存在意义** —— 真机轨不做时钟改造、不注入假钟、不消灭真实等待:
+**真实时序是 tests/real 的存在意义** —— 真机轨不做时钟改造、不注入假钟、不消灭真实等待:
 那边 flaky 的处置只有两件事: **记台账**(对上表归入类目+状态+日期)与**按台账排期**, 修法仍回
 本表治理动作列(改的是用例自身的等待/断言形态, 不是给被测系统换时钟)。把真时序轨也时钟化等于
 取消第四条测试轨, 明令不做(计划 §06 D7)。

@@ -1,7 +1,7 @@
 # 真机实测(连真实 qBittorrent 的实测轨)
 
 > 摘要: 第四条测试轨规程 —— 分工与准入、硬约束、环境守卫与假红陷阱、种子层 L0/L1/L2、切片与漂移治理、用例写法。状态与进度不在本文件, 在常驻锚 issue。
-> 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests-real, real 包, 不走闸门, 免token, 免鉴权, 跳过本地验证, 功能完工, 常用验收
+> 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests/real, real 包, 不走闸门, 免token, 免鉴权, 跳过本地验证, 功能完工, 常用验收
 **Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/plans/26-11-01-2123-plan-real-rm08-drift.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/plans/26-11-17-0636-plan-real-rm04-relocate-refactor-verify.html
 
 ## 00 定位: 四条测试轨的分工
@@ -11,7 +11,7 @@
 | 单测 | `tests/`(全 Fake) | ✅ `test.quick` 在 ship 链上 |
 | 浏览器 | `e2e/` + 桩服务 | ✅ 改前端门禁 |
 | 语料回放 | `sim_qb.py --source=corpus` | ❌ |
-| **真机** | `tests-real/` + 测试 qB 双环境 | ❌ **永不** |
+| **真机** | `tests/real/` + 测试 qB 双环境 | ❌ **永不** |
 
 **准入判据(反膨胀)**: 能用桩/语料验的**不进真机**。只收: ① qB 真执行才成立(命令回执/真状态变化/限速真下发); ② 必须碰真文件系统/进程/注册表。观感交互归 e2e 轨, 仅「桩数据失真足以改变结论」才进, agent 自跑(`dev.webui`+浏览器自动化)。
 
@@ -21,9 +21,9 @@
 
 | # | 约束 | 机检 |
 |---|---|---|
-| 1 | **只碰白名单实例**: 双环境主/副端口+镜像路径前缀(单点 `tests-real/lib/env_registry.py`, `real.env` 可查) | `real.guard` 越界退出码非 0, 无 `--force` |
+| 1 | **只碰白名单实例**: 双环境主/副端口+镜像路径前缀(单点 `tests/real/lib/env_registry.py`, `real.env` 可查) | `real.guard` 越界退出码非 0, 无 `--force` |
 | 2 | **只允许 `real-fake` 假种子, 真实 PT 种子禁入**(2026-11-04 已清退真实种子, 不得代造) | guard 前置 pause-all + 2s 看门狗, 违规≥3 中止本轮 |
-| 3 | **生产配置零触碰**: 配置由 `tests-real/lib/app.py` 的 `write_config()` 渲染派生(case 目录内, data_dir 落 case) | guard 撞仓库根 `config.yml` 拒跑 |
+| 3 | **生产配置零触碰**: 配置由 `tests/real/lib/app.py` 的 `write_config()` 渲染派生(case 目录内, data_dir 落 case) | guard 撞仓库根 `config.yml` 拒跑 |
 | 4 | **不动其它 qB**: 杀/起前核镜像路径 | guard 前后进程比对, 新增/消失即报告 |
 | 5 | **不挂闸门**: `ship.*` 链上出现 `real.*` 即缺陷, 立即回滚 | 人 |
 
@@ -31,7 +31,7 @@
 
 ## 02 环境与守卫
 
-### 2.1 守卫(`tests-real/lib/guard.py`, 任何用例先过)
+### 2.1 守卫(`tests/real/lib/guard.py`, 任何用例先过)
 
 静态白名单(端口/镜像路径/配置路径) → 在线核验(`connection_status` 非 `disconnected`) → 前置快照+归零(记进程与种子, pause 全部) → 运行期看门狗(2s 轮询, 违规暂停+记账) → 收尾恢复快照、删净自造物、重跑进程比对。
 
@@ -57,14 +57,14 @@
 | 限速原值 1 KiB/s(环境1)奇数; `/torrents/trackers` 带 `**[DHT]**` 等伪条目 | 曲线用例预置偶数 KiB 收尾还原; trackers 断言按 url 以 `http` 开头过滤(private 种子 msg=「私有 torrent」非错误) |
 | `uploaded` 计数与 store 快照滞后(慢 1-2 拍) | 临界断言先 `_wait`/`wait_in_store_state` 追平, 只等 hash 存在不够 |
 
-qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l2.py` / `diag_log.py <port>`, 卡住先跑别靠猜。
+qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests/real/tools/diag_l2.py` / `diag_log.py <port>`, 卡住先跑别靠猜。
 
 ### 2.5 假种子 CLI(`real.seed*`; 参数见 `--help`)
 
 - 默认 256K 够看状态; **>2G 停下等授权**(`--allow-huge --reason` 双写), 只要"大"用 `--no-data`(零落盘; 停 `stalledDL` 不进 `missingFiles`, 测"文件被删"要真删)。
 - ≥32M 落 `R:/qbt-fake/`(重启即清; 环境2 无 R: 退回 `.work` 真写盘); 默认无 announce=纯本地做种, 要 announce 用例里用 `FakeTracker`; 自造种子一律打 **`real-fake`** 标签(单点 `guard.REAL_FAKE_TAG`, snapshot 调用必须显式传 skip_tags 豁免它, 静态守阵会查), list/rm/clean 与守卫只认它; 收尾 `real.seed.clean` —— .work 顶层有 seeds/rmNN 之外的内容(疑似测量证据)会拒跑 rc=1; rmNN 内层有文件同样整单拒跑(issue 26-11-21-0638, 拒跑信息自带内层清单, 零文件空壳照收), 要清哪个子树 `--dir` 显式指名逐处清、指名前先 ls 盘点(见 pitfalls/ops/seed-clean-vs-evidence.md)。
 
-### 2.6 产品进程(`tests-real/lib/app.py`)
+### 2.6 产品进程(`tests/real/lib/app.py`)
 
 - `--dry-run` **不启 WEB**(WEB 类用例不带 dry-run); Windows 外部 SIGTERM=强杀, 优雅退出只能进程内 `signal.raise_signal` 或 `start(graceful_after=N)`; 配置必写 `schema_version: <产品现行版, 见 infra.versioning.CURRENT_VERSIONS>`(写旧版本/缺失都走启动物化迁移; **非 dry-run** 实例才改写落盘+留版本号备份, dry-run 只内存迁移; 守卫 tests/unit/test_real_schema_version_guard.py 会红, 详见 pitfalls/testing/base-schema-version-staleness.md); 断言真 pid 用 `real_pid()`, 杀产品进程照 §2.2。
 - GUI 依赖解释器带 Tk(`tkinter` 不在 `uv.lock`, `env.sync` 全绿≠能跑界面): 判据 `python -c "import customtkinter"`。
@@ -92,7 +92,7 @@ qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l
 
 ## 06 一轮的标准动作
 
-**功能完工触发(常用)**: 收尾自检功能落入 §00 两类 ⇒ 当轮自跑: `real.guard` 自检 → 能写成断言的补 `tests-real` 用例走 `real.run --yes`; 观感走 `dev.webui`+浏览器自动化; 主程序走 `dev.run`(派生配置)。结论记 `testing/real-baselines/` 与档案一行验收结论。**没做必须明示理由(环境不可用/纯桩可验/BLOCKED), 不写理由=收尾未完成**。
+**功能完工触发(常用)**: 收尾自检功能落入 §00 两类 ⇒ 当轮自跑: `real.guard` 自检 → 能写成断言的补 `tests/real` 用例走 `real.run --yes`; 观感走 `dev.webui`+浏览器自动化; 主程序走 `dev.run`(派生配置)。结论记 `testing/real-baselines/` 与档案一行验收结论。**没做必须明示理由(环境不可用/纯桩可验/BLOCKED), 不写理由=收尾未完成**。
 
 **定期排期触发(兜底)**: 收到「对〈片名〉做真机实测, 先写分步实施计划」后按序, 不许跳步:
 1. 定片(映射不到先按 §05 处置); 2. 漂移体检(§07, 结论进计划开头); 3. 环境自检 `real.guard`; 4. 写分步计划(`plans/` HTML: 用例清单+档位+期望值 / 本轮哪条升档(§08) / `[需活跃种子]` 跳过项+解锁条件 / 验收判据); 5. 执行: 每条 `PASS`/`FAIL`(⇒ scope-guard 入池 bug)/`BLOCKED`(写明原因), **当轮不修缺陷**; 6. 记录: `testing/real-baselines/<stamp>-real-<片>.md`(三态/基线 commit/环境指纹; 片名一律小写 kebab——`real-rm04-slice-a` 式, 禁 `sliceA` 式大写段: `kb.wrap --topic` 过 kebab 校验必拒, 26-11-21 改定, 存量大写文件名不改)+更新锚 issue §07; 7. 收尾: 用例代码 `ship.commit`, **不立 task 档案**(常驻锚即档案)。
@@ -114,11 +114,11 @@ qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l
 
 ## 09 用例怎么写
 
-- 位置 `tests-real/<rmNN>_<slug>/`, id 写 docstring 首行 `[RMxx-nn] <一句话>`; 可 pytest 单跑但 **pyproject [tool.pytest.ini_options] 的 testpaths 不改**(基线零扰动)。
+- 位置 `tests/real/<rmNN>_<slug>/`, id 写 docstring 首行 `[RMxx-nn] <一句话>`; 可 pytest 单跑但 **pyproject [tool.pytest.ini_options] 的 testpaths 不改**(基线零扰动)。
 - 每条必写四行: 前置 / 副作用 / 回滚 / 失败判据; 只断言外部可观测事实(内部实现归单测); 幂等(开跑清场收尾删净); L3 红验与单测同口径。
 - 禁止: 非白名单端口、读仓库根 `config.yml`、依赖人工点击(除非标 L0)、`try/except: pass` 吞异常。
 - 等待轮询用各文件的 `wait_until(fn, timeout, desc, interval)`; desc 拼带「最后观测值」的 f-string **必须传 lambda**(`lambda: (f"…")`) —— str 是调用期求值, 超时报错里显示等待前旧值; 基座已支持 callable 惰性求值(超时报错时才调), 见 issue 26-11-08-0044。
 
 ## 10 产物落位
 
-规程=本文件; 排期锚+片表+进度=常驻锚 issue; 每轮计划=`plans/<stamp>-plan-real-<片>.html`(拍板即冻结); 实测数字=`testing/real-baselines/`(全量基线单点见 kb.baseline); 用例=`tests-real/`; 诊断工具=`tests-real/tools/`; 命令=`.commands/real/`(`real.guard/run/env/up/down/seed*/list/suite`); 缺陷=各自 bug/perf issue。
+规程=本文件; 排期锚+片表+进度=常驻锚 issue; 每轮计划=`plans/<stamp>-plan-real-<片>.html`(拍板即冻结); 实测数字=`testing/real-baselines/`(全量基线单点见 kb.baseline); 用例=`tests/real/`; 诊断工具=`tests/real/tools/`; 命令=`.commands/real/`(`real.guard/run/env/up/down/seed*/list/suite`); 缺陷=各自 bug/perf issue。

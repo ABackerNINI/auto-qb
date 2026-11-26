@@ -5,7 +5,7 @@
 
 ### 单一覆盖率阈值 + 双 OS ⇒ 必有一侧恒红 (2026-10-30)
 
-- **触发**: 仓库同时跑 Windows 与 Linux CI, `pytest.ini` 的 addopts 里写死 `--cov-fail-under=99`;
+- **触发**: 仓库同时跑 Windows 与 Linux CI, `pyproject [tool.pytest.ini_options]` 的 addopts 曾写死 `--cov-fail-under=99`;
   代码里有平台独有分支(本仓: `infra/alias_fs.py` 的 ctypes/junction 封装 91 语句 + 25 分支、autostart
   注册表后端、relocate_journal、traffic_sample)。或想「按平台给不同阈值」而把钩子写在 `pytest_configure`。
 - **判别**:
@@ -21,7 +21,7 @@
   **`self.options`(那份早期命名空间)**, 不是最终的 `config.option`。而 `--cov-fail-under` 的
   **默认值是 `0.0` 而不是 `None`**(所以「判 None 才算未设」也会漏判, 得判 falsy)。
 - **处置**:
-  1. **阈值按平台定档, 且只写一处**: `pytest.ini` 的 addopts 里**删掉** `--cov-fail-under`;
+  1. **阈值按平台定档, 且只写一处**: `pyproject [tool.pytest.ini_options]` 的 addopts 里**删掉** `--cov-fail-under`;
      改在 `tests/unit/conftest.py::pytest_configure`:
      ```python
      plugin = config.pluginmanager.getplugin("_cov")
@@ -39,5 +39,5 @@
 - **守阵**: 无自动机检(阈值是配置口径)。旁证: `commands run test.linux` 的收尾行必须出现
   `Required test coverage of 99.0% reached`(非 Windows 档现闸值 —— 2026-11-05 抬档后 99.0 就是
   正确值, 常量单点 `tests/unit/conftest.py::COVERAGE_FLOOR_OTHER`, Windows 档现为 99.5) ——
-  收尾行的值与常量对不上说明钩子没生效、`pytest.ini` 又被写回了。
+  收尾行的值与常量对不上说明钩子没生效、`pyproject [tool.pytest.ini_options]` 的 addopts 又被写回了。
 - **复发**: 0

@@ -1,7 +1,7 @@
-# tests-real 手工压测的 qB WebAPI 陷阱集
+# tests/real 手工压测的 qB WebAPI 陷阱集
 
 > 摘要: 手工压测/relocate 取证直接打 qB WebAPI 时的十类坑 —— 短 hash 静默 200、renameFolder 账面级假成功(ENOENT 也算成功且零日志)、addTrackers 参数是单数 hash、FakeTracker 的 peer 表是构造时静态注入、lib/bencode.decode 返回 (值, pos) 元组、preferences 无 free_space_on_disk 键、/torrents/main 不存在、content_path 报文件路径非内容根、real.seed 子命令已被 task 内置、.torrent 默认落 .work/seeds/
-> 触发: tests-real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内存盘, R 盘, 端点漂移, free_space_on_disk, sync/maindata, torrents/main, content_path, real.seed, .torrent 落点, --out
+> 触发: tests/real, 手工压测, renameFolder, renameFile, addTrackers, FakeTracker, 短hash, 静默200, bencode decode, 真机实验, relocate 取证, 内存盘, R 盘, 端点漂移, free_space_on_disk, sync/maindata, torrents/main, content_path, real.seed, .torrent 落点, --out
 **Refs:** memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html
 
 ### 短 hash 调 WebAPI 被静默忽略(HTTP 200 零效果)
@@ -60,6 +60,6 @@
 
 ### real.seed add 的 .torrent 默认落 .work/seeds/,用例目录要用 --out 钉回
 
-- **触发**: 在 rmNN 用例目录里造种子不给 `--out` —— .torrent 落到 `tests-real/.work/seeds/<stem>.torrent`,与用例取证分离。
+- **触发**: 在 rmNN 用例目录里造种子不给 `--out` —— .torrent 落到 `tests/real/.work/seeds/<stem>.torrent`,与用例取证分离。
 - **判别**: 用例目录里找不到 .torrent,产物全在 .work/seeds/ 下。
 - **处置**: add 时 `--out` 显式指回用例目录。
