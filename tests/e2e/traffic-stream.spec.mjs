@@ -33,7 +33,7 @@ function assertNoRealRuntimeErrors(errors, allowedPattern, label) {
  * 降级路径)—— T4a 后取数主路 = 票据 POST /api/events/ticket -> EventSource
  * /api/traffic/qb/stream(scope=torrent:<hash>), 判定帧节拍源 = 事件到达。桩面:
  *   · 票据与 stream 两端点是**真生产代码**(ui_harness = 真 create_app), 不另造假端点;
- *   · 数据面 = 事件泵(/__harness__/traffic_stream, e2e/lib/traffic-stream.mjs): 把每 tick
+ *   · 数据面 = 事件泵(/__harness__/traffic_stream, tests/e2e/lib/traffic-stream.mjs): 把每 tick
  *     显示点真值按到生产同一发布点(publish_traffic_batch), 帧走真 SSE 线(一次性票据/
  *     心跳/seq/扇出全真); GET 桩静态列承担初始列 + 对账基准 —— 用例 3(降级案)例外: 其
  *     GET 桩每请求现算 base(降级轮询每 si 一发都回当前墙钟列, 非静态列; 评审 T4b #5)。

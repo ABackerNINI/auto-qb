@@ -26,7 +26,7 @@ import { withVm } from './lib/vm.mjs';
  *   4. 覆盖性自证: 采样帧里必须真实出现过四个速度形 / 三个限速形 / 徽标 42 —— 防
  *      注入被真实轮询冲掉后变异序列空转、测试无病呻吟地绿。
  *
- * 注入走 withVm(e2e/lib/vm.mjs:49-51, 计划 S3 允许的形态一): 页内直写 vm.status / vm.statsServer / vm._errUnread;
+ * 注入走 withVm(tests/e2e/lib/vm.mjs:49-51, 计划 S3 允许的形态一): 页内直写 vm.status / vm.statsServer / vm._errUnread;
  * 真实轮询会把桩值周期性写回 —— 几何不变量对任意文本成立(不受影响), 覆盖性靠页内 80ms
  * 心跳重放当前步注入兜住(被冲掉下一拍即恢复, 4ms 采样必捕捉)。步序调度全在页内
  * setTimeout, 外层零固定睡等(flaky 守卫第 2 类要拦的调用字面不在此注释复述 —— 它按行
@@ -34,7 +34,7 @@ import { withVm } from './lib/vm.mjs';
  */
 
 /** 页内执行: 装探针(4ms 采样 + rAF 双路)并按步序注入变异; 返回后轮询 window.__sbGeo.done。
- *  注入经 withVm(e2e/lib/vm.mjs 取根实例唯一直径, D4 第 1 类 evaluate), vm 由其绑定。 */
+ *  注入经 withVm(tests/e2e/lib/vm.mjs 取根实例唯一直径, D4 第 1 类 evaluate), vm 由其绑定。 */
 async function runSpeedSequence(page) {
   await withVm(page, `
     const K = 1024;

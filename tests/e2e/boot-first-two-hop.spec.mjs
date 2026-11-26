@@ -109,7 +109,7 @@ test.describe('桩冷启动两跳落位形状(plan 26-11-18-0259 S2)', () => {
     // 补 full 重建, 已配域名种子的 site_provisional 翻回 False、站点名保持真值 HHan,
     // chip 的 sa-provisional 压暗随之消失。本桩 boot-first 首轮 full_round 会重匹配 conf,
     // 且刻意跳过站点告警两态注入 —— 库内无「真未配」种子, 故 no_site_conf 的正向告警面
-    // 不在本 spec 空跑, 由 e2e/site-alerts.spec.mjs(默认模式桩)与 S3/S4 单测覆盖;
+    // 不在本 spec 空跑, 由 tests/e2e/site-alerts.spec.mjs(默认模式桩)与 S3/S4 单测覆盖;
     // 这里只断言推断态翻假/真值保持/不误报, 不伪造真未配数据。
     await tab(page, 'torrents').click();
     await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });

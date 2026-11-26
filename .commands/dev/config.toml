@@ -45,14 +45,14 @@ doc     = "../../memory-bank/pitfalls/testing/harness-is-stub-server.md"
 [tasks."dev.e2e"]
 run     = ["uv run python scripts/e2e_selfcheck.py", "npx playwright test <args>"]
 timeout = 2700
-when    = "改前端后跑 WEB UI 真浏览器冒烟（e2e/ 全量集; 桩服务由 webServer 自动起）"
-note    = "前置自检已挂 run 列表首条(2026-10-31, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): node_modules/@playwright/test 缺失、E2E_PORT 残留(旧覆盖已取消, 设置即报错)、8099 残留桩告警, 自检不过不进 spec, 修复动作在 NEXT: 行; 单跑: commands run dev.e2e-check。timeout=2700s: 2026-11-03 全量 440 例实测 21.9m ≈ 1314s(本机 CI=true 故失败重试 1 次) —— 旧 1200s(2026-10-16 280 例 654s, 约 1.8×) 已被引擎到点强杀; 本次按 ≈2× 实测抬到 2700s, 与 `.github/workflows/playwright.yml` 的 job timeout 40m 同轮抬高(历史链路 360s→600s→1200s; 套件再涨就拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、桩端口残留; 根因与实测见 doc); **端口由脚本取号**: 桩恒传 --port 0 由 OS 分配, Playwright webServer.wait 从启动行捕获实绑端口并经 UI_HARNESS_PORT 回传给 spec —— 无需人工干预、无需预知端口; 设置 E2E_PORT 会直接报错(旧固定口覆盖已取消); reuseExistingServer=false 保留作纵深防御, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): 1) commands run dev.e2e 2) E2E_CMD_RESULT=error commands run dev.e2e 3) E2E_CMD_RESULT=hang commands run dev.e2e 4) E2E_SKIP_CHECK=off commands run dev.e2e 5) E2E_HR_SCENE=empty commands run dev.e2e(或 off) 6) E2E_TORRENTS=3000 commands run dev.e2e"
+when    = "改前端后跑 WEB UI 真浏览器冒烟（tests/e2e/ 全量集; 桩服务由 webServer 自动起）"
+note    = "前置自检已挂 run 列表首条(2026-10-31, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): node_modules/@playwright/test 缺失、E2E_PORT 残留(旧覆盖已取消, 设置即报错)、8099 残留桩告警, 自检不过不进 spec, 修复动作在 NEXT: 行; 单跑: commands run dev.e2e-check。timeout=2700s: 2026-11-03 全量 440 例实测 21.9m ≈ 1314s(本机 CI=true 故失败重试 1 次) —— 旧 1200s(2026-10-16 280 例 654s, 约 1.8×) 已被引擎到点强杀; 本次按 ≈2× 实测抬到 2700s, 与 `.github/workflows/playwright.yml` 的 job timeout 40m 同轮抬高(历史链路 360s→600s→1200s; 套件再涨就拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 tests/e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、桩端口残留; 根因与实测见 doc); **端口由脚本取号**: 桩恒传 --port 0 由 OS 分配, Playwright webServer.wait 从启动行捕获实绑端口并经 UI_HARNESS_PORT 回传给 spec —— 无需人工干预、无需预知端口; 设置 E2E_PORT 会直接报错(旧固定口覆盖已取消); reuseExistingServer=false 保留作纵深防御, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): 1) commands run dev.e2e 2) E2E_CMD_RESULT=error commands run dev.e2e 3) E2E_CMD_RESULT=hang commands run dev.e2e 4) E2E_SKIP_CHECK=off commands run dev.e2e 5) E2E_HR_SCENE=empty commands run dev.e2e(或 off) 6) E2E_TORRENTS=3000 commands run dev.e2e"
 doc     = "../../memory-bank/pitfalls/testing/playwright-teardown.md"
 
 [tasks."dev.e2e-check"]
 run     = ["uv run python scripts/e2e_selfcheck.py <args>"]
 timeout = 120
-when    = "跑 e2e/冒烟前单跑环境自检: node_modules/@playwright/test 在位、E2E_PORT 无残留(该变量已取消, 有就报错)、8099 人工桩告警"
+when    = "跑 tests/e2e/冒烟前单跑环境自检: node_modules/@playwright/test 在位、E2E_PORT 无残留(该变量已取消, 有就报错)、8099 人工桩告警"
 note    = "只读不动手(不杀进程不装包), 修复动作在 NEXT: 行; e2e 端口由脚本取号, 默认不拦任何固定口; --blocking <端口> 仅人工排查指定口(--blocking 8099 可给 dev.harness 做同款前置), --warn 空串关 8099 告警; 占用归属看命令行里的 clone 路径, 判据单点见 doc"
 doc     = "../../memory-bank/pitfalls/testing/smoke.md"
 
@@ -71,17 +71,17 @@ note    = "exec kill 杀掉的是 uv 包装进程, python 子进程不死仍占�
 doc     = "../../memory-bank/pitfalls/testing/harness-save-flow.md"
 
 [tasks."dev.e2e-fast-shard"]
-run     = ["node e2e/shard-run.mjs --grep @fast <args>"]
+run     = ["node tests/e2e/shard-run.mjs --grep @fast <args>"]
 timeout = 1800
 when    = "改前端后的 fast 门禁并行形态: shard 多进程隔离桩(--index x --total N), 每 shard 独立 webServer; 串行口径见 dev.e2e"
-note    = "必须经 e2e/shard-run.mjs 包装: 它置 E2E_SHARD_TOTAL 让 playwright.config.mjs testIgnore 掉 CPU 敏感量具 spec(perf/drawer-content-perf/traffic-fx-frames), 并恒传 --shard=x/N —— 裸 npx playwright test --shard 不会排除量具 spec(量具断言在并发下数字会漂); 被排除的 spec 由 dev.e2e-perf-serial 串行补跑, 相加==全量。--index/--total 用 -- 透传(commands run dev.e2e-fast-shard -- --index 1 --total 3); shard 数先 S4 清睡等再按实测时长定(计划 26-11-05-0118 §06 D14); config 里 workers:1 刻意不动(单共享桩确定性口径), 并行只走 shard"
+note    = "必须经 tests/e2e/shard-run.mjs 包装: 它置 E2E_SHARD_TOTAL 让 playwright.config.mjs testIgnore 掉 CPU 敏感量具 spec(perf/drawer-content-perf/traffic-fx-frames), 并恒传 --shard=x/N —— 裸 npx playwright test --shard 不会排除量具 spec(量具断言在并发下数字会漂); 被排除的 spec 由 dev.e2e-perf-serial 串行补跑, 相加==全量。--index/--total 用 -- 透传(commands run dev.e2e-fast-shard -- --index 1 --total 3); shard 数先 S4 清睡等再按实测时长定(计划 26-11-05-0118 §06 D14); config 里 workers:1 刻意不动(单共享桩确定性口径), 并行只走 shard"
 doc     = "../../memory-bank/plans/26-11-05-0118-plan-flaky-test-governance.html"
 
 [tasks."dev.e2e-perf-serial"]
-run     = ["node e2e/perf-serial.mjs <args>"]
+run     = ["node tests/e2e/perf-serial.mjs <args>"]
 timeout = 900
 when    = "shard 轮转后串行补跑 CPU 敏感量具 spec(perf/drawer-content-perf/traffic-fx-frames), 与 shard 相加==全量; 单跑量具验证也用它"
-note    = "必须经 e2e/perf-serial.mjs: 固定串行口径跑三份量具 spec + E2E_TORRENTS 默认抬 600(perf.spec.mjs 行窗口化用例按 >500 门控, 默认 300 档整组 skip, 600 档才真跑; 已显式设则尊重现值) + 显式 delete E2E_SHARD_TOTAL(残留会让 config 把这三份 spec 又 ignore 掉=白跑); drawer-content-perf 用 page.route 自造千文件树, 不受该档影响; 桩由 webServer 自动起, 端口 OS 分配"
+note    = "必须经 tests/e2e/perf-serial.mjs: 固定串行口径跑三份量具 spec + E2E_TORRENTS 默认抬 600(perf.spec.mjs 行窗口化用例按 >500 门控, 默认 300 档整组 skip, 600 档才真跑; 已显式设则尊重现值) + 显式 delete E2E_SHARD_TOTAL(残留会让 config 把这三份 spec 又 ignore 掉=白跑); drawer-content-perf 用 page.route 自造千文件树, 不受该档影响; 桩由 webServer 自动起, 端口 OS 分配"
 doc     = "../../memory-bank/plans/26-11-05-0118-plan-flaky-test-governance.html"
 
 [tasks."dev.clone-kill"]

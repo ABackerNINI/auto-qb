@@ -22,7 +22,7 @@ import { INST } from './lib/vm.mjs';
  * 小数据档全量渲染换键行当场被量齐, 断言无判别力。默认档(300)下本 spec 恒 skip —— 真跑
  * 走手工抬档(perf-serial 的抬档清单只收 CPU 敏感量具, 本 spec 非量具不入其 args, 评审
  * minor-4 处置 = 头注注明手工命令):
- *   E2E_TORRENTS=400 commands run dev.e2e -- e2e/relocate-key-change-pad.spec.mjs
+ *   E2E_TORRENTS=400 commands run dev.e2e -- tests/e2e/relocate-key-change-pad.spec.mjs
  * 先红后绿取证(2026-11-16): 修复前末条「换键携带」断言 15s 超时判红; 修复后 1 passed。
  * 桩面: POST /__harness__/set_save_path(hash=逗号分隔多 hash)改 FakeTorrent.save_path 并按
  * 桩直写口径重建 groups(一次调用一代发布, 换键的加/删两半原子到达), 见 ui_harness.py。

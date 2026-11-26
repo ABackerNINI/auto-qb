@@ -45,7 +45,7 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && 'full-smoke' || 'daily
 env:
   WL_PATHS: |
     src/auto_qb/webui/
-    e2e/
+    tests/e2e/
     scripts/ui_harness.py
     playwright.config.mjs
     package.json
@@ -320,7 +320,7 @@ jobs:
       # 桩服务由 playwright.config.mjs 的 webServer 自动拉起(真 create_app + 合成种子), 无需手工起。
       # shard-run.mjs 会置 E2E_SHARD_TOTAL 把 CPU 敏感量具 spec 排除, 由 perf-serial job 补跑。
       - name: Run WEB UI smoke shard
-        run: node e2e/shard-run.mjs --grep @fast --index ${{ matrix.shard }} --total 3
+        run: node tests/e2e/shard-run.mjs --grep @fast --index ${{ matrix.shard }} --total 3
 
       # 取消/超时也要留证据 -- 改造前是 !cancelled(), 恰好在最需要排障的时候跳过上传。
       - name: Upload report
@@ -381,7 +381,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run CPU-sensitive perf specs
-        run: node e2e/perf-serial.mjs
+        run: node tests/e2e/perf-serial.mjs
 
       - name: Upload report
         if: always()
@@ -499,7 +499,7 @@ jobs:
       - name: Run full smoke shard
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/pw-shard-${{ matrix.shard }}.json
-        run: node e2e/shard-run.mjs --index ${{ matrix.shard }} --total 5 --add-reporter=json
+        run: node tests/e2e/shard-run.mjs --index ${{ matrix.shard }} --total 5 --add-reporter=json
 
       - name: Upload report
         if: always()
@@ -601,7 +601,7 @@ jobs:
       - name: Run CPU-sensitive perf specs
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/pw-full-perf.json
-        run: node e2e/perf-serial.mjs --add-reporter=json
+        run: node tests/e2e/perf-serial.mjs --add-reporter=json
 
       - name: Upload report
         if: always()

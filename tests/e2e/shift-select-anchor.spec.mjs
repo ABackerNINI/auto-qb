@@ -33,7 +33,7 @@ import { readInst } from './lib/vm.mjs';
  * 断言口径: 交互走真实鼠标手势(clickRow 的 CDP 输入管线 + 5 拍落点验证, 机理见
  * lib/gestures.mjs 头注); 判据双轨 —— DOM(.selected 类, 与用户所见一致) +
  * vm 内部字段(selMembers / selAnchorMember / kbCursor, evaluate 第2类,
- * e2e/lib/vm.mjs)。Shift 分支是**并集**语义(selection.js::shiftTorrentSel:
+ * tests/e2e/lib/vm.mjs)。Shift 分支是**并集**语义(selection.js::shiftTorrentSel:
  * 锚点→目标区间并入现有选中, 不取消已选) —— 故 Esc 后区间从空集起算, 计数即区间宽。
  */
 

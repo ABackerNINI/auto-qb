@@ -42,7 +42,7 @@ import { ctxItemById, ctxMenuScope } from './lib/gestures.mjs';
  *  计数口径: 旧块D·CTX-03 段 add() 4 处 + 块F add() 8 处 = 12 处(ok 模式主路径; error 模式下
  *  L843/L1414/L1456 三处换名仍 12 处) → 新 6 test/皮肤 × 2 皮肤, 1:N(合并)成立,
  *  每个旧名都有去向下落。旧收尾总检「无 console.error/pageerror」由 installRuntimeErrorGuard
- *  afterEach 承接(与块A 同款, e2e/lib/errors.mjs)。
+ *  afterEach 承接(与块A 同款, tests/e2e/lib/errors.mjs)。
  *
  * ── 对账实跑数字(五步对账 §5.1, 2026-10-06 S2 批实测回填) ──
  *  · 步骤2 旧脚本同参数轮(适配版): 桩 8231 --torrents 300 --ui both, W4 导出段两块

@@ -35,7 +35,7 @@ import { readInst } from './lib/vm.mjs';
  *         计划块表遗漏该孤儿断言, S6 报告确认仍留旧脚本收尾段, 块体删块前 L198–225; 收尾清
  *         localStorage / 回辅种页不再需要 —— 每 test 独立 context)
  *  另: 旧收尾总检 L1988「无 console.error / pageerror」(全文件 1 处, 非块A专有) →
- *      installRuntimeErrorGuard afterEach(每条 test 各自把关, e2e/lib/errors.mjs)。
+ *      installRuntimeErrorGuard afterEach(每条 test 各自把关, tests/e2e/lib/errors.mjs)。
  *  计数口径: 旧块A add() 调用点 13 处 + 孤儿断言 1 处(设置页刷新保持位置, S7a 补迁, 见上表)
  *  (主路径, --torrents 300; 2026-10-06 删块前全量轮实测每皮肤 13 项全 PASS × 2 皮肤) →
  *  新 8 test/皮肤 × 2 皮肤 + 数据契约 2 条, 其中断言 expect 约 25 处 + afterEach 守卫 ——

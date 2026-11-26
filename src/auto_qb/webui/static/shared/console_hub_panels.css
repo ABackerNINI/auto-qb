@@ -681,7 +681,7 @@ body.kbd-persist .sb-kbd-sw {
  * (不限 / — / 数值都从斜杠右侧起笔, 短文案不飘到槽右端断裂)。
  * 窄屏(<=900px, 四皮肤共有最窄断点)只保 .sb-speed 右缘不动: .lim 退 4ch(覆盖「不限」),
  * 长限速值仍会撑开并把组内元素一起左推 —— 窄屏契约不承诺组内零位移(见
- * e2e/statusbar-speed-geometry.spec.mjs, 只断 .sb-speed 右缘)。
+ * tests/e2e/statusbar-speed-geometry.spec.mjs, 只断 .sb-speed 右缘)。
  * 四皮肤这条规则一字不差 => 进 shared 单点(webui.md「逐字节相同的规则族进 shared 尾段」);
  * 皮肤层任何命中 .sb-spd .val/.lim 的规则都不得声明 min-width, 守阵
  * _scan_statusbar_speed_width(tests/webui_static_scan_css.py)分层钉值。 */

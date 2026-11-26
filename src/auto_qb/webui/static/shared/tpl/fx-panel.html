@@ -1,5 +1,5 @@
     <!-- 动效数值面板(R8, plan 26-11-12-1139 §05): 图区右键的非模态锚定浮层 —— 不是 .ctx-menu
-         (无 role=menu/方向键导航, 不参与菜单选择器统计, e2e/drawer-merge.spec 的计数不受影响)、
+         (无 role=menu/方向键导航, 不参与菜单选择器统计, tests/e2e/drawer-merge.spec 的计数不受影响)、
          不是 aq-modal(无遮罩, 边调边看)、不是抽屉二级页(二级页会替换 .qb-chart-host 把图销毁)。
          落点 into=app = .drawer-dock 的**兄弟**节点: 不进 .drawer 子树 —— flux 的 transform
          containing-block 会把 fixed 后代劫持成相对抽屉定位(§09 风险行; .err-panel 注释同源坑);

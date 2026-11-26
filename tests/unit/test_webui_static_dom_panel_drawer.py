@@ -22,7 +22,7 @@
 - test_frontend_drawer_open_switch_no_empty_flash: 详情面板显式换目标不闪空态守阵(2026-10-07 报障「切换种子时用户页闪'暂无已连接用户'」) —— openTorrentDrawer 已开(种子形态)重入分支先于重建副作用(同目标短路零副作用, 与 openDrawerTraffic 同口径 -> 换目标交棒 _switchDrawerTarget 软切换: 保留旧数据 + 160ms 延迟遮罩, 与键盘跟随同链路) + 冷启动重建(面板关着/流量形态换形)初值页签 loading 与空列表同帧置位(trackers/files/peers 三 flag 按 initialTab 落真, 详情在途窗口渲染加载态而非空态, 经典链与变体同免), 任一锚被拆或次序倒置即红
 - test_drawer_peers_speed_keys_normalized: 抽屉 peers 速度键名适配守阵(2026-10-10 用户报障「种子详情用户页上下行始终为 0」) —— 真 qB sync/torrentPeers 的对端速度字段是 dl_speed / up_speed(与列表侧 torrents/info 的 dlspeed / upspeed 不同名), 前端全部 peers 消费点(经典表 drawerPeerRows + 变体 07/08/09 的 peerList 直读原始对端对象)统一按 dlspeed / upspeed 取名 ⇒ 落袋单点 _fetchDrawerPeers 必须过 _drawerNormPeers 补键(否则取不到值 → 上下行恒 0); 双形态(dict/数组)同归一; 桩服务 scripts/ui_harness.py 合成对端速度键名也必须与真 qB 同形(否则冒烟「看得见速度」而真机恒 0, 测假)
 - test_drawer_tpl_trackers_card_uniform_height: 04「状态卡片栅格」卡片同排等高 + 虚拟合并卡去描述守阵(2026-10-10 用户报障「虚拟条目卡片高度与其它的不一致」) —— 口径(用户拍板「同排等高」)= 栅格 .dt04-grid 走 align-items:stretch(同排卡片自动齐平, 虚拟卡与同排实体卡恒等高) + 虚拟合并卡移除设计稿 footer 长描述只留 head + chips; 静态钉 .dt04-grid 必 stretch 且 align-items:start 不得回潮 + 描述文案(私有 tracker 种子…)不得回潮 + virtualCardHtml 内不得再现 dt04-vnote(实体『未启用』卡的短注仍用该类, 禁连类一起删)+ 卡片必须填满栅格格(width:auto 必配, 2026-10-12 用户报障「真实 tracker 卡与虚拟卡之间/虚拟卡后方有长空隙」根治: 引擎行容器继承三皮肤经典表 width:fit-content, grid 下不参与 stretch ⇒ 卡片收缩到内容宽, 两列卡片间 ~700px 永久空洞 + 卡宽随内容漂移)
-- test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): 1. 门抑制单点判据; 2. 三 fetcher 的 loading 置位都经该单点(直写即回潮); 3. 标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); 4. _stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); 5. _drawerSwitchEnd 必须清标记(否则粘住); 6. 旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
+- test_drawer_list_switch_no_loading_flash_wiring: 抽屉三列表(peers/trackers/files)软切换「不闪」守阵(2026-10-13 用户报障「种子详情用户页切换种子时『暂无已连接用户』闪烁」) —— 真根因(逐帧实测, 探针序列 `E→L→E`): 软切换保留的是**上一个目标的已落袋结果**, 而**空列表(没有对端/没有 tracker)是种子的常态**, 但三列表 fetcher 一律置 loading, 模板门 `loading && 无行` 把这份既有空态顶掉一帧换成「正在加载…」再换回 ⇒ 看起来就是空态在闪。修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn` = `!silent && !this._drawerSoftSwitch`), 保留旧结果直到被新结果取代。!**不得**改成「空响应视为未就绪→延迟渲染/重拉」—— 那会把常态的空推迟(首版固定 1s 重拉被用户否掉:「种子的常态就是没有对端」; 后端对空响应还有 1s 短缓存, 重拉只拿回空包)。本守阵钉静态接线与关键次序(行为回归由 tests/e2e/drawer-switch-no-flash.spec.mjs 逐帧采样: 空态全程在 + 无「正在加载…」+ 无重试请求): 1. 门抑制单点判据; 2. 三 fetcher 的 loading 置位都经该单点(直写即回潮); 3. 标记须在 _loadDrawerTab **之前**置位(三 fetcher 在其内 await 前同步读); 4. _stopDrawerPoll **不得**清标记(它在 `_loadDrawerTab→_startDrawerPoll` 途中被调用, 清了等于置前失效); 5. _drawerSwitchEnd 必须清标记(否则粘住); 6. 旧「延迟重拉」机制(_drawerGraceHold/_DRAWER_GRACE_DELAYS/_drawerPeerCount)不得回潮
 - test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— 1. 三份 manifest 都登记 shared/dt_table.js 且文件在盘上; 2. window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); 3. 几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; 4. L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); 5. 渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); 6. L2 落点: 单元格渲染器未登记即抛(不许渲染空白); 7. 真实列定义增喂(计划 26-11-10-0027 W1(3),
 堵合成列缺口): app.js 截断切片拿 TABLE_COLUMNS 全 13 表真实列 + DRAWER_TRACKER/PEERS 原始列集
 喂 layout —— 全列声明 tpl 前提钉住、轨道逐列取 tpl、aligns 缺省 left、keys 随列序、固化宽覆盖首列
@@ -53,7 +53,7 @@ display:none 表头的 computed 是指定形, 裸空白切分把一个 minmax �
   class(与 secRows 的 .dt02-kv 同语义槽)且变体 CSS 必须含 .dt02-crow.wide .v 折行规则
   (white-space:normal + word-break:break-all); 修复前 idRows 恒写 class="dt02-crow",
   40 位哈希被基类 nowrap+ellipsis 截断, wide 契约在该槽位无效果
-- test_drawer_tooltip_prune_static_guard: WEBUI 种子详情 tooltip 清理守阵(计划 26-11-15-0717 §04 S4 / §07 R4) —— A 移除面零回潮: 46 个黑名单逐字串按文件分组钉 not in(模板挂点 41 + JS 载荷 5, 落在 static/shared/ 下 10 文件, 08 只手术移除面 0 点), 取值来自 git diff e2825b4b..HEAD 全部删除行 title 载荷逐文件归组; 黑名单只钉逐字串, 新文案不拦, 解禁须删钉(§07 R4), 逐字串一律带属性名或足够上下文, 绝不用 state/site/tags/private 裸词(JS 变量与别处合法出现会造出假红且钉不住真正回潮); B 6 个文案手术点钉新串(解释正文) in + 旧串(摘掉的前缀/尾缀) not in, 断言范围只针对对应文件不全仓扫(e2e/tests 的 num_peers:/num_downloaded: 是 mock 数据字段赋值, 计划外不入断言); C 保留面抽查 5 项(dt10:311 优先级钮目录作用域 / dt12 blkTitle / 空帧 drawer_templates.js:352 esc / xtpl-cells.html peers 段 :331 与 :335 绑定 / drawer.html:170/171 qbCurSummaryHint)钉特征串 in; 红绿双验 = 任一移除点 title 加回对应产品文件即红, 恢复即绿
+- test_drawer_tooltip_prune_static_guard: WEBUI 种子详情 tooltip 清理守阵(计划 26-11-15-0717 §04 S4 / §07 R4) —— A 移除面零回潮: 46 个黑名单逐字串按文件分组钉 not in(模板挂点 41 + JS 载荷 5, 落在 static/shared/ 下 10 文件, 08 只手术移除面 0 点), 取值来自 git diff e2825b4b..HEAD 全部删除行 title 载荷逐文件归组; 黑名单只钉逐字串, 新文案不拦, 解禁须删钉(§07 R4), 逐字串一律带属性名或足够上下文, 绝不用 state/site/tags/private 裸词(JS 变量与别处合法出现会造出假红且钉不住真正回潮); B 6 个文案手术点钉新串(解释正文) in + 旧串(摘掉的前缀/尾缀) not in, 断言范围只针对对应文件不全仓扫(tests/e2e 的 num_peers:/num_downloaded: 是 mock 数据字段赋值, 计划外不入断言); C 保留面抽查 5 项(dt10:311 优先级钮目录作用域 / dt12 blkTitle / 空帧 drawer_templates.js:352 esc / xtpl-cells.html peers 段 :331 与 :335 绑定 / drawer.html:170/171 qbCurSummaryHint)钉特征串 in; 红绿双验 = 任一移除点 title 加回对应产品文件即红, 恢复即绿
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -1566,7 +1566,7 @@ def test_drawer_list_switch_no_loading_flash_wiring():
     修法 = 换目标窗口(`_drawerSoftSwitch`)内**不置**列表 loading 门(`_drawerListLoadingOn`), 保留那份
     旧结果直到被新结果取代。WARN: **不得**改成「空响应视为未就绪 → 延迟渲染/重拉」: 那会把常态的空推迟
     (首版固定 1s 重拉被用户否掉 —— 「种子的常态就是没有对端」, 且后端对空响应还有 1s 短缓存)。
-    行为回归由 e2e/drawer-switch-no-flash.spec.mjs 逐帧采样值守(空态全程在 + 无「正在加载…」+ 无重试
+    行为回归由 tests/e2e/drawer-switch-no-flash.spec.mjs 逐帧采样值守(空态全程在 + 无「正在加载…」+ 无重试
     请求); 本守阵只钉静态接线与关键次序, 防机制被无声拆除。
     """
     store_js = open(os.path.join(STATIC_ROOT, "shared", "drawer_store.js"), encoding="utf-8").read()
@@ -3168,7 +3168,7 @@ _REMOVED_TITLE_BLACKLIST = {
 }
 
 # 6 个文案手术点: (文件, 新串(解释正文, 必须在位), 旧串(摘掉的前缀/尾缀, 必须清零))。
-# 旧串 num_peers: / num_downloaded: 在 e2e/tests 里是 mock 数据对象字段赋值而非 tooltip
+# 旧串 num_peers: / num_downloaded: 在 tests/e2e 里是 mock 数据对象字段赋值而非 tooltip
 # 文案(编排者已裁决计划范围外), 故断言只查对应文件, 不全仓扫。
 _TOOLTIP_SURGERY = [
     ("drawer_tpl/07-peers-dashboard-tall.js", "吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示无动作", "(计划 P-04 口径)"),

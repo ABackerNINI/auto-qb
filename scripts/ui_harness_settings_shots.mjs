@@ -1,7 +1,7 @@
 /**
  * 设置页 bt_backup 编辑器视觉实测截图脚本(计划 26-11-07-0708 S6 验收动作, dev-only, **不是测试**)。
  *
- * 用途: 对 ui_harness 桩服务做真浏览器目检截图留证, 断言面与 e2e/settings-bt-backup.spec.mjs
+ * 用途: 对 ui_harness 桩服务做真浏览器目检截图留证, 断言面与 tests/e2e/settings-bt-backup.spec.mjs
  * 同口径(编辑器在「整组迁移」块内渲染+空态 / 增行 host:port+路径 保存回读 / S3 新口径 help
  * 在场 / 旧口径文案与退役键 finalize_timeout 退场), 差别只在产出: 每皮肤 5 张元素截图落
  * memory-bank/testing/baselines/attachments/, 断言结果打 stdout —— pytest「测试计划」不含本文件
@@ -15,7 +15,7 @@
  * 退出码: 断言全过 0; 任何 FAIL/ERROR 1(截图尽力而为, 已到达阶段的照常落盘)。
  *
  * 保存往返不写真桩配置盘: page.route 拦截 /api/config, PUT 收下载荷当「已落盘」、GET 注回 ——
- * 与 e2e/settings-bt-backup.spec.mjs 同口径(真后端往返语义, 只差不落盘)。
+ * 与 tests/e2e/settings-bt-backup.spec.mjs 同口径(真后端往返语义, 只差不落盘)。
  */
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';

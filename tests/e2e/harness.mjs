@@ -1,6 +1,6 @@
 /**
  * e2e 桩服务参数的**单点定义** —— playwright.config.mjs(负责起服务)、各 spec(负责断言)
- * 与 e2e/lib/mode.mjs(负责模式门控)都从这里读, 免得端口/种子数/模式在两处各写一份然后悄悄漂移。
+ * 与 tests/e2e/lib/mode.mjs(负责模式门控)都从这里读, 免得端口/种子数/模式在两处各写一份然后悄悄漂移。
  *
  * 桩服务本体是 scripts/ui_harness.py: 真 `auto_qb.webui.create_app` + 真 QbManager + FakeClient
  * + 合成种子(端点/鉴权/静态挂载全是生产代码, 只有数据是人造的)。它是**长驻**进程
@@ -11,7 +11,7 @@
  * --hr-scene / --torrents)一一对应。默认档 = ok/on/on/300(旧冒烟轨默认轮口径, 沿用不改);
  * 模式轮是**串行人跑**(env 组合决定桩形态, 每轮独立起桩), 不是并行实例。
  *
- * S7 终态(2026-10-06): 旧单页冒烟脚本已退役, e2e/ 是 WEB UI 浏览器断言的**全量单点**;
+ * S7 终态(2026-10-06): 旧单页冒烟脚本已退役, tests/e2e/ 是 WEB UI 浏览器断言的**全量单点**;
  * 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast 子集), 全量矩阵轮的六行命令见
  * .commands/dev/config.toml 的 dev.e2e note(串行人跑, 每轮独立起桩)。
  */
@@ -69,7 +69,7 @@ export const HR_SCENE = process.env.E2E_HR_SCENE || 'on';
 /**
  * 冷启动两跳观测模式(plan 26-11-18-0259 S2 e2e) —— 对应 ui_harness.py `--boot-first`(on | off)。
  * on: 桩 store 不预灌, 启动首轮经真实 _sync_line 在主线程跑(提前发布基础代), 归组在 files 闸口
- * 挂起, 由 /__harness__/boot_go 与 /__harness__/boot_gate 分两跳放行(e2e/boot-first-two-hop.spec.mjs);
+ * 挂起, 由 /__harness__/boot_go 与 /__harness__/boot_gate 分两跳放行(tests/e2e/boot-first-two-hop.spec.mjs);
  * off(默认): 桩行为与历史逐字不变。
  */
 export const BOOT_FIRST = process.env.E2E_BOOT_FIRST || 'off';
@@ -125,7 +125,7 @@ export const SKINS_ALL = ['prism', 'atlas', 'console', 'flux'];
  * Playwright 停 webServer 时等的是子进程的 `'close'` 事件, 而 Node 的 `'close'` 要求**所有
  * stdio 管道都关闭**。Windows 上它用 `spawnSync('taskkill ...')`(带管道 stdio) —— 本机 node 的
  * `spawnSync` 遇管道 stdio 必 EBUSY, 失败被静默吞掉 => 桩服务没死 => 命令永不退出、桩端口残留。
- * 现由 `e2e/global-teardown.mjs`(配置里的 `globalTeardown`)在 Playwright 动手之前用**异步**
+ * 现由 `tests/e2e/global-teardown.mjs`(配置里的 `globalTeardown`)在 Playwright 动手之前用**异步**
  * taskkill 先杀掉进程树兜底; 非 Windows 走 `process.kill(-pid, SIGKILL)` 本来就没问题。
  */
 export const HARNESS_CMD = [

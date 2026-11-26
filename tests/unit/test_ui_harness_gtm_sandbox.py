@@ -2,7 +2,7 @@
 
 归因(取证 2026-11-17): gtm 发现指针是**整机级用户级文件**(agent.pointer_dir 单点,
 按平台解析), 而 scripts/ui_harness.py 只钉了 config_path/data_dir 到 mkdtemp —— 宿主
-真跑 gtm 时桩进程 probe 真阳性 -> bundle.gtm 非 null -> e2e/settings-backup.spec.mjs
+真跑 gtm 时桩进程 probe 真阳性 -> bundle.gtm 非 null -> tests/e2e/settings-backup.spec.mjs
 的 bundle.gtm === null 断言整组红, 且导入用例的真 POST 会经 backup._apply_gtm_section
 PUT 打到宿主真实 gtm 工具覆写其配置。
 

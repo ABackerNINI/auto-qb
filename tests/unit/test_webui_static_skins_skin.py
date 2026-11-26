@@ -130,7 +130,7 @@ def test_frontend_tone_cascade_beats_state_color():
 
     静态守阵按每皮肤最终生效级联面(_ui_css_effective)判: 状态色规则锚点 + tone 基础兜底
     + 状态行上同特异度后置的 tone 规则(令牌不变); prism 成员行半边同判。真浏览器计算色
-    由 e2e/colstyle.spec.mjs 的 tone 用例承担(级联胜负只有 computed style 能证)。
+    由 tests/e2e/colstyle.spec.mjs 的 tone 用例承担(级联胜负只有 computed style 能证)。
     """
     problems = []
     _scan_tone_cascade(problems)
@@ -691,7 +691,7 @@ def test_frontend_fx_wiring():
     #     (横滚冻结列在 stamped 行上失灵)。stamp 时按实测行高覆写 --fx-row-h
     #     (spawnGhost 同款)防摘除时从缺省 44px 跳回自然高。CSS 侧配套 = fx-mount.css
     #     D4-7 行板过渡复位规则(pinned_first_cell_hover_transition_parity 钉);
-    #     行为面 = e2e/main-table-pinned-matrix.spec.mjs stamped 行用例(生命周期段)。
+    #     行为面 = tests/e2e/main-table-pinned-matrix.spec.mjs stamped 行用例(生命周期段)。
     rows_blk = re.search(r"function rows\(arr, keyAttr\) \{(.*?)\n  \}", mount_js, re.S)
     assert rows_blk, "fx-mount.js 找不到 rows() 差分函数体(行插入 stamp 生命周期的钉点)"
     blk = rows_blk.group(1)

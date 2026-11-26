@@ -1186,7 +1186,7 @@ for (const skin of DOCK_SKINS) {
      * 显式 scrollTop), e2e dt-live-update #8/#9 族钉该面不受波及(修复后复验 14/14)。
      * flux 已解跳(2026-11-14, issue 26-11-14-0844 修): flux 的行窗口化在 zoom != 1 下窗口错位
      * —— 全部渲染行落在视口上方(底 pad 独占视口), 前置不可构造; 已入池并修(columns_grid.js
-     * _rowWindow pad 按有效缩放 1/z 换算成布局 px, e2e/row-window-zoom.spec.mjs 钉该面), 本用例
+     * _rowWindow pad 按有效缩放 1/z 换算成布局 px, tests/e2e/row-window-zoom.spec.mjs 钉该面), 本用例
      * flux 档回归。机制为浏览器级, prism/atlas 双皮肤此前已确证。
      */
     test(`T8 根锚补: 缩放 0.9 + 文档底首开抽屉全程行视口位置零位移 @fast (${skin})`, async ({ page }) => {

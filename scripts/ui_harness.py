@@ -20,7 +20,7 @@
 ----
     uv run python scripts/ui_harness.py --torrents 3000
     # 浏览器侧断言已迁 e2e 轨: 桩服务由它自动起(端口由 OS 分配, Playwright webServer.wait 从
-    # 启动行捕获实绑地址), 模式走 E2E_* env(见 e2e/harness.mjs), 命令 `commands run dev.e2e`;
+    # 启动行捕获实绑地址), 模式走 E2E_* env(见 tests/e2e/harness.mjs), 命令 `commands run dev.e2e`;
     # 手看页面时直接打开启动行打印的 http://127.0.0.1:<实端口>/prism/
 
 参数
@@ -38,14 +38,14 @@
                    off 验 fail-closed 门控(菜单两处都不渲染; 配套 e2e 轮 E2E_SKIP_CHECK=off)
     --hr-scene on|empty|off(默认 on): HR 在线核实桩场景(计划 26-10-04-0312 S5) ——
                    on 灌五形态拉取历史(表3., HHan/HDSky 跨站时间轴), empty 验空态,
-                   off 验未启用态; 配套 e2e 轮 E2E_HR_SCENE(仅 on 跑表3.断言组, e2e/hr-history.spec.mjs)
+                   off 验未启用态; 配套 e2e 轮 E2E_HR_SCENE(仅 on 跑表3.断言组, tests/e2e/hr-history.spec.mjs)
     --boot-first on|off(默认 off): 冷启动两跳观测模式(plan 26-11-18-0259 S2 e2e) ——
                    store **不预灌**: 启动首轮由主线程经真实 _sync_line 跑(空 store ->
                    rounds_applied==0 -> apply_sync 落库后提前发布基础代), 归组 files 单发在
                    闸口挂起; HTTP 侧经 /__harness__/boot_go 放行、/__harness__/boot_gate 开闸,
                    分两跳观察「首跳基础代(flat 满/groups 空/singles 超集) -> 第二跳补全代
                    (groups 落位/singles 收缩)」。配套 e2e 轮 E2E_BOOT_FIRST(仅 on 跑
-                   e2e/boot-first-two-hop.spec.mjs); 默认模式(预灌 + 直写组)行为逐字不变。
+                   tests/e2e/boot-first-two-hop.spec.mjs); 默认模式(预灌 + 直写组)行为逐字不变。
 
 注意
 ----
@@ -169,7 +169,7 @@ def _inject_relocate_jobs(mgr, torrents) -> None:
         RelocateSnapshot,
     )
     # 守卫(评审 minor): 本注入按 torrents[0..4,7] 索引, --torrents<8 会 IndexError 崩在启动行打印前
-    # (e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..7 会过校验然后 webServer 捕获超时)。
+    # (tests/e2e/harness.mjs 只校验正整数, E2E_TORRENTS=1..7 会过校验然后 webServer 捕获超时)。
     # 同文件 _inject_site_alerts 有 len<2 守卫惯例; 少于 8 条时跳过注入(降级为恒空 relocate, 不崩)。
     if len(torrents) < 8:
         print(f"[harness] 迁移状态跳过注入: 种子数 {len(torrents)} < 8(索引面不足)", flush=True)
@@ -373,7 +373,7 @@ def _install_traffic_stream_probe(app, mgr) -> None:
                   steps=<0=不限>  up=<B/s>  dl=<B/s>  ttl_s=<安全自停秒, 默认 45>
         start = 顶掉旧泵(单槽, 用例间互不残留); 启动后**首帧立即落**, 此后每 si 秒一帧,
         每帧 t 前进 si(泵内 t 只按 si 脚本化步进, 不读墙钟); ttl 到点或 steps 采满自停,
-        防失败用例残留泵污染下一用例。t0 由调用方锚当前墙钟(e2e/lib/traffic-stream.mjs
+        防失败用例残留泵污染下一用例。t0 由调用方锚当前墙钟(tests/e2e/lib/traffic-stream.mjs
         pumpT0: floor(now/si)*si + si, 评审 T4b #1) —— 事件 lastT 跟住墙钟, 前端 watchdog
         (D9 静默重拉)与「滞后 Ns」徽标量纲不误触发。
       mode=stop    停泵(幂等)。
@@ -1357,7 +1357,7 @@ def _materialize_config(path: str, port: int, skip_check_menu: bool) -> None:
 
     桩的运行期配置是 FakeConfig(内存), 但 /api/config GET/PUT 走的是磁盘树(manager.config_path)
     —— 磁盘上没有文件时 GET 树没有 config.schema_version, PUT 的版本闸门(_reject_stale_version)
-    对缺章一律拒绝, 「保存并应用」在桩上永远 400, 保存流 e2e/冒烟完全测不到
+    对缺章一律拒绝, 「保存并应用」在桩上永远 400, 保存流 tests/e2e/冒烟完全测不到
     (2026-10-10 规则卡冒烟实证)。reload_config 在桩上只回执不应用(_apply_truth 只认
     pause/resume), 真配置不会顶掉 FakeConfig。
     """
@@ -1404,14 +1404,14 @@ def main() -> int:
         default="on",
         help="HR 在线核实桩场景(默认 on, 见 _inject_hr_history): on = 启用 + 五形态拉取历史"
         "(表3.); empty = 启用 + 零历史(空态); off = 未启用(前端显示未启用态)。"
-        "配套 e2e 轮 E2E_HR_SCENE —— 仅 on 跑表3.断言组(e2e/hr-history.spec.mjs)",
+        "配套 e2e 轮 E2E_HR_SCENE —— 仅 on 跑表3.断言组(tests/e2e/hr-history.spec.mjs)",
     )
     ap.add_argument(
         "--site-alert",
         choices=["on", "off"],
         default="on",
         help="站点健康两态桩(默认 on, 见 _inject_site_alerts): 1 行缺站点配置 + 1 行 tracker 报错, "
-        "供 e2e/site-alerts.spec.mjs 断言站点 chip 左槽图标(计划 26-10-19-2007 S3)",
+        "供 tests/e2e/site-alerts.spec.mjs 断言站点 chip 左槽图标(计划 26-10-19-2007 S3)",
     )
     ap.add_argument(
         "--boot-first",
@@ -1427,7 +1427,7 @@ def main() -> int:
         choices=["on", "off"],
         default="on",
         help="web.skip_check_menu 桩值(默认 on): off 起盘验 fail-closed 门控 —— "
-        "「跳检...」在多选与单选菜单都不渲染(配套 e2e 轮 E2E_SKIP_CHECK=off, e2e/menus.spec.mjs)",
+        "「跳检...」在多选与单选菜单都不渲染(配套 e2e 轮 E2E_SKIP_CHECK=off, tests/e2e/menus.spec.mjs)",
     )
     ap.add_argument(
         "--state-revert-ms",

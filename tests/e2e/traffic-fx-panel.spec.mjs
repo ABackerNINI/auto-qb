@@ -29,7 +29,7 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  *   · 四皮肤(§05.9 第 9 项): 四套各开一次, rect 断言 + 滑杆可用(改值落到 AQB_FX_CFG)。
  *   · Alt 看穿(§05.1): fx-alt 类切换是 window keydown/keyup 两路监听 + pointer-events:none
  *     的 CSS 组合 —— 穿透的真判据是**画布收到了鼠标**(hoverIdx 随移动变化), 只有真指针能验。
- *   · .ctx-menu 计数不变(§05.9 第 6 项零回归面): 面板不是 .ctx-menu —— e2e/drawer-merge
+ *   · .ctx-menu 计数不变(§05.9 第 6 项零回归面): 面板不是 .ctx-menu —— tests/e2e/drawer-merge
  *     的 strict-mode 计数靠「面板不进该选择器」成立, 这里显式钉住。
  *   · 状态行采样口径形态(26-11-18-0037 阶段 3 随 schema=2 契约改写): schema=2 样本分组
  *     契约(raw 段窗)下 si != iv -> 「采样 X s · 组距 Y s」两值(组距标称 = k x si, 桶面已
@@ -143,7 +143,7 @@ test.describe('动效数值面板 · 开层与计数面(prism/atlas)', () => {
       await expect(menu, '开面板前不得有右键菜单在场').toHaveCount(0);
       const panel = await openFxPanelByRightClick(page, host);
       await expect(menu, '面板打开后 .ctx-menu 计数必须不变(0) —— 面板不是 .ctx-menu, ' +
-        'e2e/drawer-merge 的 strict-mode 计数靠这一点成立').toHaveCount(0);
+        'tests/e2e/drawer-merge 的 strict-mode 计数靠这一点成立').toHaveCount(0);
       await expect(panel).toHaveAttribute('role', 'dialog');
       await expect(panel).toHaveAttribute('aria-label', '动效数值');
 

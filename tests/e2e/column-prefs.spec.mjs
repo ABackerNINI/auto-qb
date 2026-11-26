@@ -54,7 +54,7 @@ import { readInst } from './lib/vm.mjs';
  *    76 passed / 10 skipped / 0 failed(2.7m)。`npm run test:e2e:fast` 4 passed(7.7s)与本批前一致。
  *  · Windows 收尾: stub(TaskStop)杀净后 netstat 现查本次 run 实际端口均无 LISTENING(端口取自
  *    启动日志/捕获值, 无固定口 —— 旧脚本固定口叙述已随其退役, 现行 harness 端口由 OS 分配)、
- *    tasklist 无 python 孤儿进程; dev.e2e 侧由 e2e/global-teardown.mjs 兜底
+ *    tasklist 无 python 孤儿进程; dev.e2e 侧由 tests/e2e/global-teardown.mjs 兜底
  *    (UI_HARNESS_PORT 捕获值, 日志见「收尾兜底」行)。
  *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
@@ -138,7 +138,7 @@ const colState = (pg) => readInst(pg, '({ w: vm.colW, h: vm.colHidden })');
 
 for (const skin of SKINS) {
   test.describe.serial(`皮肤 ${skin}(块H: 列设置守阵)`, () => {
-    /* 旧脚本收尾总检「无 console.error / pageerror」的框架化(与块A 同款, e2e/lib/errors.mjs);
+    /* 旧脚本收尾总检「无 console.error / pageerror」的框架化(与块A 同款, tests/e2e/lib/errors.mjs);
      * 多 page 用例对第二页面另有测试体内显式断言(见各 test 的 errors2)。 */
     installRuntimeErrorGuard(test);
 

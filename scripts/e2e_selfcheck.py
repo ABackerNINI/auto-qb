@@ -1,4 +1,4 @@
-"""e2e/冒烟环境开机自检(dev-only, 只读不动手) —— issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck。
+"""tests/e2e/冒烟环境开机自检(dev-only, 只读不动手) —— issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck。
 
 把 smoke.md 的三类高频环境条目从「读文档排障」搬进工具: 在 `dev.e2e` 进 spec 之前
 当场探测, 不过就打印修复动作(NEXT:)并退非 0 —— commands 引擎对 run 列表逐条执行、

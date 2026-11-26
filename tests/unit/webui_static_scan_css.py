@@ -706,7 +706,7 @@ def _scan_statusbar_speed_width(problems):
     flex: 0 0 auto, .sb-speed 右缘钉死 => 数值宽变 = 整组左缘平移。处置 = shared 层 .val/.lim
     各 13ch 定宽(.val 右对齐/.lim 左对齐), 窄屏 @media(max-width: 900px)把 .lim 退 4ch。
     静态断言兜不住布局(pitfalls/web-ui/progress-bar.md), 真浏览器逐帧几何在
-    e2e/statusbar-speed-geometry.spec.mjs; 本守阵钉的是 CSS 事实面, 五件事(缺一即红):
+    tests/e2e/statusbar-speed-geometry.spec.mjs; 本守阵钉的是 CSS 事实面, 五件事(缺一即红):
     1. shared/console_hub_panels.css 顶层 .val/.lim 各恰 1 条且 min-width: 13ch —— 13 =
        fmtSpeed 有界档最长形「1023.99 KiB/s」的精确上界(12ch 会被该档撑开, 定宽即失效);
     2. @media 内 .lim 恰 1 条且 min-width: 4ch、所属断点恰 (max-width: 900px)(四皮肤共有

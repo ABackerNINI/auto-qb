@@ -14,7 +14,7 @@
 - test_decorate_fingerprint_includes_relocate: decorate.js 成员/组 relocate 签名进指纹且槽位长度同步
 - test_p1_pair_rendered_in_path_cells: 组行/种子行路径列渲染 .rel-pair 两排 A→B(rel-pcol+rel-arc), pair 隐藏原单排路径行(R3)且原生 title 同步退役(2026-11-11), A/B 排 f-cell 可点筛选+f-on 独立(D16), 无按钮语义, tone 经 relocateView
 - test_p1_pair_upper_row_uses_strikethrough_not_opacity: 上排(当前位置)100% 不透明 + 删除线旧值, 禁用 opacity 做层级(26-11-10 修 D6 淡影/伪影错觉)
-- test_p1_pair_cell_margin_keeps_row_height_constant: has-relpair 单元格 margin: -5px 0 静态钉(负 margin 吃 padding 锁行高, 双排不得使行高变化 —— 2026-11-19 行高恒等修正; 四皮肤几何实测在 e2e/relocate-pair-row-height.spec.mjs)
+- test_p1_pair_cell_margin_keeps_row_height_constant: has-relpair 单元格 margin: -5px 0 静态钉(负 margin 吃 padding 锁行高, 双排不得使行高变化 —— 2026-11-19 行高恒等修正; 四皮肤几何实测在 tests/e2e/relocate-pair-row-height.spec.mjs)
 - test_p1_pair_state_mapping_node: node 探针验证 relocateView 矩阵(pair/one/null)+ 指纹 src 值变化必须变签名
 - test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛按位置集(save_path + 进行中三态 src/dst, R3 D17; 谓词与计数同一 _pathPositions 单点, 成员级)
 - test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛位置集(dst/src 命中与 done 不命中)、清空重置
@@ -556,7 +556,7 @@ def test_p1_pair_rendered_in_path_cells():
 def test_p1_pair_cell_margin_keeps_row_height_constant():
     """双排不得使行高变化(最初设计判据): has-relpair 单元格负 margin 吃进上下 padding,
     pair 块 margin-box(30.59-10=20.59px) ≤ 主表行内容盒(≥21.69px), 行高与单排逐像素相等。
-    几何与四皮肤实测见 e2e/relocate-pair-row-height.spec.mjs; 2026-11-19 行高恒等修正。"""
+    几何与四皮肤实测见 tests/e2e/relocate-pair-row-height.spec.mjs; 2026-11-19 行高恒等修正。"""
     import re
 
     css = _static("shared/row_lang.css")

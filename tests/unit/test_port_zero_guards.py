@@ -1,7 +1,7 @@
 """测试侧端口改 0 的守阵(计划 26-11-03-0316 §09)。
 
 ## 测试计划
-- test_harness_port_contract: e2e/harness.mjs 不含固定口/静态 BASE_URL, 含 WAIT_STDOUT 与 baseUrl
+- test_harness_port_contract: tests/e2e/harness.mjs 不含固定口/静态 BASE_URL, 含 WAIT_STDOUT 与 baseUrl
 - test_playwright_web_server_uses_wait: webServer 用 wait 捕获, 无 url/port, reuseExistingServer=false
 - test_ui_harness_defaults_to_zero: --port 默认 0, 打印行使用实绑端口变量
 - test_e2e_selfcheck_no_fixed_blocking: 不再有 DEFAULT_E2E_PORT, 不把 E2E_PORT 当默认口
@@ -24,8 +24,8 @@ def _read(rel: str) -> str:
 
 
 def test_harness_port_contract():
-    text = _read("e2e/harness.mjs")
-    assert "8137" not in text, "e2e/harness.mjs 不得再出现固定口 8137"
+    text = _read("tests/e2e/harness.mjs")
+    assert "8137" not in text, "tests/e2e/harness.mjs 不得再出现固定口 8137"
     assert "export const BASE_URL" not in text, "BASE_URL 静态常量已删除, spec 一律 baseUrl() 懒取值"
     assert "Number(process.env.E2E_PORT" not in text, "E2E_PORT 不得再作为端口来源"
     assert "process.env.E2E_PORT" not in text, "只允许 `'E2E_PORT' in process.env` 的存在性检测"
@@ -38,10 +38,11 @@ def test_e2e_modules_use_lazy_base_url():
 
     harness.mjs 侧守阵(上一条)只保证定义不再出现, 拦不住调用方 —— 2a3e22db 新增的
     search-uncovered-no-duplicate.spec.mjs 就这样带着 BASE_URL 进库, Playwright 收集期
-    直接 SyntaxError(CI 红), 故这里扫整个 e2e/ 的 .mjs。
+    直接 SyntaxError(CI 红), 故这里扫整个 tests/e2e/ 的 .mjs。
     """
     offenders = [
-        str(p.relative_to(REPO)) for p in (REPO / "e2e").rglob("*.mjs") if "BASE_URL" in p.read_text(encoding="utf-8")
+        str(p.relative_to(REPO))
+        for p in (REPO / "tests/e2e").rglob("*.mjs") if "BASE_URL" in p.read_text(encoding="utf-8")
     ]
     assert not offenders, f"e2e 一律 baseUrl() 懒取值, 不得 import 静态 BASE_URL: {offenders}"
 
@@ -91,7 +92,7 @@ def test_dev_webui_defaults_to_zero():
 
 
 def test_global_teardown_reads_captured_port():
-    text = _read("e2e/global-teardown.mjs")
+    text = _read("tests/e2e/global-teardown.mjs")
     assert "UI_HARNESS_PORT" in text
     assert "import { PORT }" not in text and "from './harness.mjs'" not in text
     assert "8137" not in text, "收尾不得按固定口拼正则"

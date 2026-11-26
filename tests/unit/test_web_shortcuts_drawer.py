@@ -104,7 +104,7 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   fireSettle 在 transitionend 捕获阶段、同一派发的目标阶段还有 Vue onAfterEnter(#3 入口), 两发
   重入的 scrollBy 都在本任务收尾后的微任务落地 —— 同步挂会赶上 afterEnter 那发, 包装本身必要;
   dock(true)/dock(false) 各撤挂类(glideAddTimer)/摘除(glideTimer)两个句柄 + 开门分支防御性摘类
-  (重复触发幂等); e2e 红验在 e2e/drawer-dock-stability.spec.mjs S-A 用例(三皮肤,
+  (重复触发幂等); e2e 红验在 tests/e2e/drawer-dock-stability.spec.mjs S-A 用例(三皮肤,
   flux 红->绿, prism/atlas 对照恒绿)
 - test_drawer_transition_dock_anim: 出入过渡动画(2026-10-03 用户报: 抽屉出现/消失生硬) ——
   停靠面板占文档流, 开/关时列表底部一帧撑开/收回是生硬根源, 面板本体滑淡治不了布局跳变:

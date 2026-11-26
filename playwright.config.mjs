@@ -1,10 +1,10 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test';
-import { BOOT_FIRST, HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
+import { BOOT_FIRST, HARNESS_CMD, WAIT_STDOUT } from './tests/e2e/harness.mjs';
 
 /**
  * S5 e2e 并行化(计划 26-11-05-0118 §04 S5 / §06 D14): 并行的正确形态是 **shard 多进程**
- * (`npm run test:e2e:fast:shard -- --index x --total N`, 包装器 e2e/shard-run.mjs), 不是
+ * (`npm run test:e2e:fast:shard -- --index x --total N`, 包装器 tests/e2e/shard-run.mjs), 不是
  * workers —— 每个 shard 进程各自拉起**独立 webServer**(桩恒 `--port 0` 由 OS 分配, 互不冲突;
  * `reuseExistingServer:false` 纵深不受影响), shard 内仍 workers:1(单共享桩的确定性口径不变)。
  *
@@ -12,10 +12,10 @@ import { BOOT_FIRST, HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
  * 预算按 ~500ms 观察窗标定)在多 shard 并发下数字会漂 —— **不进 shard 轮转**: 包装器置
  * `E2E_SHARD_TOTAL` 时 testIgnore 生效将其排除, 由 `npm run test:e2e:perf-serial` 串行补跑
  * (门控档 E2E_TORRENTS=600)。手跑 `npx playwright test` 不设该 env, 串行全量口径不变。
- * 模式矩阵轮(env 组合决定桩形态)仍**轮间串行人跑**, 提速落在每轮内部 —— 见 e2e/harness.mjs。
+ * 模式矩阵轮(env 组合决定桩形态)仍**轮间串行人跑**, 提速落在每轮内部 —— 见 tests/e2e/harness.mjs。
  */
 const SHARDED = !!process.env.E2E_SHARD_TOTAL;
-/* CPU 敏感量具 spec: shard 轮转排除、由 e2e/perf-serial.mjs 串行补跑(两处清单必须同步改,
+/* CPU 敏感量具 spec: shard 轮转排除、由 tests/e2e/perf-serial.mjs 串行补跑(两处清单必须同步改,
  * 否则 spec 从门禁组合里掉出去)。traffic-fx-frames 是节拍动效的帧级采样量具 —— 断言里有
  * 拍墙钟 <= animEnd+900ms 与采样帧数下限(按帧距折算), rAF 帧距被并发拖长即假红。 */
 const CPU_SENSITIVE_SPECS = ['**/perf.spec.mjs', '**/drawer-content-perf.spec.mjs', '**/traffic-fx-frames.spec.mjs'];
@@ -33,10 +33,10 @@ const BOOT_FIRST_ONLY = ['**/boot-first-two-hop.spec.mjs'];
 /**
  * WEB UI 真浏览器冒烟 —— 本仓库"静态守阵之外"的那一层门禁。
  *
- * 定位(S7 终态, 2026-10-06): 旧单页冒烟脚本已退役, 本文件 + e2e/ 是 WEB UI 浏览器断言的
- * **全量单点** —— 全部 ≈105 处断言由 e2e/ 下按块拆分的 spec 承接(各文件头有对账映射表)。
+ * 定位(S7 终态, 2026-10-06): 旧单页冒烟脚本已退役, 本文件 + tests/e2e/ 是 WEB UI 浏览器断言的
+ * **全量单点** —— 全部 ≈105 处断言由 tests/e2e/ 下按块拆分的 spec 承接(各文件头有对账映射表)。
  *   · 模式矩阵(双皮肤 × ok|error|hang × skip-check on|off × hr-scene on|empty|off)走 env
- *     参数化(见 e2e/harness.mjs); 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast 子集,
+ *     参数化(见 tests/e2e/harness.mjs); 「每次改前端」门禁 = `npm run test:e2e:fast`(@fast 子集,
  *     分钟级), 全量矩阵轮在收尾/排障时跑(六行命令见 .commands/dev/config.toml 的 dev.e2e note);
  *   · 桩服务由本配置的 webServer 自动拉起, 不需要人工先起 `scripts/ui_harness.py`。
  *
@@ -45,16 +45,16 @@ const BOOT_FIRST_ONLY = ['**/boot-first-two-hop.spec.mjs'];
  * ESM 解析)。仓库既有约定就是**显式扩展名**: ESM 用 `.mjs`、确需 CJS 的脚本用 `.cjs`, 同一原因。
  */
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './tests/e2e',
 
-  /* 仅 shard 会话(e2e/shard-run.mjs 置 E2E_SHARD_TOTAL)排除 CPU 敏感量具 spec —— 见文件头注释;
+  /* 仅 shard 会话(tests/e2e/shard-run.mjs 置 E2E_SHARD_TOTAL)排除 CPU 敏感量具 spec —— 见文件头注释;
    * boot-first 轮(E2E_BOOT_FIRST=on)白名单只剩冷启动两跳 spec(见上方注释)。 */
   testIgnore: BOOT_FIRST_ISOLATED ? undefined : SHARDED ? CPU_SENSITIVE_SPECS : undefined,
   testMatch: BOOT_FIRST_ISOLATED ? BOOT_FIRST_ONLY : undefined,
 
   /* Windows 上给 webServer 收尾兜底 —— 不兜的话用例全 PASS 但命令永不退出(根因与实测见该文件
    * 顶部注释)。非 Windows 是 no-op, CI 不受影响。 */
-  globalTeardown: './e2e/global-teardown.mjs',
+  globalTeardown: './tests/e2e/global-teardown.mjs',
 
   /* 桩服务是**单个共享实例**, 用例之间会互相影响观测(轮询 / 乐观态), 故不并发 ——
    * 这是冒烟不是压测, 确定性优先于速度。 */

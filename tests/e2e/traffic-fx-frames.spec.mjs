@@ -106,7 +106,7 @@ installRouteCleanup(test);   // 本文件全部用例收尾时卸载全部 route
  * 【26-11-18-0037 阶段 3 改写: 判定帧节拍源 = SSE 事件到达(T4a 后架构)】
  * 旧量具的拍源是「轮询落袋」(每请求恰推进一格的 GET 桩); T4a 后取数主路 = SSE 流
  * (票据 -> EventSource -> traffic 帧), 轮询骨架退役为降级态取数 —— 拍源改**事件泵**:
- *   · 事件泵 = 桩服务 /__harness__/traffic_stream(e2e/lib/traffic-stream.mjs 助手): 把每
+ *   · 事件泵 = 桩服务 /__harness__/traffic_stream(tests/e2e/lib/traffic-stream.mjs 助手): 把每
  *     tick 显示点真值按到生产同一发布点(publish_traffic_batch), 帧走真 SSE 线; 首帧立即、
  *     每 si 秒一帧、t 每帧前进 si(脚本化时钟, 与旧「每请求恰推进一格」同款墙钟解耦)。
  *   · 事件驱动的滚动拍几何 = 尾组推进拍(D1 全步进): 显示列 = GET 组点列 + 事件尾点,

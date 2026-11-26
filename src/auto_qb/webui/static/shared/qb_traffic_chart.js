@@ -3501,7 +3501,7 @@ window.AQB_QB_TRAFFIC = {
      * 与下方 clip 自身的 save), 结尾必须配对**两笔** restore —— uPlot 1.6.x 渲染循环无顶层
      * save 兕底, 少还一笔会把 ctx.scale(pxRatio) 泄漏到后续渲染并逐帧叠加, pxRatio>1(真机
      * Windows 125%/150% 显示缩放)时全图逐帧放大错位(真机「彻底不正常乱跳」根因) ——
-     * pxRatio=1 时 scale(1,1) 无害, 故桩/e2e/全量守阵均不红, 此钉只能由 G17 计数面抓住。 */
+     * pxRatio=1 时 scale(1,1) 无害, 故桩/tests/e2e/全量守阵均不红, 此钉只能由 G17 计数面抓住。 */
     _qbDrawFxCurveGlow(u, tk) {
       const cfg = window.AQB_FX_CFG;
       if (!cfg || cfg.on !== true || !u.bbox || !u.ctx || !u.data || !u.data.length) return;
@@ -4215,7 +4215,7 @@ window.AQB_QB_TRAFFIC = {
       //   同时拦 lifecycle._onCtxMenu 的 flags 惰性补拉 —— 图宿主右键不探测(ensureWebFlags 收窄,
       //   S0-a 评审留痕 → 收口档案留痕七), 其余右键面照旧。
       // !不碰 menu.js:223 的 openDrawerMenu 早退判据: 改了会让整片正文右键都弹出「只有一个
-      //   模板选项」的半残菜单, 并撞 e2e/drawer-merge.spec.mjs 的 .ctx-menu strict-mode 计数。
+      //   模板选项」的半残菜单, 并撞 tests/e2e/drawer-merge.spec.mjs 的 .ctx-menu strict-mode 计数。
       // 总开关关掉也照开(§05.6: 否则用户失去重新打开的入口)。
       // !宿主跨重建复用而 _qbChartDestroy 只断 RO/destroy uPlot、不摘 host 监听 -> _qbFxBound
       //   标记幂等绑定(换肤 N 次不弹 N 个面板, §05.7); 宿主 DOM 随 v-if 拆走时标记随节点消亡,

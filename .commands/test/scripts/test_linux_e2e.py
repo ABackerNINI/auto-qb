@@ -75,7 +75,7 @@ def test_extra_args_passthrough_after_ddash() -> None:
 def test_no_fixed_port_injected() -> None:
     for banned in ("--port", "E2E_PORT", "UI_HARNESS_PORT"):
         assert banned not in SCRIPT, (
-            f"脚本文本不得出现 {banned}: e2e 端口纪律单点在 e2e/harness.mjs(--port 0 OS 分配 "
+            f"脚本文本不得出现 {banned}: e2e 端口纪律单点在 tests/e2e/harness.mjs(--port 0 OS 分配 "
             "+ webServer.wait 捕获), 本 task 不引入固定口不覆盖端口变量"
         )
 

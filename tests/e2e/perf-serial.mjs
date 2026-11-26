@@ -3,9 +3,9 @@
  * CPU 敏感量具 spec 的**串行补跑**入口(计划 26-11-05-0118 §04 S5 / §06 D14)。
  *
  * shard 轮转(playwright.config.mjs 在 E2E_SHARD_TOTAL 下 testIgnore)把这三份 spec 排除了:
- *   - e2e/perf.spec.mjs           —— 量具节拍/CPU 时间断言(longtask/强制布局计数)
- *   - e2e/drawer-content-perf.spec.mjs —— mut 预算按 ~500ms 观察窗标定, 并发下数字会漂
- *   - e2e/traffic-fx-frames.spec.mjs —— 节拍动效帧级采样量具(拍墙钟/帧数下限按帧距折算)
+ *   - tests/e2e/perf.spec.mjs           —— 量具节拍/CPU 时间断言(longtask/强制布局计数)
+ *   - tests/e2e/drawer-content-perf.spec.mjs —— mut 预算按 ~500ms 观察窗标定, 并发下数字会漂
+ *   - tests/e2e/traffic-fx-frames.spec.mjs —— 节拍动效帧级采样量具(拍墙钟/帧数下限按帧距折算)
  * 本脚本把它们收回串行口径跑绿, 与 shard 轮转相加 == 全量。
  * !清单同步纪律: 新增 CPU 敏感 spec 必须同时改 playwright.config.mjs 的 CPU_SENSITIVE_SPECS
  * 与本文件的 args(两处清单掉一份 = spec 从门禁组合里消失)。
@@ -15,7 +15,7 @@
  * 门控档: E2E_TORRENTS 默认抬到 600 —— perf.spec.mjs 的「行窗口化生效」用例按
  * TORRENTS>500 门控, 默认 300 档整组 skip, 600 档才真跑(已显式设 E2E_TORRENTS 则尊重现值);
  * drawer-content-perf 用 page.route 自造千文件树, 不受该档影响。env 组合与桩形态的关系见
- * e2e/harness.mjs —— 本脚本只动种子数一档, 其余模式维度保持默认。
+ * tests/e2e/harness.mjs —— 本脚本只动种子数一档, 其余模式维度保持默认。
  *
  * 串行保证: 显式 delete E2E_SHARD_TOTAL(若残留会让 config 把这两份 spec 又 ignore 掉,
  * 等于白跑) —— 但这是防御, 正常使用里它只会在 shard 包装器的子进程 env 里出现。
@@ -25,7 +25,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = path.join(ROOT, 'node_modules', 'playwright', 'cli.js');
 if (!existsSync(CLI)) {
   console.error(
@@ -43,9 +43,9 @@ const argv = process.argv.slice(2);
 const args = [
   CLI,
   'test',
-  'e2e/perf.spec.mjs',
-  'e2e/drawer-content-perf.spec.mjs',
-  'e2e/traffic-fx-frames.spec.mjs',
+  'tests/e2e/perf.spec.mjs',
+  'tests/e2e/drawer-content-perf.spec.mjs',
+  'tests/e2e/traffic-fx-frames.spec.mjs',
   ...argv,
 ];
 console.log(

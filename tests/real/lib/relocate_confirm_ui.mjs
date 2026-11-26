@@ -43,7 +43,7 @@ const step = (name, extra) => {
   out.steps.push({ name, ...(extra || {}) });
 };
 
-/** 行右键: 复刻 e2e/lib/gestures.mjs 的拦截面钳位(宽行居中滚动会把落点滚出裁剪面)。 */
+/** 行右键: 复刻 tests/e2e/lib/gestures.mjs 的拦截面钳位(宽行居中滚动会把落点滚出裁剪面)。 */
 async function rightClickRow(page, row) {
   const guard = await page.evaluate(() =>
     [...document.querySelectorAll('.sticky-head')].reduce((m, h) => Math.max(m, h.getBoundingClientRect().bottom), 0),

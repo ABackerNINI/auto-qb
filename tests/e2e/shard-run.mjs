@@ -13,7 +13,7 @@
  *  2. 恒传 `--shard=index/total` 给 playwright —— 每个 shard 是独立进程, 各自拉起独立
  *     webServer(桩 `--port 0` OS 分配, 互不冲突; `reuseExistingServer:false` 保留)。
  *  3. 直接调 `node node_modules/playwright/cli.js`(不走 npx): Windows 上 spawnSync('npx')
- *     走 cmd 包装, 与 e2e/global-teardown.mjs 记的 stdio/进程树问题同源, 少一层包装少一类坑。
+ *     走 cmd 包装, 与 tests/e2e/global-teardown.mjs 记的 stdio/进程树问题同源, 少一层包装少一类坑。
  *
  * shard 数怎么定: 先 S4 清完固定睡等再按实测时长定(§06 D14 原文) —— 见
  * memory-bank/plans/26-11-05-0118-plan-flaky-test-governance.html §04 S5 的三档实测对照。
@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLI = path.join(ROOT, 'node_modules', 'playwright', 'cli.js');
 if (!existsSync(CLI)) {
   console.error(

@@ -79,7 +79,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 /* 行板: 摘卡语言 —— 底色取页底纯色、描边归零只留底部发丝线、圆角 0、投影无、hover 不微抬。
  * 行 padding 维持皮肤原值(14px), 不在此覆盖。
  * 底色**不透明取 var(--bg)**而非「background: transparent 落页底」(issue 26-10-30-0818): 两者
- * 视觉恒等(页底就是 var(--bg) 平色, body 同源), 但 e2e 同帧守阵(e2e/main-table-pinned-hover/
+ * 视觉恒等(页底就是 var(--bg) 平色, body 同源), 但 e2e 同帧守阵(tests/e2e/main-table-pinned-hover/
  * selected)按**计算值**逐帧/逐字比较 —— 行板透明 + 首格不透明的表示分家在 hover 过渡帧必然
  * 错拍(行板 premultiplied 插值出半透明中间色, 首格全程不透明)。行板与首格必须同一表达式
  * (坑档 frozen-column.md 10 口径, 与下方 hover/选中底同批改齐)。 */
@@ -117,7 +117,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * !transparent 停靠点 = 固定 220px(2026-11-11 收紧定案, 用户拍板): 旧 46% 是**各自宽度**的
  *   百分比 —— 行按行宽衰减(可达 ~900px), 首格按格宽压缩衰减(~120px), 边界处行板仍有
  *   ~55-70% tint 而首格已归零, 实测名称列尾部 vs 相邻列 Δ20-28/255(atlas 28, 可辨阈 20),
- *   名称列与其它列静态不一致(e2e/main-table-pinned-matrix.spec.mjs 首跑实测)。固定 px 使
+ *   名称列与其它列静态不一致(tests/e2e/main-table-pinned-matrix.spec.mjs 首跑实测)。固定 px 使
  *   行板与首格**同一绝对几何**(同一停靠点 + 同一 90deg 方向), 两侧逐像素一致, 不再依赖任何
  *   宽度比。衰减段 220px = 种子/追剧表锁定首列的 minmax 最小宽(shared/app.js
  *   TORRENT/SHOW_COLUMNS name tpl), 渐层完整收在首列内; 辅种表首列最小 210px 略窄于衰减段,

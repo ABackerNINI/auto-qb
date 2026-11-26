@@ -11,16 +11,16 @@
 - test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 模板只按支名消费注册表(ctxItems(ctxMenuKind()) 单点)、单组支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
 - test_frontend_dialog_shell_single_point: 对话框外壳单点守阵(issue 26-10-20-2231, R23-A-02·A-03·A-08 收敛) —— 三段式外壳(标题头/动作栏/遮罩手势对/关闭钮)只许在组件模板 dialog-shell.html 一处(剥注释后字面量清点), 调用点一律经 <aq-modal>(9 处调用覆盖 10 个对话框开态, :open/:close/:close-args/mask-class/icon-class/width-class/body-class 接线逐点清点) + 无遮罩异形 speed-pop 走 <aq-modal-head>; 管理对话框双胞胎合并为单份模板 + mgrDef 数据表(state.js computed 两态字段/文案/动作全表驱动, dialogs-mgr/popovers 零 mgrOpen 直判残留, dialogs.js mgrSubmitNew 分派) + modal-details 两套并一(state.js::modalDetailRows: verdict 在前 copy=false / details 在后 copy=true, 复制钮边界 String(d.value ?? '') 修 value===0 不出钮)
-- test_frontend_rename_dialog_width_wiring: 重命名对话框宽档接线守阵(2026-10-19 用户报「弹窗太小」)—— 字段值 = 完整种子显示名(真实名称 routinely 80~120 字符), 骑通用 .modal 基档 520(为确认/提示一句话设计)时输入框仅 474px, 真浏览器实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露); 修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化)+ 重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860, 与设定位置/添加种子同档)。钉 _modalInit cls 字段 / popovers.html 根类绑定并入 modal.cls / editRename 传类 / 三皮肤宽档规则成对; 行为面由 e2e/rename-dialog-fit.spec.mjs 真浏览器钉
+- test_frontend_rename_dialog_width_wiring: 重命名对话框宽档接线守阵(2026-10-19 用户报「弹窗太小」)—— 字段值 = 完整种子显示名(真实名称 routinely 80~120 字符), 骑通用 .modal 基档 520(为确认/提示一句话设计)时输入框仅 474px, 真浏览器实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露); 修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化)+ 重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860, 与设定位置/添加种子同档)。钉 _modalInit cls 字段 / popovers.html 根类绑定并入 modal.cls / editRename 传类 / 三皮肤宽档规则成对; 行为面由 tests/e2e/rename-dialog-fit.spec.mjs 真浏览器钉
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
-- test_frontend_add_torrent_partial_receipt_wiring: 添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障「部分种子添加失败(已存在)时添加窗口不消失」) —— submitAddTorrent 三态分流(r.status === "warn" 分支在, 只判 r.ok 的二态写法回潮即红)+ warn 分支关窗且 warn 类 toast 带详情(后端文案带成功/失败计数)+ ok 分支保持关窗 + error(全拒)分支不得关窗(文件/链接原样没进 qB, 留窗才能改完重提; 部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。行为面由 e2e/add-partial-receipt.spec.mjs 真浏览器钉
+- test_frontend_add_torrent_partial_receipt_wiring: 添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障「部分种子添加失败(已存在)时添加窗口不消失」) —— submitAddTorrent 三态分流(r.status === "warn" 分支在, 只判 r.ok 的二态写法回潮即红)+ warn 分支关窗且 warn 类 toast 带详情(后端文案带成功/失败计数)+ ok 分支保持关窗 + error(全拒)分支不得关窗(文件/链接原样没进 qB, 留窗才能改完重提; 部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。行为面由 tests/e2e/add-partial-receipt.spec.mjs 真浏览器钉
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
 - test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible + 二次收口 rAF 复核(计划 26-11-12-0344 S2: 菜单键帽分数字距使首帧实测宽偏小, 单次钳位右缘溢出)
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
-- test_frontend_combo_hiscroll_never_scrolls_ancestors: 下拉高亮滚动跟随「只滚菜单内部」守阵(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下滑一次」)—— _hiScroll 禁用 scrollIntoView(它把**所有可滚祖先**一起滚: 开层过渡期 .add-dialog-body 的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回, 实测 body.scrollTop 0→166→83→18→0; 输入框为空时 hi=-1 无 [data-hi="1"] 故只有"选过路径"才看得见); 必须逐级向上以**菜单根为界**手动差值调 scrollTop(box.contains(n) + 到 box 即 break), 剥注释后不得出现 scrollIntoView 字面量(注释里讲禁令不算违规)。行为面由 e2e/move-dialog-fit.spec.mjs 逐帧采样 body.scrollTop 恒 0 + 文案 top 极差 ≤2px 钉
+- test_frontend_combo_hiscroll_never_scrolls_ancestors: 下拉高亮滚动跟随「只滚菜单内部」守阵(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下滑一次」)—— _hiScroll 禁用 scrollIntoView(它把**所有可滚祖先**一起滚: 开层过渡期 .add-dialog-body 的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回, 实测 body.scrollTop 0→166→83→18→0; 输入框为空时 hi=-1 无 [data-hi="1"] 故只有"选过路径"才看得见); 必须逐级向上以**菜单根为界**手动差值调 scrollTop(box.contains(n) + 到 box 即 break), 剥注释后不得出现 scrollIntoView 字面量(注释里讲禁令不算违规)。行为面由 tests/e2e/move-dialog-fit.spec.mjs 逐帧采样 body.scrollTop 恒 0 + 文案 top 极差 ≤2px 钉
 - test_frontend_add_options_recent_order: 添加种子三候选「最近使用」排序守阵(2026-10-09 用户动议: 保存路径/分类/标签按最近使用排序) —— 口径 = 由种子记录派生(非本机存储): 「最近使用」= 该值下种子 added_on 最大值, 数据面**跨视图自取数** `_addRecencyRows`(与 filters.js::facetRows 同族; 添加入口是顶栏常驻而 /api/state 按 viewMode 裁剪阵列, 直读 this.torrents 会在默认辅种页拿到空表 ⇒ 排序静默退化成字母序, 2026-10-09 e2e 首跑实测) ⇒ 零新存储; node 真跑 _addOrderByRecent(最近使用降序 -> 未用过落末尾并按字母序 -> 表空/表 null/值未命中一律退化纯字母序 + 纯函数不改入参)与 _addNormPath(与后端 infra/utils.path_normalize 同口径; 两侧不同径则 /api/paths 已归一路径与取数行的 qB 原文 save_path 对不上, 时间表恒不命中 ⇒ 静默退化成纯字母序); 静态钉接线(三候选都过 _addOrderByRecent 单点 + pick 不得再内联 .sort + _addRecencyMaps 经 _addRecencyRows 现算且三键齐全 + 路径键过 _addNormPath + _addRecencyRows 按 viewMode 分支且三来源齐全)
 - test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
-- test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— 1. 单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在全部皮肤(_UI_ALL)的 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); 2. 七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 6(26-11-17-0059 W2(1) 起计 toggleColMenu 按钮盒锚定: EDGE+2 clampAxis+1) / dialogs 1, 全部经 FIT 别名); 3. 手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); 4. 12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; 5. 顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
+- test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— 1. 单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在全部皮肤(_UI_ALL)的 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); 2. 七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 6(26-11-17-0059 W2(1) 起计 toggleColMenu 按钮盒锚定: EDGE+2 clampAxis+1) / dialogs 1, 全部经 FIT 别名); 3. 手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); 4. 12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; 5. 顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 tests/e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_move_dialog_combobox_wiring
 - test_frontend_pop_item_a11y_contract: .pop-item 三分类 a11y 契约守阵(issue 26-10-29-1335, R23-A-09) ——
   选择式 combobox(单组件 <aq-combo-input>): 输入框 role=combobox + :aria-expanded + aria-autocomplete=list +
@@ -700,7 +700,7 @@ def test_frontend_add_torrent_partial_receipt_wiring():
     症状根因: 后端旧口径把"部分受理"(qB 对重复种子整批里挑着拒, HTTP 200 + failure_count>0)
     折叠进 error 回执, 前端 submitAddTorrent 只认 r.ok 关窗 ⇒ 明明加进去几个, 窗口赖着不动
     还报"添加种子失败"。修法 = 后端三态回执(ok/warn/error, commands.py::_cmd_add_torrents) +
-    前端按 r.status 分流。行为面(pytest 运行时不可见)由 e2e/add-partial-receipt.spec.mjs 真浏览器钉,
+    前端按 r.status 分流。行为面(pytest 运行时不可见)由 tests/e2e/add-partial-receipt.spec.mjs 真浏览器钉,
     本守阵钉静态接线:
       1. submitAddTorrent 必须按三态分流 —— 有 `r.status === "warn"` 分支(只判 r.ok 即回潮);
       2. warn 分支必须关窗(addOpen = false)并以 warn 类 toast 给出详情(后端文案带计数);
@@ -933,7 +933,7 @@ def test_frontend_ctx_menu_refit_by_measured_size():
     症状: 批量菜单(约 10 项, 实测 393px)由 `_menuPos` 的常量 h=222 估算做视口钳位 ——
     锚点落在视口下部时菜单底越过下缘, 底部项(标签分类/导出/批量删除)真实点击不可达
     (Playwright 报 "element is outside of the viewport" 重试到超时)。这类几何缺陷 pytest
-    跑不出来, 故这里只钉**接线**; 行为面由 e2e/menus.spec.mjs 的 CTX-fit test 兜底:
+    跑不出来, 故这里只钉**接线**; 行为面由 tests/e2e/menus.spec.mjs 的 CTX-fit test 兜底:
       1. _menuFit 必须按 offsetWidth/offsetHeight 实测算(把常量改大一号那种"修法"再犯即红);
       2. 三个菜单容器(行右键/表头右键/文件优先级)各有 ref, 且与三个 state 对象各自的
         开层 watcher 里的 (stateKey, refName) 一一对上 —— 漏一处 = 那个菜单静默不钳位;
@@ -1379,7 +1379,7 @@ def test_frontend_rename_dialog_width_wiring():
     97 字符长名 scrollWidth 695 > clientWidth 472, 裁掉 223px; 桩名 43 字符恰好不裁,
     故冒烟从未暴露。修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化),
     重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860,
-    与设定位置/添加种子同档)。行为面由 e2e/rename-dialog-fit.spec.mjs 真浏览器钉。
+    与设定位置/添加种子同档)。行为面由 tests/e2e/rename-dialog-fit.spec.mjs 真浏览器钉。
     钉:
       1. ui_feedback.js _modalInit 声明 cls 字段(附加类名单点, 与 okDisabled/busy/verdict 同届);
       2. popovers.html 模态根类绑定并入 modal.cls(数组形态, 空串不附加类);
@@ -1768,7 +1768,7 @@ def test_overlay_fit_single_point():
        脚本顶层 let/const 是全局词法环境, 后六个文件 SyntaxError、mixin 静默不注册、
        整页崩且静态守阵全绿 —— 跨文件别名只许方法内取或包 IIFE);
     6. 行为面 node 电池: 四入口七型 + 与旧手写式网格代数等价(无 node 静默跳过);
-    真实浏览器几何由 e2e/menus.spec.mjs 的 CTX-fit 左右缘诸例盯。"""
+    真实浏览器几何由 tests/e2e/menus.spec.mjs 的 CTX-fit 左右缘诸例盯。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     fit_js = open(os.path.join(shared, "overlay_fit.js"), encoding="utf-8").read()
     files = {

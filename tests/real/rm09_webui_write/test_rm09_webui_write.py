@@ -36,7 +36,7 @@ choose 编辑器保存通道 PUT /api/config 服务端规范形语义(RM09-11, �
   未知动作 400「未知动作 '<名>'」; 动作项经 normalize_action_entry 单点漏斗认规范形
   {type, params, on_error}); 退役键 stop_following_rules_if / 伪动作 ignore_next_action_error
   键面保留识别不拒收(rules.py:43/158/404)—— W1-B 徽标数据源 = GET /api/config 树, HTTP 侧
-  可断言腿 = 退役键经保存通道键面保留, 徽标 DOM 渲染引用 e2e/静态守阵(test_webui_static_dom_page.py
+  可断言腿 = 退役键经保存通道键面保留, 徽标 DOM 渲染引用 tests/e2e/静态守阵(test_webui_static_dom_page.py
   W1-B)不复测(D2); 保存成功投递 reload_config 热重载(机制本身归 RM02-04 引用)。
   与 RM03-11 的「不测三遍」切分(D6): RM03-11 测规则层热重载语义(分支求值/首中短路/default
   兜底/无 default 空操作/装载期嵌套拒绝), RM09-11 只测保存通道交付链(规范形 → 校验/400/落盘
@@ -1104,7 +1104,7 @@ def test_rm09_11_choose_save_channel(clean_fakes):
         assert cfg_path.read_bytes() == snap, "未知动作 400 竟触碰了磁盘(高优)"
 
         # ---- 4. 红验/徽标数据源(D2): 退役键经 PUT 保存通道键面保留不拒收(applied + 落盘保留
-        #      + GET 树保留)—— 徽标 DOM 渲染/卡脚提示交互引用 e2e/静态守阵(W1-B)不复测
+        #      + GET 树保留)—— 徽标 DOM 渲染/卡脚提示交互引用 tests/e2e/静态守阵(W1-B)不复测
         tree5 = web_req(port, "GET", "/api/config")["tree"]
         tree5["config"]["rm09_rules"] = {
             "c11retired":

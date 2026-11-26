@@ -826,7 +826,7 @@ def _scan_frontend_assets():
        命中 .sb-spd ... .val/.lim 的规则(子串正则, 不锚行首)不得声明 min-width(防皮肤层覆盖
        翻脸); 基础 .sb-err 必须带 flex: 0 0 auto(未读徽标变宽只能向左挤 spacer 的几何前提) ——
        速度数值单位串随量级变("0 B/s" 5 字符 -> "1023.99 KiB/s" 13 字符), 定宽槽缺失时整组
-       左缘随每次轮询平移。真浏览器逐帧几何面另见 e2e/statusbar-speed-geometry.spec.mjs。
+       左缘随每次轮询平移。真浏览器逐帧几何面另见 tests/e2e/statusbar-speed-geometry.spec.mjs。
 
 
     WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——

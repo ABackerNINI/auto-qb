@@ -28,7 +28,7 @@ import { INST, readInst } from './lib/vm.mjs';
  *  L251  最后一屏有行且可见                                          → 同上
  *  另: 旧块包在 `if (nav.length >= 3)` 兜底分支里(L131), 兜底 add 不迁移 ——
  *  新轨定位器拿不到页签/行直接红。旧收尾总检 L581「无 console.error / pageerror」→
- *  installRuntimeErrorGuard afterEach(每条 test 各自把关, e2e/lib/errors.mjs)。
+ *  installRuntimeErrorGuard afterEach(每条 test 各自把关, tests/e2e/lib/errors.mjs)。
  *  计数口径: 块B add() 5 处/皮肤(--torrents 300; >500 时 6 处) → 新 3 test/皮肤(+1 门控 test)
  *  —— 1:N(合并)成立, 每个旧名都有去向下落。
  *
@@ -44,8 +44,8 @@ import { INST, readInst } from './lib/vm.mjs';
  *  · 步骤3 对账映射: 见上表 —— 块B 5 旧名/皮肤 → 3 test/皮肤(+1 门控 test), 1:N(合并)成立,
  *    每个旧名有去向下落。
  *  · 步骤4 删旧块(与本 spec 同 commit): 旧脚本删块B 段(含仅供块B 的 nav 页签/种子视图/
- *    tRows/tTotal 脚手架)+ 随块失去最后调用方的 readInst helper(单点在 e2e/lib/vm.mjs)与
- *    EXPECT_N 常量(块B 行窗口化门控是它最后一个调用方; 单点在 e2e/harness.mjs TORRENTS),
+ *    tRows/tTotal 脚手架)+ 随块失去最后调用方的 readInst helper(单点在 tests/e2e/lib/vm.mjs)与
+ *    EXPECT_N 常量(块B 行窗口化门控是它最后一个调用方; 单点在 tests/e2e/harness.mjs TORRENTS),
  *    与块G 段同批, 净 73+/251-; `--torrents` CLI 参数降为不再消费(头注释注明)。
  *  · 步骤5 双复跑: 旧脚本(删段后, 同桩 8235)14 项 0 FAIL(37.9s) —— 32−(块B 5 + 块G 4)×2 皮肤
  *    = 14, 项数下降恰对应两块断言数, 零残余失败; 新 spec 复跑 commands run dev.e2e 全量

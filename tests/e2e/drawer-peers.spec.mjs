@@ -31,7 +31,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 现加「上下行至少一格含数字」守卫, 桩每种子恒有非零速度对端, 确保失配即红。
  *
  * 2026-10-13: 软切换空态守卫(换种子后首个列表响应为空不得闪现空态)是跨三列表(peers/trackers/files)
- * 的**同一条数据落袋语义**问题, 单点在 e2e/drawer-switch-empty-grace.spec.mjs(三页签各钉一条),
+ * 的**同一条数据落袋语义**问题, 单点在 tests/e2e/drawer-switch-empty-grace.spec.mjs(三页签各钉一条),
  * 本文件不再重复。此处只留指针, 免得两处各自演化。
  */
 

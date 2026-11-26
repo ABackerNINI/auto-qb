@@ -13,7 +13,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *   2. 键盘触发: Enter → 该列 `aria-sort="descending"`(三态首击降序)+ 箭头点亮; Space → 翻 ascending;
  *   3. 全域同源: 抽屉变体表(drawerTrackerV06)同一组件, 键盘同样可用(引擎一处受益全域)。
  * thead 模式(设置页 HR 详情表)的 `<th>` 结构由静态守阵钉; 其 `$emit('sort')` 运行时路径随 HR 表
- * 既有 e2e/静态用例覆盖, 本 spec 不重复铺 HR 场景的长前置。
+ * 既有 tests/e2e/静态用例覆盖, 本 spec 不重复铺 HR 场景的长前置。
  */
 
 const groupHead = (page) => page.locator('.group-head[data-table="group"]');
@@ -63,7 +63,7 @@ for (const skin of SKINS) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
-      // 打开种子详情 → Tracker 页签(与 e2e/drawer-tables.spec.mjs 同路径)
+      // 打开种子详情 → Tracker 页签(与 tests/e2e/drawer-tables.spec.mjs 同路径)
       await page.click('nav.tabs [data-view="torrents"]');
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
       await page.dblclick('.torrent-row >> nth=0', { force: true });

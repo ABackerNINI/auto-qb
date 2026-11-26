@@ -43,7 +43,7 @@ UV_PYTHON_DOWNLOADS=never 下任何意外重建路径都会直接死(不许偷�
 引入代理面变量(linux_ci 那套「回环改写 + no_proxy 恒并回环」防的是容器内外呼被代理拦, e2e
 稳定面无外呼, 防线用不上)。容器 -e 面只给 LANG 与脚本参数。
 
-**动态端口(纪律对应面)**: e2e 侧端口纪律单点在 e2e/harness.mjs —— 桩恒 `--port 0` 由 OS
+**动态端口(纪律对应面)**: e2e 侧端口纪律单点在 tests/e2e/harness.mjs —— 桩恒 `--port 0` 由 OS
 分配(容器命名空间内), playwright webServer.wait 从启动行捕获实绑端口注入 UI_HARNESS_PORT,
 spec 一律 baseUrl() 懒取值; 本脚本**不引入任何固定口也不覆盖任何端口变量**(E2E_PORT 残留
 会被 harness.mjs 直接抛错)。tests/unit/_test_ports.py 是 pytest 侧单点, 不跨面复制。

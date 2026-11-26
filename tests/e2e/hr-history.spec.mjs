@@ -49,7 +49,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *    = 14, 项数下降恰对应两块, 零残余失败; 新 spec 复跑绿(66 passed / 10 skipped / 0 failed,
  *    2.4m); E2E_HR_SCENE=empty 抽验(dev.e2e 全量)62 passed / 14 skipped(1.3m) —— 本组 4 test
  *    整组 skip, skip 消息可读: 「模式不匹配, 整组跳过 —— 当前 E2E_HR_SCENE=empty, 本组要求 on」
- *    (e2e/lib/mode.mjs requireMode 注入, 其余组全绿)。
+ *    (tests/e2e/lib/mode.mjs requireMode 注入, 其余组全绿)。
  *  · 时长: 见 perf.spec.mjs 头(R3 监控口径)。
  *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──

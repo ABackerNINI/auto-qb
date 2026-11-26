@@ -50,7 +50,7 @@ ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
     # now(), port_owner/utils/full_checking 等待预算与 base 同因节流单调语义走 monotonic()。
 }
 
-# ---------- ALLOW_WAIT_TIMEOUT_E2E: e2e/*.mjs 的 page.waitForTimeout(...) 固定睡等(含注释里的历史提及, 行文本全等口径) ----------
+# ---------- ALLOW_WAIT_TIMEOUT_E2E: tests/e2e/*.mjs 的 page.waitForTimeout(...) 固定睡等(含注释里的历史提及, 行文本全等口径) ----------
 ALLOW_WAIT_TIMEOUT_E2E: dict[str, dict[str, int]] = {
     # S4 后半收口(2026-11-05): 15 文件 41 处已全部清零, 条目删净 —— 机制去向四类:
     # DOM 条件 -> expect(locator) 自动轮询(时长即断言的挂同值 timeout); 赌完成 -> expect.poll
@@ -62,10 +62,11 @@ ALLOW_WAIT_TIMEOUT_E2E: dict[str, dict[str, int]] = {
     # - 700ms x2 = W2 收场采样过覆盖窗: 收场墙钟锁定(160ms 收场曲线 + 220ms 面板 detach),
     #   采样窗须盖过动画结束; 漏采面由前置断言把门(lastDockH<=2 / docHDrop>=面板高)
     # - 150ms x1 = W2 文档底显式 scrollTo(文档底)后的提交宽限, 前置断言 y==maxScroll 本身把门
-    "e2e/drawer-dock-stability.spec.mjs": {
-        "await page.waitForTimeout(700);": 2,
-        "await page.waitForTimeout(150);": 1,
-    },
+    "tests/e2e/drawer-dock-stability.spec.mjs":
+        {
+            "await page.waitForTimeout(700);": 2,
+            "await page.waitForTimeout(150);": 1,
+        },
 }
 
 # ---------- ALLOW_BIND_PORT: 绑定调用位的字面固定端口(配置值位不拦) ----------
