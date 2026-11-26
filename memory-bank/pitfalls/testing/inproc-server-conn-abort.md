@@ -6,7 +6,7 @@
 
 ### 2026-11-07 实证: qb_capture --dry 真零请求红验对照组红, 主断言已过
 
-- **触发**: `tests/test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests` —— 同进程起
+- **触发**: `tests/unit/test_legacy_review4_scripts.py::test_qb_capture_dry_true_zero_requests` —— 同进程起
   ThreadingHTTPServer(("127.0.0.1", 0)), 前段跑 --dry 零请求主断言(全过), 末段对照组**真构造 Capture**
   打 4 个并发 login(机制自证, 证明计数器非空转); test.full 偶发红在对照组的
   `urllib3.exceptions.ProtocolError: ('Connection aborted.', ConnectionAbortedError(10053, ...))`。

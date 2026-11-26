@@ -8,7 +8,7 @@
 - **触发**: 测试断言依赖 `locale.getpreferredencoding()` / 本地码页(GBK·cp936), 或跑 `commands run test.*` 时红。
 - **判别**: 本工具会话的环境里注入了 **`PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8`**(还有 `LANG`/`LC_ALL=C.UTF-8`)
   ⇒ `locale.getpreferredencoding(False)` 返回 **`utf-8`**、`sys.flags.utf8_mode == 1`, 而真机(未注入时)是 **`cp936`**。
-  症状: `tests/test_commands_engine.py` 的 GBK 回退两条在本 shell **恒红**
+  症状: `tests/unit/test_commands_engine.py` 的 GBK 回退两条在本 shell **恒红**
   (`'������ 16 ������' != '已生成 16 个索引'`)。
   ⚠ **2026-09-25 修正旧结论**: "不是代码坏了"只对一半 —— `PYTHONUTF8` 只影响 **Python 解释器**,
   **原生(非 Python)子进程照样按系统 ANSI 码页输出**, 所以 UTF-8 模式下引擎的 GBK 回退是**真失效**

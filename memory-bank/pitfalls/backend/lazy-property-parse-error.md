@@ -18,7 +18,7 @@
       return False
   ```
   顺手在 try 内把后续要用的属性一次取完 —— 后面再碰 `parts.port` 等于把炸弹挪远一格。
-- **守阵**: 断言要**两半都锁** —— ①畸形输入**不抛异常**且返回 fail-closed 值(只断言「函数返回 False」不够: 抛异常时测试是 error 不是 fail, 但只写返回断言会漏掉穿透面); ②正常路径(端口一致 / 不一致 / 缺省 80 / https 缺省 443 / 跨站 host)行为逐位不变。本仓落地: `tests/test_web_auth.py::test_auth_host_origin_parsing_helpers` 的 4 条 Origin 非法端口断言。
+- **守阵**: 断言要**两半都锁** —— ①畸形输入**不抛异常**且返回 fail-closed 值(只断言「函数返回 False」不够: 抛异常时测试是 error 不是 fail, 但只写返回断言会漏掉穿透面); ②正常路径(端口一致 / 不一致 / 缺省 80 / https 缺省 443 / 跨站 host)行为逐位不变。本仓落地: `tests/unit/test_web_auth.py::test_auth_host_origin_parsing_helpers` 的 4 条 Origin 非法端口断言。
 - **复发**: 0(2026-10-21 首记; 首次发生在 2026-10-16 `*.localhost` 那轮 —— 当时只把 `_host_header_parts` 一侧收了口, `_origin_allowed` 未同步)。
 
 > 交叉引用: 同一判据有多个消费侧的漏守, 另见 [verdict-scope-parity.md](verdict-scope-parity.md)。本条是它的**惰性取值**变体 —— 连"一个消费侧内部"的构造与取值两段都会分家。

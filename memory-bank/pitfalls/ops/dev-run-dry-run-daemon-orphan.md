@@ -22,7 +22,7 @@
 
 ## 守阵
 
-- tests/test_clone_kill_script.py(测试计划见其 docstring): 判据 import 单点 / 候选矩阵 / 排除集 / 后代闸 / 双闸接线 / 双平台扫描; taskkill/SIGKILL 全程不真执行。
+- tests/unit/test_clone_kill_script.py(测试计划见其 docstring): 判据 import 单点 / 候选矩阵 / 排除集 / 后代闸 / 双闸接线 / 双平台扫描; taskkill/SIGKILL 全程不真执行。
 - port_kill 侧既有守阵不变(test_legacy_review4_scripts.py)。
 
 **Refs:** memory-bank/pitfalls/testing/harness-save-flow.md, memory-bank/tasks/26-11-23-dev-clone-kill-tool.md

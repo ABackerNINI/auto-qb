@@ -15,7 +15,7 @@
   泄漏的 root level 才过)。③ xdist(-n4)动态调度下同 worker 邻居每次不同, 以上状态被邻居改变就
   **偶发落空**(CI 实测 2026-09-27: 噪音日志测试抓 0 条, py3.12/3.13 都见, 本地难复现)。
 - **处置**: 挂**模块 logger** 自建 handler + **显式 setLevel** + `finally` 恢复原 level 与 handlers
-  —— 对 root 级别 / handlers / 传播链全部免疫。统一实现已落 `tests/helpers.py::capture_logs`
+  —— 对 root 级别 / handlers / 传播链全部免疫。统一实现已落 `tests/unit/helpers.py::capture_logs`
   (issue 26-10-04-2311 认领轮 2026-10-05: `.records/.messages/.text` 三视图 + 关 propagate 不污染输出),
   **新用例一律用它, 别再手写局部捕获器**; 守阵 `test_logging.py::test_capture_logs_survives_qbmanager_setup_logging`
   (对照断言钉死 caplog 恒空的坑存在性, 前提失效即红提示重评范式)。不要因此放弃日志断言 —— 日志级别即通知语义。

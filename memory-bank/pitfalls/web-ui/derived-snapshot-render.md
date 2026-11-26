@@ -18,7 +18,7 @@
   `if (groupedNow.has(r.hash)) continue`(已归组); 两道闸必须排在所有 facet 过滤与 `kept.push` **之前**。
   惰性构建(仅待兜底快照非空), 无搜索态不加 O(n) 成本。同族: `poll-reseed-filter.md`(反向形态 —— 真值变了
   候选没重播种)。
-- **守阵**: `tests/test_webui_static_skins_widget.py::test_frontend_search_uncovered_deduped`(按语义**位置**
+- **守阵**: `tests/unit/test_webui_static_skins_widget.py::test_frontend_search_uncovered_deduped`(按语义**位置**
   断言闸 < facet < push / 判据源 = 未过滤 `this.groups` / 消费点恰一处 / `filteredTorrents` 不得引入)
   + `e2e/search-uncovered-no-duplicate.spec.mjs`(三皮肤 × 4 场景, 含跨视图 stale groups 与删除时效)。
 - **复发**: 0

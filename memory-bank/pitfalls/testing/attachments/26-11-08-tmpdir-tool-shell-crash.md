@@ -23,7 +23,7 @@
   用户自己终端(`TMPDIR` 在 C 盘)无此问题。
   ⇒ 工具 shell 跑全量前**先设 `TMPDIR`**; 见到这个 `PermissionError` **先怀疑临时目录, 别当代码回归**。
   📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
-  ⚠ **2026-11-02 起废止**: 改由 `tests/_tmp_bootstrap.py` 自举(见首条), 手工固定写法全部拆除;
+  ⚠ **2026-11-02 起废止**: 改由 `tests/unit/_tmp_bootstrap.py` 自举(见首条), 手工固定写法全部拆除;
   完整约定原在 techContext.md「临时目录 / 备份盘约定」(已随 2026-11-08 重构移除, git 历史可考)。
   📌 **2026-09-23 已写进闸门命令(真正的收口)**: ⚠ **2026-11-02 起废止**(自举接管, 见首条)。原记录:
   `.commands/my-commit-flow/.my-commit-flow.toml` 里那条 pytest 闸门改成

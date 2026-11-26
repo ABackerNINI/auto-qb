@@ -23,7 +23,7 @@
 
 - **触发**: 桩里想模拟「活跃传输种子每拍速度变化」, 给 `FakeTorrent.apply_delta` 喂
   `dlspeed` / `upspeed` / `eta` / `num_seeds` 等 patch(真 `TorrentRecord` 的合法快照字段)。
-- **判别**: `FakeTorrent._SNAPSHOT_FIELDS`(tests/helpers.py 手写元组)只含 name/save_path/
+- **判别**: `FakeTorrent._SNAPSHOT_FIELDS`(tests/unit/helpers.py 手写元组)只含 name/save_path/
   state/size/tags/category/downloaded/uploaded/seeding_time/ratio/progress 等十几个字段,
   **不含 dlspeed/upspeed/eta/num_seeds/num_leechs/tracker 等**; apply_delta 对不在集内字段
   **静默跳过**(返回空 frozenset) ⇒ rounds 前进而 delta_fields 恒空 ⇒ keyed 判定失败 →

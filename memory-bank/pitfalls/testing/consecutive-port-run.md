@@ -1,6 +1,6 @@
 # 连号候选端口只验基址 —— base+1/+2 落排除段即 10013 假红
 
-> 摘要: 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。**守阵用例本体同理**: 控制流断言不得架在真实端口底板上(issue 26-11-10-0456)。
+> 摘要: 「连续 N 个候选端口」类用例(发现端点 base/base+1/base+2)若只用 `_free_port()` 取基址、再自己逐个显式 bind, 后 N-1 位从未被验证: 落进 Windows 动态排除段(Hyper-V/WSL 开机预留, 每次开机不同)或被独占进程占住就抛 WinError 10013/10048 ⇒ 假红。修法两条: ①占位走端口单点 `tests/unit/_test_ports.py::hold_run(n)`(整段逐个真绑并持有, 任一位失败整段丢弃换基址); ②断言写「落在候选表」而不是钉死某个端口号(顺延是正确行为)。**守阵用例本体同理**: 控制流断言不得架在真实端口底板上(issue 26-11-10-0456)。
 > 触发: 连号候选端口, base+1, base+2, 排除段, WinError 10013, 10048, _hold_ports, discovery_candidates, 端口单点, hold_run, 假红, netsh excludedportrange, 守阵用例假红, 断言写死重试次数, 真实端口底板, 纯合成 socket
 
 **Refs:** [issue 26-11-06-0330](../../issues/26-11-06-0330-test-hr-discovery-busy-retry-flake.html)
@@ -24,7 +24,7 @@
     5357。⇒ 判别以「实测 bind」为准(先试一次), 别只凭 netsh 列表断言某段不可绑。
   - 注意 `bind(0)` 只会分配**未被排除**的端口, 所以基址永远合法 —— 坑一定出在 `base+1` 及其后。
 - **处置**:
-  - 用单点 `tests/_test_ports.py::hold_run(count=3)` 取号: 它整段逐个真绑并**持有**返回的句柄
+  - 用单点 `tests/unit/_test_ports.py::hold_run(count=3)` 取号: 它整段逐个真绑并**持有**返回的句柄
     (没有 TOCTOU 窗口), 任一位抛 OSError 就整段关掉换新基址, 连抢 `RETRIES` 次才 `RuntimeError`。
   - **不要**给 10013 加"带理由的有限重试": 重试是遮症状, 整段自验把触发面消掉; 固定候选端口语义
     (base/+1/+2)也因此完整保留。
@@ -40,9 +40,9 @@
   **纯合成 socket**(端口由桩分配、零真实 bind), 断言只认桩内可确定的尝试次数 / 归属 / 关闭状态;
   真绑与持有的语义另留一条用真实 socket 的用例覆盖, 两用例分工不重叠。确定性复验两条: 让所有真实
   bind 一律拒绝 ⇒ 用例仍绿且真实 bind 次数为 0; 把 `hold_run` 换成「吞掉被拒位」的坏实现 ⇒ 用例必须判红。
-- **守阵**: `tests/test_free_port.py::test_hold_run_returns_bindable_run`(连号+持有+释放后可绑)、
+- **守阵**: `tests/unit/test_free_port.py::test_hold_run_returns_bindable_run`(连号+持有+释放后可绑)、
   `::test_hold_run_discards_run_whose_offset_is_refused`(整段有一位被拒 ⇒ 整段丢弃换基址, 纯桩)、
-  `tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries`(真实消费方)。
+  `tests/unit/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries`(真实消费方)。
 - **复发**: 1
 - **同族**: [fixed-port-test-collision.md](fixed-port-test-collision.md) —— 另一半: 夹具沿用**模型默认固定端口**
   导致并行撞端口 / 污染 WARNING 断言(那件的解是默认关掉发现端口, 不是换端口);

@@ -19,5 +19,5 @@
 - **守阵**: 工具侧 `tools/global-traffic-monitor/tests/test_config.py::test_defaults_match_plan_section_05`(默认 0) ·
   `tools/global-traffic-monitor/tests/test_server.py::test_random_port_two_starts_differ_and_recorded_in_pointer` +
   `test_endpoint_subcommand_prints_pointer_fields` · auto-qb 侧订阅注册键含基地址
-  (`tests/test_traffic_monitor_client.py`)
+  (`tests/unit/test_traffic_monitor_client.py`)
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

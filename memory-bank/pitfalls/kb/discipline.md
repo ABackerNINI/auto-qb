@@ -42,7 +42,7 @@
   `my-commit-flow` 的 `memory-bank/` 闸门**同集**(改了闸门就要同步这两个任务的 `run`);
   ②**提示按脚本查表**(`_common.GEN_CMD_BY_SCRIPT`), 别退化成"所有脚本同一句" ——
   只校验不写文件的脚本(`gen_active_recent.py`)的"重跑"是 `kb.active --check`, 不是重建命令。
-  守阵 `tests/test_memory_bank_structure.py::test_gen_cmd_hints_name_real_tasks`: 调用点全覆盖 +
+  守阵 `tests/unit/test_memory_bank_structure.py::test_gen_cmd_hints_name_real_tasks`: 调用点全覆盖 +
   task id 真实存在 + **提示说跑 `kb.index` 的脚本必须真的在它的 run 列表里**(两处红验过:
   退回旧的两条 `kb.index` ⇒ 红; 删掉一条 `GEN_CMD_BY_SCRIPT` 登记 ⇒ 红)。
 
@@ -55,7 +55,7 @@
   三份基线切片缺三行头, `kb.check` 第 4 条 (`gen_baseline_recent --check`) 恒红, 而闸门里
   **既没有它、也没有 `check_wording --check`** —— 两条都漏了。
 - **处置**: 把缺的 `<脚本> --check` 补进 `.my-commit-flow.toml` 的 `[[gates]]` run 清单; 守阵
-  `tests/test_memory_bank_docs.py::test_commit_gate_covers_kb_check` 钉住「闸门 ⊇ `kb.check`」
+  `tests/unit/test_memory_bank_docs.py::test_commit_gate_covers_kb_check` 钉住「闸门 ⊇ `kb.check`」
   (取 `kb.check` 的每条 `--check`, `gen_all` 展开成 `GENERATORS`; 改闸门漏同步即红)。
   与本节上一条是**同一条纪律的两个方向**: 那条管"判红了修不修得掉", 这条管"该判的有没有判"。
 

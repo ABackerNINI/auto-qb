@@ -1,0 +1,353 @@
+"""test_webui_trigger_registry 测试计划: 触发点登记表与作用域一致性守阵(计划 26-10-10-2001 S2)
+
+口径单点 = `memory-bank/conventions/webui-scope.md`(专题 webui-selection-trigger-parity)。
+登记表单点 = `static/shared/triggers.js` 的 `TRIGGER_DEFS`。本文件是「三张网」的第 1 张(静态守阵)。
+
+本守阵要解决的问题: 现状把「动谁」拆在 7 个目标解析点 + 7 个动作出口 + 1 个平行变体判定上,
+互不引用, 于是「选中 A 却动了 B」这类**静默作用对象偏移**既不被现有断言覆盖, 也没有声明可查。
+把触发点收进一张声明表之后, 新增功能要么走统一出口(网 2 自动罩), 要么登记进表(本文件强制)。
+
+## 测试计划(每个测试函数一条)
+- test_trigger_registry_shape: 登记表自身形状 —— 必填字段齐、id 唯一、枚举值在词表内、
+  scope 含 none 的投递点必须写 why(豁免也要说明, 白名单不复存在)
+- test_trigger_registry_call_sites_exact: T1 —— `shared/*.js` 里**每一个** `method: "POST"`
+  出现点所在方法必须与 `calls` 表**双向相等**(表外即红 = 新功能绕开登记; 表内残留 = 声明腐烂)
+- test_trigger_registry_no_outlet_expansion: T2 —— 选中集合的展开只允许出现在 selection.js
+  与 `_kbInvertSel`(反选是**改选中**, 不是解析目标); 出口之外不得再长出第三套展开
+- test_ctx_menu_variants_match_registry: T3 —— 支名单点 `menu.js::ctxMenuKind()`(模板
+  `ctxItems(ctxMenuKind())` 与容器 `:data-kind` 都读它)的四个返回值与登记表 `ui=ctx-menu` 的
+  variant 集合一一对应(治 pitfall ctx-menu-branch-parity: 加了一支漏另一支; 2026-10-22 模板
+  四支骨架合并后比对面从模板判据链搬到该方法)
+- test_ctx_menu_action_families_parity: T4 —— 四支的**动作族**奇偶: 四支都必须有
+  {开始/暂停/汇报/删除}, multi/member/group 还必须各有 {重新校验/跳检/限速/移动/标签分类/导出}
+  (2026-10-09 用户报「单组右键菜单缺选项」的回归位; W3 计划 26-10-20-0024 起比对面从
+  模板 @click 列表搬到 ctx_menu.js 注册表定义序, 项集奇偶治的是同一件事)
+- test_trigger_registry_entries_exist: T5 —— 登记表里每个 entry / calls.fn 都必须是源码里
+  真实存在的方法名(治「登记了不存在的入口」这类反向漂移)
+- test_scope_audit_wiring: T6 —— 运行时审计接线(计划 26-10-10-2001 S4): 三出口(_actCore/
+  _deleteFlow/_metaBulk)各恰一处 _auditScope 调用、开关 `window.__AQB_AUDIT_SCOPE__` 全源码
+  无赋值点(生产默认关)、审计环有界(50 条)
+"""
+import json
+import re
+from collections import Counter
+from pathlib import Path
+
+from webui_helpers import read_shared, SHARED_SPLIT_PARTS
+
+STATIC = Path(__file__).resolve().parents[2] / "src" / "auto_qb" / "webui" / "static"
+SHARED = STATIC / "shared"
+
+# 与 JS 侧同构的方法声明正则: 本仓库 mixin 片段的方法恒为 4 空格缩进、单行签名
+_METHOD_RE = re.compile(r"^    (?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{$")
+_JS_KEYWORDS = frozenset(
+    "if for while switch catch return else do try function await typeof new void delete in of".split()
+)
+
+UI_KINDS = {"ctx-menu", "kbd", "drawer", "statusbar"}
+VARIANTS = {"multi", "episode", "member", "group"}
+SCOPES = {"sel", "anchor", "cursor", "sel-first-cursor", "panel", "none"}
+DISPATCHES = {"action", "edit", "delete", "export", "folder", "panel", "none"}
+
+# 模板四支 -> 登记表 variant 名(模板按数据字段取名, 登记表按语义取名)
+BRANCH_TO_VARIANT = {"multi": "multi", "episode": "episode", "member": "member", "group": "group"}
+
+# T4 动作族: 四支都必须有的基线 + 必须齐的扩展族(缺一即该路径上"找不到该动作")
+FAMILY_BASE = {"resume", "pause", "reannounce", "delete"}
+FAMILY_EXT = {"recheck", "skip_check", "limits", "move", "meta", "export"}
+FAMILY_EXT_BRANCHES = {"multi", "member", "group"}
+
+
+def _read(name: str) -> str:
+    return read_shared(name)
+
+
+def _shared_js() -> dict:
+    """shared/*.js 逐域文本 —— 拆分域读根+片段聚合(同一逻辑模块, 调用点仍归属根文件名)"""
+    fragments = {f for parts in SHARED_SPLIT_PARTS.values() for f in parts[1:]}
+    out = {}
+    for p in sorted(SHARED.glob("*.js")):
+        if p.name in fragments:
+            continue
+        out[p.name] = read_shared(p.name) if p.name in SHARED_SPLIT_PARTS else p.read_text(encoding="utf-8")
+    return out
+
+
+def _defs() -> dict:
+    """从 triggers.js 文本里取出 TRIGGER_DEFS —— 严格 JSON 字面量, 保证两侧同一份声明。"""
+    text = _read("triggers.js")
+    m = re.search(r"const TRIGGER_DEFS = (\{.*?\n\});", text, re.S)
+    assert m, "triggers.js 里找不到 `const TRIGGER_DEFS = {...};`(登记表被改名/搬走? 同步本守阵)"
+    return json.loads(m.group(1))
+
+
+def _methods(text: str) -> list:
+    """[(方法名, 起始行号)] —— 只认 4 空格缩进的 mixin 方法声明(本仓库统一风格)。"""
+    out = []
+    for i, line in enumerate(text.splitlines(), start=1):
+        m = _METHOD_RE.match(line)
+        if m and m.group(1) not in _JS_KEYWORDS:
+            out.append((m.group(1), i))
+    return out
+
+
+def _enclosing(text: str, lineno: int):
+    """行号所在的方法名 —— 方法顺序排列, 取最后一个起始行 <= lineno 的。"""
+    cur = None
+    for name, start in _methods(text):
+        if start <= lineno:
+            cur = name
+        else:
+            break
+    return cur
+
+
+def _post_call_sites() -> Counter:
+    """shared/*.js 里所有 `method: "POST"` 出现点 -> (文件名, 所在方法名) 多重集。
+
+    !判据用 `method: "POST"` 而不是端点字符串: 端点可能来自变量(如 reannounce 的计划投递),
+      只认字面量会留下盲区。POST 动词是**投递**这一动作本身的唯一可靠印记。
+    !排除 triggers.js 自身: 它是这张登记表, 不是投递点(唯一方法 triggerDefs 只返回常量);
+      它的文件头注释里就写着 `method: "POST"` 这个词, 不排除会把自己扫成表外项。
+    """
+    sites = Counter()
+    for name, text in _shared_js().items():
+        if name == "triggers.js":
+            continue
+        for i, line in enumerate(text.splitlines(), start=1):
+            if 'method: "POST"' in line:
+                sites[(name, _enclosing(text, i))] += 1
+    return sites
+
+
+def _ctx_menu_branches() -> dict:
+    """行右键菜单的支名集合 -> {支: []}(占位值, 只为保持调用面的 dict 形状)。
+
+    2026-10-22(issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup): `tpl/ctx-menus.html`
+    的四支 `<template v-if>` 判据链 + 四份 `.ctx-item` 骨架合并为**一条**
+    `ctxItems(ctxMenuKind())` v-for —— 模板侧已无支段可切。支名单点随之只剩
+    `menu.js::ctxMenuKind()`(模板 v-for 与容器 `:data-kind` 都读它, 返回值与注册表
+    CTX_BRANCHES 同词)。T3 的比对面搬到"该方法会返回哪几个支名": 少一支 = 某条右键路径
+    落到 v-else 的单组支(项集静默错位, 正是 ctx-menu-branch-parity 的形态)。
+    """
+    body = _method_body(_read("menu.js"), "ctxMenuKind")
+    return {name: [] for name in re.findall(r'return "([a-z]+)";', body)}
+
+
+def _scopes_ok(value: str) -> bool:
+    """scope 串: `a` 或 `a|b`, 每个分量都在词表内。"""
+    parts = str(value).split("|")
+    return bool(parts) and all(p in SCOPES for p in parts)
+
+
+def _ctx_registry_branch_ids() -> dict:
+    """ctx_menu.js 注册表 -> {支: 定义序 id 列表(含次级)}(W3 起 T4 的比对面)。
+
+    W3(计划 26-10-20-0024)模板四支改 v-for 消费注册表后, 「某支菜单有哪些项」从模板
+    @click 列表搬到注册表定义序(CTX_ITEM_DEFS[branch] + CTX_SUB_ITEM_DEFS.member) ——
+    动作族奇偶治的是同一件事(2026-10-09「单组右键菜单缺选项」), 比对面随之搬家。
+    定义恒为 4 空格缩进、每项一行 `id: "xxx"`(与 _method_body 同款格式化假设;
+    重排文件 = 守阵红, 同步即可)。支段切到下一个 4 空格 `],` 为止(定义数组是平的)。
+    """
+    reg = _read("ctx_menu.js")
+    out = {}
+    for branch in ("multi", "episode", "member", "group"):
+        m = re.search(rf"\n    {branch}: \[(.*?)\n    \],", reg, re.S)
+        assert m, f"ctx_menu.js 找不到 {branch} 支定义段(注册表结构变了? 同步本守阵)"
+        out[branch] = re.findall(r'id: "([^"]+)"', m.group(1))
+    # 次级(「更多操作」): 现状仅 member 支有默认内容; 跨层移动后 family 项可能落在次级,
+    # 故 member 支的族覆盖面 = 一级定义序 + 次级定义序(与旧守阵的模板分段范围同口径)
+    sub_src = reg[reg.index("const CTX_SUB_ITEM_DEFS"):]
+    sm = re.search(r"\n    member: \[(.*?)\n    \],", sub_src, re.S)
+    assert sm, "ctx_menu.js 次级注册表找不到 member 支定义段(结构变了? 同步本守阵)"
+    out["member"] = out["member"] + re.findall(r'id: "([^"]+)"', sm.group(1))
+    return out
+
+
+def test_trigger_registry_shape() -> None:
+    """登记表自身形状: 必填字段、id 唯一、枚举值在词表内、豁免项必须写 why。
+
+    「豁免也要登记」是本表与普通白名单的分界 —— 白名单会越长越宽直到失去意义, 而一张
+    每行都要写理由的表, 加宽的成本是可见的。
+    """
+    defs = _defs()
+    assert set(defs) == {"ui", "calls"}, f"TRIGGER_DEFS 顶层键应只有 ui/calls, 实际 {sorted(defs)}"
+    assert defs["ui"], "ui 表为空"
+    assert defs["calls"], "calls 表为空"
+
+    ids = []
+    for row in defs["ui"]:
+        missing = {"id", "ui", "entry", "scope", "dispatch"} - set(row)
+        assert not missing, f"ui 行缺字段 {sorted(missing)}: {row}"
+        assert row["ui"] in UI_KINDS, f"ui 行的 ui 值非法: {row}"
+        assert row["dispatch"] in DISPATCHES, f"ui 行的 dispatch 非法: {row}"
+        assert _scopes_ok(row["scope"]), f"ui 行的 scope 非法: {row}"
+        if row["ui"] == "ctx-menu":
+            assert row.get("variant") in VARIANTS, f"ctx-menu 行必须有合法 variant: {row}"
+        else:
+            assert "variant" not in row, f"非 ctx-menu 行不该有 variant: {row}"
+        ids.append(row["id"])
+    dup = [i for i, c in Counter(ids).items() if c > 1]
+    assert not dup, f"ui 行 id 重复: {dup}"
+
+    for row in defs["calls"]:
+        missing = {"file", "fn", "ep", "scope", "why"} - set(row)
+        assert not missing, f"calls 行缺字段 {sorted(missing)}: {row}"
+        assert _scopes_ok(row["scope"]), f"calls 行的 scope 非法: {row}"
+        if "none" in row["scope"].split("|"):
+            assert row["why"].strip(), f"scope 含 none 的投递点必须写 why(豁免要说明理由): {row}"
+
+
+def test_trigger_registry_call_sites_exact() -> None:
+    """T1: POST 调用点与 calls 表双向相等 —— 这张表是「自动停靠」的强制网。
+
+    表外项 = 有人加了投递点却没登记(新功能绕开作用域模型); 表内残留 = 声明腐烂(函数改名/删除)。
+    两个方向都判红, 于是表与代码不会各自演化。
+    """
+    detected = _post_call_sites()
+    registered = Counter((r["file"], r["fn"]) for r in _defs()["calls"])
+
+    unregistered = sorted(k for k in detected if k not in registered)
+    assert not unregistered, (
+        "这些 POST 调用点的所在方法没有登记进 TRIGGER_DEFS.calls —— "
+        "要么把动作改走统一出口, 要么在 triggers.js 里加一行并写明 scope/why: " + ", ".join(f"{f}::{fn}" for f, fn in unregistered)
+    )
+    stale = sorted(k for k in registered if k not in detected)
+    assert not stale, (
+        "TRIGGER_DEFS.calls 里这些登记项在源码里已找不到对应 POST 调用点"
+        "(方法改名/删除/搬文件后忘了同步表): " + ", ".join(f"{f}::{fn}" for f, fn in stale)
+    )
+
+
+def test_trigger_registry_no_outlet_expansion() -> None:
+    """T2: 选中集合的展开只允许出现在 selection.js 与 `_kbInvertSel`。
+
+    `_bulkTargets` / `selHashSet` / `_kbTargets` 是**目标解析**的三个合法入口; 一旦别处又有
+    人对 `selMembers` / `selGroups` 直接做展开, 就长出了第四套口径 —— 那正是「两套选中展开」
+    的复发路径(conventions/webui-scope.md §3 机制 4)。
+    `_kbInvertSel` 例外: 它产出一份**新的选中集合**(反选), 不是解析作用目标。
+    """
+    pattern = re.compile(
+        r"\.\.\.this\.selMembers|this\.selMembers\.map|this\.selGroups\.map"
+        r"|new Set\(this\.selMembers\)|\.\.\.this\.selGroups|new Set\(this\.selGroups\)"
+    )
+    offenders = []
+    for name, text in _shared_js().items():
+        for i, line in enumerate(text.splitlines(), start=1):
+            if not pattern.search(line):
+                continue
+            fn = _enclosing(text, i)
+            if name == "selection.js" or fn == "_kbInvertSel":
+                continue
+            offenders.append(f"{name}:{i}({fn}) {line.strip()}")
+    assert not offenders, (
+        "选中集合的展开出现在出口之外 —— 作用域口径必须收在 selection.js 的单点里, "
+        "不要在触发点自己拆一遍(见 conventions/webui-scope.md §3):\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_ctx_menu_variants_match_registry() -> None:
+    """T3: 支名单点(ctxMenuKind)↔ 登记表 variant 集合一一对应(治 ctx-menu-branch-parity)。
+
+    2026-10-22 起模板四支骨架合并为一条 `ctxItems(ctxMenuKind())`, 比对面 = `ctxMenuKind()`
+    的返回字面量(见 `_ctx_menu_branches`)。
+    """
+    branches = _ctx_menu_branches()
+    assert len(branches) == 4, f"ctxMenuKind() 应返回四支, 实际 {len(branches)}: {sorted(branches)}"
+    template_variants = {BRANCH_TO_VARIANT[b] for b in branches}
+    assert template_variants == VARIANTS, f"模板支到 variant 的映射不全: {sorted(template_variants)}"
+
+    registered = {r["variant"] for r in _defs()["ui"] if r["ui"] == "ctx-menu"}
+    assert registered == template_variants, (
+        f"登记表 ctx-menu variant 集合 {sorted(registered)} 与 ctxMenuKind() 四支 {sorted(template_variants)} 不一致"
+        " —— 加了支没登记(或反之)"
+    )
+
+
+def test_ctx_menu_action_families_parity() -> None:
+    """T4: 四支动作族奇偶 —— 2026-10-09「单组右键菜单缺选项」的回归位。
+
+    症状是**不报错、不白屏**, 只是某条路径上「菜单里没这个选项」。人眼对不齐两批十几项,
+    故由守阵对账: 四支都必须有基线四族(开始/暂停/汇报/删除), multi/member/group 还必须
+    各自都有扩展六族(重新校验/跳检/限速/移动/标签分类/导出)。
+
+    W3(计划 26-10-20-0024)起模板四支改 v-for 消费注册表(shared/ctx_menu.js), 比对面从
+    「模板 @click 列表」搬到「注册表定义序」—— 项集奇偶治的是同一件事, 只是数据源换了:
+    模板只保留判据链(T3 守), 项集/顺序/分派全在注册表单点。族名与注册表 id 同形
+    (resume/pause/reannounce/delete + recheck/skip_check/limits/move/meta/export)。
+    """
+    ids = _ctx_registry_branch_ids()
+    families = {}
+    for name, tokens in ids.items():
+        families[name] = {t for t in tokens if t in FAMILY_BASE | FAMILY_EXT}
+    for name, fams in sorted(families.items()):
+        missing = FAMILY_BASE - fams
+        assert not missing, f"{name} 支缺基线动作族 {sorted(missing)}(实际 {sorted(fams)})"
+        if name in FAMILY_EXT_BRANCHES:
+            missing = FAMILY_EXT - fams
+            assert not missing, (f"{name} 支缺扩展动作族 {sorted(missing)}(实际 {sorted(fams)}) —— "
+                                 "同一批动作在各入口的项集不允许分叉")
+
+
+def test_trigger_registry_entries_exist() -> None:
+    """T5: 登记表里的 entry / calls.fn 必须是源码里真实存在的方法名(治反向漂移)。"""
+    all_text = _shared_js()
+    every_method = set()
+    for text in all_text.values():
+        every_method |= {n for n, _ in _methods(text)}
+
+    for row in _defs()["ui"]:
+        for entry in row["entry"].split("|"):
+            assert entry in every_method, f"ui 行 {row['id']} 声明的 entry `{entry}` 不是任何片段里的方法(登记腐烂)"
+    for row in _defs()["calls"]:
+        text = all_text.get(row["file"])
+        assert text is not None, f"calls 行声明了不存在的片段文件 {row['file']}"
+        assert row["fn"] in {n for n, _ in _methods(text)}, (f"calls 行 {row['file']}::{row['fn']} 在该片段里找不到同名方法")
+
+
+def _method_body(text: str, fn: str) -> str:
+    """取 mixin 片段里某方法的整个方法体(4 空格缩进单行签名 -> 4 空格缩进 `},` 结束)。"""
+    m = re.search(rf"^    (?:async\s+)?{fn}\s*\([^)]*\)\s*\{{\n(.*?)^    \}},", text, re.S | re.M)
+    assert m, f"找不到方法体 {fn}(改名/搬走? 同步本守阵)"
+    return m.group(1)
+
+
+def test_scope_audit_wiring() -> None:
+    """T6: 运行时审计接线(S4, 计划 26-10-10-2001 §5b/§6)。
+
+    审计是第三张网的运行时半张: 各出口各记账一次, e2e 断言环内无偏差。本守阵钉三件事:
+    1. 四出口(_actCore/_deleteFlow/_metaBulk/transferOpen)各恰一处 `_auditScope(` ——
+       出口收敛的运行时消费点, 少一处 = 有出口绕开审计; 多一处 = 审计面被稀释(同一动作记两次账);
+    2. 开关 `window.__AQB_AUDIT_SCOPE__` 全源码(含模板)无赋值点 —— 生产默认关是保守默认
+       硬约束(黄金法则 2); 打开只允许发生在 e2e 的 Playwright 注入脚本里;
+    3. 环有界(>50 挤出) —— 长会话不涨内存; 环单点在 scope_audit.js(不许散落第二处)。
+    """
+    all_text = _shared_js()
+    audit = all_text.get("scope_audit.js")
+    assert audit, "shared/scope_audit.js 不存在(S4 审计单点被删?)"
+
+    # 1) 四出口各恰一处(26-10-31-0306 T7 起加 transfer_flow::transferOpen —— 种子转移
+    #    是继命令/删除/元数据之后的第四个作用域消费出口, 账只记这一处)
+    outlets = {
+        "commands.js": "_actCore",
+        "delete_flow.js": "_deleteFlow",
+        "dialogs.js": "_metaBulk",
+        "transfer_flow.js": "transferOpen",
+    }
+    for fname, fn in outlets.items():
+        body = _method_body(all_text[fname], fn)
+        assert "this._auditScope(" in body, f"{fname}::{fn} 出口缺 _auditScope 记账(S4 出口接线断裂)"
+    total = sum(t.count("this._auditScope(") for t in all_text.values())
+    assert total == len(outlets), (f"_auditScope 调用点共 {total} 处, 应恰为 {len(outlets)} 出口各 1 处(多=审计面被稀释, 少=有出口绕开)")
+
+    # 2) 默认关: 开关只有读取, 没有任何赋值点(shared/*.js + tpl/*.html)
+    for name, text in all_text.items():
+        assert not re.search(r"__AQB_AUDIT_SCOPE__\s*=", text), f"{name} 出现审计开关赋值点(生产默认关被破坏)"
+    for tpl in SHARED.glob("tpl/*.html"):
+        assert not re.search(r"__AQB_AUDIT_SCOPE__\s*=", tpl.read_text(encoding="utf-8"
+                                                                      )), (f"tpl/{tpl.name} 出现审计开关赋值点(生产默认关被破坏)")
+
+    # 3) 环有界 + 单点
+    assert "ring.length > 50" in audit, "审计环缺 50 条有界挤出(长会话会无限涨)"
+    ring_sites = [n for n, t in all_text.items() if "__AQB_SCOPE_RING__" in t]
+    assert ring_sites == ["scope_audit.js"], f"环单点外泄到 {ring_sites} —— 审计环只允许 scope_audit.js 一处"

@@ -11,7 +11,7 @@
   `NameError: name 'Dict' is not defined`; 本 clone uv 环境是 **3.14**, PEP 649 惰性求值 →
   `import auto_qb` **照样 OK**, bug 完全隐身。同一份代码两个 clone 一边炸一边静默,
   只看本 clone 测试绿灯会得出「没问题」的错误结论。
-- **处置**: `tests/test_import_all.py` 双守卫 —— ①import-all 兜导入期错误; ②递归遍历
+- **处置**: `tests/unit/test_import_all.py` 双守卫 —— ①import-all 兜导入期错误; ②递归遍历
   每个模块的函数/类/方法, `inspect.get_annotations(eval_str=True)` 强制求值全部注解;
   名字在所在模块 `if TYPE_CHECKING:` 块内导入的豁免(ast 解析收集, 现有 store.py /
   taskqueue.py 两处)。**守卫写完必须红验**: 首版只有 import-all, 把 bug 重新注入后守卫

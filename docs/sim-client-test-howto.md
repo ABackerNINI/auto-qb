@@ -341,7 +341,7 @@ uv run python tools/sim/sim_run.py --scenario C2 --source=corpus:<语料目录> 
 | `endpoints_covered` | 外壳已实现端点 ⊇ 语料里出现过的端点 | 事实来源 `sim_qb.IMPLEMENTED_ENDPOINTS` |
 | `replay_stream_consumed` | 流必须被**完整消费** | 否则"回放提前结束却判 OK"是空转；静态档不判 |
 | `replay_timeline_aligned` | 回放游标相对已交付位置的滞后 | 阈值按**轮询间隔 × 倍速 × 2 裕度**动态算，不固化成常数 |
-| `maindata_lag_modeled` | 滞后模型确实用上了 | 两个滞后都为 0 时判据应转红（红验见 `tests/test_sim_corpus.py`） |
+| `maindata_lag_modeled` | 滞后模型确实用上了 | 两个滞后都为 0 时判据应转红（红验见 `tests/unit/test_sim_corpus.py`） |
 
 另有抓取侧的 `fields_complete` / `sanitize_injective` / `group_conservation` / `stream_closure` /
 `sanitize_stream_consistent` / `no_credentials` 六项，跑 `qb_capture.py` 时自检。

@@ -8,5 +8,5 @@
 - **触发**: 给 dyn 表写 `sort: { dyn: true, defKey: "<列>", defDir: 1 }`(默认按某列升序), 或收到「某张表的默认排序列点不动/排序没反应」; 也适用于把某表默认方向从降序改升序的口径调整。
 - **判别**: ①症状是「默认列看着能点、点了三下全没变化」—— 箭头方向、行序、aria-sort 任一时刻都不变; ②非默认列(如用户表的「下载」列)点击排序完全正常, 唯独默认列失效; ③看表描述符 `defKey` 与 `defDir`: defKey 非空 + defDir=1 即命中; ④静态守阵全绿(判据源/几何没错), 现有三态 node 电池若只测「换列首击」也不覆盖此路径 —— 必须真跑「点默认列第一击」。
 - **处置**: `setSort` 第三击分支(同键升序)复位前加判据 `if (cell.key === k.defKey && k.defDir === 1) { cell.dir = -1; return; }` —— 默认升序列首击翻降序, 非默认列仍照常复位默认, 三态语义对其余列不变。dyn 与经典(gk/gd)两分支同口径补齐。**：**修根因而非把 defDir 改回 -1(那会破坏「默认按该列升序」的产品口径, 如用户表 IP 点分数值序升序)。
-- **守阵**: node 电池 `tests/test_webui_static_r4_node_batteries.py::test_r4_sort_domain` 的 `dPos`(defKey=addr/defDir=1)断言组 —— 默认列一击降序/二击升序/三击再降序(非 no-op)、非默认列三击复位、空默认键表零误伤; e2e `e2e/drawer-peers-variant-tables.spec.mjs` dt07 用例点 addr 列头验 aria-sort 与行序翻转。红验: 修复前源码跑「默认列一击=降序」必失败(dir 恒 1)。
+- **守阵**: node 电池 `tests/unit/test_webui_static_r4_node_batteries.py::test_r4_sort_domain` 的 `dPos`(defKey=addr/defDir=1)断言组 —— 默认列一击降序/二击升序/三击再降序(非 no-op)、非默认列三击复位、空默认键表零误伤; e2e `e2e/drawer-peers-variant-tables.spec.mjs` dt07 用例点 addr 列头验 aria-sort 与行序翻转。红验: 修复前源码跑「默认列一击=降序」必失败(dir 恒 1)。
 - **复发**: 0

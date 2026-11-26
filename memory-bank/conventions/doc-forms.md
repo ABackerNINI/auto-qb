@@ -83,7 +83,7 @@ issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Re
   实测 1215 件 / 1856 条 ref: `ok` 1267 · `ext` 299 · `basename` 253 · `repo` 2 · `dead` **35**
   (全为历史件指向 26-11-08 已删路径, 计划 §07 R1 明示预期, 非机检故障) ——
   页面上的「未入库」从来不是丢了件。
-- **机检单点**: `gen_doc_map.py --check` (挂提交闸门 `memory-bank/` 与 kb 包 `kb.docmap`; 2026-11-17 计划 26-11-17-0010 S2 起摘出 `kb.check` 默认链 —— fail-closed 空库判红; 2026-10-03 自 tests/test_docs_forms.py 下沉, 该测试同函数复验), 声明方 = 四形态全量。
+- **机检单点**: `gen_doc_map.py --check` (挂提交闸门 `memory-bank/` 与 kb 包 `kb.docmap`; 2026-11-17 计划 26-11-17-0010 S2 起摘出 `kb.check` 默认链 —— fail-closed 空库判红; 2026-10-03 自 tests/unit/test_docs_forms.py 下沉, 该测试同函数复验), 声明方 = 四形态全量。
 
 ## 创建/更新方式 (命令化, 2026-10-17)
 

@@ -114,10 +114,10 @@ ignore_missing_imports = true
 # no_implicit_optional 是 mypy 默认开启项, 不显式写 —— 该语义恰覆盖 RUF013 隐式 Optional 债, S2 清完后此面应零错
 # S2-S4 分级结构预留: [[tool.mypy.overrides]] per-module —— S3 给已注解面(config/torrents/core 选定面)加
 # disallow_untyped_defs 收紧; S4 给抵抗面(tray.* / rules.expr.env / webui 裸 dict 重灾区)加豁免, 并由
-# tests/test_mypy_allowlist_guard.py 冻结豁免清单(只减不增, 计划 §04 S4)
+# tests/unit/test_mypy_allowlist_guard.py 冻结豁免清单(只减不增, 计划 §04 S4)
 
 # ---- S4 allowlist(计划 26-11-05-0635 §04 S4) ------------------------------------------
-# 豁免清单由 tests/test_mypy_allowlist_guard.py 冻结: 新增豁免(ignore_errors 模块或
+# 豁免清单由 tests/unit/test_mypy_allowlist_guard.py 冻结: 新增豁免(ignore_errors 模块或
 # disable_error_code 条目)守阵当场红, 减少(递减)不红。基线: 2026-11-06 S4 首跑 1087 错,
 # 纯注解级小修 -29 后 1058, 按下表豁免收敛到退出码 0。
 # 注意: 同一模块匹配多条 overrides 时, 每个选项按「最后一条匹配」取值 —— 对同一模块

@@ -222,7 +222,7 @@ uv run pytest tests/test_units.py --no-cov     # 排障单个测试档: 必须�
 - **门槛口径独立, 不与主仓合算**: 覆盖率分母只含 `gtm` 包(语句 + 分支出口), 阈值写在
   `pyproject.toml` 的 `[tool.pytest.ini_options] addopts` 里
   (`--cov=gtm --cov-branch --cov-report=term-missing --cov-fail-under=<N>`)。主仓
-  `pytest.ini` 的 `--cov=src` 与 `tests/conftest.py::pytest_configure` 里的平台定档阈值
+  `pytest.ini` 的 `--cov=src` 与 `tests/unit/conftest.py::pytest_configure` 里的平台定档阈值
   (Windows 99.0 / 其它 98.5)**一个字不动** —— 两套分母混算会互相稀释,
   两套数字也不可互比。
 - **阈值阶梯**: 88 → 91 → 93.5 → **98.5(定档 = Windows 侧实测 − 0.8, 向下取 0.5 的整数倍)**。阈值恒低于当期实测 0.8–1.0 点, 且取**双平台
@@ -247,7 +247,7 @@ uv run pytest tests/test_units.py --no-cov     # 排障单个测试档: 必须�
 改任一侧的**端点路径 / 请求或响应字段 / 状态码**时, 两侧测试必须**同轮跑**:
 
 ```bash
-commands run test.one -- tests/test_traffic_monitor_client.py   # 主仓契约端
+commands run test.one -- tests/unit/test_traffic_monitor_client.py   # 主仓契约端
 commands run test.gtm                                           # 工具侧契约端
 ```
 

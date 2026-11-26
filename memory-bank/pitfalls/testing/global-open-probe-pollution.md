@@ -7,8 +7,8 @@
 ### 2026-11-12 实证: test_read_side_view_contract_table[1m] 偶发假红
 
 - **触发**: `commands run test.quick` / `test.full`(`-n 8` 并行, ship.commit 提交闸门内同款)五轮中偶红一次; 单文件隔离重跑恒绿 —— 与 [inproc-server-conn-abort.md](inproc-server-conn-abort.md) 同轮冒头(该件闪 qb_capture, 本条闪 traffic [1m], 两类机制不同)。
-- **现象**: `tests/test_traffic_sample_store.py::test_read_side_view_contract_table[1m]` 在五轮 `-n 8` 全量中偶红一次, 单文件隔离重跑绿; 用例自身逻辑全部由冻结时钟 `frozen` 派生, 静态核查内部确定 —— 非确定通道只剩探针。
-- **机制**: `tests/traffic_sample_support.py::_v4_open_paths`(取证 2026-11-12, 符号 `def _v4_open_paths`, grep `_v4_open_paths`)原实现 patch 进程级 `builtins.open`, 只按「路径含 `qb-traffic-v4/`」收录、不区分 data_dir; 同 worker 前序测试遗留的守护线程打开**它自己 tmp_path** 下的 qb-traffic-v4 文件(路径同样含该子串)即污染 `opened` 读集, 断言 `got_days == exp_days` 假红。
+- **现象**: `tests/unit/test_traffic_sample_store.py::test_read_side_view_contract_table[1m]` 在五轮 `-n 8` 全量中偶红一次, 单文件隔离重跑绿; 用例自身逻辑全部由冻结时钟 `frozen` 派生, 静态核查内部确定 —— 非确定通道只剩探针。
+- **机制**: `tests/unit/traffic_sample_support.py::_v4_open_paths`(取证 2026-11-12, 符号 `def _v4_open_paths`, grep `_v4_open_paths`)原实现 patch 进程级 `builtins.open`, 只按「路径含 `qb-traffic-v4/`」收录、不区分 data_dir; 同 worker 前序测试遗留的守护线程打开**它自己 tmp_path** 下的 qb-traffic-v4 文件(路径同样含该子串)即污染 `opened` 读集, 断言 `got_days == exp_days` 假红。
 - **判别**: 用例断言面「日期集合不相等」而非 ConnectionError/Timeout; 用例自身时间参数冻结后内部确定; 探针 patch 面是进程级 —— 三件齐即本族, 别与 inproc-server-conn-abort(10053)/端口 TOCTOU(ConnectionRefused)混淆。
 - **处置**: 收录判据加目标根目录前缀(本例 `data_dir`): `prefix = os.path.join(os.fspath(data_dir), "").replace("\\", "/")`, 被比对路径同样正斜杠归一后 `startswith(prefix)`; 守阵 `test_v4_open_paths_probe_scoped_to_data_dir` 双向红验。**不是放宽断言** —— 端点只可能打开自家 data_dir, 收窄只剔除物理上不可能属于被测行为的记录。
 - **同族排查锚**: 仓库内其它进程级 patch 探针(如 sidefx 台账、`counting_open` 形态)若未来冒「并行偶红 + 单跑绿 + 断言集合面不等」, 先查收录判据是否含目标根收窄, 再查时序族。

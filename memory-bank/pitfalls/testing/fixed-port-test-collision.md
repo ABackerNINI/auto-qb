@@ -18,7 +18,7 @@
     (内核分配), **全程不调 `_free_port()`** —— 它能吐 WARNING 的唯一路径就是发现端点。
     ⇒ 偶发并行失败先**枚举所有能产生该日志的路径**, 别顺着「最像竞态」的那个猜。
 - **处置**:
-  - `tests/test_hr_runtime.py` 的 `make_config` 加 `discovery_port=0` 默认参数 —— 该文件几十条
+  - `tests/unit/test_hr_runtime.py` 的 `make_config` 加 `discovery_port=0` 默认参数 —— 该文件几十条
     用例**没有一条测发现服务**, 不该碰共享固定端口。新增守卫用例
     `test_channel_runtime_leaves_discovery_unbound` 钉住「channel 开着也不绑发现端口」, 防默认值回流。
   - `port=0` 对数据端点(`channel.port`)够用(内核分配); 但发现服务是「固定候选表顺序尝试」形态,

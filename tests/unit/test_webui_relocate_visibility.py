@@ -1,0 +1,1143 @@
+"""WebUI 迁移可见性 P0/P1(plan 26-11-04-1042): 快照/标注/组级聚合/指纹/行内徽标/筛选/详情段
+
+## 测试计划
+- test_state_of_phase_merges: 相位归并到 moving / pending_finalize / done / failed / cancelled / superseded(未知按 moving)
+- test_member_relocate_origin_mover_and_contract: 成员标注字段、mover 精确归属、origin 来自 job、save_path 不变
+- test_origin_roundtrip_and_legacy_unknown: web/rule/cli origin 落账回读; 旧 state 条目缺 origin 回落 unknown
+- test_snapshot_prefers_active_job_over_old_terminal: 同 hash 活跃新 job 取代终态旧 job, 快照换代并置 full 脏
+- test_group_relocate_priority_mixed_and_order_independent: 组级 failed>moving>pending_finalize>done、同优先级多 job 记 mixed、pending/total/job_ids/dst、成员顺序无关、全 cancelled 为 None
+- test_group_relocate_src_unique_when_all_members_agree: 组级 src 全组一致(去重唯一非空值)给该值, mixed 不影响
+- test_group_relocate_src_empty_when_conflicting: 组内两个不同 src => ""
+- test_group_relocate_src_empty_when_no_member_has_src: 全部标注 src 空串 => ""
+- test_relocate_null_when_disabled_or_no_jobs: relocate 关 / 无 job(含旧 state 无 relocate 段) => relocate 字段 null
+- test_view_build_does_not_probe_filesystem_or_iterate_jobs: 列表构建期不 lstat/stat/readlink/islink, 不遍历 _jobs
+- test_decorate_fingerprint_includes_relocate: decorate.js 成员/组 relocate 签名进指纹且槽位长度同步
+- test_p1_pair_rendered_in_path_cells: 组行/种子行路径列渲染 .rel-pair 两排 A→B(rel-pcol+rel-arc), pair 隐藏原单排路径行(R3)且原生 title 同步退役(2026-11-11), A/B 排 f-cell 可点筛选+f-on 独立(D16), 无按钮语义, tone 经 relocateView
+- test_p1_pair_upper_row_uses_strikethrough_not_opacity: 上排(当前位置)100% 不透明 + 删除线旧值, 禁用 opacity 做层级(26-11-10 修 D6 淡影/伪影错觉)
+- test_p1_pair_cell_margin_keeps_row_height_constant: has-relpair 单元格 margin: -5px 0 静态钉(负 margin 吃 padding 锁行高, 双排不得使行高变化 —— 2026-11-19 行高恒等修正; 四皮肤几何实测在 e2e/relocate-pair-row-height.spec.mjs)
+- test_p1_pair_state_mapping_node: node 探针验证 relocateView 矩阵(pair/one/null)+ 指纹 src 值变化必须变签名
+- test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛按位置集(save_path + 进行中三态 src/dst, R3 D17; 谓词与计数同一 _pathPositions 单点, 成员级)
+- test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛位置集(dst/src 命中与 done 不命中)、清空重置
+- test_p1_detail_section_and_endpoint_projection: 详情端点带 relocate; 无 job 时详情段整段不渲染
+- test_p1_detail_endpoint_passes_relocate: 真实 /api/torrents/{hash} 端点: 有 job 回传 relocate 投影, 无 job 为 null, save_path 不变
+- test_member_relocate_resume_pending_projection: 恢复确认账展示面(26-11-14-1744 (3)) —— job 带
+  resume_pending/retries 时标注带 计数/hash 列表/补发数/穷尽位, 穷尽界=机制侧上界(retries>=MAX 才 True),
+  空账(含默认)全零不噪音, 已删成员在账如实计数, 同 job 各成员带同一份 job 级账
+- test_resume_pending_endpoint_projection: 真实 /api/torrents/{hash} 端点透传恢复账四字段(空账字段恒在)
+- test_resume_pending_display_wiring: 待恢复文案单点 decorate.relocateResumeText 定义恰一次, 消费面
+  (drawer_rows 两行 / relocate_pop kv)走同一单点; 空账零噪音与穷尽/在途区分文案钉扎
+
+外部旧路径种子通知态(T5, 计划 26-11-20-0434):
+
+- test_foreign_member_projection: foreign_member 投影 —— kind B/mismatch 进面板(A 不进);
+  state=DISPLAY_FOREIGN + 契约形状与 member_relocate 同形(mover False/alias 0/resume 全零/
+  origin 空) + first_seen 占 updated_at 槽 + expired 位(location 空位) + kind 透传(B2 前端
+  mismatch 说明行区分位); 空条目 None
+- test_foreign_row_fallback_and_job_priority: 行构建回落 —— notified 账条目经
+  foreign_notified_view 发布视图落到 _member_view 标注; job 成员先行命中不落外部回落;
+  relocate 关恒 None; 缺 getter 替身面零异常
+- test_group_relocate_foreign_priority: 组级 foreign 垫底(0, 与 superseded 同级)—— 全外部
+  组 state=foreign/src=旧根/dst 列表/pending=0; 外部成员遇在途迁移让位; superseded+foreign
+  混合组 state=foreign 不进 mixed(评审 minor 4: 豁免放宽为 top state 集 ⊆ {foreign,
+  superseded}, 纯 superseded 组口径不动)
+- test_p1_pair_state_mapping_node 扩 foreign 支: relocateView foreign 恒 one(警示 tone)+
+  _relocatePick foreign 自成档不进「有过迁移」
+- test_foreign_display_wiring: 通知面接线守阵 —— 词表/色调(两作用域)/筛选档/浮窗专属块/
+  模板强调条件/抽屉专属行集 六处同轮在场; 降级判据读后端 expired 位 + 文案单点
+  foreignExpiredText 定义恰一次且浮窗/抽屉共用(评审 minor 6 + nit 9); mismatch 说明文案
+  单点 foreignMismatchText 定义恰一次且浮窗/抽屉共用、判据读后端 kind 位, 字面只落 decorate
+  单点(B2, 计划 26-11-21-1600)
+
+收尾窗行状态细化(B3-4, 计划 26-11-21-1600 D8):
+
+- test_finalize_state_derivation: finalize_state 纯派生矩阵 —— rewritten 恒 await_recheck
+  (qB 态无关: journal 合并态是账面权威事实, qB 回连中/快照滞后不降级); armed 仅 qB 最后
+  已知离线给 await_window, 在线/未知(None)回落 ""; moved/moving/终态/未知相位恒 ""(非
+  收尾窗 armed/rewritten 相位)
+- test_member_relocate_finalize_projection: 标注面 finalize 档位字段恒在(缺省 qb_connected
+  =None 同旧契约) + 真机接线面(mgr._last_conn_ok -> status_snapshot().connected ->
+  _relocate_member 派生 await_window/await_recheck; 连接态未知回落 "") + foreign_member
+  finalize 恒空串(通知态不在收尾窗, 字段契约同形)
+- test_relocate_qb_connected_fallback: _relocate_qb_connected 收口分支(views.py)—— 替身缺
+  status_snapshot 方法 / 读数异常都按 None 收口(呈现面零异常), None 沿派生链到 finalize
+  恒空串(未知不谎报)
+- test_finalize_row_state_word_node: node 探针真跑 relocateRowStateText(B3-4 行状态词单点)
+  —— done + dst 给「收尾完成(新保存路径 <dst>)」(路径取既有账面 dst, 零新增)、done 无
+  dst 只给词不谎报; pending_finalize 细分档 await_window/await_recheck 给细分词; 空档位/
+  未知档位回落 coarse 词表; 无标注恒空串; 组行形态(无 finalize 字段)自然回落; 签名槽位
+  面(_relocateSig finalize 变档签名必变)
+- test_finalize_display_wiring: 行状态词接线守阵 —— 细分词表/收尾完成词只落 decorate 单点
+  (浮窗 verdict 与抽屉 sum/迁移状态行消费 relocateRowStateText 同一单点, 不各造文案;
+  呈现档位词表 RELOCATE_STATE_TEXT 不扩面、筛选桶 _relocatePick 不读 finalize —— 细分档
+  是收尾窗瞬时子态, 筛选仍按 coarse「待收尾」取数); _relocateSig 含 finalize 槽
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+
+import pytest
+
+from auto_qb.core.modules import relocate_units as ru
+from auto_qb.core.modules.relocate_units import RelocateJob
+from helpers import relocate_env
+
+
+def _job(
+    job_id: str,
+    hashes=("HA", "HB"),
+    *,
+    mover: str = "HA",
+    src: str = r"R:\src",
+    phase: str = ru.PHASE_MOVING,
+    origin: str = "web",
+    updated_at: float = 1.0,
+    created_at: float = 0.5,
+    alias_paths=(),
+    resume_pending=(),
+    resume_retries: int = 0,
+) -> RelocateJob:
+    return RelocateJob(
+        job_id=job_id,
+        hashes=tuple(hashes),
+        mover=mover,
+        src=src,
+        dst=r"R:\dst",
+        scope=r"R:\src",
+        alias_kind="file" if alias_paths else "",
+        alias_paths=tuple(alias_paths),
+        phase=phase,
+        origin=origin,
+        created_at=created_at,
+        updated_at=updated_at,
+        resume_pending=tuple(resume_pending),
+        resume_retries=resume_retries,
+    )
+
+
+def _row(env, recs=None):
+    key = next(iter(env.mgr.store.groups))
+    if recs is None:
+        recs = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+    return env.mgr._build_group_row(key, recs, set())
+
+
+@pytest.mark.parametrize(
+    "phase,state",
+    [
+        (ru.PHASE_MOVING, "moving"),
+        (ru.PHASE_WATCHING, "moving"),
+        (ru.PHASE_MOVED, "pending_finalize"),
+        (ru.PHASE_ARMED, "pending_finalize"),
+        (ru.PHASE_REWRITTEN, "pending_finalize"),
+        ("removing", "moving"),
+        ("removed", "moving"),
+        ("finalizing", "moving"),
+        (ru.PHASE_DONE, "done"),
+        (ru.PHASE_FAILED, "failed"),
+        (ru.PHASE_CANCELLED, "cancelled"),
+        (ru.PHASE_SUPERSEDED, "superseded"),
+        ("", "moving"),
+        ("legacy_unknown", "moving"),
+    ],
+)
+def test_state_of_phase_merges(phase, state):
+    from auto_qb.webui.views_relocate import state_of_phase
+
+    assert state_of_phase(phase) == state
+
+
+def test_member_relocate_origin_mover_and_contract(tmp_path):
+    env = relocate_env(tmp_path)
+    env.mgr.ctx.relocate.register_job(
+        _job("j1", phase=ru.PHASE_MOVING, origin="rule", alias_paths=["a", "b"], updated_at=5.0)
+    )
+    ha = env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]
+    hb = env.mgr._member_view(env.mgr.store.by_hash["HB"])["relocate"]
+    assert ha and hb
+    assert ha["state"] == "moving" and ha["phase"] == ru.PHASE_MOVING
+    assert ha["mover"] is True, "mover 必须按 job.mover 精确匹配"
+    assert hb["mover"] is False
+    assert ha["origin"] == "rule", "origin 必须来自 job, 不得按调用路径猜"
+    assert ha["alias_kind"] == "file" and ha["alias_count"] == 2
+    assert ha["job_id"] == "j1" and ha["updated_at"] == 5.0
+    assert ha["created_at"] == 0.5, "设置时间来自 job 登记时刻, 必须随 relocate 投影下发"
+    # 不改 save_path: 迁移可见性只加标注, 路径筛选仍按 qB save_path 语义
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["save_path"] == env.src
+
+
+def test_member_relocate_resume_pending_projection(tmp_path):
+    """恢复确认账展示面(issue 26-11-14-1744 (3)): 账字段随 relocate 投影下发, 穷尽/在途可区分"""
+    from auto_qb.core.modules.relocate_units import RESUME_RETRY_MAX
+
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    # 在途态: 账非空且 retries 未到上界
+    mod.register_job(_job("j1", resume_pending=("HA", "HB"), resume_retries=1))
+    ha = env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]
+    hb = env.mgr._member_view(env.mgr.store.by_hash["HB"])["relocate"]
+    assert ha["resume_pending_count"] == 2 and ha["resume_pending_hashes"] == ["HA", "HB"]
+    assert ha["resume_retries"] == 1 and ha["resume_exhausted"] is False
+    # 账是 job 级的: 同 job 各成员标注带同一份(与 alias_count 同形), 不按成员各自重算
+    assert hb["resume_pending_count"] == 2 and hb["resume_pending_hashes"] == ["HA", "HB"]
+    # 穷尽边界: retries 达机制侧上界才 True(展示区分单点 = 机制常数, 不复制数值)
+    mod.register_job(_job("j2", resume_pending=("HA", ), resume_retries=RESUME_RETRY_MAX - 1))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["resume_exhausted"] is False
+    mod.register_job(_job("j3", resume_pending=("HA", ), resume_retries=RESUME_RETRY_MAX))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["resume_exhausted"] is True
+    # 空账(默认账 = 旧 state 条目同形): 字段恒在但全零, 前端按计数隐藏行零噪音
+    mod.register_job(_job("j4"))
+    empty = env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]
+    assert empty["resume_pending_count"] == 0 and empty["resume_pending_hashes"] == []
+    assert empty["resume_retries"] == 0 and empty["resume_exhausted"] is False
+    # 已删成员在账如实显示(保守挂账语义): 不在组内的 hash 原样进列表, 不过滤不特殊标注
+    mod.register_job(_job("j5", resume_pending=("HA", "HDELETED")))
+    gone = env.mgr._member_view(env.mgr.store.by_hash["HB"])["relocate"]
+    assert gone["resume_pending_hashes"] == ["HA", "HDELETED"], "已删成员必须如实进展示面"
+
+
+# ---------- 外部旧路径种子通知态(T5, 计划 26-11-20-0434) ----------
+
+
+def test_foreign_member_projection():
+    """foreign_member 投影: kind 分流(B/mismatch 进面板, A 不进)+ 契约形状 + expired 位"""
+    from auto_qb.webui.views_relocate import foreign_member
+
+    entry = {
+        "root": "r:/old",
+        "kind": "B",
+        "job_id": "jd",
+        "phase": "done",
+        "location": "R:/new",
+        "first_seen": 1234.5,
+    }
+    a = foreign_member(entry)
+    assert a["state"] == ru.DISPLAY_FOREIGN
+    assert a["src"] == "r:/old" and a["dst"] == "R:/new"
+    assert a["job_id"] == "jd" and a["phase"] == "done"
+    assert a["mover"] is False and a["origin"] == "" and a["reason"] == ""
+    assert a["alias_count"] == 0 and a["alias_kind"] == ""
+    assert a["resume_pending_count"] == 0 and a["resume_pending_hashes"] == []
+    assert a["resume_retries"] == 0 and a["resume_exhausted"] is False
+    assert a["first_seen"] == 1234.5 and a["updated_at"] == 1234.5  # 首见占 updated_at 槽
+    assert a["expired"] is False
+    assert a["kind"] == "B"  # kind 透传(B2 前端 mismatch 说明行区分位)
+    # R7 已过期(location 空位): expired True + dst 空(浮窗/抽屉按它给降级文案)
+    expired = foreign_member({**entry, "location": ""})
+    assert expired["expired"] is True and expired["dst"] == "" and expired["kind"] == "B"
+    # mismatch(清单不一致)同进面板; kind A(已纳入收尾, job 标注面接管)不进
+    mx = foreign_member({**entry, "kind": "mismatch"})
+    assert mx["state"] == ru.DISPLAY_FOREIGN and mx["kind"] == "mismatch"
+    assert foreign_member({**entry, "kind": "A"}) is None
+    assert foreign_member(None) is None and foreign_member({}) is None
+    assert foreign_member({"kind": "B", "root": "", "location": "", "first_seen": 0})["job_id"] == ""
+
+
+def test_foreign_row_fallback_and_job_priority(tmp_path):
+    """行构建回落: notified 账 -> foreign_notified_view 发布视图 -> _member_view 标注"""
+    from helpers import FakeTorrent, seed_store
+
+    env = relocate_env(tmp_path)
+    mgr = env.mgr
+    mod = mgr.ctx.relocate
+    t = FakeTorrent(hash="HFOREIGN", name="foreign-seed", save_path="R:/old", state="pausedUP")
+    env.client.torrents["HFOREIGN"] = t
+    seed_store(mgr, [t])
+    rec = mgr.store.by_hash["HFOREIGN"]
+    notified = mod._state_foreign_notified()
+    notified["HFOREIGN"] = {
+        "root": "r:/old",
+        "kind": "B",
+        "job_id": "jd",
+        "phase": "done",
+        "location": "R:/new",
+        "first_seen": 99.0
+    }
+    mod._foreign_publish_view()
+    assert mgr._member_view(rec)["relocate"]["state"] == ru.DISPLAY_FOREIGN
+    # job 成员先行命中(该 hash 已被纳入收尾): job 标注接管, 不落外部回落
+    mod.register_job(_job("jf", hashes=("HFOREIGN", )))
+    assert mgr._member_view(rec)["relocate"]["state"] == ru.DISPLAY_MOVING
+    # relocate 关: 即使发布视图仍在, 恒 None(呈现面由 relocate.enabled 收口)
+    mgr.config.relocate.enabled = False
+    assert mgr._member_view(rec)["relocate"] is None
+    mgr.config.relocate.enabled = True
+    # 替身面: 模块缺 getter / 视图形状异常 -> 零异常恒 None(呈现面兜底)
+    from types import SimpleNamespace as NS
+
+    old_mod = mgr.ctx.relocate
+    mgr.ctx.relocate = NS()  # 无 foreign_notified_view 属性
+    assert mgr._member_view(rec)["relocate"] is None
+    mgr.ctx.relocate = NS(foreign_notified_view=lambda: "junk")  # 形状异常
+    assert mgr._member_view(rec)["relocate"] is None
+    mgr.ctx.relocate = old_mod
+
+
+def test_group_relocate_foreign_priority():
+    """组级 foreign 垫底(0, 与 superseded 同级): 全外部组可表达, 遇在途迁移让位"""
+    from auto_qb.webui.views_relocate import foreign_member, group_relocate, member_relocate
+
+    foreign = foreign_member(
+        {
+            "root": "r:/old",
+            "kind": "B",
+            "job_id": "jd",
+            "phase": "done",
+            "location": "R:/new",
+            "first_seen": 1.0
+        }
+    )
+    foreign2 = foreign_member(
+        {
+            "root": "r:/old",
+            "kind": "mismatch",
+            "job_id": "jd2",
+            "phase": "done",
+            "location": "",
+            "first_seen": 2.0
+        }
+    )
+    g = group_relocate([{"relocate": foreign}, {"relocate": foreign2}])
+    assert g["state"] == ru.DISPLAY_FOREIGN  # 全外部组: 组级也表达通知态
+    assert g["src"] == "r:/old" and g["dst"] == ["R:/new"]  # dst 空值不入列(与既有口径一致)
+    assert g["pending"] == 0 and g["total"] == 2  # foreign 不算在途(pending 语义不动)
+    assert g["job_ids"] == ["jd", "jd2"]
+    # 外部成员遇在途迁移让位(优先序垫底): 组级标注 = 在途迁移, 不被通知态覆盖
+    moving = member_relocate(ru.job_to_dict(_job("jm")), "HA")
+    g2 = group_relocate([{"relocate": foreign}, {"relocate": moving}])
+    assert g2["state"] == ru.DISPLAY_MOVING
+    # superseded + foreign 混合(评审 minor 4): 两者同垫底序, 在时通知面压过历史态
+    # -> state=foreign 不落 mixed(豁免条件放宽为 top state 集 ⊆ {foreign, superseded})
+    superseded = member_relocate(ru.job_to_dict(_job("js", phase=ru.PHASE_SUPERSEDED)), "HA")
+    g3 = group_relocate([{"relocate": foreign}, {"relocate": superseded}])
+    assert g3["state"] == ru.DISPLAY_FOREIGN
+    # 纯 superseded 组(无 foreign): 豁免不进 —— 走既有 mixed/job_diversity 口径不被改写
+    g4 = group_relocate([{"relocate": superseded}])
+    assert g4["state"] == ru.DISPLAY_SUPERSEDED
+    # 空组标注组(全 None)与既有行为一致: None
+    assert group_relocate([{"relocate": None}]) is None
+
+
+def test_origin_roundtrip_and_legacy_unknown():
+    for origin in ("web", "rule", "cli"):
+        d = ru.job_to_dict(_job("j", origin=origin))
+        assert d["origin"] == origin
+        assert ru.job_from_dict(d).origin == origin
+    legacy = ru.job_to_dict(_job("j", origin="web"))
+    legacy.pop("origin")
+    assert ru.job_from_dict(legacy).origin == "unknown", "旧 state 条目缺 origin 必须回落 unknown"
+
+
+def test_snapshot_prefers_active_job_over_old_terminal(tmp_path):
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    mod.register_job(_job("j_old", phase=ru.PHASE_DONE, updated_at=100.0))
+    assert mod.jobs_snapshot().job_for("HA")["job_id"] == "j_old"
+    mod.register_job(_job("j_new", phase=ru.PHASE_MOVING, updated_at=1.0))
+    snap = mod.jobs_snapshot()
+    assert snap.job_for("HA")["job_id"] == "j_new", "同一 hash 必须取活跃 job, 即使终态 job 更新更晚"
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["state"] == "moving"
+    assert snap.generation >= 2
+    assert env.mgr.web.group_view_dirty is True
+    assert "relocate_jobs" in env.mgr.web._pending_full_reasons
+
+
+def test_group_relocate_priority_mixed_and_order_independent(tmp_path):
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    mod.register_job(_job("j_fail", hashes=("HA", ), phase=ru.PHASE_FAILED, updated_at=2.0))
+    mod.register_job(_job("j_move", hashes=("HB", ), phase=ru.PHASE_MOVING, updated_at=3.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["state"] == "failed", "failed 优先于 moving"
+    assert row["relocate"]["pending"] == 1 and row["relocate"]["total"] == 2
+    assert row["relocate"]["job_ids"] == ["j_fail", "j_move"]
+
+    # 同一 hash 的活跃新 job 取代终态 failed: 组成员标注取活跃者, failed 不再挂出
+    mod.register_job(_job("j_armed_a", hashes=("HA", ), phase=ru.PHASE_ARMED, updated_at=4.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["state"] == "moving", "moving(HB) 优先于 pending_finalize(HA)"
+    assert "j_fail" not in row["relocate"]["job_ids"], "被活跃 job 取代的终态 job 不进组级标注"
+
+    # 同优先级两个不同 job => mixed
+    mod.register_job(_job("j_move_a2", hashes=("HA", ), phase=ru.PHASE_MOVING, updated_at=5.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["state"] == "mixed", "同优先级两个 job 必须 mixed"
+    assert row["relocate"]["pending"] == 2
+
+    # 顺序无关
+    assert env.mgr._build_group_row(key, list(reversed(members)), set())["relocate"] == row["relocate"]
+
+    # dst 去重排序
+    assert row["relocate"]["dst"] == [r"R:\dst"]
+
+    # 先撤销在途 job, 再登记单个全组 done => done(非 mixed)
+    for jid, hashes in (("j_move_a2", ("HA", )), ("j_armed_a", ("HA", )), ("j_move", ("HB", ))):
+        mod.register_job(_job(jid, hashes=hashes, phase=ru.PHASE_CANCELLED, updated_at=7.0))
+    mod.register_job(_job("j_done", phase=ru.PHASE_DONE, updated_at=8.0))
+    row2 = env.mgr._build_group_row(key, members, set())
+    assert row2["relocate"]["state"] == "done" and row2["relocate"]["pending"] == 0
+
+    # 全 cancelled => 无组级标注
+    mod.register_job(_job("j_done", phase=ru.PHASE_CANCELLED, updated_at=9.0))
+    assert env.mgr._build_group_row(key, members, set())["relocate"] is None
+
+
+def test_group_relocate_src_unique_when_all_members_agree(tmp_path):
+    """组级 src 聚合(plan 26-11-07-2344 S1): 全组一致(恰 1 个非空去重值) => 该值"""
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    # 单 job 覆盖全组 => 两成员标注同 src
+    mod.register_job(_job("j1", phase=ru.PHASE_MOVING, src=r"R:\from", updated_at=2.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["src"] == r"R:\from"
+
+    # 两个不同 job 但 src 相同 => 去重后仍唯一(state mixed 不影响 src 聚合)
+    mod.register_job(_job("j2", hashes=("HA", ), phase=ru.PHASE_MOVING, src=r"R:\from", updated_at=3.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["state"] == "mixed"
+    assert row["relocate"]["src"] == r"R:\from", "src 去重唯一即给值, 与 state 是否 mixed 无关"
+
+
+def test_group_relocate_src_empty_when_conflicting(tmp_path):
+    """组级 src 聚合: 组内出现两个不同 src => ""(不一致不给值)"""
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    mod.register_job(_job("j_a", hashes=("HA", ), phase=ru.PHASE_MOVING, src=r"R:\a", updated_at=2.0))
+    mod.register_job(_job("j_b", hashes=("HB", ), phase=ru.PHASE_MOVING, src=r"R:\b", updated_at=3.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"]["src"] == ""
+    assert row["relocate"]["job_ids"] == ["j_a", "j_b"], "src 缺席不影响其余聚合字段"
+
+
+def test_group_relocate_src_empty_when_no_member_has_src(tmp_path):
+    """组级 src 聚合: 全部标注无 src(空串) => ""(全缺失不给值)"""
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    key = next(iter(env.mgr.store.groups))
+    members = [env.mgr.store.by_hash[h] for h in env.mgr.store.groups[key]]
+
+    mod.register_job(_job("j1", phase=ru.PHASE_MOVING, src="", updated_at=2.0))
+    row = env.mgr._build_group_row(key, members, set())
+    assert row["relocate"] is not None and row["relocate"]["state"] == "moving"
+    assert row["relocate"]["src"] == ""
+
+
+def test_relocate_null_when_disabled_or_no_jobs(tmp_path):
+    env = relocate_env(tmp_path)
+    # 无 job(等价旧 state.json 没有 relocate 段) => null
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"] is None
+    assert _row(env)["relocate"] is None
+
+    env.mgr.ctx.relocate.register_job(_job("j1", phase=ru.PHASE_MOVING))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"] is not None
+
+    # relocate 关: 即使内存仍有 job 也必须 null
+    env.mgr.config.relocate.enabled = False
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"] is None
+    assert _row(env)["relocate"] is None
+
+
+def test_view_build_does_not_probe_filesystem_or_iterate_jobs(tmp_path, monkeypatch):
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    mod.register_job(_job("j1", phase=ru.PHASE_MOVING, alias_paths=["a"]))
+    members = env.mgr.store.by_hash["HA"]
+
+    calls = []
+
+    def _boom(*a, **k):
+        calls.append((a, k))
+        raise AssertionError("列表构建期禁止文件系统探测")
+
+    for name in ("lstat", "stat", "readlink"):
+        monkeypatch.setattr(os, name, _boom)
+    monkeypatch.setattr(os.path, "islink", _boom)
+
+    class _NoIterJobs(dict):
+        def __iter__(self):
+            raise AssertionError("Web 构建期禁止遍历 _jobs")
+
+        def values(self):
+            raise AssertionError("Web 构建期禁止遍历 _jobs")
+
+        def items(self):
+            raise AssertionError("Web 构建期禁止遍历 _jobs")
+
+    monkeypatch.setattr(mod, "_jobs", _NoIterJobs(mod._jobs))
+    env.mgr._member_view(members)
+    row = _row(env)
+    # P-02 二期(hash 引用式): 成员 relocate 明细不随组行外发, 可见面 = 组级聚合
+    # group_relocate(组内单成员全组一致 -> state 原样); 断言语义不变: 构建期不探盘/不遍历
+    assert row["relocate"]["state"] == "moving"
+    assert not calls
+
+
+def test_decorate_fingerprint_includes_relocate():
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] /
+          "src/auto_qb/webui/static/shared/decorate.js").read_text(encoding="utf-8")
+    assert "function _relocateSig(" in js and "function _groupRelocateSig(" in js
+    assert "_relocateSig(m.relocate)" in js
+    assert "fp.length !== ms.length * 9 + 3" in js, "成员 site_provisional/relocate 槽 + 组 relocate 槽必须同步长度"
+    assert "_groupRelocateSig(g.relocate)" in js
+    assert "r.armed_at" in js, "P1 详情消费 armed_at, 必须进装饰指纹"
+    assert "r.created_at" in js, "P1 详情消费设置时间, 新字段必须进装饰指纹"
+    # src 必须进**两份**签名(plan 26-11-07-2344 S2): 行内两排 A→B(relocateView)消费 src/dst,
+    # S1 又给组级聚合补了 src —— 漏槽 = 相位/src 推进后两排停在旧值(风险表第一行)
+    sig_body = js.split("function _relocateSig(", 1)[1].split("\n}", 1)[0]
+    grp_body = js.split("function _groupRelocateSig(", 1)[1].split("\n}", 1)[0]
+    assert "r.src" in sig_body, "成员 relocate 签名必须含 src"
+    assert "r.src" in grp_body, "组级 relocate 签名必须含 src(S1 组级聚合新增字段)"
+
+
+def _static(name: str) -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[2] / "src/auto_qb/webui/static" / name).read_text(encoding="utf-8")
+
+
+def test_p1_pair_rendered_in_path_cells():
+    """行内迁移展示 = 着色 A→B 两排 + 右缘弧形箭头(plan 26-11-07-2344 S2/S4 + R3 D16), 徽章全撤"""
+    cells = _static("shared/tpl/xtpl-cells.html")
+    # 两排结构: 组行与种子行两个 save_path 分支各有 .rel-pair(rel-pcol 纵排 + 右缘弧形箭头)
+    assert cells.count('class="rel-pair"') == 2, "组行与种子行路径列都要有两排 A→B 展示"
+    assert cells.count('class="rel-pcol"') == 2, "pair 内部必须是纵排列(rel-pcol > rel-pa + rel-pb)"
+    assert cells.count('class="rel-pa f-cell"') == 2 and cells.count('class="rel-pb f-cell"') == 2, \
+        "A/B 排必须带 f-cell(四皮肤同款 cursor:pointer + hover 底色)"
+    assert cells.count('class="rel-arc"') == 2, "弧形箭头(方向语义)每分支一个"
+    # pair 模式隐藏原单排路径行(R3 实施缺口修正): A 排(当前位置)已承载该值, 不再重复渲染;
+    # one/无标注回落仍走原 .sp-body 单排(sp-body 恒在, 由 mode !== 'pair' 守住 pair 隐藏)。
+    # 同一判定也守原生 title 退役(2026-11-11): 双排时 A/B 已明文 + 悬停浮窗全量, title 只剩
+    # 单条旧路径反成误导 —— 每分支 sp-body 隐藏 + title 置空各一处, 计 4。
+    assert cells.count("mode !== 'pair'") == 4, \
+        "pair 模式必须隐藏原单排路径行(A 排已承载同一值)且原生 title 同步退役(两分支各 2 处)"
+    # R3 D16(D9 修订 = 零导航点击, 路径 chip 筛选保留): A/B 排点击 = 切换路径筛选,
+    # 显示值即筛选值(所见即所筛), f-on 下划线两排各自独立挂 isFilterOn
+    for rowvar in ("g", "m"):
+        for ab in ("a", "b"):
+            assert f"filterFromChip('path', $root.relocateView({rowvar}).{ab})" in cells, \
+                f"{rowvar} 行 {ab} 排必须可点切换路径筛选"
+            assert f"isFilterOn('pathFilter', $root.relocateView({rowvar}).{ab})" in cells, \
+                f"{rowvar} 行 {ab} 排必须独立挂 f-on 选中态"
+    # 无按钮语义(旧徽标连开抽屉的坑 3 不回归): chip 点击只筛路径, 不开抽屉/链浮窗
+    assert "rel-badge" not in cells, "文字徽章已撤, 两排结构取代"
+    assert "relocateBadge" not in cells and "relocateOpen" not in cells
+    assert "'has-rel'" not in cells, "旧 has-rel 绑定已改 has-relpair"
+    assert 'type="button"' not in cells, "路径列不得有任何按钮语义(点击仅筛选)"
+    # 展示口径单点: tone 类经 relocateView 拼接, 模板不写状态字面量
+    assert "$root.relocateView(" in cells, "pair/one 判定与 tone 必须走 relocateView 单点"
+    assert "'rel-tone-' +" in cells, "tone 类必须经 relocateView().tone 拼接"
+    assert "rel-tone-moving" not in cells and "rel-tone-failed" not in cells, "模板不写状态字面量"
+
+    css = _static("shared/row_lang.css")
+    assert ".rl-scope .rel-badge" not in css, "999px 药丸样式已撤(flux/console 直角皮肤冲突的坑 2)"
+    assert ".g-save-path.has-relpair" in css, "has-relpair 同款 flex 布局(路径文字 flex:1 min-width:0 保省略)"
+    assert ".rl-scope .rel-pair" in css and ".rl-scope .rel-pcol" in css
+    assert ".rl-scope .rel-pa" in css and ".rl-scope .rel-pb" in css and ".rl-scope .rel-arc" in css
+    for tone in ("moving", "pending", "failed", "mixed"):
+        assert f".rl-scope .rel-tone-{tone}" in css, f"tone {tone} 的着色规则缺失(状态唯一载体 = 颜色)"
+    assert "@keyframes rel-pulse" in css, "moving 态脉冲动画缺失"
+    assert "prefers-reduced-motion" in css, "脉冲必须尊重系统减动效设置"
+
+
+def test_p1_pair_cell_margin_keeps_row_height_constant():
+    """双排不得使行高变化(最初设计判据): has-relpair 单元格负 margin 吃进上下 padding,
+    pair 块 margin-box(30.59-10=20.59px) ≤ 主表行内容盒(≥21.69px), 行高与单排逐像素相等。
+    几何与四皮肤实测见 e2e/relocate-pair-row-height.spec.mjs; 2026-11-19 行高恒等修正。"""
+    import re
+
+    css = _static("shared/row_lang.css")
+    rule = re.search(r"\.rl-scope \.g-save-path\.has-relpair\s*\{([^}]*)\}", css)
+    assert rule, ".has-relpair 规则缺失(双排落点单元格样式单点)"
+    body = rule.group(1)
+    assert re.search(r"margin:\s*-5px\s+0", body), \
+        f"has-relpair 须带 margin: -5px 0(负 margin 吃 padding 锁行高, 双排不得使行高变化): {body.strip()!r}"
+
+
+def test_p1_pair_upper_row_uses_strikethrough_not_opacity():
+    """上排(当前位置)= 100% 不透明 + 删除线旧值; 透明度分层在深色底 + 高相似路径文本上会被读成下排的淡影(26-11-10 修 D6)"""
+    import re
+
+    css = _static("shared/row_lang.css")
+    rule = re.search(r"\.rl-scope \.rel-pa\s*\{([^}]*)\}", css)
+    assert rule, ".rel-pa 规则缺失(双排上排样式单点)"
+    body = rule.group(1)
+    assert "opacity" not in body, \
+        f"上排不得用 opacity 做层级(深色底 + 高相似路径文本会被读成下排的淡影/伪影): {body.strip()!r}"
+    assert "text-decoration: line-through" in body, \
+        f"上排(当前位置)须用删除线标旧值, 与下排形成形状差异: {body.strip()!r}"
+
+
+_NODE_VIEW_PROBE = r"""
+const fs=require('fs'),vm=require('vm');
+const sandbox={window:{},console};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);
+const M=Object.assign({},sandbox.window.AQB_DECORATE.methods);
+const call=(name,row)=>M[name].call(Object.assign({},M),row);
+const v=(row)=>{const x=call('relocateView',row);return x&&{mode:x.mode,tone:x.tone,a:x.a,b:x.b,label:x.label};};
+const out={
+  moving:v({relocate:{state:'moving',src:'R:/src',dst:'R:/dst'}}),
+  pending:v({relocate:{state:'pending_finalize',src:'R:/src',dst:'R:/dst',armed_at:5}}),
+  failed:v({relocate:{state:'failed',src:'R:/src',dst:'R:/dst',reason:'boom'}}),
+  seedOneNoSrc:v({relocate:{state:'moving',src:'',dst:'R:/dst'}}),
+  seedOneNoDst:v({relocate:{state:'moving',src:'R:/src',dst:''}}),
+  grpPair:v({members:[{}],relocate:{state:'moving',src:'R:/src',dst:['R:/dst']}}),
+  grpMixed:v({members:[{}],relocate:{state:'mixed',src:'R:/src',dst:['R:/dst'],pending:1,total:2}}),
+  grpMultiDst:v({members:[{}],relocate:{state:'moving',src:'R:/src',dst:['R:/a','R:/b']}}),
+  grpNoSrc:v({members:[{}],relocate:{state:'moving',src:'',dst:['R:/dst']}}),
+  done:v({relocate:{state:'done',src:'R:/src',dst:'R:/dst'}}),
+  cancelled:v({relocate:{state:'cancelled',src:'R:/src',dst:'R:/dst'}}),
+  foreignOne:v({relocate:{state:'foreign',src:'R:/old',dst:'R:/new'}}),
+  foreignExpired:v({relocate:{state:'foreign',src:'R:/old',dst:''}}),
+  foreignGrp:v({members:[{}],relocate:{state:'foreign',src:'R:/old',dst:['R:/new']}}),
+  none:v({relocate:null}),
+  buckets:call('_relocateBuckets',{members:[
+    {relocate:{state:'moving'}},{relocate:{state:'pending_finalize'}},{relocate:{state:'done'}},{}
+  ]}),
+  foreignBuckets:call('_relocateBuckets',{members:[{relocate:{state:'foreign'}}]}),
+  sigSrcChg:sandbox._relocateSig({state:'moving',src:'R:/a'})!==sandbox._relocateSig({state:'moving',src:'R:/b'}),
+  grpSigSrcChg:sandbox._groupRelocateSig({state:'moving',src:'R:/a',dst:['R:/d']})!==sandbox._groupRelocateSig({state:'moving',src:'R:/b',dst:['R:/d']}),
+  foreignSigLocChg:sandbox._relocateSig({state:'foreign',src:'R:/old',dst:'R:/a'})!==sandbox._relocateSig({state:'foreign',src:'R:/old',dst:'R:/b'}),
+};
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_p1_pair_state_mapping_node():
+    """relocateView 矩阵(plan 26-11-07-2344 S2): pair/one/null 三态 + 指纹 src 敏感性"""
+    node = shutil.which("node")
+    if not node:
+        return
+    from pathlib import Path
+
+    js = Path(__file__).resolve().parents[2] / "src/auto_qb/webui/static/shared/decorate.js"
+    proc = subprocess.run(
+        [node, "-e", _NODE_VIEW_PROBE, str(js)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+
+    # 进行中三态 + src/dst 齐全 -> 两排(pair), tone 直映
+    assert out["moving"]["mode"] == "pair" and out["moving"]["tone"] == "moving"
+    assert out["moving"]["a"] == "R:/src" and out["moving"]["b"] == "R:/dst"
+    assert out["pending"]["mode"] == "pair" and out["pending"]["tone"] == "pending"
+    assert out["failed"]["mode"] == "pair" and out["failed"]["tone"] == "failed"
+    # 种子行 src/dst 任一缺失 -> 单排(one, a/b 置空, label 挂状态词)
+    assert out["seedOneNoSrc"]["mode"] == "one" and out["seedOneNoSrc"]["a"] is None
+    assert out["seedOneNoSrc"]["b"] is None and out["seedOneNoSrc"]["label"] == "迁移中"
+    assert out["seedOneNoDst"]["mode"] == "one"
+    # 组行: 组级 src 非空且 dst 恰 1 个 -> 两排(a=src, b=dst[0]); mixed/多 dst/src 缺失 -> 单排
+    assert out["grpPair"]["mode"] == "pair" and out["grpPair"]["a"] == "R:/src" and out["grpPair"]["b"] == "R:/dst"
+    assert out["grpMixed"]["mode"] == "one" and out["grpMixed"]["tone"] == "mixed"
+    assert out["grpMultiDst"]["mode"] == "one"
+    assert out["grpNoSrc"]["mode"] == "one"
+    # 终态/无标注 -> null(模板回落纯单排正常色, 不出现「已完成」结论)
+    assert out["done"] is None and out["cancelled"] is None and out["none"] is None
+    # foreign(T5): 恒单排 one(警示 tone + 状态词 label, src/dst 不进 A/B 排 —— 不进路径筛选
+    # 位置集, R3 D17 钉扎矩阵不动); 已过期(dst 空)同形
+    assert out["foreignOne"]["mode"] == "one" and out["foreignOne"]["tone"] == "foreign"
+    assert out["foreignOne"]["a"] is None and out["foreignOne"]["b"] is None
+    assert out["foreignOne"]["label"] == "旧路径外部种子"
+    assert out["foreignExpired"]["mode"] == "one" and out["foreignExpired"]["tone"] == "foreign"
+    assert out["foreignGrp"]["mode"] == "one", "组行 foreign 也恒单排(不做 A->B 双排)"
+    # 组级筛选桶口径不变(P1 既有行为): 组内任一成员落档即保留; done 只贡献「有过迁移」
+    assert "迁移中" in out["buckets"] and "待收尾" in out["buckets"] and "有过迁移" in out["buckets"]
+    # foreign 自成档(计数即面板计数徽标), 不进「有过迁移」(外部工具加种不是本程序迁移)
+    assert out["foreignBuckets"] == ["旧路径外部种子"]
+    # 指纹敏感性(plan §07 风险第一行): src 值变化必须让成员/组两份签名都变, 否则两排停旧值
+    assert out["sigSrcChg"] is True, "改 src 值 _relocateSig 签名必须变"
+    assert out["grpSigSrcChg"] is True, "改 src 值 _groupRelocateSig 签名必须变(S2 新增槽位)"
+    # foreign 标注的现位置变化(location 置空/恢复)必须进签名, 否则行内警示色停在旧态
+    assert out["foreignSigLocChg"] is True, "改 foreign dst 值 _relocateSig 签名必须变"
+
+
+def test_p1_filter_semantics_and_path_filter_untouched():
+    filters = _static("shared/filters.js")
+    state = _static("shared/state.js")
+    assert "relocateFilter: []" in state
+    assert "relocateOptions() {" in filters
+    assert '_facetOptions("relocate")' in filters and 'kind === "relocate"' in filters
+    assert 'kind: "relocate", label: "迁移状态"' in filters
+    assert "this.relocateFilter.length" in filters, "迁移状态筛选必须进入筛选激活判定/应用分支"
+    assert '_relocateBuckets(g)' in filters and '_relocateBuckets(r)' in filters
+    assert '_relocateBuckets(m)' in _static("shared/hr.js"), "展开组成员也要吃迁移状态筛选"
+    # 路径筛 = 位置集匹配(plan 26-11-07-2344 R3 D17): save_path 恒参与; 进行中三态(moving/
+    # pending_finalize/failed)的迁移标注把 src/dst 并入「保存位置」—— 行内 A/B 排 chip 点击
+    # 筛的就是同一口径, 不新增筛选维度; done/cancelled 历史位置不参与(回落纯 save_path)。
+    # 谓词与 _facetPick 计数必须同一单点 _pathPositions, 且成员级与计数同侧
+    # (R4 存量评审 R5#36 口径延续: 组内任一成员位置命中即保留整组)
+    assert "_pathPositions(r)" in filters, "选项计数(_facetPick)必须走位置集单点"
+    assert "g.members.some((m) => this.pathFilter.some((v) => this._pathPositions(m).includes(v)))" in filters, \
+        "组级谓词必须成员级走位置集单点"
+    assert "this.pathFilter.some((v) => this._pathPositions(r).includes(v))" in filters, \
+        "虚拟行谓词必须走位置集单点"
+    assert "this.pathFilter.some((v) => this._pathPositions(m).includes(v))" in _static("shared/hr.js"), \
+        "成员级谓词(_memberPass)必须走位置集单点"
+    assert "filterFromChip('path', g.save_path)" in _static("shared/tpl/xtpl-cells.html")
+    assert "filterFromChip('path', m.save_path)" in _static("shared/tpl/xtpl-cells.html")
+
+
+_NODE_FILTER_PROBE = r"""
+const fs=require('fs'),vm=require('vm');
+const sandbox={window:{},console};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);  // decorate.js
+vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),sandbox);  // filters.js
+const M=sandbox.window.AQB_FILTERS.methods, C=sandbox.window.AQB_FILTERS.computed;
+const D=sandbox.window.AQB_DECORATE.methods;
+const groups=[
+  {key:'g1',save_path:'R:/a',members:[{hash:'H1',save_path:'R:/a',relocate:{state:'moving',src:'R:/a',dst:'R:/x'}},{hash:'H2',save_path:'R:/a'}]},
+  {key:'g2',save_path:'R:/a',members:[{hash:'H3',save_path:'R:/a',relocate:{state:'pending_finalize',src:'R:/a',dst:'R:/x'}}]},
+  {key:'g3',save_path:'R:/b',members:[{hash:'H4',save_path:'R:/b',relocate:{state:'moving',src:'R:/c',dst:'R:/y'}}]},
+  {key:'g4',save_path:'R:/a',members:[{hash:'H5',save_path:'R:/a',relocate:{state:'done',src:'R:/a',dst:'R:/x'}}]},
+  // R4 存量评审 R5#36: 组内路径不一(组级 save_path = 首成员路径) —— 谓词与 _facetPick 计数
+  // 必须同侧成员级: 选非首成员路径(R:/b)不得把计数里存在的 g5 静默滤出
+  {key:'g5',save_path:'R:/a',members:[{hash:'H6',save_path:'R:/a'},{hash:'H7',save_path:'R:/b'}]},
+];
+const base={sortedGroups:groups,facetRows:groups,groups:groups,torrents:[],kindFilter:'',
+  hrFilter:[],hrSrcFilter:[],relocateFilter:[],pathFilter:[],tagFilter:[],categoryFilter:[],
+  siteFilter:[],searchQuery:'',searchHits:new Set(),searchPending:false,searchUncovered:[]};
+const ctx=(over)=>Object.assign({},base,D,M,over);
+const ids=(rows)=>rows.map(g=>g.key);
+process.stdout.write(JSON.stringify({
+  moving:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中']}))),
+  multi:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中','待收尾']}))),
+  andPath:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中'],pathFilter:['R:/a']}))),
+  pathOnly:ids(C.filteredGroups.call(ctx({pathFilter:['R:/a']}))),
+  pathDst:ids(C.filteredGroups.call(ctx({pathFilter:['R:/x']}))),
+  pathSrc:ids(C.filteredGroups.call(ctx({pathFilter:['R:/c']}))),
+  pathNonFirst:ids(C.filteredGroups.call(ctx({pathFilter:['R:/b']}))),
+  cleared:ids(C.filteredGroups.call(ctx({relocateFilter:[],pathFilter:[]}))),
+  options:C.relocateOptions.call(ctx({})),
+  pathOpts:C.pathOptions.call(ctx({})),
+  active:C.filtersActive.call(ctx({relocateFilter:['迁移中']})),
+  facets:C.facetsActive.call(ctx({relocateFilter:['迁移中']})),
+}));
+"""
+
+
+def test_p1_filter_behavior_node():
+    """行为面: 迁移状态筛 = 组内或 / 跨筛与 / 路径筛位置集(D17)/ 清空可重置"""
+    node = shutil.which("node")
+    if not node:
+        return
+    from pathlib import Path
+
+    shared = Path(__file__).resolve().parents[2] / "src/auto_qb/webui/static/shared"
+    proc = subprocess.run(
+        [node, "-e", _NODE_FILTER_PROBE,
+         str(shared / "decorate.js"),
+         str(shared / "filters.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+
+    assert out["moving"] == ["g1", "g3"], "组内任一成员迁移中即保留整组(或语义)"
+    assert out["multi"] == ["g1", "g2", "g3"], "同一筛选器多选 = 或; done 组不命中"
+    assert out["andPath"] == ["g1"], "迁移状态与路径筛为且; 路径筛仍按 save_path"
+    assert out["pathOnly"] == ["g1", "g2", "g4", "g5"], "纯 save_path 匹配不受迁移状态筛影响"
+    # 位置集匹配(plan R3 D17): 进行中三态(moving/pending_finalize/failed)的 src/dst 并入
+    # 「保存位置」; done 的历史 src/dst 不参与(g4 的 dst 与 g1/g2 同为 R:/x 却不命中)
+    assert out["pathDst"] == ["g1", "g2"], "进行中三态的 dst 命中; done 组的 dst 不参与"
+    assert out["pathSrc"] == ["g3"], "进行中三态的 src 命中(与 save_path 不同值的 src 也参与)"
+    # R4 存量评审 R5#36: 谓词成员级与 _facetPick 计数同侧 —— 组内路径不一时选非首成员路径,
+    # 计数里存在的组不得被静默滤出(修复前 g5 只比对组级 R:/a 会被滤掉, 本行必红)
+    assert out["pathNonFirst"] == ["g3", "g5"], "选组内非首成员路径: 计数存在的组必须保留"
+    assert out["pathOpts"] == [
+        {
+            "value": "R:/a",
+            "count": 4
+        },
+        {
+            "value": "R:/b",
+            "count": 2
+        },
+        {
+            "value": "R:/x",
+            "count": 2
+        },
+        {
+            "value": "R:/c",
+            "count": 1
+        },
+        {
+            "value": "R:/y",
+            "count": 1
+        },
+    ], "路径选项 = 位置集计数(组视图 = 含该位置的组数; 进行中 src/dst 参与, done 不参与)"
+    assert out["cleared"] == ["g1", "g2", "g3", "g4", "g5"]
+    assert out["options"] == [
+        {
+            "value": "有过迁移",
+            "count": 4
+        },
+        {
+            "value": "迁移中",
+            "count": 2
+        },
+        {
+            "value": "待收尾",
+            "count": 1
+        },
+    ], "选项计数 = 含该状态的组数"
+    assert out["active"] is True and out["facets"] is True, "迁移筛必须进入 filtersActive/facetsActive"
+
+
+def test_p1_detail_section_and_endpoint_projection():
+    route = _static("../server/routes/torrent_detail.py")
+    assert '"relocate": relocate(hash) if relocate else None' in route
+    assert 'getattr(manager, "_relocate_member", None)' in route
+    rows = _static("shared/drawer_rows.js")
+    assert 'title: "迁移"' in rows and "if (rel)" in rows
+    assert 'label: "迁移状态"' in rows and 'label: "设置来源"' in rows
+    assert 'label: "任务标识"' in rows and 'label: "收尾武装"' in rows
+    assert 'label: "设置时间"' in rows, "plan P1-2 要求详情段展示设置时间"
+    tpl02 = _static("shared/drawer_tpl/02-general-cards-low.js")
+    tpl03 = _static("shared/drawer_tpl/03-general-dossier-collapsed.js")
+    assert 'secs["迁移"]' in tpl02 and 'secs["迁移"]' in tpl03
+
+
+def test_p1_detail_endpoint_passes_relocate(web_env):
+    """真实端点: 有 job 透传 relocate 投影, 无 job 为 null; save_path 语义不变"""
+    from auto_qb.torrents import TorrentRecord
+    from auto_qb.webui.views_relocate import member_relocate
+
+    mgr, client = web_env
+    records = {
+        "HA": TorrentRecord(hash="HA", name="X", save_path=r"R:\src"),
+        "HB": TorrentRecord(hash="HB", name="Y", save_path=r"R:\src"),
+    }
+    mgr.store.get = records.get
+    job = {
+        "job_id": "j1",
+        "phase": ru.PHASE_MOVING,
+        "src": r"R:\src",
+        "dst": r"R:\dst",
+        "alias_paths": [],
+        "created_at": 1234.5
+    }
+    mgr._relocate_member = lambda h: member_relocate(job, h) if h == "HA" else None
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    ha = client.get("/api/torrents/HA", headers=auth).json()["torrent"]
+    assert ha["relocate"]["state"] == "moving" and ha["relocate"]["dst"] == r"R:\dst"
+    assert ha["relocate"]["created_at"] == 1234.5
+    assert ha["save_path"] == r"R:\src", "迁移可见性不得改写 qB save_path 语义"
+
+    hb = client.get("/api/torrents/HB", headers=auth).json()["torrent"]
+    assert hb["relocate"] is None, "无 job 时字段恒在但值为 null(详情段整段不渲染)"
+
+
+def test_resume_pending_endpoint_projection(web_env):
+    """真实端点: 恢复确认账字段(issue 26-11-14-1744 (3))随 relocate 投影下发, 空账字段恒在"""
+    from auto_qb.torrents import TorrentRecord
+    from auto_qb.webui.views_relocate import member_relocate
+
+    mgr, client = web_env
+    records = {"HA": TorrentRecord(hash="HA", name="X", save_path=r"R:\src")}
+    mgr.store.get = records.get
+    job = {
+        "job_id": "j1",
+        "phase": ru.PHASE_MOVING,
+        "src": r"R:\src",
+        "dst": r"R:\dst",
+        "alias_paths": [],
+        "resume_pending": ["HA", "HGONE"],
+        "resume_retries": 2,
+        "resume_exhausted": False,
+    }
+    mgr._relocate_member = lambda h: member_relocate(job, h)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    ha = client.get("/api/torrents/HA", headers=auth).json()["torrent"]["relocate"]
+    assert ha["resume_pending_count"] == 2 and ha["resume_pending_hashes"] == ["HA", "HGONE"]
+    assert ha["resume_retries"] == 2 and ha["resume_exhausted"] is False
+
+    # 空账条目(旧 state 同形): 字段恒在且计数 0 —— 契约 = 字段恒在, 前端按计数决定出不出行
+    empty = member_relocate({"job_id": "j2", "phase": ru.PHASE_MOVING}, "HA")
+    assert empty["resume_pending_count"] == 0 and empty["resume_pending_hashes"] == []
+    assert empty["resume_retries"] == 0 and empty["resume_exhausted"] is False
+
+
+def test_resume_pending_display_wiring():
+    """待恢复展示面接线(issue 26-11-14-1744 (3)): 文案单点 + 消费面(抽屉两行/浮窗 kv)"""
+    deco = _static("shared/decorate.js")
+    rows = _static("shared/drawer_rows.js")
+    pop = _static("shared/relocate_pop.js")
+    assert deco.count("relocateResumeText(rel) {") == 1, \
+        "待恢复文案单点必须在 decorate.js 定义恰一次(在途/穷尽区分不另写第二份)"
+    assert rows.count("this.relocateResumeText(rel)") == 2, \
+        "抽屉迁移段两行守门都走单点(计数行 + 哈希行同空账判定)"
+    assert 'label: "待恢复成员"' in rows and 'label: "待恢复哈希"' in rows, \
+        "恢复确认账两行必须在场(计数+态 / hash 列表)"
+    assert "this.relocateResumeText(rel)" in pop, "浮窗 kv 必须消费同一文案单点"
+    assert '"待恢复成员"' in pop, "浮窗 kv 行标签与抽屉计数行同名"
+    # 文案钉扎: 空账零噪音(空串守门) + 穷尽/在途区分词
+    assert 'if (n <= 0) return "";' in deco, "空账必须返回空串(调用方按空串不出行)"
+    assert "不再补发" in deco and "恢复确认中" in deco, \
+        "在途/穷尽两态文案必须在场(区分由后端 resume_exhausted 给, 前端不重算上界)"
+
+
+def test_foreign_display_wiring():
+    """外部旧路径种子通知面接线守阵(T5): 词表/色调/筛选档/浮窗专属块/模板强调条件/抽屉专属行集 六处同轮在场"""
+    deco = _static("shared/decorate.js")
+    rows = _static("shared/drawer_rows.js")
+    pop = _static("shared/relocate_pop.js")
+    css = _static("shared/row_lang.css")
+    tpl = _static("shared/tpl/popovers.html")
+    # 词表跨端同源: decorate 词值 == units.DISPLAY_FOREIGN(改值须两端同步)
+    assert "foreign: \"旧路径外部种子\"" in deco, "状态词必须在 decorate 词表(筛选档/浮窗 verdict 共用)"
+    assert "foreign: \"foreign\"" in deco, "foreign 必须挂 tone 色调映射(否则 relocateView 判 null 不弹)"
+    # 行内恒单排(不做 A->B 双排 —— 不进路径筛选位置集, R3 D17 钉扎矩阵不动)
+    assert 'rel.state === "foreign"' in deco, "relocateView 的 foreign 恒 one 分支必须在场"
+    assert 'rel.state !== "foreign") out.push(RELOCATE_FILTER_ANY)' in deco, \
+        "foreign 不得进「有过迁移」筛选档(外部加种不是本程序迁移)"
+    # 色调令牌: 两个作用域都定义(行内 .rl-scope + 浮窗 .relpop)
+    assert css.count(".rel-tone-foreign") == 2, "foreign 色调必须在 rl-scope 与 relpop 两域各一条"
+    # 浮窗 foreign 专属块: 旧路径/数据现位置 + 首见 + 模板强调条件扩展
+    assert '["旧路径", rel.src]' in pop and '["数据现位置"' in pop, "浮窗 foreign 路径块必须在场"
+    assert 'kv.push(["首见"' in pop, "foreign 首见 kv 必须在场"
+    assert "p[0] === '数据现位置'" in tpl, "浮窗 rp-em 强调条件必须覆盖「数据现位置」"
+    # 降级判据与文案单点(评审 minor 6 + nit 9): expired 位只认后端, 文案 decorate 定义恰一次
+    assert "rel.expired" in pop and "rel.expired" in rows, \
+        "浮窗/抽屉降级判据必须读后端 expired 位(不按 dst 空实重推, resume_exhausted 同口径)"
+    assert deco.count("foreignExpiredText() {") == 1, "降级文案单点必须在 decorate 定义恰一次"
+    assert "this.foreignExpiredText()" in pop and "this.foreignExpiredText()" in rows, \
+        "浮窗/抽屉必须消费同一文案单点(不另写第二份字面)"
+    assert "映射已过期" in deco and "映射已过期" not in pop and "映射已过期" not in rows, \
+        "降级文案字面只允许落 decorate 单点(漂移 = 两处文案各走各的)"
+    # mismatch 说明文案单点(B2, 计划 26-11-21-1600): decorate 定义恰一次, 浮窗/抽屉共用,
+    # 判据读后端投影 kind 位 —— 呈现档位词表不扩面(状态词/tone/筛选档断言上方原样不动)
+    assert deco.count("foreignMismatchText() {") == 1, "mismatch 说明文案单点必须在 decorate 定义恰一次"
+    assert "this.foreignMismatchText()" in pop and "this.foreignMismatchText()" in rows, \
+        "浮窗/抽屉必须消费同一 mismatch 文案单点(不另写第二份字面)"
+    assert "同内容根目录下内容不一致" in deco and "同内容根目录下内容不一致" not in pop \
+        and "同内容根目录下内容不一致" not in rows, \
+        "mismatch 文案字面只允许落 decorate 单点(漂移 = 两处文案各走各的)"
+    # 抽屉 foreign 专属行集(通知事实面, 不出 job 机械面)
+    assert 'rel.state === "foreign"' in rows, "抽屉迁移段必须有 foreign 分支"
+    assert 'label: "旧路径"' in rows and 'label: "数据现位置"' in rows and 'label: "首见"' in rows
+
+
+# ---------- 收尾窗行状态细化(B3-4, 计划 26-11-21-1600 D8) ----------
+
+
+def test_finalize_state_derivation():
+    """finalize_state 纯派生矩阵(B3-4): 输入组合(相位 x qB 连接态) -> 细分档位"""
+    from auto_qb.webui.views_relocate import (
+        FINALIZE_AWAIT_RECHECK,
+        FINALIZE_AWAIT_WINDOW,
+        finalize_state,
+    )
+
+    # rewritten(journal 合并态)恒 await_recheck: 相位本身是账面权威事实, qB 态无关 ——
+    # qB 离线(还在下线窗)/在线(回连核验中)/未知(快照滞后)都不降级回 coarse 词
+    assert finalize_state(ru.PHASE_REWRITTEN, False) == FINALIZE_AWAIT_RECHECK
+    assert finalize_state(ru.PHASE_REWRITTEN, True) == FINALIZE_AWAIT_RECHECK
+    assert finalize_state(ru.PHASE_REWRITTEN, None) == FINALIZE_AWAIT_RECHECK
+    # armed 仅 qB 最后已知离线给 await_window(等 qB 下线改写窗)
+    assert finalize_state(ru.PHASE_ARMED, False) == FINALIZE_AWAIT_WINDOW
+    # qB 在线回落现行为(armed + 在线 = 别名在场正常做种, coarse「待收尾」);
+    # None(未知/连接中, 快照滞后语义)不谎报, 同样回落
+    assert finalize_state(ru.PHASE_ARMED, True) == ""
+    assert finalize_state(ru.PHASE_ARMED, None) == ""
+    # 非收尾窗 armed/rewritten 相位恒 "": moved/moving/终态/未知/空串
+    for phase in (
+        ru.PHASE_MOVED, ru.PHASE_MOVING, ru.PHASE_WATCHING, ru.PHASE_DONE, ru.PHASE_FAILED, ru.PHASE_CANCELLED,
+        ru.PHASE_SUPERSEDED, "", "junk"
+    ):
+        assert finalize_state(phase, False) == "", f"相位 {phase!r} 不得给细分档位"
+        assert finalize_state(phase, True) == ""
+
+
+def test_member_relocate_finalize_projection(tmp_path):
+    """标注面 finalize 档位(B3-4): 字段恒在 + 真机接线面(status 快照面 -> 派生)+ foreign 同形"""
+    from auto_qb.webui.views_relocate import (
+        FINALIZE_AWAIT_RECHECK,
+        FINALIZE_AWAIT_WINDOW,
+        foreign_member,
+        member_relocate,
+    )
+
+    # 纯函数面: 缺省 qb_connected=None 与旧调用契约同形(字段恒在值为空串 = 不适用)
+    legacy = member_relocate(ru.job_to_dict(_job("j1", phase=ru.PHASE_ARMED)), "HA")
+    assert legacy["finalize"] == "", "缺省 qB 未知: armed 不给细分档(字段恒在)"
+    # 显式输入: armed+离线 / rewritten 任意态
+    assert member_relocate(ru.job_to_dict(_job("j2", phase=ru.PHASE_ARMED)), "HA",
+                           qb_connected=False)["finalize"] == FINALIZE_AWAIT_WINDOW
+    assert member_relocate(ru.job_to_dict(_job("j3", phase=ru.PHASE_REWRITTEN)), "HA",
+                           qb_connected=True)["finalize"] == FINALIZE_AWAIT_RECHECK
+
+    # 真机接线面: mgr._last_conn_ok(status_snapshot().connected)经 _relocate_member 到标注
+    env = relocate_env(tmp_path)
+    mod = env.mgr.ctx.relocate
+    mod.register_job(_job("jw", phase=ru.PHASE_ARMED))
+    env.mgr._last_conn_ok = None  # 连接中/未知: 不给细分档(最后已知语义, 未知不谎报)
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["finalize"] == ""
+    env.mgr._last_conn_ok = False  # qB 下线改写窗
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["finalize"] \
+        == FINALIZE_AWAIT_WINDOW
+    mod.register_job(_job("jw2", phase=ru.PHASE_REWRITTEN))
+    assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["relocate"]["finalize"] \
+        == FINALIZE_AWAIT_RECHECK
+
+    # foreign(通知态)不在收尾窗: finalize 恒空串, 字段契约与 member_relocate 同形
+    entry = {"root": "r:/old", "kind": "B", "job_id": "jd", "phase": "done", "location": "R:/new", "first_seen": 1.0}
+    assert foreign_member(entry)["finalize"] == ""
+    assert foreign_member({**entry, "kind": "mismatch"})["finalize"] == ""
+
+
+def test_relocate_qb_connected_fallback():
+    """_relocate_qb_connected 收口分支(views.py B3-4 输入面): 替身缺 status_snapshot /
+    读数异常 -> None, 经 member_relocate 到 finalize 恒空串(未知不谎报, 呈现面零异常)"""
+    from types import SimpleNamespace
+
+    from auto_qb.webui.views import WebviewMixin
+    from auto_qb.webui.views_relocate import member_relocate
+
+    # 替身缺方法(无 status_snapshot 属性): 按 None 收口
+    assert WebviewMixin._relocate_qb_connected(SimpleNamespace()) is None
+
+    # 读数异常(替身方法抛错): 呈现面零异常, 同按 None 收口
+    class _Boom:
+        def status_snapshot(self):
+            raise RuntimeError("替身读数异常")
+
+    assert WebviewMixin._relocate_qb_connected(_Boom()) is None
+    # None 输入沿派生链回落: armed 不给细分档(未知不谎报)
+    assert member_relocate(
+        ru.job_to_dict(_job("jf", phase=ru.PHASE_ARMED)),
+        "HA",
+        qb_connected=WebviewMixin._relocate_qb_connected(SimpleNamespace())
+    )["finalize"] == ""
+
+
+_NODE_ROW_STATE_PROBE = r"""
+const fs=require('fs'),vm=require('vm');
+const sandbox={window:{},console};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);
+const M=Object.assign({},sandbox.window.AQB_DECORATE.methods);
+const t=(rel)=>M.relocateRowStateText.call(Object.assign({},M),rel);
+const out={
+  donePath:t({state:'done',src:'R:/s',dst:'R:/dst'}),
+  doneNoDst:t({state:'done',src:'R:/s',dst:''}),
+  doneNullDst:t({state:'done',src:'R:/s',dst:null}),
+  window:t({state:'pending_finalize',phase:'armed',finalize:'await_window',src:'R:/s',dst:'R:/d'}),
+  recheck:t({state:'pending_finalize',phase:'rewritten',finalize:'await_recheck',src:'R:/s',dst:'R:/d'}),
+  pendingCoarse:t({state:'pending_finalize',finalize:'',src:'R:/s',dst:'R:/d'}),
+  unknownToken:t({state:'pending_finalize',finalize:'junk'}),
+  moving:t({state:'moving',finalize:'',src:'R:/s',dst:'R:/d'}),
+  failed:t({state:'failed',finalize:'',reason:'boom'}),
+  foreign:t({state:'foreign',finalize:'',src:'R:/o',dst:'R:/n'}),
+  grpPending:t({state:'pending_finalize',pending:3,total:12,src:'R:/s',dst:['R:/d']}),
+  grpMixed:t({state:'mixed',pending:1,total:8}),
+  cancel:t({state:'cancelled',finalize:''}),
+  none:t(null),
+  sigFinalize:sandbox._relocateSig({state:'pending_finalize',finalize:'await_window'})
+    !==sandbox._relocateSig({state:'pending_finalize',finalize:'await_recheck'}),
+  sigFinalizeVsEmpty:sandbox._relocateSig({state:'pending_finalize',finalize:'await_window'})
+    !==sandbox._relocateSig({state:'pending_finalize'}),
+  sigOtherStable:sandbox._relocateSig({state:'moving',src:'R:/a'})
+    ===sandbox._relocateSig({state:'moving',src:'R:/a'}),
+};
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_finalize_row_state_word_node():
+    """node 探针真跑 relocateRowStateText(B3-4 行状态词单点): 三态词 + 回落 + 签名敏感性"""
+    node = shutil.which("node")
+    if not node:
+        return
+    from pathlib import Path
+
+    js = Path(__file__).resolve().parents[2] / "src/auto_qb/webui/static/shared/decorate.js"
+    proc = subprocess.run(
+        [node, "-e", _NODE_ROW_STATE_PROBE, str(js)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+
+    # done 第三态: 新保存路径从既有账面 dst 取(零新增), 缀在「收尾完成」词后;
+    # dst 缺失(空/null)只给词不谎报路径
+    assert out["donePath"] == "收尾完成(新保存路径 R:/dst)"
+    assert out["doneNoDst"] == "收尾完成" and out["doneNullDst"] == "收尾完成"
+    # 收尾窗两态细分词(与计划 B3-4 档名逐字同源)
+    assert out["window"] == "qB 下线等改写窗"
+    assert out["recheck"] == "已改写待回连核验"
+    # 回落面: 空档位/未知档位/其余 state/组行形态(无 finalize 字段)全走 coarse 词表
+    assert out["pendingCoarse"] == "待收尾"
+    assert out["unknownToken"] == "待收尾", "未知档位必须回落 coarse 词表(不渲染空词)"
+    assert out["moving"] == "迁移中" and out["failed"] == "迁移失败"
+    assert out["foreign"] == "旧路径外部种子"
+    assert out["grpPending"] == "待收尾" and out["grpMixed"] == "迁移多任务", \
+        "组行标注无 finalize 字段, 自然回落 coarse(细分面按计划只落种子行)"
+    assert out["cancel"] == "已撤销" and out["none"] == ""
+    # 签名敏感性(B3-4 漏槽 = 细分词停旧档): finalize 变档/有无必须让 _relocateSig 变;
+    # 其余槽位行为不变(同值同签名)
+    assert out["sigFinalize"] is True and out["sigFinalizeVsEmpty"] is True
+    assert out["sigOtherStable"] is True
+
+
+def test_finalize_display_wiring():
+    """行状态词接线守阵(B3-4): 词面单点 + 浮窗/抽屉消费同一单点 + 筛选档不扩面 + 签名槽位"""
+    deco = _static("shared/decorate.js")
+    rows = _static("shared/drawer_rows.js")
+    pop = _static("shared/relocate_pop.js")
+    # 词面检查剥注释(消费面代码态: 头注纪律文字里的同词不算使用, 与 relocate_pop 接线
+    # 守阵的零请求剥块同口径)
+    pop_code = re.sub(r"/\*.*?\*/", "", pop, flags=re.S)
+    pop_code = re.sub(r"//[^\n]*", "", pop_code)
+    rows_code = re.sub(r"/\*.*?\*/", "", rows, flags=re.S)
+    rows_code = re.sub(r"//[^\n]*", "", rows_code)
+    # 细分词表 + 收尾完成词只落 decorate 单点(消费方不各造文案)
+    assert deco.count("RELOCATE_FINALIZE_TEXT = {") == 1, "细分词表必须在 decorate 定义恰一次"
+    assert deco.count('const RELOCATE_DONE_TEXT = "收尾完成";') == 1, "收尾完成词必须单点定义"
+    assert deco.count("relocateRowStateText(rel) {") == 1, "行状态词单点必须在 decorate 定义恰一次"
+    for word in ("qB 下线等改写窗", "已改写待回连核验", "收尾完成"):
+        assert word in deco, f"细分词面缺 {word}"
+        assert word not in pop_code and word not in rows_code, \
+            f"{word} 字面只允许落 decorate 单点(浮窗/抽屉经 relocateRowStateText 消费)"
+    # 浮窗 verdict 与抽屉(sum + 迁移状态行)消费同一单点
+    assert "this.relocateRowStateText(rel)" in pop, "浮窗 verdict 必须消费行状态词单点"
+    assert rows.count("this.relocateRowStateText(rel)") == 2, \
+        "抽屉 sum 与迁移状态行都必须消费同一单点(不另写第二份口径)"
+    # 呈现档位词表不扩面: RELOCATE_STATE_TEXT 不收细分词(done 词面保持既有「已完成」——
+    # 收尾完成词只走行状态词单点, 改 coarse done 词面 = 筛选/链回落链路语义漂移, 本条即红);
+    # 筛选桶 _relocatePick 不读 finalize —— 细分档是收尾窗瞬时子态, 筛选仍按 coarse 取数,
+    # 词表/档位零扩张(qB 连接态翻转会让瞬时档计数抖动, 不进筛选面)
+    coarse = deco.split("const RELOCATE_STATE_TEXT", 1)[1].split("const RELOCATE_FINALIZE_TEXT", 1)[0]
+    assert 'done: "已完成"' in coarse, "coarse 词表 done 词面必须保持既有「已完成」(收尾完成词只走行状态词单点)"
+    assert "await_window" not in coarse, "coarse 词表不得收细分档位词(呈现档位词表不扩面)"
+    pick = deco.split("_relocatePick(r) {", 1)[1].split("_relocateBuckets(row) {", 1)[0]
+    assert "finalize" not in pick, "筛选桶不得读细分档位(呈现档位词表不扩面)"
+    # 标注签名含 finalize 槽(qB 连接态翻转只改档位不动 phase, 漏槽 = 细分词停旧档)
+    sig_body = deco.split("function _relocateSig(", 1)[1].split("\n}", 1)[0]
+    assert "r.finalize" in sig_body, "成员标注签名必须含 finalize 槽(B3-4)"

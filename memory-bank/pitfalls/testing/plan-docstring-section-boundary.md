@@ -20,4 +20,4 @@
 - 边界只认同级: `startswith('## ')`(## + 空格), `###` 是段内小节不算边界; 段**起点**判定可放宽(含「测试计划」即认), 段**终点**必须同级口径。
 - 已经插花的文件: 开工树净时 `git restore` 本轮改动后修正口径重跑; 不要在花掉的基础上做减法回退(残留判断比重跑贵)。
 - 防复发三件套: ①只读取证脚本先出底数; ②改写脚本逐文件数字与底数强校验(不一致中止不写盘); ③段解析逻辑从守阵模块 import 单一来源(`guard._plan_section`), 只 import 正则不管住边界 —— 两份手抄的解析逻辑迟早分叉。
-- 守阵: `tests/test_test_plan_docstring_guard.py`(`_plan_section` 钉同级边界口径, 合成源红验内建)。
+- 守阵: `tests/unit/test_test_plan_docstring_guard.py`(`_plan_section` 钉同级边界口径, 合成源红验内建)。

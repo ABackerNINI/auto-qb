@@ -35,7 +35,7 @@
   生产按小时/按天语义**正确**, 是"同日多 hour"用例前提在另一个时区不成立。**别**去改日封口条件。
 - **处置**: 时钟钉在**本地正午** `_Clock(now=_w5_ts(2026, 6, 15, 12, 0, 0))`(与 0013 轮正午锚点同口径),
   前后各 12h 余量、跨时区恒同日; 不要用 `int(time.time())` 现时刻。
-- **守阵**: `tests/test_traffic_sample_store.py::test_w5_ingest_acc_same_day_multi_hour`; 红验 = `TZ=UTC` 下旧写法必红
+- **守阵**: `tests/unit/test_traffic_sample_store.py::test_w5_ingest_acc_same_day_multi_hour`; 红验 = `TZ=UTC` 下旧写法必红
   (实测 `day_hours=0`), 改后绿; 本机 UTC+8 下两版都绿, 只在本机跑等于没验。
 - **为什么没命中**: 第一眼把"固定时钟"当成"时刻无关", 没算默认 epoch 在**目标时区的本地钟点**
   (`1_700_000_000` 在 UTC = 22:13, 离日界仅 1h47m); 本机 UTC+8 恰好离日界 17h+, 掩盖了这条。

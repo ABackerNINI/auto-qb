@@ -635,7 +635,7 @@ def build_checks(
                 f"未分出 {len(missing)} 组、多分出 {len(extra)} 组"
             )
         # ---------------- CORPUS.maindata_lag_modeled —— 滞后模型生效(issue 2145 的验收凭据) ----------------
-        # 模型在 W3 已落地; 这条判据确认"本轮确实用上了滞后模型"。红验在 tests/test_sim_corpus.py
+        # 模型在 W3 已落地; 这条判据确认"本轮确实用上了滞后模型"。红验在 tests/unit/test_sim_corpus.py
         # (把 --maindata-lag-ms 设 0 => 两端同刻可见 => 判据必须转红)。
         add(
             "CORPUS.maindata_lag_modeled", 1 if (args.command_latency_ms > 0 or args.maindata_lag_ms > 0) else 0, "==",

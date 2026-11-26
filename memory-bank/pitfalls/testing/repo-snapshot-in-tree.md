@@ -8,6 +8,6 @@
 ### 快照放 `test-results/` 会让单点守卫判红(即使该目录已 gitignore)
 
 - **触发**: 为做只读评审 / 批量评审, 把 `git archive <sha> | tar -x -C <dir>` 解到仓库内的某个 gitignored 目录(如 `test-results/review-exp/snap-*`)。
-- **判别**: `tests/test_free_port.py::test_free_port_single_source` 与 `tests/test_tmp_bootstrap.py::test_candidates_single_source` 报「散落」, 命中路径全在 `<快照>/tests/_test_ports.py`、`<快照>/tests/_tmp_bootstrap.py`。守卫是**扫全树**(不读 `.gitignore`), 所以「已忽略」不等于「看不见」—— 这两条守卫守的正是「同一个常量只能有一处定义」, 而快照里天然有第二处。
+- **判别**: `tests/unit/test_free_port.py::test_free_port_single_source` 与 `tests/unit/test_tmp_bootstrap.py::test_candidates_single_source` 报「散落」, 命中路径全在 `<快照>/tests/unit/_test_ports.py`、`<快照>/tests/unit/_tmp_bootstrap.py`。守卫是**扫全树**(不读 `.gitignore`), 所以「已忽略」不等于「看不见」—— 这两条守卫守的正是「同一个常量只能有一处定义」, 而快照里天然有第二处。
 - **处置**: 快照一律放仓库外(`<repo>/../_review-exp-snap/<name>/`); 已经放进树内的移走即可。**不要**去放宽守卫(放宽等于放弃单点保证), 也不要给守卫加"跳过 test-results"的白名单(下一次换目录又会复发)。
-- **复发形态提示**: 任何"整棵仓库的副本"都会撞同一堵墙 —— 备份目录、对照实验的基线树、旧版本解包。判据统一: 只要副本里有 `tests/_test_ports.py` 或 `tests/_tmp_bootstrap.py`, 就不许待在树内。
+- **复发形态提示**: 任何"整棵仓库的副本"都会撞同一堵墙 —— 备份目录、对照实验的基线树、旧版本解包。判据统一: 只要副本里有 `tests/unit/_test_ports.py` 或 `tests/unit/_tmp_bootstrap.py`, 就不许待在树内。

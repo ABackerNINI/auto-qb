@@ -22,7 +22,7 @@
 `self._reload_state()` + `ctx.state.materialize_migration(dry_run)` + `next_flush_at`
 起点整体挪到 `self.host.start_all(dry_run)` 之前(try 内; 物化紧随加载判据不变;
 `start_all` 失败路径不回滚物化 —— 迁移/恢复写回幂等, 下次启动重放同链)。守阵:
-`tests/test_qbmanager_w6.py` 两条 —— `test_w6_reload_precedes_start_all_wiring`(顺序
+`tests/unit/test_qbmanager_w6.py` 两条 —— `test_w6_reload_precedes_start_all_wiring`(顺序
 接线) + `test_w6_startup_state_write_survives_run`(行为: 桩 start_all 写 state, run()
 优雅退出后盘面必须带该写点; 红验在回归摆位下两条全红)。过渡形态留档: relocate 接管面
 写穿(`relocate_mod.py` `_load_jobs` 尾部 `ctx.state.save()`)曾是规避手段, 内核修复后

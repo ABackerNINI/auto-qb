@@ -65,7 +65,7 @@
   没有任何守阵能在改完那一秒判红, 只能靠读代码推断。
 - **处置**: **泛化: 「只在 `--self-test` / 手动脚本里跑过」的判据等于没判据** ——
   它要真起 HTTP **且**真装 `qbittorrentapi`(没装就整段 `return 0`), CI 从不执行 ⇒ 平台差异、回归全都**静默**。
-  已把 B2 段下沉进 `tests/test_sim_corpus.py::test_safe_delete_rejects_path_outside_fs_root`
+  已把 B2 段下沉进 `tests/unit/test_sim_corpus.py::test_safe_delete_rejects_path_outside_fs_root`
   (直接打方法, 不起服务, 两平台 CI 都跑), 并比原自检多钉两条: 拒绝时**文件没被真删** + **记进 `violations`**。
   红验: `is_within` 改恒 True ⇒ 该用例 `DID NOT RAISE` 立刻红。
   B3 / D4 两段**同属这一类**, 也已下沉(B3 阈值改 *99 ⇒ `DID NOT RAISE`; D4 改成"假装删了" ⇒ `assert 0 > 0`)。
@@ -92,7 +92,7 @@
     严格判据必须**组件级 `os.listdir` 精确比对**, 全程不碰 `resolve()` / `abspath()`。
 - **处置**: `check_doc_links.py::link_exists` 改组件级精确比对 + 拒绝结尾点/空格的组件名
   (`_is_literal_name`: Windows 存不出这种名字 ⇒ 该链接在 CI 必坏); 守阵
-  `tests/test_memory_bank_docs.py::test_doc_links_rejects_windows_normalized_targets`。
+  `tests/unit/test_memory_bank_docs.py::test_doc_links_rejects_windows_normalized_targets`。
   **红验现场**(退回 `.exists()` 即红): 夹具里三条可疑目标只报出 `kb/x.`, **漏掉 `kb/...` 与 `kb/Cap.md`**
   —— 正是两类漏检的实证。
   **泛化: 任何"按路径存在性判绿"的检查(链接 / 找文件 / 白名单比对)在本机都是上界**;
@@ -113,7 +113,7 @@
   在盘」这个状态(stat 失败即不存在), 拿它当刺激本身就不忠实。
 - **处置**: 桩打在**判定层**, 不打 `os.stat` —— 造「B′ 不可判定」就桩
   `relocate_proof._bprime_evidence` 返回 `_unavailable(...)`
-  (`tests/test_web_relocate.py::_stub_bprime_unavailable`); 建夹具一律在装桩**之前**; 真要桩 `os.stat`,
+  (`tests/unit/test_web_relocate.py::_stub_bprime_unavailable`); 建夹具一律在装桩**之前**; 真要桩 `os.stat`,
   先问一句「`os.path.exists` 这条链在两侧是不是同一个实现」—— 不是就别用这个刺激。
 
 ## 已外迁(原文见附件)

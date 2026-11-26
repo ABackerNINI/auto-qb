@@ -1,9 +1,9 @@
 # tests-real 基座写死 schema_version 字面量: 产品 bump 后静默过期
 
-> 摘要: tests-real 各片基座(write_cfg/CONFIG_TEMPLATE)写死 `schema_version: <当时现行版>` 避免迁移改写 —— 产品 config schema 一 bump, 该字面量立即过期, 启动物化(materialize_schema_migration)开始改写落盘+留 `<名>.v<m>.bak` 搅浑用例临时目录, 而现有「缺 N 拒跑」断言只查写入前文本所以恒绿。守卫 = `tests/test_real_schema_version_guard.py` 扫字面量断言 == `CURRENT_VERSIONS["config"]`。
+> 摘要: tests-real 各片基座(write_cfg/CONFIG_TEMPLATE)写死 `schema_version: <当时现行版>` 避免迁移改写 —— 产品 config schema 一 bump, 该字面量立即过期, 启动物化(materialize_schema_migration)开始改写落盘+留 `<名>.v<m>.bak` 搅浑用例临时目录, 而现有「缺 N 拒跑」断言只查写入前文本所以恒绿。守卫 = `tests/unit/test_real_schema_version_guard.py` 扫字面量断言 == `CURRENT_VERSIONS["config"]`。
 > 触发: schema_version, 基座, 版本字串, 迁移改写, config.yml.v5.bak, 版本备份, CURRENT_VERSIONS, 启动物化, materialize_schema_migration, v5→v6, 版本过期, 测试基座
 
-**Refs:** memory-bank/issues/26-11-08-0044-test-tests-real-rm08-schema-version-stale.html · tests/test_real_schema_version_guard.py
+**Refs:** memory-bank/issues/26-11-08-0044-test-tests-real-rm08-schema-version-stale.html · tests/unit/test_real_schema_version_guard.py
 
 ## 坑
 
@@ -11,7 +11,7 @@
 
 ## 动作
 
-- **产品 config schema bump 时, `tests/test_real_schema_version_guard.py` 会红** —— 红了照它指的文件把基座字面量抬到新现行版(字面量形: YAML 模板 `schema_version: N` 与 dict `"schema_version": N` 两种, docstring 措辞一并改), 不要只改模板不改断言/docstring。
+- **产品 config schema bump 时, `tests/unit/test_real_schema_version_guard.py` 会红** —— 红了照它指的文件把基座字面量抬到新现行版(字面量形: YAML 模板 `schema_version: N` 与 dict `"schema_version": N` 两种, docstring 措辞一并改), 不要只改模板不改断言/docstring。
 - **给基座加字面量时优先想守卫**: 新片基座写 `schema_version: <现行版>`(别从旧片抄旧值); 新增同名字段但非 config schema 的域(keys 类), 必须同步更新守卫的 `_OTHER_DOMAIN` 豁免表并在表注写明域语义。
 - **断言面别只查写入前文本**: 「配置缺 N 拒跑」防的是手滑删键, 防不了「N 过期」—— 过期防线只在守卫测试一处, 别在各片复制粘贴第二份版本号口径。
 

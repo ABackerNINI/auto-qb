@@ -41,14 +41,14 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
-for _p in (ROOT, os.path.join(ROOT, "src"), os.path.join(ROOT, "tests"), HERE):
+for _p in (ROOT, os.path.join(ROOT, "src"), os.path.join(ROOT, "tests", "unit"), HERE):
     sys.path.insert(0, _p)
 
 from auto_qb.config import WebConfig  # noqa: E402
 from auto_qb.config.models import QbTraffic  # noqa: E402
 from auto_qb.webui import create_app  # noqa: E402
 from auto_qb.webui.server.traffic_qb import QbTrafficChartApi  # noqa: E402
-from tests.helpers import FakeClient, make_manager, seed_store  # noqa: E402
+from tests.unit.helpers import FakeClient, make_manager, seed_store  # noqa: E402
 import ui_harness as H  # noqa: E402
 
 SAMPLE_S = 1.5

@@ -32,7 +32,7 @@ UV_PYTHON_DOWNLOADS=never 下任何意外重建路径都会直接死(不许偷�
 让 uv run 直接用现成 .venv(uv 0.13.7 实测支持该 env; `uv run --help` 有 --no-sync)。
 
 **AUTO_QB_TESTBED 不导出(取舍留痕, 对照 linux_ci.run_script 的 export)**: 该 env 的唯一
-消费方是 pytest 挂钟型性能基准(tests/test_modules_p5.py::_perf_limit_key), e2e 不跑 pytest,
+消费方是 pytest 挂钟型性能基准(tests/unit/test_modules_p5.py::_perf_limit_key), e2e 不跑 pytest,
 桩服务与浏览器断言都不读它 —— 导出是死重量, 还会误导人把容器 e2e 耗时往 testbed 档上解读
 (e2e 数字本就不进基线, 见上)。
 
@@ -46,7 +46,7 @@ UV_PYTHON_DOWNLOADS=never 下任何意外重建路径都会直接死(不许偷�
 **动态端口(纪律对应面)**: e2e 侧端口纪律单点在 e2e/harness.mjs —— 桩恒 `--port 0` 由 OS
 分配(容器命名空间内), playwright webServer.wait 从启动行捕获实绑端口注入 UI_HARNESS_PORT,
 spec 一律 baseUrl() 懒取值; 本脚本**不引入任何固定口也不覆盖任何端口变量**(E2E_PORT 残留
-会被 harness.mjs 直接抛错)。tests/_test_ports.py 是 pytest 侧单点, 不跨面复制。
+会被 harness.mjs 直接抛错)。tests/unit/_test_ports.py 是 pytest 侧单点, 不跨面复制。
 
 **软件渲染预期**: 容器内 chromium 走 swiftshader 软件渲染 + CPU 配额(与宿主其它容器共享),
 单用例墙钟比 Windows 真渲染慢一个量级 —— 属合法形态差异非挂死; 判挂死看渲染器进程是否在周转

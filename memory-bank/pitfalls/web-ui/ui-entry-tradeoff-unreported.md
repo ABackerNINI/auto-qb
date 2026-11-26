@@ -13,5 +13,5 @@
 - **触发**: ①实现时发现通用编辑树表达不了某个键(用户自定动态映射/值域特异), 顺手决定 hidden + 让用户直接编 YAML, 没上报 —— 这是用户入口决策(要不要给入口/入口放哪), 不是渲染细节; ②收口验收(N 系列真机断言 + 评审)没有「设置页打开过一遍」动作, e2e 对设置页零断言; ③同形态前例: T8b「闸门漏执行入口」(功能在但用户点不到, 同批 8556584f 修复)同类未立坑 —— 同类错法第二次出现才立坑。
 - **判别**: 三个信号对上即踩中: 代码/schema/文档口径一致且测试全绿, 但 (a) 用户从设置页找不到该功能的任何入口; (b) 问一句「用户在哪编辑它?」答不出来, 或答案是「改 YAML 文件」; (c) grep e2e 与真机断言, 对设置页该入口零覆盖。
 - **处置**: ①入口取舍翻案上报拍板; hidden 的语义按拍板结果迁移为「专用组件接管渲染」(参照 aq-transfer-targets 同范式: 模板件 + `app.component` 注册 + 挂进对应设置卡, 本次 `aq-bt-backup-editor` 嵌「整组迁移」块, 计划 26-11-07-0708); ②补 e2e settings spec(空态/增行保存/回读断言, `e2e/settings-bt-backup.spec.mjs`); ③往后纪律: 影响用户入口/交互面的取舍必须上报拍板, 不得以实现细节名义自行决定; 涉设置页/入口面的计划, 收口验收固定含浏览器级断言或显式目检项。
-- **守阵**: `e2e/settings-bt-backup.spec.mjs`(prism/atlas 双皮肤: 编辑器在「整组迁移」块内渲染 + 新口径关键词在场 + 旧口径全量退场); `tests/test_webui_static_dom_page_layout.py::test_frontend_flatten_skips_hidden_fields`(hidden 不进通用编辑树的单点)。纪律面(上报拍板/验收含设置页)无机检, 靠计划评审与坑档路由兜。
+- **守阵**: `e2e/settings-bt-backup.spec.mjs`(prism/atlas 双皮肤: 编辑器在「整组迁移」块内渲染 + 新口径关键词在场 + 旧口径全量退场); `tests/unit/test_webui_static_dom_page_layout.py::test_frontend_flatten_skips_hidden_fields`(hidden 不进通用编辑树的单点)。纪律面(上报拍板/验收含设置页)无机检, 靠计划评审与坑档路由兜。
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

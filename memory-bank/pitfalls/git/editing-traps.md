@@ -8,7 +8,7 @@
 - **触发**: 仓库根新增 `.gitattributes`(`* text=auto eol=lf`)+ 全局 `core.autocrlf` 改 `input` —— blob 侧提交必归一 LF, 新检出文件为 LF; 此后「编辑导致整文件行尾归一、diff 爆炸」不再可能(git 侧看不到行尾差异)。
 - **判别**: 存量工作区文件磁盘上仍是 CRLF(一次性转 LF 暂缓), 各 clone 跑完工作区转换前, 下文「edit 工具 oldText CRLF 匹配」「Python 文本模式 `\r\r\n`」「heredoc 终止符」等条目照旧适用。
 - **长期适用**: `.cmd` 生成物必须 CRLF(cmd 对 LF 拆错行)与 Python 写模式陷阱, 与仓库行尾统一无关。
-- **处置**: 写盘形态守阵 (2026-10-31, issue 26-10-31-2226-feat-repo-writeform-guard): `tests/test_kb_writeform.py`
+- **处置**: 写盘形态守阵 (2026-10-31, issue 26-10-31-2226-feat-repo-writeform-guard): `tests/unit/test_kb_writeform.py`
   进 test.full 闸门三查 —— 裸 CR / 同文件 CRLF+LF 混排 / 逐字符一行(行数≥300 且 bytes-per-line<8);
   存量冻结 1 件(逐字符一行实证件, 无法无损复原), 新增形态当场红, 不再靠人读本文档才发现。
 

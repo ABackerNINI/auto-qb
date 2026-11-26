@@ -210,10 +210,10 @@ def test_sweep_double_condition_and_bounded_root() -> None:
     assert f'root="{root}"' in script and "$root" in script, "清扫只动 /root/auto-qb-tests/ 面"
     assert script.count('rm -rf "$d"') == 1, "只 rmtree 整个 workdir, 不钻子树"
     # 阈值强钉: 常量注入再核对自身是同义反复, 阈值漂离 12h 须红 —— 对齐单点
-    # tests/_tmp_bootstrap.py::CLEAN_AGE_HOURS(与 linux_ci 头注宣称口径一致)。
+    # tests/unit/_tmp_bootstrap.py::CLEAN_AGE_HOURS(与 linux_ci 头注宣称口径一致)。
     spec = importlib.util.spec_from_file_location(
         "_tmp_bootstrap_pin",
-        Path(linux_ci.__file__).resolve().parents[3] / "tests" / "_tmp_bootstrap.py",
+        Path(linux_ci.__file__).resolve().parents[3] / "tests" / "unit" / "_tmp_bootstrap.py",
     )
     assert spec is not None and spec.loader is not None
     bootstrap = importlib.util.module_from_spec(spec)

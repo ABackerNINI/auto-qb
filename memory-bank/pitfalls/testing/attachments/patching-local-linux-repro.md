@@ -11,7 +11,7 @@
   ② **`commands run test.linux`**: tar 流推送工作树(含 `.git` 与未提交 WIP, 排除清单剔 `__pycache__`/`.venv`/`node_modules`/`dist`/`.coverage*` 等)进容器 `/root/auto-qb-tests/<slug>/code` → cp 模板 venv 补 delta → 容器内全量 pytest。变体: `--python 3.12` 对齐 CI 矩阵另一版本; `--name <slug>` 每会话独立 workdir, 多会话并行全量互不影响(2026-11-12 双开实测)。
   e2e 走 **`commands run test.linux-e2e`**(playwright headless chromium), 变异走 **mutants.\*** 六条 —— 全部同一容器, 环境即代码可重建。
   ❗**`.git` 必须随拷**(旧坑仍成立): `test_commands_engine` 的 `find_root()` 靠向上找 `.git`, 缺了会多出 5 条假红 —— 它不在排除清单里, 别当冗余"优化"掉。
-  ❗**回环代理坑仍在**(2026-10-11 实测, exec 形态继承): 容器里注了代理就必须同时排除回环, 否则 `tests/test_hr_server.py` 那批监听回环的端点测试 **6 failed + 2 errors 假红**(环境造假红, 与 PYTHONUTF8 那条同族)。已内建: `linux_ci.py` 自动透传代理 —— 回环主机改写 `host.docker.internal`(exec 下 Docker Desktop 内建 DNS 解析得到, 免旧形态的 `--add-host=host.docker.internal:host-gateway`, 2026-11-12 getent 实证), `no_proxy` 恒并入回环; 守阵 `.commands/test/scripts/test_linux_ci.py`(红验: 拆掉任一改写点即红)。脚本在, 别再手拼容器命令。
+  ❗**回环代理坑仍在**(2026-10-11 实测, exec 形态继承): 容器里注了代理就必须同时排除回环, 否则 `tests/unit/test_hr_server.py` 那批监听回环的端点测试 **6 failed + 2 errors 假红**(环境造假红, 与 PYTHONUTF8 那条同族)。已内建: `linux_ci.py` 自动透传代理 —— 回环主机改写 `host.docker.internal`(exec 下 Docker Desktop 内建 DNS 解析得到, 免旧形态的 `--add-host=host.docker.internal:host-gateway`, 2026-11-12 getent 实证), `no_proxy` 恒并入回环; 守阵 `.commands/test/scripts/test_linux_ci.py`(红验: 拆掉任一改写点即红)。脚本在, 别再手拼容器命令。
   **为什么是脚本而不是一行 `run`**: 命令里全是 `&&` / `;` / `|` 与多层引号, 而引擎在 Windows 上走 `cmd.exe`(`shell=True`)—— 引号地狱必踩。
   容器内 `ctypes.wintypes` **可导入**, 只有 `ctypes.windll` / `ctypes.WINFUNCTYPE` / `winreg` 缺失。
 - **历史(留痕, 2026-11-12 testbed 落地后退役, 别再按此操作)**:
@@ -20,7 +20,7 @@
 - **处置**: 退而求其次的**等价论证** —— 用
   `monkeypatch.setattr(模块, "os", types.SimpleNamespace(path=posixpath))` 再跑判据 ——
   这**精确等价**于"该代码跑在 Linux", 于是**在 Windows 上就能复现 Linux 的失败**。
-  写成守阵即成防回潮(见 `tests/test_sim_corpus.py::test_fsmock_case_folding_does_not_follow_platform`:
+  写成守阵即成防回潮(见 `tests/unit/test_sim_corpus.py::test_fsmock_case_folding_does_not_follow_platform`:
   还原成旧写法时它在本机**立刻红**, 而原有那条 `test_fsmock_long_path_prefix_and_case` **仍然绿** ——
   后者正是"只在 Linux 现形"的原因)。
   ❗守阵判据**别用文本扫描**: `os.path.normcase` 这串字就写在 `_key` 的 docstring 里当反例,

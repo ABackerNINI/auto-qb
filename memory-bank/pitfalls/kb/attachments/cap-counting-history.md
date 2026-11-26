@@ -52,7 +52,7 @@
   但**先查渲染口径**的优先级不变, 渲染仍有病根时先修口径。
 - **复发**: 6–7 —— 两条都是建档漏 `**Topics:**` 行: 复发 6 拖到 ship 闸门才红, 复发 7 被守卫当场拦住
   —— 守卫确实拦, 但**建档模板本身**得把 Topics 行当必备行带上, 不能靠守卫兜底。口径沉淀:
-  **任何 memory-bank 文件新建/修改后, `kb.index` 与 KB 守卫(`kb.check` + `tests/test_docs_forms.py`)
+  **任何 memory-bank 文件新建/修改后, `kb.index` 与 KB 守卫(`kb.check` + `tests/unit/test_docs_forms.py`)
   一并重跑再进 ship**; **建档模板 = 状态行四件套 + `**Topics:** <slug>`**(slug 与文件名一致)。
 
 

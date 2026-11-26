@@ -23,8 +23,8 @@
 
 - **覆盖文件**: `.py` `.js` `.cjs` `.mjs` `.ts` `.yml` `.yaml` `.html` `.css` `.json` `.toml` `.ini` `.cfg` `.sh` 等源码与配置; 含注释、字符串字面量、日志模板、CSS 内容。
 - **文档放行**: `.md` 与交付用 `*.html` (计划 / 报告 / issue) 是富文本展示层, 不在终端渲染, **可自由使用这些符号**; 本项目 AGENTS.md / memory-bank 即如此。
-- **排除面 (闸门 `EXCLUDE_*` / `EXEMPT_CELLS` 表逐条带理由)**: 功能性数据 (gitmoji 映射表 / 被断言数据 / 判定字典键)、逐字镜像与历史快照、第三方设计骨架与参考资源、WebUI 可见文案 (`✕` 关闭图标, 延续 0229 先例)。数据 / 测试夹具 (`.pyc`) 与已 gitignore 的运行数据按内容需要保留。**订正 2026-11-08**: 旧稿「编码守阵字面量 U+FFFD / U+FE0F」在 `tests/test_commands_engine.py` 已以 `\ufffd` 转义存在 (本身合规), 该类撤下; 仅 `.agents/skills/commands/scripts/run.py` 描述 GBK 乱码的逐字引文按局部豁免保留。
-- **机械闸门 (D2/D3)**: `tests/test_ascii_symbol_guard.py` 从表 A 派生判据, 冻结清单 + 递减不红机制**保留**(未来若确有一整批既有符号需要登记, 仍走同一入口); 冻结数据在 `tests/_ascii_symbol_frozen.py`。**2026-11-09 存量已清零, 冻结清单为空, 闸门实际形态是纯只拦新增**(未登记的 key 冻结值视为 0, 实测 > 0 即红; 递减机制留作将来登记既有整批时复用)。守阵现 13 条用例对 13 条 `## 测试计划`。`test_code_style_table_is_single_source` 双向校验本节表 A 与闸门常量, 只改一侧当场红。
+- **排除面 (闸门 `EXCLUDE_*` / `EXEMPT_CELLS` 表逐条带理由)**: 功能性数据 (gitmoji 映射表 / 被断言数据 / 判定字典键)、逐字镜像与历史快照、第三方设计骨架与参考资源、WebUI 可见文案 (`✕` 关闭图标, 延续 0229 先例)。数据 / 测试夹具 (`.pyc`) 与已 gitignore 的运行数据按内容需要保留。**订正 2026-11-08**: 旧稿「编码守阵字面量 U+FFFD / U+FE0F」在 `tests/unit/test_commands_engine.py` 已以 `\ufffd` 转义存在 (本身合规), 该类撤下; 仅 `.agents/skills/commands/scripts/run.py` 描述 GBK 乱码的逐字引文按局部豁免保留。
+- **机械闸门 (D2/D3)**: `tests/unit/test_ascii_symbol_guard.py` 从表 A 派生判据, 冻结清单 + 递减不红机制**保留**(未来若确有一整批既有符号需要登记, 仍走同一入口); 冻结数据在 `tests/_ascii_symbol_frozen.py`。**2026-11-09 存量已清零, 冻结清单为空, 闸门实际形态是纯只拦新增**(未登记的 key 冻结值视为 0, 实测 > 0 即红; 递减机制留作将来登记既有整批时复用)。守阵现 13 条用例对 13 条 `## 测试计划`。`test_code_style_table_is_single_source` 双向校验本节表 A 与闸门常量, 只改一侧当场红。
 
 ## 函数设计原则 (用户明示)
 
@@ -41,7 +41,7 @@
 
 ## 模块职责约定 (用户明示)
 
-- **所有配置校验集中在 config 校验阶段 fail-fast, 插件类不再自查** (2026-09-06): conditions/actions 等插件假定配置正确 (`_validate_plugin_entry` 保证名称已注册 + `_PLUGIN_SPEC_VALIDATORS` 做 spec 深度校验), 构造函数只解析、不加正确性检查 (曾把 state 属性名校验写进 StateCondition, 违背该原则已迁移)。对应测试放 `tests/test_config_load.py` (load_config 级), 不在插件测试里构造非法 spec。
+- **所有配置校验集中在 config 校验阶段 fail-fast, 插件类不再自查** (2026-09-06): conditions/actions 等插件假定配置正确 (`_validate_plugin_entry` 保证名称已注册 + `_PLUGIN_SPEC_VALIDATORS` 做 spec 深度校验), 构造函数只解析、不加正确性检查 (曾把 state 属性名校验写进 StateCondition, 违背该原则已迁移)。对应测试放 `tests/unit/test_config_load.py` (load_config 级), 不在插件测试里构造非法 spec。
 - **新条件字段一律先进 `rules/expr/env.py`, 不再新增固定条件插件** (2026-09-20): 表达式条件 `expr` 落地后, 想按新的种子字段/额外值做判断, 在 `env.py` 的取值面加一个表项即可(名字 + 取值器 + 静态类型 + 昂贵标记), **不要**再走「新条件插件 + 校验 + schema + 前端」那套四处接线。旧 13 个条件冻结保留, 只修 bug 不加能力。取值面是单一事实源, schema/前端/文档都从它派生。
 
 ## 命名规范 (想法.md 明文规定, 代码严格遵守)
@@ -81,7 +81,7 @@
 - 插件注册: 类级 `name` 属性 + `@register_condition`/`@register_action` 装饰器, `registry.py` 按名创建; 未知名抛 ValueError。
 - 跨模块避免循环导入: `rules/base.py` 不 import QbManager (manager 以 `Any` 传入); `curves.py`/`episodes.py` 无项目内依赖。
 - Facade模式: 业务代码**只**调 `self.api` (QbApi), 不直接用 raw client (例外: 数据层惰性缓存内部与测试)。
-- **写后同步的字段边界** (2026-10-21, 计划 26-10-21-2323): 判据是「这个值的事实来源是谁」。`QbApi` 写方法只在**我们下发的确定性字段**上同步快照 (tags / category / up_limit / dl_limit); **运行状态** (state / progress / 速率 / seeding_time / ratio) 一律不写, 只等 qB 上报 —— qB 侧按 `BitTorrent/Session/RefreshInterval` 节流刷新, 命令后直查或回写都是假新鲜。`save_path` 是例外: 它也是我们的值, 但它是**分组键的输入**而 qB 搬家是异步的, 同样等上报。`torrents_delete` 的摘记录属「确定动作 + `_pending_removed` 兜底」, 保留。守阵: `tests/test_sync.py::test_no_synthetic_state_write_site`(全库 AST 扫描 + 四条判据)。
+- **写后同步的字段边界** (2026-10-21, 计划 26-10-21-2323): 判据是「这个值的事实来源是谁」。`QbApi` 写方法只在**我们下发的确定性字段**上同步快照 (tags / category / up_limit / dl_limit); **运行状态** (state / progress / 速率 / seeding_time / ratio) 一律不写, 只等 qB 上报 —— qB 侧按 `BitTorrent/Session/RefreshInterval` 节流刷新, 命令后直查或回写都是假新鲜。`save_path` 是例外: 它也是我们的值, 但它是**分组键的输入**而 qB 搬家是异步的, 同样等上报。`torrents_delete` 的摘记录属「确定动作 + `_pending_removed` 兜底」, 保留。守阵: `tests/unit/test_sync.py::test_no_synthetic_state_write_site`(全库 AST 扫描 + 四条判据)。
 
 ## 其它工程约定
 

@@ -13,12 +13,12 @@
 
 - **触发**: 扫"分支死"扫不到的另一形态 —— node 语义电池的一条 check 里, 被测调用写在**逗号表达式**中, 真正比对的是调用之后的树状态。若调用没生效, 状态就没变, 期望值看似"没变"的形态也跟着静默成立(此处是"输入本应是扁平列表"这一步没被钉住, 而期望写成 `{all:[...]}`, 二者只在调用真执行时才互斥)。同电池另一条更露骨: `(f(), f(), true)` —— 两次返回值被丢弃, 第三元素字面量 `true`, **无论实现如何都绿**。
 - **判别**: ①逐条问"这条若把被测函数改成空函数, 会不会红"; 空函数仍绿的条目 = 恒真; ②调用写在逗号表达式里的条目, 把调用**抽成独立语句**并在调用前后各断言一次(前置: 输入确为旧形态; 后置: 输出为新形态), 前置断言常常就暴露"夹具早就是新形态"; ③整组电池的 `ok/total` 是否能在 Python 侧被证明"结果被真实比对"——`assert not failed` 只证明全绿, 不证明没早退。
-- **处置**: ①条 1 改三步分开(钉输入 → 调归一 → 钉输出); ②幂等条改快照深比较(归一可能无返回值, 别拿返回值当比较对象; 比较**被测对象本身的整棵快照**前后)—— 另附"非幂等样本必须被抓出"的专桩, 自证该比较模式可红; ③Python 侧端到端活性注入: 探针支持 `liveness` 参数追加一例必红期望, 二次运行断言该红**精确出现在 failed** 且 `total` 恰 +1, 早退/结果被吞时注入红不出现即守阵红(本例落地: `tests/test_webui_static_dom_page_layout.py::test_frontend_rule_tree_and_choose_editor` 第 5 步); ④收口做变异红验: 改坏被测实现(杀归一/改非幂等)必须精确报对应条目, 还原复绿。
+- **处置**: ①条 1 改三步分开(钉输入 → 调归一 → 钉输出); ②幂等条改快照深比较(归一可能无返回值, 别拿返回值当比较对象; 比较**被测对象本身的整棵快照**前后)—— 另附"非幂等样本必须被抓出"的专桩, 自证该比较模式可红; ③Python 侧端到端活性注入: 探针支持 `liveness` 参数追加一例必红期望, 二次运行断言该红**精确出现在 failed** 且 `total` 恰 +1, 早退/结果被吞时注入红不出现即守阵红(本例落地: `tests/unit/test_webui_static_dom_page_layout.py::test_frontend_rule_tree_and_choose_editor` 第 5 步); ④收口做变异红验: 改坏被测实现(杀归一/改非幂等)必须精确报对应条目, 还原复绿。
 
 ## 守阵
 
-- `tests/test_webui_static_dom_page_layout.py::test_frontend_template_no_reserved_prefix_identifiers` 尾部活性探针(指令形态 `_probeTap` + 插值形态 `_probeVar` 必须命中; `$emit`/`$root`/`$event` 必须放行) —— 同类扫描型守阵照此加装。
-- `tests/test_webui_static_dom_page_layout.py::test_frontend_rule_tree_and_choose_editor` 第 2 条(cfgNormalizeRulesDraft 归一条目红验式三步 + 幂等快照深比较 + 非幂等专桩)与第 5 条(liveness 注入必红期望端到端红验) —— 电池条目级空转照此加装。
+- `tests/unit/test_webui_static_dom_page_layout.py::test_frontend_template_no_reserved_prefix_identifiers` 尾部活性探针(指令形态 `_probeTap` + 插值形态 `_probeVar` 必须命中; `$emit`/`$root`/`$event` 必须放行) —— 同类扫描型守阵照此加装。
+- `tests/unit/test_webui_static_dom_page_layout.py::test_frontend_rule_tree_and_choose_editor` 第 2 条(cfgNormalizeRulesDraft 归一条目红验式三步 + 幂等快照深比较 + 非幂等专桩)与第 5 条(liveness 注入必红期望端到端红验) —— 电池条目级空转照此加装。
 
 ## 关联
 

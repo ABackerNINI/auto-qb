@@ -14,7 +14,7 @@
   ②认领模块的 apply 是 BaseModule 默认无动作(或恒短路); ③该段不在 rules 重建判据里(delete_tags/
   trackers 变了会触发 L2 重建, 搅浑断言)。合规先例: add_episode_tags(maintenance 独占 + 无动作)。
   必须用有副作用的段时, finally 里摘干净(notify: `host.get("notify")._unmount()`); 参考实现
-  tests/test_modules_p6.py::test_unclaimed_section_change_warns_and_rebuilds 的选段注释。
+  tests/unit/test_modules_p6.py::test_unclaimed_section_change_warns_and_rebuilds 的选段注释。
 - **守阵**: test_modules_p6 选段注释(段选择判据三条件); conftest 的通知拦截只拦**外部命令**,
   拦不住 handler 挂载本身 —— 别指望 conftest 兜底。
 - **复发**: 1(2026-10-01 P6 兜底守阵初版; 全量红指向 test_notify 才定位, 选段注释已把判据固化)。

@@ -17,7 +17,7 @@
 
 ## 三份 shell 内联段(sprite / #app+login) parity 守阵
 
-- **处置**: `tests/test_webui_static_skins_skin.py::test_frontend_shell_sprite_login_parity` —— ①sprite 段锚点切片(`<svg class="icon-sprite"` 起配套 `</svg>` 止)三份**逐字相等**, 另钉 symbol 数 ≥40 下限(实测 67): sprite 若被整体外提成共享文件, 三份会同时消失、相等断言恒真, 下限逼那种迁移显式改守阵; ②`#app`+login 段(`<div id="app"` 起 `tpl-manifest` 前止)**归一 HTML 注释与空行后**相等 —— console 合法多一行皮肤说明注释(§现象已记"仅差 1 行注释"), 照"逐字相等"字面执行会恒红, 故注释不参与比对(注释不渲染), 标记/属性/文本 drift 一律红。失败信息带首个差异行(行号 + 两侧原文)并提示"改图标/改登录遮罩须三皮肤同步"。
+- **处置**: `tests/unit/test_webui_static_skins_skin.py::test_frontend_shell_sprite_login_parity` —— ①sprite 段锚点切片(`<svg class="icon-sprite"` 起配套 `</svg>` 止)三份**逐字相等**, 另钉 symbol 数 ≥40 下限(实测 67): sprite 若被整体外提成共享文件, 三份会同时消失、相等断言恒真, 下限逼那种迁移显式改守阵; ②`#app`+login 段(`<div id="app"` 起 `tpl-manifest` 前止)**归一 HTML 注释与空行后**相等 —— console 合法多一行皮肤说明注释(§现象已记"仅差 1 行注释"), 照"逐字相等"字面执行会恒红, 故注释不参与比对(注释不渲染), 标记/属性/文本 drift 一律红。失败信息带首个差异行(行号 + 两侧原文)并提示"改图标/改登录遮罩须三皮肤同步"。
 - **守阵**: `test_frontend_shell_sprite_login_parity`(issue 26-10-20-2231, 2026-10-21 认领并修; 红验三类突变: console sprite 单边漂移红 / prism login 标记漂移红 / prism login 仅注释漂移绿, 突变精确反向还原后三份 shell `git diff` 零改动)。
 - **复发**: 0
 

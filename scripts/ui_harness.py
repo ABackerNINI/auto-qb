@@ -74,16 +74,16 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
-# tests/helpers 直连 clock 顶级模块(wait_until 单点, 计划 26-11-05-0118 S1/S3) ——
-# 桩进程不在 pytest 下, 必须自己把 tests/ 也放进 sys.path 才 import 得到(缺了 e2e 桩起不来)
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
+# tests/unit/helpers 直连 clock 顶级模块(wait_until 单点, 计划 26-11-05-0118 S1/S3) ——
+# 桩进程不在 pytest 下, 必须自己把 tests/unit/ 也放进 sys.path 才 import 得到(缺了 e2e 桩起不来)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "unit"))
 
 from auto_qb.config import WebConfig  # noqa: E402
 from auto_qb.config.loaders import load_config  # noqa: E402
 from auto_qb.infra.versioning import CURRENT_VERSIONS  # noqa: E402
 from auto_qb.webui import create_app  # noqa: E402
 from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES, REANNOUNCE_INACTIVE_SKIP  # noqa: E402
-from tests.helpers import (  # noqa: E402
+from tests.unit.helpers import (  # noqa: E402
     FakeClient,
     FakeTorrent,
     FakeTracker,
@@ -633,7 +633,7 @@ def _make_peers_response(i: int) -> dict:
     """单种子的合成 sync/torrentPeers 整包(与 qB 响应同形)
 
     !peers 用 **dict**(以 "ip:port" 为键)而非数组 —— 真 qB 恒为 dict, 前端 drawerPeerRows 做
-    dict/数组双形态归一; 桩若图省事给数组, 归一的 dict 分支就永远测不到(口径同 tests/helpers.py
+    dict/数组双形态归一; 桩若图省事给数组, 归一的 dict 分支就永远测不到(口径同 tests/unit/helpers.py
     FakeClient.sync_torrent_peers)。**速度字段名必须是 qB 原始 dl_speed / up_speed**(与
     torrents/info 的 dlspeed / upspeed 不同名)—— 曾按 dlspeed / upspeed 造假数据, 前端据此
     「看得见速度」, 真机却恒 0, 测假; 前端在 drawer.js::_drawerNormPeers 落袋单点适配两键。
@@ -1115,7 +1115,7 @@ def _publish_with_delta(mgr, new_states):
     修法 = 让桩走生产同一条推导: 目标 state 作为增量 patch 喂给**真 store._apply**
     (patch 形状与 qB sync 增量响应同形: 只含变化种子的变化字段), 不再手工预写任何
     store 增量字段。FakeTorrent.apply_delta 与 TorrentRecord.apply_delta 同语义
-    (tests/helpers.py :805), patch 里 state 变化会推出 delta_fields/dirty_groups/
+    (tests/unit/helpers.py :805), patch 里 state 变化会推出 delta_fields/dirty_groups/
     view_changed/rounds_applied++ 全套。若只 rebuild_views, 新代的 delta 桶恒空:
     前端(S4 起默认带 delta=1)每轮都收 "full=false + 空 delta", 真值永远到不了行上
     (2026-10-07 S4 冒烟实测: 暂停后 delta.torrents=[] 而非真值行)。
@@ -1337,7 +1337,7 @@ def _isolate_gtm_discovery(tmp: str) -> None:
     -> `discover()` -> `read_pointer()` -> `endpoint_path()` 发现工具; 指针是**用户级平台目录**
     的整机共享文件(agent.pointer_dir)。本机装过工具时, 桩进程会读到真指针并探活成功 -> 导出
     bundle 带 gtm 段、导入框 gtm pill 可选 -> e2e 8 例确定性红。产品行为正确, 是**桩污染**:
-    桩本该是"工具缺席"的离线形态, 却漏进了宿主的整机状态(与 tests/conftest.py 的
+    桩本该是"工具缺席"的离线形态, 却漏进了宿主的整机状态(与 tests/unit/conftest.py 的
     gtm_spike_isolation fixture 同族问题, 只是 e2e 桩不在 pytest 下, 没人替它隔离)。
 
     做法: 只把 agent 的 `pointer_dir()` 单点指到 <tmp>/gtm-pointer(该目录不存在 =>

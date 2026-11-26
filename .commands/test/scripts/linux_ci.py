@@ -33,7 +33,7 @@
    按 testbed 档判 —— 容器 8 vCPU 配额与并行会话(16 worker)对挂钟的放大是合法调度非回归
    (2026-11-12 S2 双开实证: solo rebuild 中位 1.1ms, 双开偶发越开发机严格档 4.0ms)。
 6. 下轮兜底清扫(R6): 开跑前扫 `/root/auto-qb-tests/` 下带 `.run-pid` 标记的 workdir,
-   「内嵌 pid 已死(容器内 kill -0) + mtime 超龄(12h, 与 tests/_tmp_bootstrap.py
+   「内嵌 pid 已死(容器内 kill -0) + mtime 超龄(12h, 与 tests/unit/_tmp_bootstrap.py
    CLEAN_AGE_HOURS 同款)」**双条件缺一不可**, 只 rmtree 整个 workdir、不钻子树、不碰
    无标记目录、不越出该单根。标记**全程段在场**: 解包 exec 一开始就写(记解包 bash 自身
    pid, 不设 trap —— 被杀即死, kill -0 可判), run_script 随后覆盖为自身 pid 并设 EXIT
@@ -42,7 +42,7 @@
 
 **代理透传(保留面, 计划 §04 S2 明示)**: 宿主代理变量里的回环主机改写成
 host.docker.internal(Docker Desktop 内建 DNS, 容器内免 --add-host, 2026-11-12 getent 实证),
-`no_proxy` 恒并入回环 —— 注了代理不放行回环时 `tests/test_hr_server.py` 回环端点用例假红
+`no_proxy` 恒并入回环 —— 注了代理不放行回环时 `tests/unit/test_hr_server.py` 回环端点用例假红
 (实测 6 failed + 2 errors, 2026-10-11)。容器只接收显式 -e, 不透传宿主整张环境表。
 坑档单点: pitfalls/testing/patching.md「容器网络坑」。
 
@@ -88,7 +88,7 @@ EXCLUDES = (
 )
 #: R6 分层超时: 内层(pytest)先到, 引擎包装 1800s(.commands/test/config.toml)兜外层
 INNER_PYTEST_TIMEOUT = 1500
-#: 清扫 mtime 超龄阈值(秒), 对齐 tests/_tmp_bootstrap.py::CLEAN_AGE_HOURS
+#: 清扫 mtime 超龄阈值(秒), 对齐 tests/unit/_tmp_bootstrap.py::CLEAN_AGE_HOURS
 SWEEP_AGE_SECONDS = int(12.0 * 3600)
 TIMEOUT_KILL_GRACE = 30  # 内层 timeout 到点后 SIGKILL 前的宽限
 
@@ -118,7 +118,7 @@ def container_env(environ: dict[str, str] | None = None) -> list[tuple[str, str]
 
     - 代理变量照传, 但回环主机改写(否则容器拿它指自己, 走不出宿主代理)。
     - `no_proxy` / `NO_PROXY` 恒并入回环 —— 注了代理却不放行回环时, 回环端点用例集体假红。
-    - 宿主其余变量(含 TMPDIR)**一律不透传**: 容器内 TMPDIR 由 tests/_tmp_bootstrap.py
+    - 宿主其余变量(含 TMPDIR)**一律不透传**: 容器内 TMPDIR 由 tests/unit/_tmp_bootstrap.py
       在 pytest 进程内自举, 宿主值漏进去会触发外部 TMPDIR 拒收(rc=4)。
     """
     env: dict[str, str] = dict(os.environ if environ is None else environ)
@@ -250,7 +250,7 @@ uv export --frozen --format requirements-txt --no-hashes --no-emit-project --qui
 uv pip install -q --python .venv/bin/python -r "$AQB_WORK/delta-req.txt" || {{ echo "[FAIL] 依赖 delta 补装失败(uv pip install -r)。NEXT: 看上方 uv 报错; 国内镜像站不可达按 R9 换源或手动开代理后重跑。"; exit 22; }}
 uv pip install -q --python .venv/bin/python -e . --no-deps || {{ echo "[FAIL] 项目 editable 补装失败(-e . --no-deps, hatchling 构建面)。NEXT: 看上方 uv 报错; 构建依赖拉不动按 R9 换源或手动开代理后重跑。"; exit 23; }}
 echo "[linux-ci] 阶段: 容器内 timeout {inner_timeout}s 包裹全量 pytest(内层先到, 干净退出)"
-export AUTO_QB_TESTBED=1  # 性能基准选 testbed 档(tests/test_modules_p5.py::_perf_limit_key): 容器配额+并行会话的挂钟放大是合法调度, 非回归
+export AUTO_QB_TESTBED=1  # 性能基准选 testbed 档(tests/unit/test_modules_p5.py::_perf_limit_key): 容器配额+并行会话的挂钟放大是合法调度, 非回归
 rc=0
 timeout -k {TIMEOUT_KILL_GRACE} {inner_timeout} .venv/bin/python -m pytest tests -q || rc=$?
 exit $rc"""

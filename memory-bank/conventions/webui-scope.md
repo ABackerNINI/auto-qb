@@ -61,7 +61,7 @@
 
 | 网 | 落点 | 接住什么 |
 |---|---|---|
-| ① 静态守阵 | `tests/test_webui_trigger_registry.py` | 表外直投递 / 出口外展开选中集合 / 菜单变体缺支 / 四支动作族不齐 / 登记了不存在的入口 |
+| ① 静态守阵 | `tests/unit/test_webui_trigger_registry.py` | 表外直投递 / 出口外展开选中集合 / 菜单变体缺支 / 四支动作族不齐 / 登记了不存在的入口 |
 | ② 运行时审计 | `scopeAudit`(计划 S4) | 走统一出口的动作**零新增代码**自动被比对描述符与载荷 |
 | ③ 真浏览器矩阵 | `e2e/trigger-scope.spec.mjs`(计划 S5) | 从 `TRIGGER_DEFS.ui` 生成用例, 真实输入 × 载荷比对 |
 

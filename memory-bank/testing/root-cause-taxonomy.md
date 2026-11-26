@@ -18,7 +18,7 @@
 | 类目 | 本仓库证据(坑档/实测) | 治理动作 | 治理阶段 |
 |---|---|---|---|
 | async-wait/时序 | src 161 取时点 / tests 裸 sleep 63 处 / e2e 91 处 waitForTimeout(治理前实测) | 时钟注入(infra/clock 单点+构造期注入) + wait_until 条件轮询 + expect.poll | S2/S3/S4 |
-| time(边界/粒度) | flaky-midnight-daycount / flaky-minute-stamp-dup / time-tick-collapse-strict-advance | 统一假钟(tests/clock.py)固定时间+区间断言 | S2/S3 |
+| time(边界/粒度) | flaky-midnight-daycount / flaky-minute-stamp-dup / time-tick-collapse-strict-advance | 统一假钟(tests/unit/clock.py)固定时间+区间断言 | S2/S3 |
 | 并发/竞态 | poll-last-round-race / cross-thread-teardown-assert | 事件同步/条件轮询替代末值断言 | S3 |
 | 顺序依赖 | xdist-worker-global-snapshot / hr-registry-pollution(已治) | pytest-randomly 周巡检(test.random-order)暴露 | S5 |
 | platform | timing-tolerance(15.6ms 刻度) / ci-only-guard / coverage-floor-platform | platform_tolerance 容差单点+跨平台断言规范+守阵 | S5 |
@@ -37,5 +37,5 @@
 
 ## 守阵与巡检(归因的机器面)
 
-- 四类守阵(tests/test_flaky_timing_guards.py + tests/test_platform_tolerance_guards.py): 裸 sleep / waitForTimeout / 裸取时 / 绑定位固定口(bind 调用位 + ThreadingHTTPServer/socket.create_server 等构造位, 配置值位不拦), 新增即红 —— 防回潮, 不替代归因。
+- 四类守阵(tests/unit/test_flaky_timing_guards.py + tests/unit/test_platform_tolerance_guards.py): 裸 sleep / waitForTimeout / 裸取时 / 绑定位固定口(bind 调用位 + ThreadingHTTPServer/socket.create_server 等构造位, 配置值位不拦), 新增即红 —— 防回潮, 不替代归因。
 - 周巡检 `commands run test.random-order`(pytest-randomly 随机序采样): 顺序依赖/共享状态新例的探测器, 红灯固定 seed 复现归因后进台账; 巡检约定见 [flaky-ledger.md](flaky-ledger.md) 巡检段。

@@ -9,7 +9,7 @@
 
 - **触发**: 给 `Config` / 门面层(`QbManager.web` / `QbManager.hr` 等)加一个**构造期或热重载时会被读到**的字段
   (2026-09-24 M2 实测: `apply_new_config` 读 `config.hr_check` 与 `config.data_dir`)。
-- **判别**: `tests/helpers.py::FakeConfig` 是**类属性式**手写桩(不是真 `Config`), 不会自动获得新字段;
+- **判别**: `tests/unit/helpers.py::FakeConfig` 是**类属性式**手写桩(不是真 `Config`), 不会自动获得新字段;
   一旦真代码读它 ⇒ `AttributeError` **同一次跑里红一片**(实测 13 条跨 test_ui / test_qbmanager / test_web),
   报错信息是 `'FakeConfig' object has no attribute ...`, 很好认但很容易被当成"新代码写错"。
   同理还有那些**临时拼的 `SimpleNamespace(web=...)` 旧配置桩** —— 也得补。

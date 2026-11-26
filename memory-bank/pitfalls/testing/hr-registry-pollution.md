@@ -20,7 +20,7 @@
     实例; 而后端按**文件序**(= 最后心跳升序)返回 ⇒ `instances[0]` 恒为最旧的死实例 ⇒
     「主实例暂不可用 —— 连不上端点(Failed to fetch)」。
 - **处置**:
-  - `tests/conftest.py` 会话级 autouse 夹具 `_isolated_hr_registry`: 把 **`auto_qb.hr.runtime` 命名
+  - `tests/unit/conftest.py` 会话级 autouse 夹具 `_isolated_hr_registry`: 把 **`auto_qb.hr.runtime` 命名
     空间里**的 `default_registry_path` 指向 tmp 目录。**只 patch runtime 的引用**, 不动
     `hr.discovery.default_registry_path` 本身 —— 否则 `test_default_registry_path_platform_shape`
     (断言真实平台形态)会跟着被改掉。
@@ -29,7 +29,7 @@
   - 顺带根治「读时过滤、写时不剪」: `InstanceRegistry.upsert` 现在顺手剪掉超 `INSTANCE_TTL_S` 的
     条目(与 `alive` **共用** `_entry_fresh` 判据, 防两处漂移)⇒ 文件不再无界增长, 存量死条目在
     下一个活实例心跳时被清掉, **无需手工清理**。
-- **守阵**: `tests/test_hr_discovery.py::test_hr_registry_path_is_isolated_from_real_file`
+- **守阵**: `tests/unit/test_hr_discovery.py::test_hr_registry_path_is_isolated_from_real_file`
   (runtime 用的路径必须 ≠ 真实 app-data) +
   `test_registry_prunes_expired_on_upsert`(剪枝边界与 `alive` 同判据)。两条均已红验。
 - **!别指望 sidefx 台账兜住这类**: 记账器覆盖 `POPEN`/`LAUNCH`/`REG`/`REGVAL`/`FSDEL`/`SYMLINK`/

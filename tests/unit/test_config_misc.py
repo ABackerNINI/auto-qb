@@ -1,0 +1,2119 @@
+"""test_config_misc 测试计划: 配置加载与 HR 规则解析
+
+## 测试计划(每个测试函数一条)
+- test_validate_trackers_empty_and_non_dict: trackers 留空合法; 非字典报错(fail-fast)
+- test_validate_minimal_ok: 仅必填项的最小配置通过校验
+- test_site_hr_explicit_empty_overrides_global: 站点级 tri_state 键显式空串穿过 strip/校验/加载全链 = 覆盖为空(v4)
+- test_validate_required_missing: 缺 domains / 站点 hr 缺 required_seeding_time 报错
+- test_validate_bad_formats: 非法格式聚合(main_tick/port/log.level/限速/布尔)
+- test_validate_max_tasks_per_tick_range: max_tasks_per_tick 非正值报错(0/负值被 TaskQueue 当"不限量", 与配置语义相反)
+- test_validate_value_ranges: 取值范围收紧聚合(interval/main_tick/sync_interval 上下界, max_tasks_per_tick 上界, log.max_bytes 轮转区间, required_share_ratio 有限性与范围, hr.condition 边界, notify 上界, 规则 interval 正时间)
+- test_validate_exact_boundaries: 闭区间**端点逐值**钉住(端口/log.max_bytes/notify/max_tasks/qb_traffic 采样·落盘·保留窗/曲线阈值严格递增) —— 池内旧用例取远离边界的值, 端点位移类变异全靠这条
+- test_validate_exact_boundaries_size_and_window_tail: 端点用例的三处补缺 —— log.max_bytes **逐字节**两端(1MiB±1B / 1GiB±1B) + raw_window 上界两端(90D/91D) + flush_interval 须整数秒的**拦截侧**
+- test_validate_schema_version_lower_endpoint: schema_version 下界端点(1 合法 / 0 非法)
+- test_validate_qb_traffic_main_tick_crosscheck: sample_interval_multiplier 的有效秒上限用**同一份配置**的 main_tick 换算(main_tick 取自当前配置而非模型默认; 10x60s=600s 压线合法, 11x60s=660s 超限且报错含换算值; main_tick 写坏时跳过上限校验)
+- test_validate_integer_and_str_list_guards: integer=True 拒小数 / 字符串列表空白项报错 / state_file 空白串报错(拦截侧语义)
+- test_validate_fs_reports_all_entries: fs.path_map 逐条报错不被前一条非法截断(continue 而非 break)
+- test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
+- test_validate_rule_evaluation_enum: evaluation 枚举位(W4/D4) —— all|first_match 放行(占坑),
+  其它取值报错, 键缺省 = 默认 all
+- test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
+- test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键);
+  守阵(26-10-06-0028 D-02)——with_reference/without_reference 子段键面 fail-fast(enabeld/autostart 拼错报未知键,
+  enabled 非布尔报错, 全键面合法不报)
+- test_validate_checking_custom_timeout_key: checking 的 custom_basic_check_timeout 合法时间串放行;
+  负数/坏格式/0 fail-fast 拒绝(超时保险丝只可调档不可关掉)
+- test_validate_checking_cooldown_key: checking 的 recheck_fail_cooldown 合法时间串放行;
+  负数/坏格式/0 fail-fast 拒绝(校验失败冷却窗口不可关闭, 26-11-08-1717)
+- test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在; 重复引用判重(尾随空白归一判重/畸形只报格式错不叠加/合法配置原样保序不去重)
+- test_validate_regex_patterns: 非法 regex: 模式报错
+- test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
+- test_validate_notify: notify 段校验(未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels)
+- test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
+- test_validate_gslc_enabled_key: global_speed_limit_curve.enabled 总开关(缺省 True/false/true 解析/非布尔报错)
+- test_validate_empty_file: 空文件/非字典根节点报错
+- test_config_error_wraps_io_and_yaml: 文件读取/YAML 解析异常统一包装为 ConfigError
+- test_validate_section_type_errors: 各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags 坏项)
+- test_validate_hr_value_errors: 站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔)
+- test_validate_tracker_groups: 站点 groups 非列表/空串项报错(fail-fast)
+- test_validate_state_save_interval: state_save_interval 0(关闭, 含裸 0/0S 两写法)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
+- test_validate_schema_version_shape: validate_config 形状校验(须为整数/须>=1, 防御层)
+- test_validate_web_ctx_menu_errors: web.ctx_menu 布局坏形状全类型报错(非字典/支级非字典/order·hidden 非字符串数组/sub 非字典/未知层键/sep token 格式错, 计划 26-10-20-0024 W1)
+- test_validate_web_ctx_menu_pass_shapes: web.ctx_menu 合法形态不报错(空字典/全层齐全/未知支名容忍)
+- test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path/custom_basic_check_timeout 等被改大写后须走未知键/默认分支)
+- test_validate_short_circuit_pairs_differing_truth: 短路运算符(and/or)语义钉住 —— 用两操作数取不同真值的输入(traffic_source 空列表/非 list, curves 项单键判定, 规则集绑定, removed 触发白名单)
+- test_validate_nested_section_shapes_and_unparsable_intervals: 嵌套段形状守卫(traffic_source.global_traffic_monitor 非字典停在该层) + qb_traffic 倍数无法解析为整数时上限换算整段跳过(只报类型/解析错)
+- test_strip_none_list_branch_and_key_case: _strip_none 列表分支(None/空串项剔除 + 列表内嵌 dict 的站点 tri_state 叶保留) + state_file 键名精确性
+- test_validate_rule_refs_single_char_and_short_circuit: 规则引用 @ 后仅 1 字符仍是格式合法(钉住 r[1:] 而非 r[2:])
+- test_validate_qb_traffic_multiplier_int_forms: 倍数整数形态判据(文件侧 1/15/"15" 合法, 0/-1 走下界, "1.5"/"30S" 走解析错; 程序侧 1.5 浮点与 True 布尔在类型层拒, 不得被 int() 截断/放行)
+- test_validate_gslc_interval_key_exact: global_speed_limit_curve.interval 键名精确性 + 值校验(positive)
+- test_validate_fs_reports_all_entries_after_skip_branches: fs.path_map 空 from/归一后为空/空 to 条目不得中断后续条目校验(continue 而非 break)
+- test_validate_fs_prefix_ambiguity_keeps_scanning: fs.path_map 前缀歧义自比须 continue(非 break)、命中后只 break 内层(非 return)
+- test_validate_trackers_reports_all_entries: trackers 非字典条目不得中断后续条目校验(continue 而非 break)
+- test_validate_tag_lists_reports_after_absent_key: delete_tags 缺省时 delete_tags_if_has_no_torrents 仍须校验(continue 而非 break)
+- test_validate_gslc_reports_all_curves: curves 前一条结构错不得中断后续条目(重复 period 仍须报出)
+- test_validate_curve_points_reports_all_entries: upload_curve 非单项映射/阈值不可解析条目不得中断后续条目(严格递增仍须报出)
+- test_validate_rule_refs_dedup_after_malformed: 规则引用判重轮的前置畸形引用不得中断判重(continue 而非 break)
+- test_validate_checking_action_reports_all_segments: checking 子段缺段/非字典不得中断后续段(continue 而非 break)
+- test_validate_trigger_action_compat_reports_all_actions: 删除触发白名单检查的伪动作/结构错条目不得中断后续动作(continue 而非 break)
+- test_validate_rules_reports_all_groups_and_rules: 非字典规则集/规则条目不得中断后续条目校验(continue 而非 break)
+- test_validate_fs_errors
+- test_validate_hr_check_type_errors
+- test_validate_hr_site_bindings_skips_unparseable_enabled
+- test_validate_hr_site_entry_errors
+- test_validate_notify_and_root_edges
+- test_validate_notify_channels_edges
+- test_validate_plugin_entry_and_notify_edges
+- test_validate_root_config_not_dict
+- test_validate_sections_pass_shapes
+- test_validate_tracker_field_errors
+- test_validate_tracker_rules_non_list_skips_refs
+- test_validate_trackers_and_rules_structure
+- test_validate_traffic_source_enabled_key: enabled 总开关(缺省 True/false 关闭/非布尔报错; false 免检 dat_path 且 expr 门控放行) + no/off/0 等价关闭写法同口径(R4#14/#10), 非 0 数字不算关闭
+- test_validate_traffic_source_gtm_expr_gate: provider=global_traffic_monitor 恒 traffic_configured(R4#11): gtm + 无 dat_path + sys.upload_today expr 规则零报错(回归成判 dat_path 即红)
+- test_validate_notify_dedup_window_bare_zero: notify.dedup_window 裸 0 = 不去重(R4#15): 裸 0/整数 0/0S 放行, 坏格式照拒
+- test_validate_rule_cooldown_bare_zero: example_rules.*.cooldown 裸 0 = 不冷却(issue 26-11-08-0703, 同 R4#15 修法):
+  裸 0/整数 0/浮点 0.0/0S 放行, 非零裸数字/坏格式/负值/非零浮点 3.5/文件路径字符串 "0.0" 照拒(26-11-08-1923)
+- test_validate_checking_section_mode_absent_ok: checking 子段 mode 缺省走 schema 默认(R4#12): {enabled: true} 不报「取值非法: ''」, 显式非法 mode 照拒
+- test_validate_add_episode_tags_unknown_keys: add_episode_tags 未知键 fail-fast(R4#13): 模板键拼错报未知键, 合法键面放行
+- test_validate_value_errors_extended
+- test_validate_web_errors
+- test_web_token_ascii_only: web.token 字符集限 ASCII(与 hr_check.channel.token 同形态, issue 26-11-08-0827) —— 含非 ASCII 报「ASCII」错并聚合, 纯 ASCII 放行, 非字符串仍报「必须是字符串」不串档
+- test_validate_qbittorrent_str_keys
+- test_validate_fs_path_map_from_to_must_be_string
+- test_fs_path_map_nonscalar_blocks_load
+"""
+
+import logging
+
+import os
+
+import tempfile
+
+from pathlib import Path
+
+import pytest
+
+import yaml
+
+from auto_qb.config import (
+    Config,
+    ConfigError,
+    HRRule,
+    NotifyConfig,
+    QbittorrentConfig,
+    TrackerConfig,
+    load_config,
+    load_global_hr,
+    load_tracker_hr,
+)
+
+from auto_qb.core.traffic_source import paths as traffic_paths
+
+from auto_qb.infra.errors import AutoQbError
+
+from config_write_support import (
+    _errs,
+    _load_errors,
+    _write_config,
+    _write_raw,
+)
+
+
+def test_validate_trackers_empty_and_non_dict():
+    """trackers 留空(未配置站点)合法; 非字典是配置错误 -> 报错(fail-fast)"""
+    with tempfile.TemporaryDirectory() as td:
+        # 留空: 合法(trackers: 经 yaml 解析为 None, 视为未配置任何站点)
+        empty_path = os.path.join(td, "empty.yml")
+        with open(empty_path, "w", encoding="utf-8") as f:
+            f.write("config:\n  qbittorrent:\n    host: h\n  trackers:\n")
+        cfg = load_config(empty_path)
+        assert cfg.trackers == {}
+        # 非字典: 报错
+        cfg_path = _write_config(td, trackers="not-a-dict")
+        try:
+            load_config(cfg_path)
+            assert False, "trackers 非字典应报错"
+        except ConfigError as e:
+            assert "config.trackers: 必须是字典" in str(e)
+
+
+def test_validate_minimal_ok():
+    """仅必填项(qbittorrent 可全默认, tracker 只填 domains)的最小配置通过校验"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"))
+        assert cfg.trackers["T1"].domains == ["a.com"]
+        assert cfg.trackers["T1"].hr is None
+        assert cfg.main_tick == 2.0  # 默认 2s
+
+
+def test_site_hr_explicit_empty_overrides_global():
+    """站点级 tri_state 键显式空串 = 「覆盖为空」(report 26-10-03-0504 方案 B 阶段 1, config v4)
+
+    _strip_none 对站点段 config.trackers.<名>.hr.<tri_state str 键> 的 '' 保留, 穿过
+    strip -> 校验 -> 解析全链后生效值仍为 ''(全局配了 add_tag 时某站可表达「本站不打标」);
+    tri_state 键缺失仍照常回退全局; 消费端(maintenance_mod)对 '' 按不打标/不设置处理。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  schema_version: 4\n"
+            "  hr:\n"
+            "    add_tag: zGlobal\n"
+            "    add_tag_for_satisfied: zDone\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains:\n"
+            "        - a.com\n"
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        add_tag: ''\n"  # tri_state: 覆盖为空 = 本站不打标
+            "        add_category_for_satisfied: ''\n"  # tri_state: 同上
+        )
+        cfg = load_config(_write_raw(td, text))
+        t = cfg.trackers["T1"]
+        assert t.hr.add_tag == "", "站点显式空串应保留为覆盖空, 不回退全局"
+        assert t.hr.add_category_for_satisfied == ""
+        assert t.hr.add_tag_for_satisfied == "zDone", "tri_state 键缺失照常回退全局"
+
+
+def test_validate_required_missing():
+    """tracker 缺 domains / 站点 hr 缺 required_seeding_time -> 明确报错"""
+    with tempfile.TemporaryDirectory() as td:
+        err = _load_errors(td, "config:\n  trackers:\n    T1:\n      tags: [a]\n")
+        assert "config.trackers.T1: 缺少必填键 domains" in err, err
+        err = _load_errors(
+            td, "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n        condition: 80%\n"
+        )
+        assert "config.trackers.T1.hr: 缺少必填键 required_seeding_time" in err, err
+
+
+def test_validate_bad_formats():
+    """非法值格式聚合: 时间/整数/端口/日志等级/限速/布尔/状态文件"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  main_tick: abc\n"
+            "  max_tasks_per_tick: 1.5\n"
+            "  remove_similar_tags: maybe\n"
+            "  log:\n"
+            "    level: VERBOSE\n"
+            "    max_bytes: 10MB\n"
+            "  qbittorrent:\n"
+            "    port: 99999\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      upload_speed_limit: 100MPH\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.main_tick: 无效时间格式" in err, err
+        assert "config.max_tasks_per_tick" in err, err
+        assert "config.remove_similar_tags: 无效布尔值" in err, err
+        assert "config.log.level: 非法日志等级" in err, err
+        assert "config.log.max_bytes" in err, err  # MB 非二进制单位
+        assert "config.qbittorrent.port: 超出范围" in err, err
+        assert "config.trackers.T1.upload_speed_limit: 无效速度格式" in err, err
+
+
+def test_validate_max_tasks_per_tick_range():
+    """max_tasks_per_tick 非正值 must 报错
+
+    `TaskQueue._pop_due` 把 `max_tasks <= 0` 当"不限量"的内部语义, 配置放行 0/负值会让
+    "每轮最多 N 个"反转成"一轮弹出全部到期任务"; schema 的 min=1 只管前端控件, 不进校验。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        for bad in ("0", "-5"):
+            err = _load_errors(td, "config:\n  max_tasks_per_tick: %s\n" % bad)
+            assert "config.max_tasks_per_tick: 须 >= 1" in err, err
+        # 合法值与非整数不得被误伤(非整数的格式错误由 _try 记录)
+        assert "config.max_tasks_per_tick" not in _load_errors(td, "config:\n  max_tasks_per_tick: 20\n")
+
+
+def test_validate_state_save_interval():
+    """state_save_interval: 0(关闭; 裸 0 与 0S 两写法)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)"""
+    with tempfile.TemporaryDirectory() as td:
+        # 合法: 0=关闭(裸 0 与 0S 同放行, R4#9: 文案/文档口径「0(关闭)」的裸 0 写法须可表达)
+        # / 下限值 / 常规值 / 带单位换算
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 0\n")
+        assert _errs({"state_save_interval": 0}) == []  # 整数 0(程序内构造)同样放行
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 0S\n")
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 30S\n")
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 120S\n")
+        assert "state_save_interval" not in _load_errors(td, "config:\n  state_save_interval: 2M\n")
+        # 低于下限 -> 拒绝(下限 30s 防误配置写放大, issue 26-09-21-1347 拍板)
+        err = _load_errors(td, "config:\n  state_save_interval: 29S\n")
+        assert "config.state_save_interval: 须为 0(关闭)或 >= 30S(防误配置写放大): 29S" in err, err
+        # 坏格式(裸数字无单位)/负数 -> 格式报错(裸 0 特判只放行 0 本身, 非零裸数字照拒)
+        assert "config.state_save_interval: 无效时间格式" in _load_errors(td, "config:\n  state_save_interval: 120\n")
+        assert "config.state_save_interval: 无效时间格式" in _load_errors(td, "config:\n  state_save_interval: -5S\n")
+
+
+def test_validate_rule_spec():
+    """规则 spec: 未知键/取值域/未知条件与动作/多键项/空值 -> 聚合报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      enabled: true\n"
+            "      unknow: 1\n"
+            "      execute_once: someday\n"
+            "      stop_following_rules_if: sometimes\n"
+            "      trigger: on_torrent_frob\n"
+            "      cooldown: 5X\n"
+            "      conditions:\n"
+            "        - sizee: \">=1MiB\"\n"
+            "        - path: /a\n"
+            "          size: \">=1MiB\"\n"
+            "        - notadict\n"
+            "      actions:\n"
+            "        - star: true\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.example_rules.rule1: 未知键 ['unknow']" in err, err
+        assert "execute_once 取值非法: 'someday'" in err, err
+        assert "stop_following_rules_if 取值非法: 'sometimes'" in err, err
+        assert "trigger 取值非法: 'on_torrent_frob'" in err, err
+        assert "config.example_rules.rule1.cooldown: 无效时间格式" in err, err
+        assert "未知条件 'sizee'" in err, err
+        assert "必须是单键字典" in err, err
+        assert "未知动作 'star'" in err, err
+
+
+def test_validate_rule_evaluation_enum():
+    """evaluation 枚举位(W4/D4): all|first_match 放行(first_match 为占坑键值不实现),
+    其它取值报错; 键缺省 = 默认 all 不报错"""
+    head = "config:\n  example_rules:\n    rule1:\n      actions:\n        - add_tags: [X]\n"
+    with tempfile.TemporaryDirectory() as td:
+        assert _load_errors(td, head) == "", "键缺省 = 默认 all"
+        assert _load_errors(td, head + "      evaluation: all\n") == "", "all 合法"
+        assert _load_errors(td, head + "      evaluation: first_match\n") == "", "first_match 占坑放行"
+        err = _load_errors(td, head + "      evaluation: sometimes\n")
+        assert "evaluation 取值非法: 'sometimes'" in err, err
+        assert "all/first_match" in err, err
+
+
+def test_validate_state_condition_spec():
+    """state 条件 spec 深度校验: 非法 is_* 属性(拼写错)/裸枚举成员名(恒真值) -> 报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      conditions:\n"
+            "        - state: \"is_stopp\"\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "    rule2:\n"
+            "      conditions:\n"
+            "        - state: \"is_stopped&UPLOADING\"\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "    rule3:\n"
+            "      conditions:\n"
+            "        - state: \"is_stopped&is_complete\"\n"
+            "      actions:\n"
+            "        - stop: true\n"
+        )
+        err = _load_errors(td, text)
+        assert "非法状态属性 'is_stopp'" in err, err
+        assert "非法状态属性 'UPLOADING'" in err, err  # 裸枚举成员名在实例上恒真值, 拒绝
+        assert "rule3" not in err, err  # 合法 spec 不报错
+
+
+def test_validate_checking_action_spec():
+    """checking 动作 spec 深度校验: 非dict/缺basic_check/非法值/段非dict/非法mode/未知键/custom缺program -> 聚合报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      actions:\n"
+            "        - checking: \"skip-checking\"\n"
+            "    rule2:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            with_reference: {mode: skip-checking}\n"
+            "    rule3:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: xxx\n"
+            "    rule4:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: \"skip-checking\"\n"
+            "    rule5:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: xxx}\n"
+            "    rule6:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            poll_timeout: 60S\n"
+            "    rule7:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: custom\n"
+            "    rule8:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: skip-checking, auto_start: true}\n"
+            "            without_reference: {mode: full-checking}\n"
+            "    rule9:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            skip_checking_tag: zSkipChecked\n"
+            "    rule10:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: skip-checking, enabeld: 'true', autostart: 'true'}\n"
+            "    rule11:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            without_reference: {mode: full-checking, enabled: 'maybe'}\n"
+            "    rule12:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: skip-checking, enabled: 'true', auto_start: 'no'}\n"
+            "            without_reference: {mode: full-checking, enabled: false, auto_start: true}\n"
+        )
+        err = _load_errors(td, text)
+        assert "checking 动作只接受 dict 配置" in err, err
+        assert "必须配置 basic_check" in err, err
+        assert "basic_check 取值非法: 'xxx'" in err, err
+        assert "with_reference: 必须是字典" in err, err
+        assert "mode 取值非法: 'xxx'" in err, err
+        assert "未知键 ['poll_timeout']" in err, err
+        assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
+        # skip_checking_tag 为全局配置, spec 配同名键报未知键
+        assert "未知键 ['skip_checking_tag']" in err, err
+        # 子段键面 fail-fast(26-10-06-0028 D-02): enabled/auto_start 拼错原先校验零报错、运行时静默缺省
+        assert "with_reference: 未知键 ['autostart', 'enabeld']" in err, err
+        assert "without_reference.enabled: 无效布尔值: maybe" in err, err
+        assert "rule8" not in err and "rule12" not in err, err  # 合法 spec(含子段全键面)不报错
+
+
+def test_validate_checking_custom_timeout_key():
+    """custom_basic_check_timeout: 合法时间串放行; 负数/坏格式/0 在 config 校验期 fail-fast 拒绝
+    (超时保险丝只可调档不可关掉 —— 0/负值会在运行期变成「立即超时」或绕过保险丝语义)"""
+    with tempfile.TemporaryDirectory() as td:
+        base = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: custom\n"
+            "            custom_basic_check_program_path: /bin/verify\n"
+        )
+        # 合法时间串(含人话形式)放行
+        assert _load_errors(td, base + "            custom_basic_check_timeout: 10M\n") == ""
+        assert _load_errors(td, base + "            custom_basic_check_timeout: 600S\n") == ""
+        # 负数: 不满足时间串形状, 报无效格式(坐标含键名)
+        err = _load_errors(td, base + "            custom_basic_check_timeout: -5S\n")
+        assert "custom_basic_check_timeout" in err and "无效时间格式" in err, err
+        # 非时间串照拒
+        err = _load_errors(td, base + "            custom_basic_check_timeout: soon\n")
+        assert "custom_basic_check_timeout" in err and "无效时间格式" in err, err
+        # 0(关掉保险丝的写法)按正时间校验拒绝
+        err = _load_errors(td, base + "            custom_basic_check_timeout: 0S\n")
+        assert "custom_basic_check_timeout" in err and "必须为正时间" in err, err
+
+
+def test_validate_checking_cooldown_key():
+    """recheck_fail_cooldown: 合法时间串放行; 负数/坏格式/0 在 config 校验期 fail-fast 拒绝
+    (校验失败冷却窗口不可关闭, 26-11-08-1717 —— 窗口只在真实校验失败后生效, 0=关闭等于放回
+    「每轮重复校验」的本 issue 形态)"""
+    with tempfile.TemporaryDirectory() as td:
+        base = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+        )
+        # 合法时间串(含人话形式)放行
+        assert _load_errors(td, base + "            recheck_fail_cooldown: 1H\n") == ""
+        assert _load_errors(td, base + "            recheck_fail_cooldown: 30M\n") == ""
+        # 负数: 不满足时间串形状, 报无效格式(坐标含键名)
+        err = _load_errors(td, base + "            recheck_fail_cooldown: -5M\n")
+        assert "recheck_fail_cooldown" in err and "无效时间格式" in err, err
+        # 非时间串照拒
+        err = _load_errors(td, base + "            recheck_fail_cooldown: soon\n")
+        assert "recheck_fail_cooldown" in err and "无效时间格式" in err, err
+        # 0(关掉冷却的写法)按正时间校验拒绝
+        err = _load_errors(td, base + "            recheck_fail_cooldown: 0S\n")
+        assert "recheck_fail_cooldown" in err and "必须为正时间" in err, err
+
+
+def test_validate_rule_refs():
+    """tracker.rules 引用: 必须 @ 开头且规则集/规则存在; 重复引用判重(计划 26-10-02-1621 W1)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - example_rules\n"
+            "        - '@example_rules.ruleX'\n"
+            "        - '@no_such_set'\n"
+        )
+        err = _load_errors(td, text)
+        assert "规则引用必须以 @ 开头: 'example_rules'" in err, err
+        assert "引用的规则不存在: @example_rules.ruleX" in err, err
+        assert "引用的规则集不存在: @no_such_set" in err, err
+        # 合法引用通过(移除两条非法引用)
+        ok = (
+            text.replace("- example_rules", "- '@example_rules'").replace("        - '@example_rules.ruleX'\n",
+                                                                          "").replace("        - '@no_such_set'\n", "")
+        )
+        cfg = load_config(_write_raw(td, ok))
+        assert cfg.trackers["T1"].rules == ["@example_rules"]
+
+        # -- 重复引用判重(26-10-02-1621 W1): 运行时按规则名去重使重复条目完全惰性, 配置期 fail-fast 拒收 --
+
+        # 1. 同一 @ 引用写两遍 -> 报「规则引用重复」(序号 0 基, 与 path_map 判重先例口径一致)
+        dup = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@example_rules'\n"
+            "        - '@example_rules'\n"
+        )
+        err = _load_errors(td, dup)
+        assert "config.trackers.T1.rules[1]: 规则引用重复(与第 0 条相同): @example_rules" in err, err
+
+        # 2. 尾随空白归一后判重("@A" 与 "@A " 同一归一形); 报错显示归一形, 序号仍指首现
+        ws = dup.replace(
+            "        - '@example_rules'\n        - '@example_rules'\n",
+            "        - '@example_rules'\n        - '@example_rules '\n"
+        )
+        err = _load_errors(td, ws)
+        assert "config.trackers.T1.rules[1]: 规则引用重复(与第 0 条相同): @example_rules" in err, err
+
+        # 3. 畸形引用重复: 第一轮只报格式错(逐条各报一次), 不叠加查重错
+        bad = dup.replace(
+            "        - '@example_rules'\n        - '@example_rules'\n",
+            "        - example_rules\n        - example_rules\n"
+        )
+        err = _load_errors(td, bad)
+        assert err.count("规则引用必须以 @ 开头") == 2, err
+        assert "规则引用重复" not in err, err
+
+        # 4. 无重复的合法配置 load 通过且 rules 原样保序(锁「loaders 不静默去重」)
+        # (规则集键约定: config 段下以 _rules 结尾, 见 loaders.py rules_config 提取)
+        ok_multi = (
+            "config:\n"
+            "  setA_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  setB_rules:\n"
+            "    r2:\n"
+            "      conditions:\n"
+            "        - path: /b\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@setB_rules'\n"
+            "        - '@setA_rules'\n"
+        )
+        cfg = load_config(_write_raw(td, ok_multi))
+        assert cfg.trackers["T1"].rules == ["@setB_rules", "@setA_rules"], cfg.trackers["T1"].rules
+
+
+def test_validate_regex_patterns():
+    """delete_tags / tracker.remove_tags 中非法 regex: 模式报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  delete_tags:\n"
+            "    - 'regex:^a(b'\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      remove_tags:\n"
+            "        - 'regex:[x'\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.delete_tags[0]: 非法正则" in err, err
+        assert "config.trackers.T1.remove_tags[0]: 非法正则" in err, err
+
+
+def test_validate_condition_and_remove_tags_regex():
+    """tags/category/trackers 条件与 remove_tags 动作的非法 regex: 模式在 config 阶段 fail-fast"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  my_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - tags: ['regex:[x']\n"
+            "        - category: 'regex:[y'\n"
+            "        - trackers: 'regex:[z'\n"
+            "      actions:\n"
+            "        - remove_tags: ['regex:[w']\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.my_rules.r1.conditions[0].tags[0]: 非法正则" in err, err
+        assert "config.my_rules.r1.conditions[1].category[0]: 非法正则" in err, err
+        assert "config.my_rules.r1.conditions[2].trackers[0]: 非法正则" in err, err
+        assert "config.my_rules.r1.actions[0].remove_tags[0]: 非法正则" in err, err
+
+
+def test_validate_notify():
+    """notify 段校验: 未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels 聚合报错"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  notify:\n"
+            "    unknown_key: 1\n"
+            "    min_level: DEBUG\n"
+            "    quiet_hours: '25:00-99:99'\n"
+            "    max_per_hour: 0\n"
+            "    dedup_window: abc\n"
+            "    channels:\n"
+            "      - dingtalk: {}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.notify: 未知键 ['unknown_key']" in err, err
+        assert "config.notify.min_level: 须为 INFO/WARNING/ERROR 之一: 'DEBUG'" in err, err
+        assert "config.notify.quiet_hours: 须为 'HH:MM-HH:MM'(可跨午夜)" in err, err
+        assert "config.notify.max_per_hour: 必须为正整数" in err, err
+        assert "config.notify.dedup_window" in err, err
+        assert "config.notify.channels[0]: 未知渠道 'dingtalk'" in err, err
+
+
+def test_validate_gslc():
+    """global_speed_limit_curve 由原生校验器 _validate_global_speed_limit_curve 聚合错误"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: WEEK\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.global_speed_limit_curve.curves[0].curve.period: 无效 period" in err, err
+        assert "需配置 upload_curve 和/或 download_curve" in err, err
+
+
+def test_validate_gslc_enabled_key():
+    """global_speed_limit_curve.enabled 功能总开关: 缺省 True / false 关闭 / true 开启 / 非布尔报错"""
+    base = (
+        "config:\n"
+        "  global_speed_limit_curve:\n"
+        "    traffic_source:\n"
+        "      - traffic_monitor:\n"
+        "          dat_path: a.dat\n"
+        "    curves:\n"
+        "      - curve:\n"
+        "          period: 1D\n"
+        "          upload_curve:\n"
+        "            - 10GiB: {upload_speed_limit: 6MiB/s}\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, base))
+        assert cfg.global_speed_limit_curve.enabled is True  # 缺省 True = 现行行为
+
+        cfg = load_config(_write_raw(td, base + "    enabled: false\n"))
+        assert cfg.global_speed_limit_curve.enabled is False
+
+        cfg = load_config(_write_raw(td, base + "    enabled: true\n"))
+        assert cfg.global_speed_limit_curve.enabled is True
+
+        err = _load_errors(td, base + "    enabled: not-bool\n")
+        assert "config.global_speed_limit_curve.enabled" in err, err
+
+
+def test_validate_traffic_source_enabled_key():
+    """traffic_source.enabled 总开关(计划 26-10-17-1737 S1/D1): 缺省 True / false 关闭 /
+    非布尔报错; false 时免检 dat_path(关来源是"没配好数据源"时的出路)且流量规则名字不被门控禁掉"""
+    base = ("config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n")
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, base))
+        assert cfg.traffic_source.enabled is True  # 缺省 True = 现行行为
+
+        cfg = load_config(_write_raw(td, base.replace("dat_path: a.dat", "dat_path: a.dat\n    enabled: false")))
+        assert cfg.traffic_source.enabled is False
+
+        cfg = load_config(_write_raw(td, base.replace("dat_path: a.dat", "dat_path: a.dat\n    enabled: true")))
+        assert cfg.traffic_source.enabled is True
+
+        err = _load_errors(td, base.replace("dat_path: a.dat", "dat_path: a.dat\n    enabled: not-bool"))
+        assert "config.traffic_source.enabled" in err, err
+
+        # enabled=false: 缺 dat_path 也零报错(provider 缺省 = traffic_monitor, 原本必填)
+        off_no_dat = "config:\n  traffic_source:\n    enabled: false\n"
+        assert _load_errors(td, off_no_dat) == "", _load_errors(td, off_no_dat)
+        # enabled 缺省/true: dat_path 仍必填(既有 fail-fast 行为不变)
+        on_no_dat = "config:\n  traffic_source:\n    traffic_monitor: {}\n"
+        assert "traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径" in _load_errors(td, on_no_dat)
+        # 非法 enabled 值不当成关闭: 仍走 dat_path 必填(parse_bool 报错另行记录)
+        bad_off = "config:\n  traffic_source:\n    enabled: not-bool\n"
+        err = _load_errors(td, bad_off)
+        assert "config.traffic_source.enabled" in err, err
+        assert "必须配置非空的 dat 文件路径" in err, err
+        # enabled=false: 流量规则里的 traffic.* 名字不被校验期门控禁掉(否则保存必败, 用户无法自救)
+        off_rules = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    enabled: false\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - expr: \"sys.upload_today > 0\"\n"
+        )
+        err = _load_errors(td, off_rules)
+        assert err == "", err
+        # 对照: enabled 缺省 + 无 dat_path -> 门控照旧报"无数据源"
+        on_rules = off_rules.replace("    enabled: false\n", "")
+        assert "无数据源" in _load_errors(td, on_rules)
+        # no/off/0 等价关闭写法(R4#14, 关闭判定经 parse_bool): 同样免检 dat_path
+        # (此前只认字面 "false", enabled: no 被当开启 -> dat_path 必填报错, 走不到逃生口)
+        for form in ("no", "off", "0"):
+            assert _load_errors(td, f"config:\n  traffic_source:\n    enabled: {form}\n") == ""
+        # gate 同口径(R4#10): enabled: no 时 traffic.* 名字不被门控禁掉
+        no_rules = off_rules.replace("    enabled: false\n", "    enabled: no\n")
+        assert _load_errors(td, no_rules) == "", _load_errors(td, no_rules)
+        # 对照: 非 0 数字不是布尔, 不算关闭(格式错照记 + gate 照禁, 保守方向不变)
+        bad_num_rules = off_rules.replace("    enabled: false\n", "    enabled: 2\n")
+        err = _load_errors(td, bad_num_rules)
+        assert "config.traffic_source.enabled" in err, err
+        assert "无数据源" in err, err
+
+
+def test_validate_traffic_source_gtm_expr_gate():
+    """provider=global_traffic_monitor 恒 traffic_configured(R4#11): gtm 无 dat_path + sys.upload_today expr 规则零报错
+
+    gtm 分支此前 tests/ 零覆盖: 回归成「判 dat_path」(-> traffic 派生的 sys.* 门控名(GATED_NAMES)被禁用)
+    会被本用例捕获; 对照支钉住 traffic_monitor 缺 dat_path 仍报"无数据源", 保证用例非空转。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        gtm_rules = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    provider: global_traffic_monitor\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - expr: \"sys.upload_today > 0\"\n"
+        )
+        assert _load_errors(td, gtm_rules) == "", _load_errors(td, gtm_rules)
+        # 对照: provider 缺省(=traffic_monitor)且无 dat_path -> 门控报"无数据源"
+        assert "无数据源" in _load_errors(td, gtm_rules.replace("    provider: global_traffic_monitor\n", ""))
+
+
+def test_validate_notify_dedup_window_bare_zero():
+    """notify.dedup_window 裸 0 = 不去重(合法, R4#15): 裸 0/整数 0/0S 放行, 坏格式照拒"""
+    with tempfile.TemporaryDirectory() as td:
+        assert "dedup_window" not in _load_errors(td, "config:\n  notify:\n    dedup_window: 0\n")
+        assert _errs({"notify": {"dedup_window": 0}}) == []  # 整数 0(程序内构造)同样放行
+        assert "dedup_window" not in _load_errors(td, "config:\n  notify:\n    dedup_window: 0S\n")
+        assert "config.notify.dedup_window" in _load_errors(td, "config:\n  notify:\n    dedup_window: abc\n")
+
+
+def test_validate_rule_cooldown_bare_zero():
+    """example_rules.*.cooldown 裸 0 = 不冷却(合法, issue 26-11-08-0703, 与 R4#15 dedup_window 同构):
+    裸 0/整数 0/浮点 0.0/0S 放行; 非零裸数字/坏格式/负值照拒(特判只放行数值 0 本身);
+    浮点口径见 issue 26-11-08-1923(谓词扩 float 0.0): 文件路径经 BaseLoader 是字符串 "0.0",
+    照走「无效时间格式」干净报错, 不在放行之列(扩法只对数值 0 放行)"""
+    with tempfile.TemporaryDirectory() as td:
+        assert "cooldown" not in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 0\n      actions: []\n"
+        )
+        assert _errs({"example_rules": {"r1": {"cooldown": 0, "actions": []}}}) == []  # 整数 0(程序内构造)同样放行
+        assert _errs({"example_rules": {
+            "r1": {
+                "cooldown": 0.0,
+                "actions": []
+            }
+        }}) == []  # 浮点 0.0 同口径(issue 26-11-08-1923)
+        assert "cooldown" not in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 0S\n      actions: []\n"
+        )
+        assert "cooldown" not in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 10M\n      actions: []\n"
+        )
+        # 文件路径 cooldown: 0.0 经 BaseLoader 成字符串 "0.0", 不在数值 0 放行之列 -> 干净聚合报错
+        assert "config.example_rules.r1.cooldown: 无效时间格式: 0.0" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 0.0\n      actions: []\n"
+        )
+        # 非零裸数字无单位/坏格式/负值/非零浮点 -> 格式报错(裸 0 特判只放行数值 0 本身)
+        assert "config.example_rules.r1.cooldown: 无效时间格式" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: 5\n      actions: []\n"
+        )
+        assert "config.example_rules.r1.cooldown: 无效时间格式" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: abc\n      actions: []\n"
+        )
+        assert "config.example_rules.r1.cooldown: 无效时间格式" in _load_errors(
+            td, "config:\n  example_rules:\n    r1:\n      cooldown: -5S\n      actions: []\n"
+        )
+        assert "config.example_rules.r1.cooldown: 无效时间格式: 3.5" in _errs(
+            {"example_rules": {
+                "r1": {
+                    "cooldown": 3.5,
+                    "actions": []
+                }
+            }}
+        )  # 非零浮点(程序内构造)照拒, 不得被顺手放行
+
+
+def test_validate_checking_section_mode_absent_ok():
+    """checking 子段 mode 缺省走 schema 默认 skip-checking(R4#12): {enabled: true} 不报「取值非法: ''」
+
+    存在守卫只对显式配置的 mode 校验取值域: 非法显式值照拒(守卫不放水)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        ok = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {enabled: true}\n"
+            "            without_reference: {auto_start: true}\n"
+        )
+        assert _load_errors(td, ok) == "", _load_errors(td, ok)
+        bad = ok.replace("with_reference: {enabled: true}", "with_reference: {mode: xxx}")
+        assert "with_reference.mode 取值非法: 'xxx'" in _load_errors(td, bad)
+
+
+def test_validate_add_episode_tags_unknown_keys():
+    """add_episode_tags 未知键 fail-fast(R4#13): 模板键拼错报未知键(此前全段零报错、loader 静默回落默认), 合法键面放行"""
+    with tempfile.TemporaryDirectory() as td:
+        err = _load_errors(td, "config:\n  add_episode_tags:\n    add_tag_singel: zE01\n")
+        assert "config.add_episode_tags: 未知键 ['add_tag_singel']" in err, err
+        ok = (
+            "config:\n"
+            "  add_episode_tags:\n"
+            "    enabled: true\n"
+            "    add_tag_single: zE${episode_first}\n"
+            "    add_tag_multi: zE${episode_first}-${episode_last}\n"
+        )
+        assert _load_errors(td, ok) == "", _load_errors(td, ok)
+
+
+def test_validate_empty_file():
+    """空文件/非字典根节点 -> 明确报错"""
+    with tempfile.TemporaryDirectory() as td:
+        assert "配置文件为空或根节点不是字典" in _load_errors(td, "")
+        assert "配置文件为空或根节点不是字典" in _load_errors(td, "- a\n- b\n")
+
+
+def test_config_error_wraps_io_and_yaml():
+    """文件读取/YAML 解析异常统一包装为 ConfigError(ValueError 子类, 供 CLI 单点捕获)"""
+    with tempfile.TemporaryDirectory() as td:
+        with pytest.raises(ConfigError, match="配置文件读取失败"):
+            load_config(os.path.join(td, "no-such.yml"))
+        with pytest.raises(ConfigError, match="YAML 解析失败"):
+            load_config(_write_raw(td, "config: [unclosed"))
+        assert issubclass(ConfigError, AutoQbError)  # 根异常(CLI 单点捕获)
+
+
+def test_validate_section_type_errors():
+    """各段非字典/非列表类型错误聚合(log/qbittorrent/grouping/hr/add_episode_tags/delete_tags/坏项)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  log: [not-a-dict]\n"
+            "  qbittorrent: 123\n"
+            "  grouping: not-dict\n"
+            "  hr: 456\n"
+            "  add_episode_tags: not-dict\n"
+            "  delete_tags: [\" \", 5]\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      tags: not-a-list\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.log: 必须是字典" in err, err
+        assert "config.qbittorrent: 必须是字典" in err, err
+        assert "config.grouping: 必须是字典" in err, err
+        assert "config.hr: 必须是字典" in err, err
+        assert "config.add_episode_tags: 必须是字典" in err, err
+        assert "config.delete_tags: 第 [0] 项必须是非空字符串" in err, err
+        assert "config.trackers.T1.tags: 必须是列表" in err, err
+
+
+def test_validate_hr_value_errors():
+    """站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔非法)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  grouping:\n"
+            "    enabled: not-bool\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        extra_seeding_time: abc\n"
+            "        required_share_ratio: not-number\n"
+            "        condition: bad-cond\n"
+            "        overwrite_category: not-bool\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.grouping.enabled" in err, err
+        assert "config.trackers.T1.hr.extra_seeding_time" in err, err
+        assert "config.trackers.T1.hr.required_share_ratio(须为数字)" in err, err
+        assert "config.trackers.T1.hr.condition(如 80% 或 10MiB)" in err, err
+        assert "config.trackers.T1.hr.overwrite_category" in err, err
+
+
+def test_validate_value_errors_extended():
+    """值错误扩展: add_episode_tags 模板/端口非整数/hr 未知键与布尔/trackers 标量与字段/规则集结构/触发白名单
+
+    注意: 空串值会被 _strip_none 过滤(走默认), 因此"必须非空"类断言用纯空格串触发。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  add_episode_tags:\n"
+            "    enabled: not-bool\n"
+            "    add_tag_single: \" \"\n"
+            "  qbittorrent:\n"
+            "    host: h\n"
+            "    port: not-int\n"
+            "  hr:\n"
+            "    unknown_key: 1\n"
+            "    overwrite_category: not-bool\n"
+            "  trackers: 123\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions: not-a-list\n"
+            "      actions: not-a-list\n"
+            "      trigger: bad-trigger\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.add_episode_tags.enabled" in err, err
+        assert "config.add_episode_tags.add_tag_single: 必须是非空字符串" in err, err
+        assert "config.qbittorrent.port: 必须是整数" in err, err
+        assert "config.hr: 未知键" in err, err
+        assert "config.hr.overwrite_category" in err, err
+        assert "config.trackers: 必须是字典" in err, err
+        assert "config.example_rules.r1.conditions: 必须是字典" in err, err  # W3-A: 树形键面
+        assert "config.example_rules.r1.actions: 必须是列表" in err, err
+        assert "config.example_rules.r1: trigger 取值非法" in err, err
+
+
+def test_validate_tracker_groups():
+    """站点 groups 字段: 非列表/纯空白串项报错(空串项被 _strip_none 视为未配置剔除, 项目统一约定; 空列表合法)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      groups: not-a-list\n"
+            "    T2:\n"
+            "      domains: [b.com]\n"
+            "      groups: ['  ']\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.trackers.T1.groups: 必须是列表" in err, err
+        assert "config.trackers.T2.groups: 第 [0] 项必须是非空字符串" in err, err
+
+
+def test_validate_tracker_field_errors():
+    """trackers 字段错误: domains 空列表/remove_similar_tags 非布尔/hr 非字典"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: []\n"
+            "      remove_similar_tags: not-bool\n"
+            "      hr: not-dict\n"
+            "    T2: not-dict\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.trackers.T1.domains: 必须是非空字符串列表" in err, err
+        assert "config.trackers.T2: 必须是字典" in err, err
+        assert "config.trackers.T1.remove_similar_tags" in err, err
+        assert "config.trackers.T1.hr: 必须是字典" in err, err
+
+
+def test_validate_plugin_entry_and_notify_edges():
+    """插件项空值/ignore_next 非布尔/notify 非字典"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  my_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - tags:\n"
+            "      actions:\n"
+            "        - {}\n"
+            "        - ignore_next_action_error: not-bool\n"
+            "        - reannounce: true\n"
+            "  notify: not-dict\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+        )
+        err = _load_errors(td, text)
+        assert "值不能为空" in err, err
+        assert "config.my_rules.r1.actions[1].ignore_next_action_error" in err, err
+        assert "config.notify: 必须是字典" in err, err
+
+
+def test_validate_trackers_and_rules_structure():
+    """trackers 非字典/规则集非字典/规则 spec 非字典/conditions 非字典(W3-A 树形)-actions 非列表"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers: 123\n"
+            "  example_rules: 456\n"
+            "  more_rules:\n"
+            "    r1: not-dict\n"
+            "    r2:\n"
+            "      conditions: not-a-list\n"
+            "      actions: not-a-list\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.trackers: 必须是字典" in err, err
+        assert "config.example_rules: 必须是字典(规则名 -> 规则spec)" in err, err
+        assert "config.more_rules.r1: 必须是字典" in err, err
+        assert "config.more_rules.r2.conditions: 必须是字典" in err, err  # W3-A: 树形键面
+        assert "config.more_rules.r2.actions: 必须是列表" in err, err
+
+
+def test_validate_notify_and_root_edges():
+    """notify 字段边界(quiet_hours 无-/max_per_hour 非整数/channels 结构)/根节点 config 非字典/gslc 阈值非法"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  notify:\n"
+            "    quiet_hours: 2300\n"
+            "    max_per_hour: []\n"
+            "    channels: not-a-list\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: x.dat\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: DAY\n"
+            "          upload_curve:\n"
+            "            - abc: {upload_speed_limit: 1MiB/s}\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.notify.quiet_hours: 须为" in err, err
+        assert "config.notify.max_per_hour: 必须为整数" in err, err
+        assert "config.notify.channels: 必须是非空列表" in err, err
+        assert "config: 必须是字典" not in err, err
+        assert "abc" in err, err
+
+
+def test_validate_root_config_not_dict():
+    """根节点 config 非字典 -> 必须是字典"""
+    with tempfile.TemporaryDirectory() as td:
+        text = "config: 123\n"
+        err = _load_errors(td, text)
+        assert "config: 必须是字典" in err, err
+
+
+def test_validate_value_ranges():
+    """取值范围收紧聚合: 防止"格式合法但危险"的值进入运行时
+
+    - config.interval: 0 会经 TaskQueue._norm_interval 归一化成 1s(全部种子级任务每秒跑)
+    - log.max_bytes: 0 在 RotatingFileHandler 语义 = 从不轮转(单文件无限增长)
+    - required_share_ratio: 负数/nan/inf 会静默破坏 HR 判定语义(nan 比较恒 False)
+    - hr.condition: "0%"/负数立即满足、">100%"永不触发, 均与配置意图相反
+    - 规则 interval: 显式 0 同样归一化成每秒全量跑; cooldown=0 是文档化的"不冷却"语义, 不拦
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- config.interval: 上下界(1s-1D), 边界值合法
+        assert "config.interval: 须 >= 1s" in _load_errors(td, "config:\n  interval: 0S\n")
+        assert "config.interval: 须 <= 86400s" in _load_errors(td, "config:\n  interval: 2D\n")
+        assert _load_errors(td, "config:\n  interval: 1S\n") == ""
+        assert _load_errors(td, "config:\n  interval: 1D\n") == ""
+        # --- main_tick / sync_interval: 高频下限与失效上限
+        assert "config.main_tick: 须 >= 0.5s" in _load_errors(td, "config:\n  main_tick: 0.1S\n")
+        assert "config.main_tick: 须 <= 3600s" in _load_errors(td, "config:\n  main_tick: 2H\n")
+        assert _load_errors(td, "config:\n  main_tick: 30M\n") == ""
+        assert "config.sync_interval: 须 >= 1s" in _load_errors(td, "config:\n  sync_interval: 0.5S\n")
+        assert _load_errors(td, "config:\n  sync_interval: 10M\n") == ""
+        # --- max_tasks_per_tick 上界(下界已有独立测试)
+        assert "config.max_tasks_per_tick: 须 <= 500" in _load_errors(td, "config:\n  max_tasks_per_tick: 501\n")
+        assert _load_errors(td, "config:\n  max_tasks_per_tick: 500\n") == ""
+        # --- log.max_bytes: 0B/过小/过大都拦, 默认值合法(裸数字无单位是格式错误, 不进范围检查)
+        err = _load_errors(td, "config:\n  log:\n    max_bytes: 0B\n")
+        assert "config.log.max_bytes: 须在 1MiB-1GiB 范围内" in err, err
+        assert "config.log.max_bytes" in _load_errors(td, "config:\n  log:\n    max_bytes: 512KiB\n")
+        assert "config.log.max_bytes" in _load_errors(td, "config:\n  log:\n    max_bytes: 2GiB\n")
+        assert _load_errors(td, "config:\n  log:\n    max_bytes: 10MiB\n") == ""
+
+        def _hr_ratio(value):
+            return _load_errors(
+                td,
+                "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n"
+                "        required_seeding_time: 3D\n        required_share_ratio: %s\n" % value,
+            )
+
+        # --- required_share_ratio: nan/inf/负数/超上界, 边界 0(不要求)与 100 合法
+        assert "须为有限数字" in _hr_ratio("nan")
+        assert "须为有限数字" in _hr_ratio("inf")
+        assert "须 >= 0" in _hr_ratio("-1")
+        assert "须 <= 100" in _hr_ratio("101")
+        assert _hr_ratio("0") == ""
+        assert _hr_ratio("100") == ""
+
+        def _hr_cond(value):
+            return _load_errors(
+                td,
+                "config:\n  trackers:\n    T1:\n      domains: [a.com]\n      hr:\n"
+                "        required_seeding_time: 3D\n        condition: %s\n" % value,
+            )
+
+        # --- hr.condition: 百分比 (0,100] / 下载量 >0, 边界合法
+        assert "HR 百分比条件须 (0, 100]" in _hr_cond("0%")
+        assert "HR 百分比条件须 (0, 100]" in _hr_cond("200%")
+        assert "HR 百分比条件须 (0, 100]" in _hr_cond("-5%")
+        assert "HR 下载量条件须 > 0" in _hr_cond("0MiB")
+        assert _hr_cond("80%") == ""
+        assert _hr_cond("100%") == ""
+        assert _hr_cond("10MiB") == ""
+        # --- notify: max_per_hour 上界; dedup_window 上限(0=不去重仍合法)
+        assert "config.notify.max_per_hour: 须 <= 100" in _load_errors(td, "config:\n  notify:\n    max_per_hour: 101\n")
+        assert _load_errors(td, "config:\n  notify:\n    max_per_hour: 100\n") == ""
+        assert "config.notify.dedup_window: 须 <= 86400s" in _load_errors(
+            td, "config:\n  notify:\n    dedup_window: 25H\n"
+        )
+        assert _load_errors(td, "config:\n  notify:\n    dedup_window: 0S\n") == ""
+        # --- 规则 interval: 显式 0 拦(队列归一化成 1s); cooldown=0 是"不冷却"语义, 不拦
+        assert "config.rr_rules.r1.interval: 必须为正时间" in _load_errors(
+            td, "config:\n  rr_rules:\n    r1:\n      interval: 0S\n"
+        )
+        assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      interval: 5S\n") == ""
+        assert _load_errors(td, "config:\n  rr_rules:\n    r1:\n      cooldown: 0S\n") == ""
+
+
+def test_validate_exact_boundaries():
+    """闭区间端点逐值钉住 —— 池内既有用例取的都是**远离边界**的值, 端点位移类变异
+    (`<=` -> `<`、闭区间端点 +1/-1)因此全部存活。本用例把每个闭区间两端都走一遍。
+
+    覆盖: 端口 [1,65535] 两处(qbittorrent/web) + hr_check.channel [0,65535](0=随机/关闭, 计划 26-10-14-1241) ·
+    log.max_bytes [1MiB,1GiB] ·
+    notify.max_per_hour [1,100] · max_tasks_per_tick [1,500] · main_tick 下限 0.5s ·
+    sync_interval [1,600]s · qb_traffic 采样/落盘/保留窗端点 · 曲线阈值 >0 且严格递增。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- 端口闭区间: qbittorrent/web 为 [1,65535]; hr_check.channel 为 [0,65535](0 = 随机/关闭)
+        for head in (
+            "config:\n  qbittorrent:\n    port: %s\n",
+            "config:\n  web:\n    port: %s\n",
+        ):
+            assert _load_errors(td, head % 1) == "", head
+            assert _load_errors(td, head % 65535) == "", head
+            assert "超出范围 1-65535" in _load_errors(td, head % 0), head
+            assert "超出范围 1-65535" in _load_errors(td, head % 65536), head
+        channel_head = "config:\n  hr_check:\n    channel:\n      port: %s\n"
+        assert _load_errors(td, channel_head % 0) == "", "channel.port 0 = 随机(合法, 计划 26-10-14-1241)"
+        assert _load_errors(td, channel_head % 65535) == "", channel_head
+        assert "超出范围 0-65535" in _load_errors(td, channel_head % 65536), channel_head
+        assert "超出范围 0-65535" in _load_errors(td, channel_head % -1), channel_head
+
+        def log_mb(v):
+            return _load_errors(td, "config:\n  log:\n    max_bytes: %s\n" % v)
+
+        # --- log.max_bytes: 两端合法, 上下各越界一档非法
+        assert log_mb("1MiB") == ""
+        assert log_mb("1GiB") == ""
+        assert "config.log.max_bytes" in log_mb("1023KiB")
+        assert "config.log.max_bytes" in log_mb("1025MiB")
+
+        # --- notify.max_per_hour 下界端点 1 合法, 0 非法(上界 100 已有独立用例)
+        assert _load_errors(td, "config:\n  notify:\n    max_per_hour: 1\n") == ""
+        assert "必须为正整数" in _load_errors(td, "config:\n  notify:\n    max_per_hour: 0\n")
+
+        # --- max_tasks_per_tick 下界端点 1 合法, 0 非法(上界 500 已有独立用例)
+        assert _load_errors(td, "config:\n  max_tasks_per_tick: 1\n") == ""
+        assert "须 >= 1" in _load_errors(td, "config:\n  max_tasks_per_tick: 0\n")
+
+        # --- main_tick 下限端点 0.5s; sync_interval 闭区间两端
+        assert _load_errors(td, "config:\n  main_tick: 0.5S\n") == ""
+        assert _load_errors(td, "config:\n  sync_interval: 1S\n") == ""
+        assert _load_errors(td, "config:\n  sync_interval: 600S\n") == ""
+        assert "config.sync_interval: 须 <= 600s" in _load_errors(td, "config:\n  sync_interval: 601S\n")
+
+        def qbt(section):
+            return _load_errors(td, "config:\n  qb_traffic:\n" + section)
+
+        # --- qb_traffic.sample_interval_multiplier 有效秒上界端点(默认 main_tick=2s: 300 倍 = 600s 合法,
+        #     301 倍 = 602s 超限) / flush_interval 两端 / 两个保留窗下界
+        assert qbt("    sample_interval_multiplier: 300\n") == ""
+        assert "301 x main_tick(2s) = 602s 超过上限 600s" in qbt("    sample_interval_multiplier: 301\n")
+        assert qbt("    flush_interval: 60S\n") == ""
+        assert qbt("    flush_interval: 3600S\n") == ""
+        assert "config.qb_traffic.flush_interval: 须 >= 60s" in qbt("    flush_interval: 59S\n")
+        assert "config.qb_traffic.flush_interval: 须 <= 3600s" in qbt("    flush_interval: 3601S\n")
+        assert qbt("    raw_window: 1H\n") == ""
+        assert "config.qb_traffic.raw_window: 须 >= 3600s" in qbt("    raw_window: 59M\n")
+        assert qbt("    rollup_window: 7D\n") == ""
+        assert "config.qb_traffic.rollup_window: 须 >= 604800s" in qbt("    rollup_window: 6D\n")
+
+        # --- 曲线阈值: 必须 > 0 且**严格**递增(相等即非法)
+        gslc = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - 1B: {upload_speed_limit: 6MiB/s}\n"
+        )
+        assert _load_errors(td, gslc) == ""
+        assert "阈值必须大于 0" in _load_errors(td, gslc.replace("- 1B:", "- 0B:"))
+        assert "必须严格递增" in _load_errors(td, gslc + "            - 1B: {upload_speed_limit: 7MiB/s}\n")
+
+
+def test_validate_exact_boundaries_size_and_window_tail():
+    """端点用例的**逐字节 / 上界 / 整数秒**三处补缺 —— 上面那条用的是「隔一档」的值, 挡不住逐字节位移
+
+    - log.max_bytes [1MiB, 1GiB]: 上条用 1023KiB / 1025MiB 验两端, `1024**2` -> `1024**2 - 1` 与
+      `1024**3` -> `1024**3 + 1` 这类**只挪 1 字节**的位移照样全绿(区间大了/小了一字节没用例踩);
+    - qb_traffic.raw_window 上界 90D: 上条只钉了下界 1H, 上界两端(90D 合法 / 91D 非法)都没喂过;
+    - qb_traffic.flush_interval 须为整数秒: 池内只有「整数秒通过」侧, 该分支的报错语句被删也全绿。
+    """
+    with tempfile.TemporaryDirectory() as td:
+
+        def log_mb(v):
+            return _load_errors(td, "config:\n  log:\n    max_bytes: %s\n" % v)
+
+        # --- log.max_bytes 逐字节: 两端合法, 两端外 **1 字节** 非法
+        assert log_mb("1048576B") == "", "1MiB"
+        assert log_mb("1073741824B") == "", "1GiB"
+        assert "config.log.max_bytes" in log_mb("1048575B"), "1MiB - 1B"
+        assert "config.log.max_bytes" in log_mb("1073741825B"), "1GiB + 1B"
+
+        def qbt(section):
+            return _load_errors(td, "config:\n  qb_traffic:\n" + section)
+
+        # --- raw_window 上界端点 90D 合法 / 91D 非法
+        assert qbt("    raw_window: 90D\n") == ""
+        assert "config.qb_traffic.raw_window: 须 <= 7776000s" in qbt("    raw_window: 91D\n")
+        # --- flush_interval 整数秒判据的**拦截侧**
+        assert "config.qb_traffic.flush_interval: 须为整数秒" in qbt("    flush_interval: 90.5S\n")
+        assert qbt("    flush_interval: 90S\n") == ""
+
+
+def test_validate_schema_version_lower_endpoint():
+    """schema_version 下界端点: 1 合法 / 0 非法(`parsed_version < 1` -> `< 0` 的位移此前挡不住)"""
+    from auto_qb.config.validation import validate_config
+
+    assert validate_config({"config": {"schema_version": "1"}}) == []
+    assert any("config.schema_version: 须 >= 1" in e for e in validate_config({"config": {"schema_version": "0"}}))
+
+
+def test_validate_qb_traffic_main_tick_crosscheck():
+    """qb_traffic.sample_interval_multiplier 的有效秒上限用**同一份配置**的 main_tick 换算
+
+    钉住两件事: 1. main_tick 取自当前配置(而非模型默认 2s —— 取默认则 11 倍仅 22s 不报错);
+    2. 上限是闭区间(10 x 60s = 600s 合法, 11 x 60s = 660s 超限), 报错文案含换算值。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        err = _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval_multiplier: 11\n")
+        assert "config.qb_traffic.sample_interval_multiplier" in err, err
+        assert "11 x main_tick(60s) = 660s 超过上限 600s" in err, err
+        # 相等合法(<= 而非 <)
+        assert _load_errors(td, "config:\n  main_tick: 60S\n  qb_traffic:\n    sample_interval_multiplier: 10\n") == ""
+        # main_tick 写坏 -> 上限校验跳过(只报 main_tick 自身错误, 不叠假错也不 TypeError)
+        bad_tick = _load_errors(
+            td, "config:\n  main_tick: nonsense\n  qb_traffic:\n    sample_interval_multiplier: 301\n"
+        )
+        assert "config.main_tick" in bad_tick, bad_tick
+        assert "config.qb_traffic.sample_interval_multiplier" not in bad_tick, bad_tick
+
+
+def test_validate_integer_and_str_list_guards():
+    """整数判据与字符串列表判据的返回语义钉住(池内用例只测了"通过"侧, 未测"拦截"侧)
+
+    - hr_check.max_requests_per_day/max_pages_per_wave 走 integer=True: 小数必须被 int() 拒
+    - 字符串列表项必须**非空白**: 空白项必须报错(_check_str_list 返回 False)
+    - state_file 显式空白串必须报错
+    """
+    with tempfile.TemporaryDirectory() as td:
+        assert "max_requests_per_day" in _load_errors(td, "config:\n  hr_check:\n    max_requests_per_day: 1.5\n")
+        assert "max_pages_per_wave" in _load_errors(td, "config:\n  hr_check:\n    max_pages_per_wave: 2.5\n")
+        assert _load_errors(td, "config:\n  hr_check:\n    max_requests_per_day: 10\n") == ""
+        # 空白项必须报错(_check_str_list 的 return False 分支)
+        assert "必须是非空字符串" in _load_errors(td, 'config:\n  delete_tags:\n    - " "\n')
+        assert _load_errors(td, "config:\n  delete_tags:\n    - ok\n") == ""
+        # state_file 显式空白串
+        assert "config.state_file: 不能为空" in _load_errors(td, 'config:\n  state_file: " "\n')
+
+
+def test_validate_fs_reports_all_entries():
+    """fs.path_map 逐条报错: 前一条非法**不得**截断后续条目的校验(循环用 continue 而非 break)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - not-a-dict\n"
+            "      - {from: 'D:/a', to: /a}\n"
+            "      - {from: 'D:/a', to: /b}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.fs.path_map[0]: 必须是字典" in err, err
+        assert "config.fs.path_map[2].from: 与第 1 条重复" in err, err
+
+
+def test_validate_fs_path_map_from_to_must_be_string():
+    """fs.path_map from/to 必须是非空字符串 —— dict/list/bool/int 不得经 str() 静默通过
+    (issue 26-11-03-0901 同批, 口径与 transfer path_map 一致)"""
+    for bad in ({"k": "v"}, ["x"], True, 1):
+        errs = _errs({"fs": {"path_map": [{"from": bad, "to": "/mnt/a"}]}})
+        assert any("path_map[0].from: 必须是字符串" in e for e in errs), (bad, errs)
+        errs = _errs({"fs": {"path_map": [{"from": "D:/a", "to": bad}]}})
+        assert any("path_map[0].to: 必须是字符串" in e for e in errs), (bad, errs)
+    # 缺键仍按「不能为空」报(类型分支不改旧文案)
+    errs = _errs({"fs": {"path_map": [{"from": "D:/a"}]}})
+    assert any("path_map[0].to: 不能为空" in e for e in errs)
+    assert _errs({"fs": {"path_map": [{"from": "D:/a", "to": "/mnt/a"}]}}) == []
+
+
+def test_fs_path_map_nonscalar_blocks_load():
+    """真实 YAML 链路: from 写成嵌套列表(BaseLoader 标量恒为字符串, 只有容器能进类型分支)
+    ⇒ load_config 抛 ConfigError(issue 26-11-03-0901 同批)"""
+    text = ("config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - from:\n"
+            "          - D:/a\n"
+            "        to: /mnt/a\n")
+    with tempfile.TemporaryDirectory() as td:
+        with pytest.raises(ConfigError, match=r"path_map\[0\]\.from: 必须是字符串"):
+            load_config(_write_raw(td, text))
+
+
+def test_validate_schema_version_shape():
+    """validate_config 形状校验(防御层): schema_version 非整数/负值聚合报错"""
+    from auto_qb.config.validation import validate_config
+
+    errors = validate_config({"config": {"schema_version": "abc"}})
+    assert any("须为整数" in e for e in errors)
+    errors = validate_config({"config": {"schema_version": "-3"}})
+    assert any("须 >= 1" in e for e in errors)
+    assert validate_config({"config": {"schema_version": "1"}}) == []
+
+
+def test_validate_sections_pass_shapes():
+    """sections 合法形态(无错误支路): add_episode_tags 无 enabled 键 / log 合法等级与区间 /
+    hr 排除表含 regex 前缀 / notify.quiet_hours 留空 / web 无 enabled 键 —— 分支「不报错」侧"""
+    assert _errs({"add_episode_tags": {"add_tag_single": "单集"}}) == []
+    assert _errs({"log": {"level": "INFO", "max_bytes": "10MiB"}}) == []
+    assert _errs({"hr": {"exclude_tags": ["regex:^HR-", "keep"], "exclude_categories": ["cat"]}}) == []
+    assert _errs({"notify": {"quiet_hours": "", "channels": [{"platform": {}}]}}) == []
+    assert _errs({"web": {"host": "127.0.0.1", "port": 8080}}) == []
+
+
+def test_validate_hr_check_type_errors():
+    """hr_check 段类型错误聚合: 整段非字典 / channel 非字典 / port 非整数与越界 / token 非字符串 /
+    allow_window 留空(合法跳过) / sites 非字典"""
+    errors = _errs({"hr_check": "not-dict"})
+    assert any("config.hr_check: 必须是字典" in e for e in errors)
+
+    errors = _errs({
+        "hr_check": {
+            "allow_window": "",  # 留空 = 不限制时段, 合法
+            "channel": "not-dict",
+            "sites": "not-dict",
+        }
+    })
+    assert any("config.hr_check.channel: 必须是字典" in e for e in errors)
+    assert any("config.hr_check.sites: 必须是字典" in e for e in errors)
+
+    errors = _errs({"hr_check": {"channel": {"port": "abc", "token": 123}}})
+    assert any("config.hr_check.channel.port: 必须是整数" in e for e in errors)
+    assert any("config.hr_check.channel.token: 必须是字符串" in e for e in errors)
+
+    errors = _errs({"hr_check": {"channel": {"port": 70000}}})
+    assert any("config.hr_check.channel.port: 超出范围" in e for e in errors)
+
+
+def test_validate_hr_site_entry_errors():
+    """hr_check.sites 条目: 非 dict 条目 / tracker 非字符串(档案 id 已登记的两站)"""
+    errors = _errs({"hr_check": {"sites": {"btschool": "not-dict"}}})
+    assert any("config.hr_check.sites.btschool: 必须是字典" in e for e in errors)
+    errors = _errs({"hr_check": {"sites": {"carpt": {"tracker": 123}}}})
+    assert any("config.hr_check.sites.carpt.tracker: 必须是字符串" in e for e in errors)
+
+
+def test_validate_hr_site_bindings_skips_unparseable_enabled():
+    """站点绑定: enabled 解析失败 -> 键类型错误已由条目校验报告, 绑定层静默跳过(不二次报错)"""
+    errors = _errs(
+        {
+            "trackers": {
+                "T1": {
+                    "domains": ["pt.btschool.club"]
+                }
+            },
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "enabled": "maybe"
+                    }
+                }
+            },
+        }
+    )
+    assert any("config.hr_check.sites.btschool.enabled" in e for e in errors)
+    # 绑定层不再产出重复错误(默认映射未命中那条不会出现 —— 282 行 continue)
+    assert not any("默认映射未命中" in e for e in errors)
+
+
+def test_validate_fs_errors():
+    """fs.path_map 结构与归一错误: 整段非字典 / 条目非字典 / from·to 为空 / 归一后为空"""
+    errors = _errs({"fs": "not-dict"})
+    assert any("config.fs: 必须是字典" in e for e in errors)
+
+    errors = _errs({"fs": {"path_map": ["not-dict"]}})
+    assert any("config.fs.path_map[0]: 必须是字典" in e for e in errors)
+
+    errors = _errs({"fs": {"path_map": [{"from": "", "to": ""}]}})
+    assert any("config.fs.path_map[0].from: 不能为空" in e for e in errors)
+    assert any("config.fs.path_map[0].to: 不能为空" in e for e in errors)
+
+    errors = _errs({"fs": {"path_map": [{"from": "//", "to": "/mnt/a"}]}})
+    assert any("config.fs.path_map[0].from: 归一后为空" in e for e in errors)
+    errors = _errs({"fs": {"path_map": [{"from": "D:/x", "to": "/"}]}})
+    assert any("config.fs.path_map[0].to: 归一后为空" in e for e in errors)
+
+
+def test_validate_web_errors():
+    """web 段类型与范围错误: 整段非字典 / host 空串 / port 非整数与越界 / token 非字符串 / skip_check_menu 非 bool"""
+    errors = _errs({"web": "not-dict"})
+    assert any("config.web: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"host": "", "port": "abc", "token": 123}})
+    assert any("config.web.host: 必须是非空字符串" in e for e in errors)
+    assert any("config.web.port: 必须是整数" in e for e in errors)
+    assert any("config.web.token: 必须是字符串" in e for e in errors)
+    errors = _errs({"web": {"port": 70000}})
+    assert any("config.web.port: 超出范围" in e for e in errors)
+    errors = _errs({"web": {"skip_check_menu": "maybe"}})
+    assert any("config.web.skip_check_menu" in e for e in errors)
+
+
+def test_web_token_ascii_only():
+    """web.token 字符集限 ASCII: 含非 ASCII 字符报错并聚合(issue 26-11-08-0827)
+
+    与 hr_check.channel.token 同形态(26-11-07-0527 #1): 常数时间密钥比较的 str 形态要求
+    两侧均为 ASCII, 非 ASCII 密钥(如中文)能过旧「必须是字符串」校验, 运行期每个请求在
+    鉴权处抛 TypeError 兜 500 —— 必须配置期拦下; 纯 ASCII 放行, 非字符串不串档。
+    """
+    errors = _errs({"web": {"token": "密钥"}})
+    assert any("config.web.token" in e and "ASCII" in e for e in errors), errors
+    errors = _errs({"web": {"token": "ok中"}})
+    assert any("config.web.token" in e and "ASCII" in e for e in errors), errors
+    assert _errs({"web": {"token": "plain-KEY_42"}}) == []
+    errors = _errs({"web": {"token": 123}})
+    assert any("config.web.token: 必须是字符串" in e for e in errors), errors
+    assert not any("ASCII" in e for e in errors), "非字符串不串档到字符集报错"
+
+
+def test_validate_qbittorrent_str_keys():
+    """qbittorrent 三 str 键类型 fail-fast(26-10-30-0622): username/password/api_key 写成容器报错,
+    与 web.token / hr_check.channel.token 同形态 —— 否则校验零报错原样进 QbittorrentConfig,
+    运行期才在 qB 登录载荷/Bearer 头构造处炸出误导性连接错误; 空串合法(= 未配置语义)"""
+    errors = _errs({"qbittorrent": {"username": ["a"], "password": {"k": "v"}, "api_key": 123}})
+    assert any("config.qbittorrent.username: 必须是字符串" in e for e in errors), errors
+    assert any("config.qbittorrent.password: 必须是字符串" in e for e in errors), errors
+    assert any("config.qbittorrent.api_key: 必须是字符串" in e for e in errors), errors
+    assert _errs({"qbittorrent": {"username": "u", "password": "p", "api_key": ""}}) == []
+
+
+def test_validate_web_ctx_menu_errors():
+    """web.ctx_menu 布局坏形状(计划 26-10-20-0024 W1): 非字典 / 支级非字典 / order·hidden 非字符串数组 /
+    sub 非字典 / 未知层键 / sep token 格式错 —— 全部进 errors 不抛(保存 400 拦下, 不 500 不写坏盘)"""
+    errors = _errs({"web": {"ctx_menu": "not-dict"}})
+    assert any("config.web.ctx_menu: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": "not-dict"}}})
+    assert any("config.web.ctx_menu.group: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"order": "resume"}}}})
+    assert any("config.web.ctx_menu.group.order: 必须是字符串数组" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"hidden": [1, 2]}}}})
+    assert any("config.web.ctx_menu.group.hidden: 必须是字符串数组" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"sub": "x"}}}})
+    assert any("config.web.ctx_menu.group.sub: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"orders": ["a"]}}}})
+    assert any("config.web.ctx_menu.group: 未知键 'orders'" in e for e in errors)
+    errors = _errs({"web": {"ctx_menu": {"group": {"order": ["sep:d1", "sep-typo:d1", "resume"]}}}})
+    assert any("config.web.ctx_menu.group.order[1]" in e and "'sep:' 开头" in e for e in errors)
+
+
+def test_validate_web_ctx_menu_pass_shapes():
+    """web.ctx_menu 合法形态不报错(计划 26-10-20-0024 W1): 空字典 / 全层齐全 / 未知支名容忍(前端只读四支)"""
+    assert _errs({"web": {"ctx_menu": {}}}) == []
+    assert _errs({"web": {"ctx_menu": {"group": {}}}}) == []
+    assert _errs(
+        {
+            "web":
+                {
+                    "ctx_menu":
+                        {
+                            "member":
+                                {
+                                    "order": ["resume", "sep:d1", "sub-more"],
+                                    "hidden": [],
+                                    "sub": {
+                                        "order": ["queue-top"],
+                                        "hidden": []
+                                    }
+                                }
+                        }
+                }
+        }
+    ) == []
+    assert _errs({"web": {"ctx_menu": {"future-branch": {"order": ["x"]}}}}) == []  # 未知支名: 前端忽略, 不报错
+
+
+def test_validate_tracker_rules_non_list_skips_refs():
+    """tracker.rules 非列表: 列表类型错误报告, 规则引用检查跳过(不产出引用层错误)"""
+    errors = _errs({"trackers": {"T1": {"domains": ["a.com"], "rules": "not-a-list"}}})
+    assert any("config.trackers.T1.rules: 必须是列表" in e for e in errors)
+    assert not any("@ 开头" in e for e in errors)
+
+
+def test_validate_notify_channels_edges():
+    """notify.channels: 单键映射约束(非 dict / 多键) + 未知渠道 + 合法 platform 条目放行"""
+    errors = _errs({"notify": {"channels": ["not-dict", {"a": {}, "b": {}}, {"slack": {}}]}})
+    assert any("config.notify.channels[0]: 必须是单键映射" in e for e in errors)
+    assert any("config.notify.channels[1]: 必须是单键映射" in e for e in errors)
+    assert any("config.notify.channels[2]: 未知渠道 'slack'" in e for e in errors)
+    assert _errs({"notify": {"channels": [{"platform": {}}]}}) == []
+
+
+def test_validate_string_keys_exact_case():
+    """键名字符串必须**精确**匹配(大小写敏感)—— 键名被改成大写后必须走未知键/默认分支
+
+    变异面: 校验器里「按字符串键名取值」的判据(`monitor.get("dat_path")` / `curve_spec["period"]` /
+    `set(curve_spec) - {... "download_curve"}` / `value.get("custom_basic_check_program_path")` /
+    `"curve" in item` / `cfg["state_file"]` 等)对键名大小写不敏感的话, 用户把键名写错大小写会被
+    静默当作"未配置"放行(本该 fail-fast 报未知键), 或反过来把正确键名当成未知键误报。
+    每条断言都构造「键名大小写与实际不符」的输入, 钉住只有精确拼写才被识别。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- curves: traffic_monitor.dat_path 大小写(变异 monitor.get("DAT_PATH") 后 dat_path 配了也判"未配置")
+        # 精确 dat_path -> expr 用到 gated 名字时门控认为"已配数据源" -> 不报门控错
+        # (若键名被改大写, monitor 取不到值 -> traffic_configured=False -> 反而报门控错, 断言翻面)
+        gated_expr = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - expr: \"sys.upload_today > 0\"\n"
+        )
+        # dat_path 精确拼写: 数据源已配 -> 门控放行(无"无数据源"报错); 大小写不符则视作未配 -> 报门控错
+        assert "无数据源" not in _load_errors(td, gated_expr), _load_errors(td, gated_expr)
+        bad_case = gated_expr.replace("dat_path: a.dat", "DAT_PATH: a.dat")
+        # 大写键名不在白名单 -> traffic_monitor 未知键报错(未被静默接受), 且因此视为未配数据源
+        err = _load_errors(td, bad_case)
+        assert "traffic_monitor: 未知键" in err, err
+        assert "无数据源" in err, err
+
+        # --- curves: curve_spec 的 period/upload_curve/download_curve 键名大小写
+        # 精确键: 合法配置零报错; 大写键 -> 走未知键报错(而非被当成合法键)
+        gslc_ok = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n"
+            "  global_speed_limit_curve:\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          download_curve:\n"
+            "            - 10GiB: {download_speed_limit: 6MiB/s}\n"
+        )
+        assert _load_errors(td, gslc_ok) == ""
+        # period 大写: 缺 period 报错(而非"重复 period"里取错键)
+        assert "缺少 period" in _load_errors(td, gslc_ok.replace("          period: 1D", "          PERIOD: 1D"))
+        # download_curve 大写: 未知键报错 + 因为含大写与正确键都缺 -> 报"需配置 upload_curve 和/或 download_curve"
+        err = _load_errors(td, gslc_ok.replace("download_curve:", "DOWNLOAD_CURVE:"))
+        assert "DOWNLOAD_CURVE" in err, err
+        assert "需配置 upload_curve 和/或 download_curve" in err, err
+        # download_curve 精确时应**不**报"需配置 upload_curve 和/或 download_curve"(键名识别正确)
+        assert "需配置 upload_curve 和/或 download_curve" not in _load_errors(td, gslc_ok), "键名大小写须精确"
+
+        # --- rules: checking 动作 custom_basic_check_program_path 大小写
+        custom_ok = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: custom\n"
+            "            custom_basic_check_program_path: /bin/verify\n"
+        )
+        # 精确拼写 -> 满足 basic_check=custom 的必填要求, 零报错
+        assert _load_errors(td, custom_ok) == ""
+        # 大写键名 -> 未知键 + 仍报"必须配置 custom_basic_check_program_path"(键名识别精确)
+        err = _load_errors(
+            td,
+            custom_ok.replace("custom_basic_check_program_path: /bin/verify", "CUSTOM_BASIC_CHECK_PROGRAM_PATH: /x")
+        )
+        assert "CUSTOM_BASIC_CHECK_PROGRAM_PATH" in err, err
+        assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
+
+        # --- rules: checking 动作 custom_basic_check_timeout 大小写(同 program_path 形制)
+        timeout_ok = custom_ok.replace(
+            "custom_basic_check_program_path: /bin/verify",
+            "custom_basic_check_program_path: /bin/verify\n            custom_basic_check_timeout: 10M",
+        )
+        # 精确拼写 -> 合法键, 值过正时间校验, 零报错
+        assert _load_errors(td, timeout_ok) == ""
+        # 大写键名 -> 未知键报错(不得被静默当成未配置放行)
+        err = _load_errors(td, timeout_ok.replace("custom_basic_check_timeout: 10M", "CUSTOM_BASIC_CHECK_TIMEOUT: 10M"))
+        assert "未知键 ['CUSTOM_BASIC_CHECK_TIMEOUT']" in err, err
+
+
+def test_validate_short_circuit_pairs_differing_truth():
+    """短路运算符(and/or)语义钉住 —— 用两个操作数**取不同真值**的输入
+
+    池内旧用例常只覆盖「两个操作数同真/同假」, 于是 `and` 换 `or` 后结果不变(变异存活)。
+    本用例专门构造「左真右假 / 左假右真」的输入, 让 and/or 互换必然翻转行为。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # --- sections.py: 顶层 traffic_source 结构短路(左真右假: 数据源列表为空 -> 迁移后无 dat_path);
+        #     左假右真: 子块非 dict -> 结构错(不再进 dat_path 判定)
+        empty_src = "config:\n  global_speed_limit_curve:\n    traffic_source: []\n    curves:\n      - curve:\n          period: 1D\n"
+        assert "traffic_source.traffic_monitor.dat_path: provider=traffic_monitor 时必须配置非空的 dat 文件路径" in _load_errors(
+            td, empty_src
+        )
+        bad_src = "config:\n  traffic_source:\n    traffic_monitor: notadict\n"
+        assert "config.traffic_source.traffic_monitor: 必须是字典" in _load_errors(td, bad_src)
+
+        # --- curves.py: `not isinstance(item, dict) or len(item) != 1 or "curve" not in item`
+        # 左假右真: item 是 dict 但键不是 curve(单键) -> "必须为单项映射"
+        wrong_key = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    traffic_monitor:\n"
+            "      dat_path: a.dat\n"
+            "  global_speed_limit_curve:\n"
+            "    curves:\n"
+            "      - notcurve:\n"
+            "          period: 1D\n"
+        )
+        assert "必须为单项映射" in _load_errors(td, wrong_key)
+        # 左真右真(非 dict): 也报"必须为单项映射"
+        assert "必须为单项映射" in _load_errors(
+            td,
+            wrong_key.replace("      - notcurve:", "      - stritem").replace("          period: 1D\n", "")
+        )
+
+        # --- rules.py: `not isinstance(group_spec, dict) or rule_name not in group_spec`
+        # 左真右假: group_spec 非 dict(规则集 spec 非字典)
+        text = (
+            "config:\n"
+            "  setA_rules: notadict\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@setA_rules.ruleX'\n"
+        )
+        assert "引用的规则不存在: @setA_rules.ruleX" in _load_errors(td, text)
+        # 左假右真: group_spec 是 dict 但规则名不存在
+        text2 = (
+            "config:\n"
+            "  setA_rules:\n"
+            "    r1:\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@setA_rules.noSuchRule'\n"
+        )
+        assert "引用的规则不存在: @setA_rules.noSuchRule" in _load_errors(td, text2)
+
+        # --- rules.py: `not isinstance(entry, dict) or len(entry) != 1`(trigger compat 白名单)
+        # 左真右假: entry 非 dict -> 跳过(结构错误由 plugin_entry 报); 左假右真: dict 但多键
+        deleted = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      trigger: on_torrent_deleted\n"
+            "      actions:\n"
+            "        - stop: true\n"
+        )
+        assert "不适用于 trigger 'on_torrent_deleted'" in _load_errors(td, deleted)
+
+        # --- rules.py: `not r.startswith("@") or not r[1:].strip()` 空引用形态
+        # 左假右真: "@" 开头但 @ 后为空 -> 报"必须以 @ 开头"(而非放行)
+        empty_ref = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@'\n"
+        )
+        assert "规则引用必须以 @ 开头" in _load_errors(td, empty_ref)
+
+        # --- rules.py: trigger compat 的 `not isinstance(entry, dict) or len(entry) != 1`
+        # 左真(len 恰为 1 的非 dict): 白名单循环跳过(结构错误已由 plugin_entry 报), 不叠加"不适用"错
+        weird_entry = (
+            "config:\n"
+            "  g_rules:\n"
+            "    r1:\n"
+            "      trigger: on_torrent_deleted\n"
+            "      actions:\n"
+            "        - [stop]\n"
+        )
+        err = _load_errors(td, weird_entry)
+        assert "必须是字典" in err, err  # 结构错误照报
+        assert "不适用于 trigger 'on_torrent_deleted'" not in err, err  # 但白名单循环须跳过
+
+        # --- rules.py: `not isinstance(group_spec, dict) or rule_name not in group_spec`
+        # 左真(group_spec 非 dict)但右假(rule_name 是它的子串) -> 仍须报"引用的规则不存在"
+        sub = (
+            "config:\n"
+            "  S_rules: ruleXYZ\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@S_rules.rule'\n"
+        )
+        assert "引用的规则不存在: @S_rules.rule" in _load_errors(td, sub)
+
+        # --- curves.py: `not isinstance(item, dict) or len(item) != 1 or "curve" not in item`
+        # 左真(A) 中假(B=len==1) 右假(C="curve" in item) -> 单项映射检查须报错
+        list_item = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - [curve]\n"
+        )
+        assert "必须为单项映射" in _load_errors(td, list_item)
+        # A 假 B 真 C 假: dict, 多键, 含 "curve" -> 仍须报"必须为单项映射"
+        multi_key = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor:\n"
+            "          dat_path: a.dat\n"
+            "    curves:\n"
+            "      - curve: {period: 1D}\n"
+            "        extra: 1\n"
+        )
+        assert "必须为单项映射" in _load_errors(td, multi_key)
+
+
+def test_validate_nested_section_shapes_and_unparsable_intervals():
+    """嵌套段「形状非字典」与「时间串不可解析」两条纵深守卫
+
+    1. `traffic_source.global_traffic_monitor` 非字典 -> 报「必须是字典」并停在该层
+      (不继续取 tool_dir/tool_exe, 否则标量上取 in 判据语义漂移);
+    2. `qb_traffic.sample_interval_multiplier` 无法解析为整数 -> 只报类型/解析错, **上限换算整段跳过**
+      (倍数解析失败时不得再拿 None 参与 main_tick 乘法比较, 否则叠出假错或直接 TypeError)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        bad_tool = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    provider: global_traffic_monitor\n"
+            "    global_traffic_monitor: notadict\n"
+        )
+        assert "config.traffic_source.global_traffic_monitor: 必须是字典" in _load_errors(td, bad_tool)
+
+        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: nonsense\n")
+        assert "config.qb_traffic.sample_interval_multiplier" in err, err
+        assert "超过上限" not in err and "须 >= 1" not in err, err
+
+
+def test_validate_gslc_interval_key_exact():
+    """global_speed_limit_curve.interval 键名精确性 + 值校验(钉住 interval 键名与 positive 判定)
+
+    变异面: 未知键集合字面量里的 "interval" 改大写(mutmut_13/14)会把合法的 interval 误报未知键;
+    `if "interval" in spec` 改大写(mutmut_20)与取 `spec["interval"]` 改大写(mutmut_31)会让
+    interval 值完全不被校验(非法值静默放行)。
+    """
+    base = (
+        "config:\n"
+        "  global_speed_limit_curve:\n"
+        "    traffic_source:\n"
+        "      - traffic_monitor:\n"
+        "          dat_path: a.dat\n"
+        "    curves:\n"
+        "      - curve:\n"
+        "          period: 1D\n"
+        "          upload_curve:\n"
+        "            - 1B: {upload_speed_limit: 1MiB/s}\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        # 合法 interval: 不报未知键、零报错
+        assert _load_errors(td, base + "    interval: 5M\n") == ""
+        assert "未知键" not in _load_errors(td, base + "    interval: 5M\n")
+        # 非法 interval(0)必须被校验报错(键名识别精确, positive=True)
+        assert "config.global_speed_limit_curve.interval: 必须为正时间: 0S" in _load_errors(td, base + "    interval: 0S\n")
+
+
+def test_strip_none_list_branch_and_key_case():
+    """_strip_none 的**列表分支**与 state_file 键名精确性
+
+    变异面(池内旧用例只走 dict 分支 / 只测多条):
+    - `[... for v in value if v is not None and v != ""]`:
+      `and` 换 `or`(mutmut_23)会把 None 项留下; `v != ""` 换 `v != "XXXX"`(mutmut_26)会把空串项留下;
+      列表项丢弃 `_path`(mutmut_22)会让**列表内嵌 dict** 的站点 tri_state 叶失去路径上下文、''
+      被照剥(覆盖为空的语义在数组形态下失效)。
+    - `validate_config` 的 `"state_file" in cfg`(mutmut_145/146 改大写): 只有精确键名才触发非空校验。
+    """
+    from auto_qb.config.validation.core import _strip_none
+
+    # 列表分支: None 与 "" 项都被剔除(变异 and->or / != "XXXX" 后会被留下)
+    assert _strip_none({"a": [1, None, "", "x"]}) == {"a": [1, "x"]}
+    assert _strip_none([None, "", "y"]) == ["y"]
+    # 列表内嵌 dict 的站点 tri_state 叶: '' 保留(丢弃 _path 后会被照剥成 {})
+    data = {"config": {"trackers": {"T": {"hr": [{"add_tag": ""}]}}}}
+    assert _strip_none(data) == {"config": {"trackers": {"T": {"hr": [{"add_tag": ""}]}}}}, _strip_none(data)
+
+    with tempfile.TemporaryDirectory() as td:
+        # state_file 精确键名才走非空校验: 大小写不符 -> 未知键(不是"不能为空")
+        assert "config.state_file: 不能为空" in _load_errors(td, "config:\n  state_file: ' '\n")
+        err = _load_errors(td, "config:\n  STATE_FILE: ' '\n")
+        assert "不能为空" not in err, err
+        assert "未知键 ['STATE_FILE']" in err, err
+
+
+def test_validate_rule_refs_single_char_and_short_circuit():
+    """tracker.rules 引用的边界形态: @ 后仅 1 字符是**格式合法**的引用(钉住 r[1:] 而非 r[2:])
+
+    变异面: `not r[1:].strip()` 改成 `not r[2:].strip()`(mutmut_8/40)后, '@A' 这种单字符
+    引用会被误判成"必须以 @ 开头"(报格式错), 而非"引用的规则集不存在"。单字符规则集名永不
+    存在(规则集键须以 _rules 结尾), 故行为差异体现在**报错文案**上 —— 两条断言分别钉住。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = ("config:\n"
+                "  trackers:\n"
+                "    T1:\n"
+                "      domains: [a.com]\n"
+                "      rules:\n"
+                "        - '@A'\n")
+        err = _load_errors(td, text)
+        # @ 后非空 -> 通过格式检查, 落到"规则集不存在"(而非"必须以 @ 开头")
+        assert "引用的规则集不存在: @A" in err, err
+        assert "规则引用必须以 @ 开头" not in err, err
+
+
+def test_validate_qb_traffic_multiplier_int_forms():
+    """qb_traffic.sample_interval_multiplier 的整数形态判据(计划 26-11-10-0252 D4/D5)
+
+    文件侧(BaseLoader 标量全为字符串, 与生产加载同路): 1 / 15 / "15" 合法(与 loader 的 int(str) 一致);
+    0 与 -1 走下界; "1.5" 与 "30S"(旧秒值残值)走解析错 —— 前者尤其不得被 int() 静默截断成 1。
+    程序侧(validate_config 直接收 Python 值, 即 webui PUT 的路径): 1.5 浮点走类型层拒; True 布尔走
+    类型层拒 —— bool 是 int 子类, 不先挡就会 int(True)=1 静默放行。
+    """
+    from auto_qb.config.validation import validate_config
+
+    with tempfile.TemporaryDirectory() as td:
+
+        def qbt(v):
+            return _load_errors(td, "config:\n  qb_traffic:\n    sample_interval_multiplier: %s\n" % v)
+
+        assert qbt("1") == ""
+        assert qbt("15") == ""
+        assert qbt('"15"') == ""
+        assert "须 >= 1(1 = 1 倍 main_tick): 0" in qbt("0")
+        assert "须 >= 1(1 = 1 倍 main_tick): -1" in qbt("-1")
+        assert "须为整数倍数(int >= 1): 1.5" in qbt("1.5")
+        err = qbt('"30S"')
+        assert "须为整数倍数(int >= 1): 30S" in err, err
+        assert "旧秒值写法已退役" in err, err
+
+        def direct(v):
+            return " | ".join(validate_config({"config": {"qb_traffic": {"sample_interval_multiplier": v}}}))
+
+        assert direct(1) == ""
+        assert direct(15) == ""
+        assert "不接受浮点值" in direct(1.5)
+        assert "不接受布尔值" in direct(True)
+
+
+def test_validate_fs_reports_all_entries_after_skip_branches():
+    """fs.path_map: 空 from / 归一后为空 / 空 to 的条目不得中断后续条目的校验(continue 而非 break)
+
+    变异面: `if not src or not dst: continue`(mutmut_87) · `if not src_n: continue`(mutmut_94) ·
+    `if not dst_n: continue`(mutmut_97) —— 三处都在"跳过当前条目"后继续循环; 前置三种跳过分支各一,
+    末位重复条目必须照常被查出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - {from: '', to: /a}\n"
+            "      - {from: 'D:/x', to: '/'}\n"
+            "      - {from: '/', to: /c}\n"
+            "      - {from: 'D:/p', to: /p}\n"
+            "      - {from: 'D:/p', to: /q}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.fs.path_map[0].from: 不能为空" in err, err
+        assert "config.fs.path_map[1].to: 归一后为空" in err, err
+        assert "config.fs.path_map[2].from: 归一后为空" in err, err
+        assert "config.fs.path_map[4].from: 与第 3 条重复" in err, err
+
+
+def test_validate_fs_prefix_ambiguity_keeps_scanning():
+    """fs.path_map 前缀歧义检查: 自比跳过须 continue(非 break, mutmut_106)、命中后只 break 内层(非 return, mutmut_113)
+
+    构造两组「深路径在前、浅路径在后」的歧义对 —— 深层条目要跟**更后面**的浅层条目比才命中, 故:
+    1. 自比改成 break 会漏掉本组命中(mutmut_106); 2. 命中后 return 会让第二组不再被检查(mutmut_113)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - {from: 'D:/a/sub', to: /s1}\n"
+            "      - {from: 'D:/a', to: /a1}\n"
+            "      - {from: 'D:/c/sub', to: /s2}\n"
+            "      - {from: 'D:/c', to: /c1}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.fs.path_map[0].from: 是第 1 条 from 的前缀" in err, err
+        assert "config.fs.path_map[2].from: 是第 3 条 from 的前缀" in err, err
+
+
+def test_validate_trackers_reports_all_entries():
+    """trackers 逐条校验: 非字典条目不得中断后续条目的校验(continue 而非 break, mutmut_9)"""
+    with tempfile.TemporaryDirectory() as td:
+        text = ("config:\n"
+                "  trackers:\n"
+                "    Bad: oops\n"
+                "    T1: {}\n")
+        err = _load_errors(td, text)
+        assert "config.trackers.Bad: 必须是字典" in err, err
+        assert "config.trackers.T1: 缺少必填键 domains" in err, err
+
+
+def test_validate_tag_lists_reports_after_absent_key():
+    """delete_tags 缺省时 delete_tags_if_has_no_torrents 仍须校验(continue 而非 break, mutmut_6)
+
+    循环按 ("delete_tags", "delete_tags_if_has_no_torrents") 顺序走; 只配后者时前者缺失走
+    continue —— 若改 break, 后者整条跳过, 其非法项永远报不出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "  delete_tags_if_has_no_torrents:\n"
+            "    - [x]\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.delete_tags_if_has_no_torrents: 第 [0] 项必须是非空字符串" in err, err
+
+
+def test_validate_gslc_reports_all_curves():
+    """global_speed_limit_curve.curves 逐条校验: 前一条结构错不得中断后续条目(continue 而非 break)
+
+    变异面: 单项映射判定 continue(mutmut_108) · curve 非字典 continue(mutmut_114) —— 后置的
+    「重复 period」条目必须照常被查出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor: {dat_path: /x}\n"
+            "    curves:\n"
+            "      - notadict\n"
+            "      - curve: bad\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - {1MiB: {upload_speed_limit: 1MiB}}\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - {1MiB: {upload_speed_limit: 1MiB}}\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.global_speed_limit_curve.curves[0] 必须为单项映射" in err, err
+        assert "config.global_speed_limit_curve.curves[1].curve: 必须是字典" in err, err
+        assert "config.global_speed_limit_curve.curves[3].curve: 重复 period: 1D" in err, err
+
+
+def test_validate_curve_points_reports_all_entries():
+    """upload_curve 逐条校验: 非单项映射/阈值不可解析的条目不得中断后续条目(continue 而非 break)
+
+    变异面: 单项映射判定 continue(mutmut_14) · parse_fsize 失败 continue(mutmut_22) —— 后置的
+    「阈值必须严格递增」条目必须照常被查出来。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  global_speed_limit_curve:\n"
+            "    traffic_source:\n"
+            "      - traffic_monitor: {dat_path: /x}\n"
+            "    curves:\n"
+            "      - curve:\n"
+            "          period: 1D\n"
+            "          upload_curve:\n"
+            "            - notadict\n"
+            "            - {bad: {upload_speed_limit: 1MiB}}\n"
+            "            - {2MiB: {upload_speed_limit: 1MiB}}\n"
+            "            - {1MiB: {upload_speed_limit: 1MiB}}\n"
+        )
+        err = _load_errors(td, text)
+        assert "upload_curve[0] 必须为单项映射" in err, err
+        assert "upload_curve[1]: 无效大小格式: bad" in err, err
+        assert "upload_curve[3] 阈值必须严格递增: 1MiB" in err, err
+
+
+def test_validate_rule_refs_dedup_after_malformed():
+    """规则引用判重: 前置畸形引用不得中断判重扫描(continue 而非 break, mutmut_41)
+
+    判重是**第二轮独立循环**; 首个畸形引用('notatref')走 continue —— 若改 break, 后面的合法重复
+    引用('@example_rules' 两次)永远报不出重复。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - notatref\n"
+            "        - '@example_rules'\n"
+            "        - '@example_rules'\n"
+        )
+        err = _load_errors(td, text)
+        assert "规则引用必须以 @ 开头: 'notatref'" in err, err
+        assert "config.trackers.T1.rules[2]: 规则引用重复(与第 1 条相同): @example_rules" in err, err
+
+
+def test_validate_checking_action_reports_all_segments():
+    """checking 动作子段逐段校验: 缺段/段非字典不得中断后续段(continue 而非 break)
+
+    变异面: `if seg not in value: continue`(缺段跳过) · `if not isinstance(sub, dict): continue`
+    (mutmut_46)。ruleA 只有 without_reference(前段缺失) · ruleB 前段非字典但后段仍须报错。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    ruleA:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            without_reference: {mode: nope}\n"
+            "    ruleB:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: bad\n"
+            "            without_reference: {mode: nope}\n"
+        )
+        err = _load_errors(td, text)
+        assert "ruleA.actions[0].checking.without_reference.mode 取值非法" in err, err
+        assert "ruleB.actions[0].checking.with_reference: 必须是字典" in err, err
+        assert "ruleB.actions[0].checking.without_reference.mode 取值非法" in err, err
+
+
+def test_validate_trigger_action_compat_reports_all_actions():
+    """on_torrent_deleted 动作白名单: 前置伪动作/结构错条目不得中断后续动作的检查(continue 而非 break)
+
+    变异面: `if not isinstance(entry, dict) or len(entry) != 1: continue` ·
+    `if name == "ignore_next_action_error": continue` —— 两条 continue 若改 break, 末位越界动作就漏报。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      trigger: on_torrent_deleted\n"
+            "      actions:\n"
+            "        - ignore_next_action_error: true\n"
+            "        - notadict\n"
+            "        - start: true\n"
+        )
+        err = _load_errors(td, text)
+        assert "动作 'start' 不适用于 trigger 'on_torrent_deleted'" in err, err
+
+
+def test_validate_rules_reports_all_groups_and_rules():
+    """规则集校验: 非字典规则集/规则条目不得中断后续条目(continue 而非 break)
+
+    变异面: `if not isinstance(group, dict): continue`(非字典规则集) · `if not isinstance(spec,
+    dict): continue`(非字典规则条目)。两级各放一个跳过分支在前, 末尾合法规则的错必须照常报出。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  g1_rules: oops\n"
+            "  g2_rules:\n"
+            "    bad: oops\n"
+            "    good:\n"
+            "      trigger: nope\n"
+        )
+        err = _load_errors(td, text)
+        assert "config.g1_rules: 必须是字典(规则名 -> 规则spec)" in err, err
+        assert "config.g2_rules.bad: 必须是字典" in err, err
+        assert "config.g2_rules.good: trigger 取值非法" in err, err

@@ -222,6 +222,22 @@ def is_webui_skin_shell(path: Path, root: Path) -> bool:
     )
 
 
+# 逐字镜像测试夹具: `tests/unit/fixtures/` 下是刻意残缺的站点页面 (解析器回归输入),
+# doctype / title / 标签嵌套等 document 级规则对夹具无意义, 改内容即破坏用例语义 ——
+# 与 tpl 分片/皮肤壳同属范畴错误 (2026-11-26 tests 整树迁 unit 后 rename 使这批存量
+# 夹具首次进 `<changed:**/*.html>` 增量面而暴露)。判据只认路径, L1+L2 常驻判据照常跑。
+FIXTURE_ROOT = ("tests", "unit", "fixtures")
+
+
+def is_test_fixture(path: Path, root: Path) -> bool:
+    """该文件是否为 `tests/unit/fixtures/` 下的逐字镜像夹具 (v.Nu document 级不适用)。"""
+    try:
+        parts = path.resolve().relative_to(root.resolve()).parts
+    except (ValueError, OSError):
+        return False
+    return tuple(parts[:3]) == FIXTURE_ROOT
+
+
 def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
     """跑 v.Nu; 输出归一为 `仓库相对路径:行: error: 文案`; --strict 有 error 即 rc=1。"""
     if not files:
@@ -236,12 +252,15 @@ def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
         )
         if not files:
             return 0
-    skipped = [p for p in files if is_vue_template_fragment(p, root) or is_webui_skin_shell(p, root)]
+    skipped = [
+        p
+        for p in files if is_vue_template_fragment(p, root) or is_webui_skin_shell(p, root) or is_test_fixture(p, root)
+    ]
     if skipped:
         files = [p for p in files if p not in skipped]
         print(
-            "[--] check_html --vnu: 跳过 Vue 承载面 (tpl 分片 / 皮肤壳内联根模板; "
-            "v-if/@click/:prop 属模板语法, v.Nu 不适用): " + ", ".join(rel_posix(p, root) for p in skipped)
+            "[--] check_html --vnu: 跳过 Vue 承载面 / 逐字镜像夹具 (tpl 分片 / 皮肤壳内联根模板 / "
+            "tests/unit/fixtures 残缺页面; v.Nu document 级不适用): " + ", ".join(rel_posix(p, root) for p in skipped)
         )
         if not files:
             print("[ok] check_html --vnu: 本次改动全是 Vue 承载面, 无需 v.Nu")

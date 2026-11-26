@@ -14,7 +14,7 @@
   - `kb.docmap --check` 报「主键纪律 OK: 680 份文档」并**把这个件计入文档数**(它读的是 `doc-topic`, 不是
     `doc-status`), 认领链也 OK ⇒ **看不出异常**;
   - `test_docs_index_is_regenerated` 也**不红** —— 生成器跳过该件, 索引 == 生成结果, 自洽;
-  - 修复前唯一能红的闸门是 `tests/test_docs_forms.py::test_status_vocabulary`(直接校验 `doc-status` ∈ 5 词表),
+  - 修复前唯一能红的闸门是 `tests/unit/test_docs_forms.py::test_status_vocabulary`(直接校验 `doc-status` ∈ 5 词表),
     但它只在 `test.full` 跑 —— 纯文档轮提交时看不到。
   对照: md 档案的 `**Status:**` 是 4 词表(`In Progress`/`Open`/`Done`/`Dropped`, 见
   [tasks-archive.md](tasks-archive.md)), **两张表不同**, 别互相套用。
@@ -25,6 +25,6 @@
   - **闸门侧**: `gen_doc_map --check` 加同源词表校验, 提交闸门 `memory-bank/` 轮次即判红并给出逐件清单
     (纯文档轮也覆盖, 与 2026-10-03 认领链下沉同款)。
   - 5 词表单点在 `_common.DOC_STATUSES`(生成器与守卫 import 同源, 不手抄)。
-- **守阵**: `tests/test_docs_forms.py` —— `test_docs_index_rejects_unknown_status`(fail-fast) /
+- **守阵**: `tests/unit/test_docs_forms.py` —— `test_docs_index_rejects_unknown_status`(fail-fast) /
   `test_docs_index_indexes_valid_status`(防过严) / `test_doc_map_flags_unknown_status`(闸门侧) /
   `test_status_vocabulary_is_single_point`(单点)。

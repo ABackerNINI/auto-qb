@@ -65,7 +65,7 @@ commands run env.sync # 首次/依赖变更后同步依赖
 - Linux 测试三面(pytest / e2e / 变异`mutants.*`)统一跑在 Docker 常驻容器`auto-qb-testbed`(docker exec 形态, 计划 26-11-12-0152): 容器不在跑先`test.linux-env`, 别手拼 docker 命令; 容器/宿主 docker 面累积时先`test.linux-clean`演练再`--yes`(白名单点名式, 禁面杀命令); 容器配方与坑见`memory-bank/pitfalls/testing/patching.md`。
 
 - 依赖统一走`uv`(`pyproject.toml`+`uv.lock`)。
-- ⚠测试TMPDIR由`tests/_tmp_bootstrap.py`自举探测,**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;判据与换根单点见`memory-bank/pitfalls/testing/tmpdir.md`。
+- ⚠测试TMPDIR由`tests/unit/_tmp_bootstrap.py`自举探测,**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;判据与换根单点见`memory-bank/pitfalls/testing/tmpdir.md`。
 - 新增测试必须同步该文件头部docstring的"## 测试计划"清单。
 
 ## 🔴进程安全:禁止一切taskkill

@@ -15,7 +15,7 @@
   走 `columns.js::_syncHeadHeight` 既有单点, **不写死** —— 顶栏随媒体查询/状态条/窄屏折行变高)。
   内容列恒撑满则面板自然落点恒在视口底, sticky 恒生效, 锚点与列表长短无关。三皮肤成对改
   (atlas/console 的 components.css + prism 的 views.css)。
-- **守阵**: `tests/test_webui_static_skins_widget.py::test_frontend_search_pending_no_collapse`(三皮肤 .layout min-height 锚)+
+- **守阵**: `tests/unit/test_webui_static_skins_widget.py::test_frontend_search_pending_no_collapse`(三皮肤 .layout min-height 锚)+
   `e2e/drawer-dock-stability.spec.mjs`(行为: 搜索全程面板 top 偏差 ≤2px)。配套根因(待响应期
   塌列表)见 search-pending-collapse。
 - **取证(2026-10-07)**: 修复前短列表态面板 top 416 vs 钉住态 430; 修复后三皮肤逐帧采样零变化。

@@ -54,7 +54,7 @@ from auto_qb.rules.conditions import (  # noqa: E402
 )
 from auto_qb.rules.expr import compile_expr, evaluate, validate  # noqa: E402
 from auto_qb.torrents import TorrentRecord  # noqa: E402
-from tests.helpers import FakeClient, make_manager  # noqa: E402
+from tests.unit.helpers import FakeClient, make_manager  # noqa: E402
 
 _GIB = 1024**3
 

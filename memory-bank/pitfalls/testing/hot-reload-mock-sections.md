@@ -17,6 +17,6 @@
   相等比较。守阵本体的模块侧段短路/身份对比判据另有单测(test_core_modules / test_facade_modules),
   热重载守阵只钉"分级分支"语义, 两层不要混。
 - **守阵**: test_web.test_apply_new_config_levels / test_apply_new_config_l2_preserves_runtime_state
-  的替身区钉段注释; tests/test_facade_modules.py 头部说明。
+  的替身区钉段注释; tests/unit/test_facade_modules.py 头部说明。
 - **复发**: 2(2026-09-30 P1 logging/notify、P2 web/hr 各一次; P1 未立档是本条漏记主因 —— 当时只
   在档案与测试注释里记了, 没进 pitfalls)。

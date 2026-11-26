@@ -7,7 +7,7 @@
 
 ## 坑
 
-`tests-real/` 不在 pytest `testpaths`, `test.full`/`test.quick` 都收集不到它 —— 全量全绿 **≠** tests-real 用例可收集。退役/重构产品组件时, 只按 pytest 收集面清偿测试(如 S4a 66418c7e 同步退役了 `tests/test_finalize_watch.py`)会**漏掉 tests-real 侧引用同一组件的用例**: `tests-real/rm10_notify/test_rm10_notify.py` 模块级 `from auto_qb.infra.relocate_journal import acquire_pid` + 三条 guardian 用例调 `finalize_watch.run`, import 即炸、整文件(含 5 条仍活的通知用例)无法收集, 潜伏至 B09 全仓复扫才被偶然发现(issue 26-11-09-2128, 2026-11-09 清偿)。
+`tests-real/` 不在 pytest `testpaths`, `test.full`/`test.quick` 都收集不到它 —— 全量全绿 **≠** tests-real 用例可收集。退役/重构产品组件时, 只按 pytest 收集面清偿测试(如 S4a 66418c7e 同步退役了 `tests/unit/test_finalize_watch.py`)会**漏掉 tests-real 侧引用同一组件的用例**: `tests-real/rm10_notify/test_rm10_notify.py` 模块级 `from auto_qb.infra.relocate_journal import acquire_pid` + 三条 guardian 用例调 `finalize_watch.run`, import 即炸、整文件(含 5 条仍活的通知用例)无法收集, 潜伏至 B09 全仓复扫才被偶然发现(issue 26-11-09-2128, 2026-11-09 清偿)。
 
 ## 动作
 

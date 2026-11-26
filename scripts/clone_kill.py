@@ -30,7 +30,7 @@ clone 域外的进程(如产品拉起的 explorer)被 fail-closed 闸保住, REF
 平台双支: 与 port_kill 同构 -- nt 走 Win32_Process 全量枚举, POSIX 走 /proc 扫描;
 实杀一律经 port_kill._kill_pid 单点(import 私名: 实杀路径复制一分就有了第二个
 taskkill 调用点, 两个工具共用同一单点)。守阵把 os.name 钉成 posix + 假 /proc 树,
-任一平台跑(tests/test_clone_kill_script.py)。
+任一平台跑(tests/unit/test_clone_kill_script.py)。
 
 红线豁免(AGENTS.md 进程安全节, 2026-11-22 拍板追加第三处): 本脚本的一切杀都过
 归属闸; AI 代理在 shell 直接执行 taskkill 仍一律禁止。

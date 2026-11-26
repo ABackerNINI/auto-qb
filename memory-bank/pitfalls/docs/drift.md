@@ -32,7 +32,7 @@
   正是本条判别面写的「只扫部分面=假绿」形态, 且多出两个易漏位: **docstring 与 print 文案里也指路**
   (不只是 `# 注释`), **无连字符变体路径**(`configreference` 类)单点 grep 抓不到。为什么没命中:
   路由没到 —— 退役批未对照本条跑全量 `git grep` 验收。指路目标随退役换权威(现行 =
-  `src/auto_qb/config/schema/` + validate_config 与键面快照 `tests/fixtures/config_key_surface.txt`),
+  `src/auto_qb/config/schema/` + validate_config 与键面快照 `tests/unit/fixtures/config_key_surface.txt`),
   改指时先核目标单点仍适用再写, 不适用的删死链保留事实。
 - **守阵**: 未下沉 —— 泛化需要一份「退役名册」(哪些名字算退役、谁维护); 已复发 +1, 再评估结论:
   名册仍是缺失前提(退役面无结构化登记, 守阵无法判"哪个名字算退役"), 下沉稳阵成本仍大于收益,
@@ -48,7 +48,7 @@
   且旧写法还可能被解析器**静默忽略** = 功能实际是关的。抄之前先 `load_config()` 验一遍就知道。
 - **处置**: 新示例文件落盘后**立即 `load_config()` 验一遍**(它就是校验单点, 别信底子);
   发现既有示例漂移**一行不改** —— 属计划外缺陷, 报告交用户决定(范围守恒)。
-- **守阵**: `tests/test_config_load.py::test_example_minimal_yml_passes_fail_fast` /
+- **守阵**: `tests/unit/test_config_load.py::test_example_minimal_yml_passes_fail_fast` /
   `test_example_docker_config_yml_passes_fail_fast` —— 两份示例过 fail-fast 校验 + 钉各自承诺的
   开箱语义/容器契约字段; minimal 守阵红验过(HEAD 旧形态 → 红)。新示例文件进来时往这里追加一条。
 

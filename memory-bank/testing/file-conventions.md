@@ -58,7 +58,7 @@
 ### 跨平台断言规范(平台容差单点, flaky 治理计划 26-11-05-0118 S6/D6)
 
 - **触发**: 写计时断言 / 平台分支测试 / 平台相关 skipif。
-- **常量单点**: 平台相关容差一律 import `tests/platform_tolerance.py`, 禁手写刻度魔数 ——
+- **常量单点**: 平台相关容差一律 import `tests/unit/platform_tolerance.py`, 禁手写刻度魔数 ——
   `WIN_TIMER_TICK_S`(Windows 等待原语按 15.6ms 定时器刻度取整)与
   `SLEEP_LOWER_MARGIN_S`(挂钟**下界**断言余量, >= 2 tick = 31.2ms)。
   用法: `assert elapsed >= nominal - SLEEP_LOWER_MARGIN_S`。
@@ -69,7 +69,7 @@
 - **平台相关 skipif 强制带理由 + 负责人**: reason 写明"该断言依赖的语义在另一侧为何不成立",
   装饰器行范围内加 `# owner: <名>`; skip 的处置(issue 入池)按
   [flaky-ledger.md](flaky-ledger.md)「巡检约定」节。守阵:
-  `tests/test_platform_tolerance_guards.py::test_repo_skipif_all_have_reason_and_owner`
+  `tests/unit/test_platform_tolerance_guards.py::test_repo_skipif_all_have_reason_and_owner`
   (缺任一即红, 合成源红验内建)。
 - **禁写死仅一侧成立的形状**: 前缀切片长度 / 路径分隔符 / 大小写折叠语义 / 仅一侧存在的
   模块常量 —— 按平台分支分别断言, 不写"两侧共用的单一期望值"
@@ -127,7 +127,7 @@
 
 ### 测试期禁止真实系统副作用(会话级守卫 + 常驻 sidefx)
 
-> 已外迁: 两道会话级守卫(通知 / AUMID 注册表键)与常驻 `tests/sidefx.py` 记账器(七类副作用 / 放行清单 / 临时根缓存失效)的完整判据与处置 → [attachments/file-conventions-details.md](attachments/file-conventions-details.md)。
+> 已外迁: 两道会话级守卫(通知 / AUMID 注册表键)与常驻 `tests/unit/sidefx.py` 记账器(七类副作用 / 放行清单 / 临时根缓存失效)的完整判据与处置 → [attachments/file-conventions-details.md](attachments/file-conventions-details.md)。
 
 ### 测试不得依赖宿主环境能力
 

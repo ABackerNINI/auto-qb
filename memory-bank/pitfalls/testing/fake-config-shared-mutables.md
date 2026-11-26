@@ -13,7 +13,7 @@
   `assert mgr.config.grouping.enabled is False` 落进同一 worker, 后者稳定红
   (单跑恒绿 —— 单独跑时该测试拿到的类属性还是默认 False)。
 - **判别**: 失败断言的值与**本测试自己设置过的任何东西**都对不上、且单跑绿/组合跑红
-  → 先怀疑跨测试状态泄漏, 再查泄漏介质。本项目测试替身的介质是 `tests/helpers.py`
+  → 先怀疑跨测试状态泄漏, 再查泄漏介质。本项目测试替身的介质是 `tests/unit/helpers.py`
   的**类属性**: `FakeConfig.grouping / add_episode_tags / web / hr_check / logging /
   qbittorrent / hr / delete_tags / rules_config / trackers` 全是类级 dataclass 或
   dict/list 实例, `make_manager` 只赋值 `state_file` 等标量, 其余段全部共享同一对象。

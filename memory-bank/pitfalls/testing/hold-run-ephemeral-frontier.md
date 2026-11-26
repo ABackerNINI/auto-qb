@@ -11,7 +11,7 @@ hold_run/连号段类 flake 报 10048 时, 怎么在 1 分钟内分辨「前沿�
 
 ### bind(0) 前沿邻接: 取号方式本身就是触发面
 
-- **触发**: 连号段占位单点 `tests/_test_ports.py::hold_run(n)` 旧实现先 `bind(0)` 取基址、再逐位真绑 base+1..+N。并行(全量 `-n 8`; 本机 test.quick 次轮 sidefx 副作用台账总计 11278 条, 2026-11-20 汇总; 台账以端口绑定为主 —— 直接占比证据来自隔离形态: 40 条中 BIND 占 38)下, 其他 worker 的 `bind(0)` 正沿前沿顺序取号, 与本 worker 的建段窗口赛跑。
+- **触发**: 连号段占位单点 `tests/unit/_test_ports.py::hold_run(n)` 旧实现先 `bind(0)` 取基址、再逐位真绑 base+1..+N。并行(全量 `-n 8`; 本机 test.quick 次轮 sidefx 副作用台账总计 11278 条, 2026-11-20 汇总; 台账以端口绑定为主 —— 直接占比证据来自隔离形态: 40 条中 BIND 占 38)下, 其他 worker 的 `bind(0)` 正沿前沿顺序取号, 与本 worker 的建段窗口赛跑。
 - **判别**:
   - 事发码 **10048(端口被占)** —— 前沿邻接的指纹; **10013(权限拒绝)** 才是排除段(`netsh interface ipv4 show excludedportrange protocol=tcp`)的指纹。两码都可能出现时按实际报错端口分段归因。
   - 探针(30 秒): python 连续 20 次 `bind(0)+close`, 端口严格递增连号 ⇒ 前沿分配实锤(Windows 实测如此; Linux 推定同样顺沿, 待 testbed 实测)。持住刚取到的端口再取号, 下一个号绕开持住位继续递进。
@@ -21,7 +21,7 @@ hold_run/连号段类 flake 报 10048 时, 怎么在 1 分钟内分辨「前沿�
   - 整段逐位真绑+失败整段丢弃重画的结构**保留不变**(它兜住私用段内的残余碰撞: 真实服务端口 27017 等/排除段碎块/其他 worker 的 hold_run 段); RETRIES 与即时重画也不变 —— 换段之后剩余失败源都是「重画换个随机位即可解」的稀疏碰撞, sleep/抬次数是在给已消除的风险买保险。
   - 单端口取号(`free_port`)的 bind(0) **不必**同改: 无连号要求, 回绑自验已够, 且它的失败模式是「取号后被抢」而非「建段被邻居截胡」。
   - 平台差: 若某机器手动改窄过动态段(`netsh int ipv4 show dynamicport tcp` / `/proc/sys/net/ipv4/ip_local_port_range`)使之下探到私用段, 退化行为=回到概率性竞争, 不会更糟 —— Linux 侧以 `test.linux` 实测 testbed 的段下界为准。
-- **守阵**: `tests/test_free_port.py::test_hold_run_returns_bindable_run`(新增钉面: 基址必须落私用段, 回潮 bind(0) 即红)、
+- **守阵**: `tests/unit/test_free_port.py::test_hold_run_returns_bindable_run`(新增钉面: 基址必须落私用段, 回潮 bind(0) 即红)、
   `::test_hold_run_discards_run_whose_offset_is_refused`(整段丢弃重画, 纯合成 socket, 尝试边界由 close 事件判定 —— 取号 socket 消失后不再能用 bind(0) 定界)、
   `::test_hold_run_width_guard_rejects_oversized_count`(count 超段宽在 socket 创建前 RuntimeError, 零网络)、
   `::test_hold_run_redraws_with_new_random_base`(重画必须重新抽取随机基址 —— randint 提出循环的坏实现判红, 正钉本档「每轮换新随机基址」承重面)、

@@ -14,4 +14,4 @@
 - **处置**: 收编命令前**先搜消费点**(按 task id 全仓 grep `.agents` / `.commands` / `tests`)再改;
   用例不要写死条数 / 脚本名 —— 改成从声明处现算(如 `len(C.task_commands(task, ...))` / `gen_all.GENERATORS`)。
   守阵: `.agents/skills/commands/scripts/test_engine.py::test_run_selfcheck_compressed`(改用 `kb.check` + 动态条数)、
-  `tests/test_memory_bank_structure.py::test_gen_cmd_hints_name_real_tasks`(认可 `gen_all` 的间接覆盖)。
+  `tests/unit/test_memory_bank_structure.py::test_gen_cmd_hints_name_real_tasks`(认可 `gen_all` 的间接覆盖)。

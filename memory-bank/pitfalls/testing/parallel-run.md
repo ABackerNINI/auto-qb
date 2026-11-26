@@ -84,7 +84,7 @@
   **各自会红**; 用仓库外插件 `R:/Temp/auto-qb/plugins/pa_violate.py` 注入一条越界删除验证:
   串行与 `-n 4` **都**报 `AssertionError: 测试期出现 1 条越界的真实系统副作用`。
   真正的问题是 `pytest_terminal_summary` **只在控制器上产出**, 而台账在 worker 上 ⇒ 静默消失。
-- **处置(已落地, 在 `tests/conftest.py`)**: worker 侧把台账写进 `config.workeroutput`,
+- **处置(已落地, 在 `tests/unit/conftest.py`)**: worker 侧把台账写进 `config.workeroutput`,
   控制器侧用 xdist 钩子 `pytest_testnodedown` 从 `node.workeroutput` 收, 在终端总结里**汇总成一行**:
   `副作用台账(4 个并行 worker 汇总): 共 2034 条, 越界 0 条`。
   **有越界时**额外把该 worker 的全文打出来 —— 比串行**更好**, 能看出是哪个 worker。
@@ -100,7 +100,7 @@
 ### 项目文档里"并行不行"的那条理由是错的
 
 - **触发**: 评估并行时会撞到既有说法 —— "本项目有绑定本地端口的 `FakeQbServer` 用例, 所以不能并行"。
-- **判别**: **事实有误** —— `tests/helpers.py:388` 用的是 `ThreadingHTTPServer(("127.0.0.1", 0), ...)`,
+- **判别**: **事实有误** —— `tests/unit/helpers.py:388` 用的是 `ThreadingHTTPServer(("127.0.0.1", 0), ...)`,
   端口 **0 = 由内核分配**, 天然不撞。
 - **处置**: 别拿这条当挡箭牌。
 
@@ -108,7 +108,7 @@
 
 - **触发**: 全量并行**偶发**红在端口相关用例上(`test_hr_discovery.py` 一族), 单跑绿、紧接重跑全量也绿。
 - **判别**: 先看三件事, 缺一件就别下结论 ——
-  ①**改动面是否沾边**: `git diff --stat` 里有没有 `src/auto_qb/hr/**`、`tests/test_hr_discovery.py`;
+  ①**改动面是否沾边**: `git diff --stat` 里有没有 `src/auto_qb/hr/**`、`tests/unit/test_hr_discovery.py`;
   ②**单独跑是否绿**: `uv run pytest <nodeid> -q -n 0`;
   ③**traceback 在不在手**: 从全量日志里取栈。
   2026-10-29 实例(八修收尾, **未定位, 只留观察**): 连跑两次 `test.full`, 第一次红在

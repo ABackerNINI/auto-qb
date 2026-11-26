@@ -121,8 +121,8 @@
 - **处置**: 两个出口的语义都别"优化"(在 judge 层给出管束结论会让未接入站点静默触发 HR)。
   空视图判据是 `HrSiteView.has_evidence`(lane_a / lane_terminal / verified 全空 ⇒ 行 4);
   全站型由 `listing="none"` 表达; 旧 `mode` 分叉与 `unknown_policy` 已删(见 `resolve.py` 模块头)。
-  守阵: `tests/test_hr_resolve.py::test_none_when_view_missing` / `::test_none_when_listing_none` /
-  `::test_row4_no_evidence` / `tests/test_hr_runtime_feeder.py::test_judge_without_published_view_falls_back`。
+  守阵: `tests/unit/test_hr_resolve.py::test_none_when_view_missing` / `::test_none_when_listing_none` /
+  `::test_row4_no_evidence` / `tests/unit/test_hr_runtime_feeder.py::test_judge_without_published_view_falls_back`。
 
 ### HR: 站点行**缺达标字段 ≠ 站点说未达标**(2026-09-25)
 

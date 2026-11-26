@@ -16,7 +16,7 @@
   「巡检约定」节)。
 - **不改生产面**: pytest-randomly 是 dev 依赖, 本入口不碰 config.yml / 生产配置键。
 
-TMPDIR: 原样透传环境(由子进程 pytest 的 tests/_tmp_bootstrap.py 自举探测, 外部 TMPDIR 会被
+TMPDIR: 原样透传环境(由子进程 pytest 的 tests/unit/_tmp_bootstrap.py 自举探测, 外部 TMPDIR 会被
 rc=4 拒收 —— 与 test.pkg.scoped 同口径)。
 """
 

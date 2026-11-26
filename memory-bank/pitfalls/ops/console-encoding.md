@@ -31,7 +31,7 @@
   上次 +1 (2026-11-06, CI `windows-latest` cp1252 一次红 6 条 node 探针): 为什么没命中 ——
   坑档早就写了, 但 `处置` 把 `errors="replace"` 写成括号里的“可加”, 全仓 12 处 `text=True` 漏声明、
   另 4 处只声明 `encoding`, 也没有机检 ⇒ 新用例照抄旧写法。此处把口径收成**两项必填**, 并落
-  `tests/test_platform_tolerance_guards.py::test_repo_text_subprocess_calls_pin_utf8` 全仓 AST 对账
+  `tests/unit/test_platform_tolerance_guards.py::test_repo_text_subprocess_calls_pin_utf8` 全仓 AST 对账
   (带合成源活性探针)。本机复现: `PYTHONUTF8=0` 把 preferred encoding 压回 cp936。
 
 ## 打印外部输出时不要假定它是 UTF-8
@@ -97,7 +97,7 @@
   进程不退不出。编码 `reconfigure(encoding=...)` **不改变缓冲策略**, 修完编码还是看不见。
 - **处置**: 常驻/长跑脚本入口对 stdio 一并 `reconfigure(line_buffering=True)`(同一次 reconfigure 里给,
   见 nav_server.py `_utf8_stdout`); 或者关键行改 `print(..., flush=True)`。守阵:
-  `tests/test_kb_nav_shell.py::test_log_filters_polling` 旁的冒烟路径 + 引擎 stream 通道
+  `tests/unit/test_kb_nav_shell.py::test_log_filters_polling` 旁的冒烟路径 + 引擎 stream 通道
   (commands run.py, 2026-10-04) —— stream 模式 stdio 直连不落管道, 是另一条独立防线。
 
 ## CLI 入口的同一兜底: gtm 非控制台 print 中文会崩(2026-11-03 补, 同因不另立坑档)

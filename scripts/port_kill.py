@@ -43,7 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# POSIX 支的 /proc 根单点(守阵用假 /proc 树钉双支, 见 tests/test_legacy_review4_scripts.py)
+# POSIX 支的 /proc 根单点(守阵用假 /proc 树钉双支, 见 tests/unit/test_legacy_review4_scripts.py)
 PROC_ROOT = "/proc"
 # 本 clone 仓库根单点: 脚本固定在 <root>/scripts/ 下, 从 __file__ 上推一层。
 # clone 域闸(in_clone_domain / kill_decision)用它判定候选进程是否归属本 clone。

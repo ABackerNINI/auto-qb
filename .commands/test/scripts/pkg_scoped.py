@@ -11,7 +11,7 @@ rc 0(闸门 `<changed:>` 无匹配本应整条跳过, 这里只兜底 —— iss
 与「实跑通过」可区分)。
 
 TMPDIR(2026-11-02, 计划 26-11-02-0657): 不再内置 R:/ 前缀(自 2026-11-01 引入起在本机从未生效,
-必走 WARN 分支); 由子进程 pytest 的 tests/_tmp_bootstrap.py 自举探测(R→H→系统temp)——
+必走 WARN 分支); 由子进程 pytest 的 tests/unit/_tmp_bootstrap.py 自举探测(R→H→系统temp)——
 本 wrapper **原样透传环境**, 不设 TMPDIR; 若环境里有外部 TMPDIR, 子进程会 rc=4 拒收(刻意堵死)。
 """
 

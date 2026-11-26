@@ -27,7 +27,7 @@
 - **别踩的坑**: ①回调内 try/catch 吞 Test ended 类错 —— 能消红但掩盖真实路由错误, 不推荐; ②CI retry
   绿了就当修好 —— 违反台账纪律(retry 不是修复); ③想用运行期守阵钉差分 —— 见机制节, 物理不可行,
   差分锚在静态面(下条)。
-- **守阵**: `tests/test_flaky_timing_guards.py` 扫描器 5(`test_repo_route_fetch_specs_wired_route_cleanup`):
+- **守阵**: `tests/unit/test_flaky_timing_guards.py` 扫描器 5(`test_repo_route_fetch_specs_wired_route_cleanup`):
   含 `route.fetch(` 调用位的 `*.spec.mjs` 必须在**文件顶层**接线 `installRouteCleanup`; 两侧取噪声方向
   相反的安全侧 —— 违例侧看原文按调用位判(注释提及也算, 先取后 await 的分离形态同拦), 接线侧**剥注释后
   判行首无缩进的调用形态**(import 单独在场不算接线, 只注释调用行 = 临时关闸照样红, describe 内缩进调用

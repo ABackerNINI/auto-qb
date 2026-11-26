@@ -41,7 +41,7 @@
   本地"绿"只是因为没跑全量收集(未执行 `--list`), CI 一收集就现形。
 - **处置**: spec 一律 `import { baseUrl }` 并在**使用点**调用(`${baseUrl()}/...`) —— 端口要等
   webServer.wait 注入 `UI_HARNESS_PORT` 后才可读, 模块级常量恒 undefined。新增 spec 先跑
-  `commands run dev.e2e -- --list` 收口。守阵: `tests/test_port_zero_guards.py::test_e2e_modules_use_lazy_base_url`
+  `commands run dev.e2e -- --list` 收口。守阵: `tests/unit/test_port_zero_guards.py::test_e2e_modules_use_lazy_base_url`
   扫 `e2e/` 全部 `.mjs`(`BASE_URL` 零命中) —— 原守阵只查 harness.mjs 的**定义侧**, 拦不住调用方回潮。
 
 ### 全量套件增长撞预算: `dev.e2e` 引擎 timeout / CI job timeout 到点强杀

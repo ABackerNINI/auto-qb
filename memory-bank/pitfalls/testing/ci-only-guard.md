@@ -26,7 +26,7 @@
   强制分支只换了**实现判定**, 常量仍由当前平台的模块提供 —— Windows 专属常量不能照名直接取。
 - **处置**: 与被测实现同口径兜底取常量 —— `getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)`
   (`relocate_mod._spawn` 本就是这款写法); **别**整体 skip 掉用例, 否则 Windows 正分支在 Linux 上失去守阵。
-- **守阵**: `tests/test_relocate_exec_misc.py::test_spawn_args_pinned`; 无 WSL/容器时复现 Linux 语义:
+- **守阵**: `tests/unit/test_relocate_exec_misc.py::test_spawn_args_pinned`; 无 WSL/容器时复现 Linux 语义:
   先 `del subprocess.CREATE_NO_WINDOW` 再同进程 `pytest.main(...)`(实测改前 AttributeError、改后绿)。
 - **复发**: +1 (2026-11-03): 为什么没命中 —— 见到用例已用 monkeypatch 造平台差异, 就默认"两侧都覆盖了",
   没检查断言里引用的**模块常量**是否也随平台存在; 判别法当时只写了"切片长度/阈值", 没泛化到"仅一侧存在的符号"。
@@ -66,7 +66,7 @@
   `.strip()` 报 `AttributeError`, 以及严格解码打死读线程后的 `TimeoutExpired`。**别**当成 JS 死循环去调超时。
 - **处置**: 收端 `encoding="utf-8", errors="replace"` 两项都写(口径单点见 [../ops/console-encoding.md]
   「反向」节, 本变体的 `复发 +1` 记在那条); node 电池超时统一 60s。
-- **守阵**: `tests/test_platform_tolerance_guards.py` 新增全仓 AST 对账 + 合成源活性探针,
+- **守阵**: `tests/unit/test_platform_tolerance_guards.py` 新增全仓 AST 对账 + 合成源活性探针,
   12 处漏声明与 4 处漏 `errors` 一次收口; 本机复现 = `env -u TMPDIR PYTHONUTF8=0` 跑用例
   (改前 5 failed 1 passed → 改后 6 passed; 全量 `test.quick` 5479 passed)。
 - **反面证据 / 复现局限**: 本机 `PYTHONUTF8=0` 压回的是 cp936, **不是** runner 的 cp1252 ——

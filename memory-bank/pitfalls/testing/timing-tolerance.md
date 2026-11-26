@@ -11,20 +11,20 @@
   (其它进程 timeBeginPeriod / Win11 timer coalescing 改变取整方向: 3 刻度=46.8ms 红, 4 刻度=62.4ms 绿)。
   同日 regime 微基准可直接量化: `Event.wait(0.05)` 3000 次 min=59.1ms(过冲 regime, 0 假红)。
 - **处置**: 下界留余量, 余量按"被守回归的量级"定, 不按"抖动实测"定 —— throttle 守阵取
-  `elapsed >= main_tick - SLEEP_LOWER_MARGIN_S`(余量单点 tests/platform_tolerance.py, 2026-11-06
+  `elapsed >= main_tick - SLEEP_LOWER_MARGIN_S`(余量单点 tests/unit/platform_tolerance.py, 2026-11-06
   S6 收敛: 由各点手写 0.02 抬升为 >=2 tick=31.2ms; 空转是微秒级, 余量不损失判别力; 而 0.9 倍下界=45ms 距 46.8ms 假红值仅
   1.8ms 仍会抖)。**不要**为对称加挂钟上界: 负载合法拉长等待, 上界会制造新的假红模式。相关: 同根双 issue
   [26-09-20-0952](../../issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) /
   [26-09-22-2052](../../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html)(2026-09-28 修复关闭)。
 - **复发**: 4
-  - ① 2026-10-05 CI 假红: `tests/test_traffic_grid_group.py::test_group_50_members_correct_and_time_bound`
+  - ① 2026-10-05 CI 假红: `tests/unit/test_traffic_grid_group.py::test_group_50_members_correct_and_time_bound`
     的**挂钟上界** `elapsed < 3.0` 在 windows-latest 实测 4.01s(同一负载本机插桩中位 ~1.26s) —— 正是上面
     「不要为对称加挂钟上界」形态的**首次真兑现**(上界零容差, 合法负载直接撞线)。处置: 计时改
     `time.process_time`(CPU 时间, 不受 `-n 4` worker 抢占 / 调度放大), 上界 3.0 → 8.0s(≈30s 采样间隔的 1/4,
     仍拦数量级劣化)。**为什么没命中**: 断言 2026-09-19(P4, v2 口径)就写下, 早于本条坑档(09-28); 且本条
     `触发` 词面偏「节流 / 节拍守阵」(下界), 性能**上界**守阵不在路由视野 —— 上界此前只作为「别这么写」的
     告诫存在, 无实测个案可路由; windows-latest job 2026-10-04 才加, 假红此前无处现形。
-  - ② 2026-11-07 CI 假红: `tests/test_modules_p5.py::test_rebuild_benchmark_5000_seeds` rebuild
+  - ② 2026-11-07 CI 假红: `tests/unit/test_modules_p5.py::test_rebuild_benchmark_5000_seeds` rebuild
     median-of-5 挂钟 8.158ms >= 4.0ms 阈值(基线采于本机 7950X, 同口径中位 0.864ms) —— ubuntu-latest
     少核 runner + `-n 8` xdist 抢占 + coverage 插桩, 合法调度放大近 10x。**处置不能照抄 ①**:
     `ci.yml` 的 test(ubuntu-latest) 与 test-windows(windows-latest) 跑**同一份测试代码**, 计时
@@ -35,7 +35,7 @@
     本轮无 Linux 环境(Docker 不可用)**未实测**, 不声称它也不可用; 若只跑 Linux 一侧, 改 CPU
     时间是更优解。故走 platform_tolerance 规范第 2 条「非用挂钟不可 → 放宽到不可撞线量级」
     分支: 上线**两档阈值**(开发机严格档 0.1/4.0ms 不动; CI 档 1.0/20.0ms 只由
-    GITHUB_ACTIONS 启用), 数字单点 `tests/fixtures/perf_baseline.json`, `[5000-seed benchmark]`
+    GITHUB_ACTIONS 启用), 数字单点 `tests/unit/fixtures/perf_baseline.json`, `[5000-seed benchmark]`
     打印行带档位与阈值可追溯, 灾难线 1s/30s 保留。**已知取舍**: 分档只放宽上界、未从测量层
     消除抢占放大, CI 侧需 ~23x 中位劣化才报; 本地严格档保留检测力。**为什么没命中**:
     该测试 docstring 已写明基线机器与重采样流程, 却把「换机器」只理解成开发者换开发机,

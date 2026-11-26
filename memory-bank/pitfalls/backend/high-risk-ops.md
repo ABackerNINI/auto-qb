@@ -25,7 +25,7 @@
 - **触发**: 加 / 改快照字段, 改 `REQUIRED_TORRENT_FIELDS`。
 - **判别**: `_refresh_torrents` 首次拉全量时校验 `REQUIRED_TORRENT_FIELDS`(快照 18 + 跳检重加 6),
   缺失抛 `QbCompatError` → CLI 干净退出。字段缺失时规则会**基于假数据决策**。
-- **处置**: **加深快照字段必须同步 `tests/helpers.py` 的 `FakeTorrent._SNAPSHOT_FIELDS`**,
+- **处置**: **加深快照字段必须同步 `tests/unit/helpers.py` 的 `FakeTorrent._SNAPSHOT_FIELDS`**,
   否则 sync 版本校验报缺字段、启动即退。**fail-fast 是有意的, 别改宽容。**
 
 ### `or 默认值` 会掩盖数值字段: 方向可能朝危险侧
@@ -88,9 +88,9 @@
   `PROD_ROUND_WAIT_MAX`, 超额就让位而不是干等); ②等待必须**可中断**(关停/热重挂要
   立刻打断, 否则 join 得等它睡完, 期间还持着站点锁); ③**下载跨波续排**(`_run_downloads`):
   本波预算受限没下完的 `.torrent` 留待下波续下(永久层身份缓存去重, 同 tid 不重下)。守阵:
-  `tests/test_hr_runtime_feeder.py::test_production_service_gets_a_sleeper` ·
-  `tests/test_hr_service_wave.py::test_budget_take_gives_up_without_sleeper` ·
-  `tests/test_hr_service_misc.py::test_run_downloads_unit_paths`(预算为 0 时未下完的留待下波)。
+  `tests/unit/test_hr_runtime_feeder.py::test_production_service_gets_a_sleeper` ·
+  `tests/unit/test_hr_service_wave.py::test_budget_take_gives_up_without_sleeper` ·
+  `tests/unit/test_hr_service_misc.py::test_run_downloads_unit_paths`(预算为 0 时未下完的留待下波)。
 
 ### HR: 扩展侧硬上限触发时必须「让位」而不是「计失败」(2026-09-25 实测)
 

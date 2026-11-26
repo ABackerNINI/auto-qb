@@ -23,9 +23,9 @@
   报成「没通道」; ④错误分类要跟着改:`HrChannelUnavailable` 是 `HrFetchError` 的子类, 凡
   「不是这个种子/这份数据的问题」的让位元组都要把它列进去, 否则通道级故障会被记成
   「种子取 .torrent 失败」并进重试冷却。
-- **守阵**: `tests/test_hr_fetcher_channel.py::test_endpoint_not_listening_fails_fast`(断言
+- **守阵**: `tests/unit/test_hr_fetcher_channel.py::test_endpoint_not_listening_fails_fast`(断言
   **不进队列**、**耗时 < 1s**、异常类型恰为 `HrChannelUnavailable`, 且叫停语义优先);
-  `tests/test_hr_runtime_feeder.py::test_fetcher_fails_fast_when_endpoint_stops_listening`(门面接线:
+  `tests/unit/test_hr_runtime_feeder.py::test_fetcher_fails_fast_when_endpoint_stops_listening`(门面接线:
   端点被收掉后取数立刻报无通道)。两例红验实测: 未修复时前者报 API 缺失、后者**白等 5s 后**才抛
   「等待浏览器扩展取数超时」。
 - **相关**: [hot-reload-held-config.md](hot-reload-held-config.md)(端点为何会没起来)。

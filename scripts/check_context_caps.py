@@ -30,7 +30,7 @@ IDE 注入项目引导文件时, 超出 `MAX_GUIDANCE_CHARS`(8000) 的部分会�
 严重度单点
 ----------
 知识库角色 cap 的严重度由 skill 侧 `check_kb_structure.HARD_CAP_ROLES` 决定, 本脚本**进程内
-import 它**(与 `tests/test_memory_bank.py` 同做法) —— 不在两处各写一份判定逻辑。
+import 它**(与 `tests/unit/test_memory_bank.py` 同做法) —— 不在两处各写一份判定逻辑。
 
 用法
 ----

@@ -1,4 +1,4 @@
-# tests/helpers.py 基础设施
+# tests/unit/helpers.py 基础设施
 
 > 摘要: 全 Fake 测试基座的四个替身 + 本地假 qB 服务 + 四个最常用的构造函数 —— 写测试前必读。
 > 触发: 写测试, helpers, FakeClient, FakeTorrent, FakeQbServer, make_manager, make_ctx, seed_store, 替身

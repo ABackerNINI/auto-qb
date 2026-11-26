@@ -38,7 +38,7 @@
 - **处置**: `distSegments` 按 viewMode 分支: groups 走 groups + singles / torrents 走 `torrents[].kind` /
   shows 走 `shows.list[].seasons[].episodes[].state`(**`shows` 是 `{list, unrecognized}` 不是数组**, 第一脚就踩过)。
   判定口诀"**凡跨视图呈现的派生值, 都问一次'它在另两个视图下还成立吗'**";
-  守阵: `tests/test_webui_static_dom_page_layout.py::test_frontend_dist_segments_aggregates_per_view`。
+  守阵: `tests/unit/test_webui_static_dom_page_layout.py::test_frontend_dist_segments_aggregates_per_view`。
 
 ## 上游从「空/未接入」变「有值」会点亮下游**从未跑过**的展示分支 (2026-09-29)
 
@@ -116,5 +116,5 @@
   与后端 `infra/utils.path_normalize` 口径逐字一致: 转斜杠 + 压重复斜杠 + 保留首尾斜杠)。
   且**必须配真跑纯函数的 node 电池**(命中/不命中两态都钉) —— 静态守阵只验接线,
   看不出"键对不上", 而这正是本坑唯一可观测的面。
-- **守阵**: `tests/test_webui_static_dom_panel_dialogs.py::test_frontend_add_options_recent_order`
+- **守阵**: `tests/unit/test_webui_static_dom_panel_dialogs.py::test_frontend_add_options_recent_order`
   (node 电池真跑 `_addOrderByRecent`/`_addNormPath` + 静态钉接线, 已红验)。

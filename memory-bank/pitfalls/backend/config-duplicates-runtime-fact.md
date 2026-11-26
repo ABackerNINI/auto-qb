@@ -11,7 +11,7 @@
   2. 状态区/调试端点显示的路径是**对的**(它读的是指针), 而取数走的是配置 —— 同名字段两个来源;
   3. 查配置发现那个键**根本不存在**(不是填错), 于是校验也不报错(如果它只对另一分支必填)。
 - **处置**: 别补迁移、别加必填校验 —— **删掉那个配置键**, 把解析收进一个运行期单点(本仓 `core/traffic_source/paths.py::dat_path(config)`: 配置只回答"用户能配什么", 事实由持有者报出)。删键后残留配置按**未知键报错**(不静默忽略, 忽略会让人以为"配了就在生效"); 删掉旧单点(`active_dat_path()`), 不留第二入口 —— 留一个恒返回空串的旧入口, 迟早有调用方把"来源不对"当成"未配置"。
-- **守阵**: `tests/test_traffic_source_paths.py`(两条分支 + 指针缺失 + 互斥) · `tests/test_config_traffic_monitor.py::test_validate_tool_data_dir_key_is_gone`(残留键必须报错) · `tests/fixtures/config_key_surface.txt`(键面基线, 删键即红)
+- **守阵**: `tests/unit/test_traffic_source_paths.py`(两条分支 + 指针缺失 + 互斥) · `tests/unit/test_config_traffic_monitor.py::test_validate_tool_data_dir_key_is_gone`(残留键必须报错) · `tests/unit/fixtures/config_key_surface.txt`(键面基线, 删键即红)
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)
 
 ### 把「运行期事实」算进「配置是不是变了」的指纹
@@ -22,5 +22,5 @@
   2. 同一份配置前后两次比对**结果不同**(指针在两次读之间变了), 判定不可复现 ⇒ 单测只能盖住时序, 写不出稳定断言;
   3. 想给它写守阵时发现必须桩掉指针文件的时钟/内容才能定住。
 - **处置**: 指纹只取**配置事实**(本仓 `paths.source_signature(config)` = `(enabled, provider, traffic_monitor.dat_path)`); 「指针指向的目录变了」这种情形**由 `provider` 分支覆盖** —— 同一 provider 下换目录是工具自己的事, 消费者下一轮照常读指针即可, 不需要「变更」语义。运行期事实留给运行期读(`dat_path`), 绝不进变更判定。
-- **守阵**: `tests/test_traffic_monitor_client.py::test_source_signature_tracks_source_keys`(表驱动: 无关段改不动指纹) · `test_reload_config_unchanged_source_does_not_refresh`(无关保存不换快照引用)
+- **守阵**: `tests/unit/test_traffic_monitor_client.py::test_source_signature_tracks_source_keys`(表驱动: 无关段改不动指纹) · `test_reload_config_unchanged_source_does_not_refresh`(无关保存不换快照引用)
 - **复发**: 0

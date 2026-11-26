@@ -129,7 +129,7 @@
 - **处置**: 判据与文案单点在 `webui/commands_common.py::qb_reject_text`(4xx 且非 401 -> 可读文案 + 已知场景
   行动建议, `QB_REJECT_HINTS` 按 qB 文案子串匹配; qB 文案随其界面语言变, 匹配不到只给通用前缀, 不猜),
   分发层只分流: 命中 -> **WARNING 无堆栈**, 未命中(网络/鉴权/代码 bug) -> ERROR + `exc_info=True`。
-  守阵 `tests/test_web_commands_bulk.py::test_qb_reject_text_classification` 与
+  守阵 `tests/unit/test_web_commands_bulk.py::test_qb_reject_text_classification` 与
   `test_queue_torrent_qb_reject_receipt_and_log`。
 
 ### qB `sync/torrentPeers` 的对端速度字段是 `dl_speed` / `up_speed`, **不是** `dlspeed` / `upspeed`

@@ -7,5 +7,5 @@
 
 - **触发**: 想用 `with mock.patch.object(mgr.host.get("grouping"), "_on_transitions") as h: mgr.events.emit("transitions", ...)` 断言「相位广播恰好触达一次」—— emit 正常返回但 handler 0 次调用。
 - **判别**: `ModuleHost.register` 在装配点回调 `module.subscribe(events)`, `phases.on(phase, handler)` 存进总线的是**当时的绑定方法对象**; `patch.object` 替换的是实例属性 `_on_transitions`, 二者是两个对象 —— 总线快照 `tuple(self._handlers[...])` 派发的永远是注册期那份。
-- **处置**: 守**接线**(谁订阅了什么)用 `len(mgr.events._handlers[phase]) == 1` + `emit(...) == 1`(返回值即触达订阅者数); 守**行为**直接 emit 真数据断言副作用, 或 `patch.object` 总线里那个 handler 对象本身。见 tests/test_modules_p4.py::test_grouping_phases_wired 的两种写法。
-- **守阵**: tests/test_modules_p4.py::test_grouping_phases_wired(订阅计数 + emit 返回值)。
+- **处置**: 守**接线**(谁订阅了什么)用 `len(mgr.events._handlers[phase]) == 1` + `emit(...) == 1`(返回值即触达订阅者数); 守**行为**直接 emit 真数据断言副作用, 或 `patch.object` 总线里那个 handler 对象本身。见 tests/unit/test_modules_p4.py::test_grouping_phases_wired 的两种写法。
+- **守阵**: tests/unit/test_modules_p4.py::test_grouping_phases_wired(订阅计数 + emit 返回值)。

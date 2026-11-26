@@ -5,7 +5,7 @@
 
 **Refs:** memory-bank/plans/26-11-02-0657-plan-testing-tmpdir-bootstrap.html
 
-### 测试 TMPDIR 已由 `tests/_tmp_bootstrap.py` 自举接管(2026-11-02); 外部 TMPDIR 一律拒收 rc=4
+### 测试 TMPDIR 已由 `tests/unit/_tmp_bootstrap.py` 自举接管(2026-11-02); 外部 TMPDIR 一律拒收 rc=4
 
 - **触发**: 跑 tests/ 树的任何 pytest; 或想在 shell / run config / config.toml 里手工设 `TMPDIR`。
 - **判别**:
@@ -25,7 +25,7 @@
     CWD 的 `.coverage`(早于一切 conftest), env `COVERAGE_FILE` 对主进程**无效**;
     conftest `pytest_configure` 调 `_tmp_bootstrap.retarget_cov_data_file()` 改写 `_data._filename`
     重定向(xdist worker 启动晚, env 天然有效)。**若升级 pytest-cov/coverage 后仓库根又见 `.coverage.*`,
-    先查这个私有面**(钉版于 uv.lock, 回归阵 `tests/test_tmp_bootstrap.py`)。
+    先查这个私有面**(钉版于 uv.lock, 回归阵 `tests/unit/test_tmp_bootstrap.py`)。
   · 同 clone 写重型全量互斥锁 `<系统temp>/auto-qb-locks/<repo hash8>`: 撞锁 **rc=3** + 打印持锁者,
     强杀后下一位自愈; 残留实例根按「mtime 超 12h 且内嵌 pid 已死」双条件清扫(阈值暂定可调)。
 - **处置**: 一律 `commands run test.*` 或裸 `uv run pytest tests ...`, **任何层都别预设 TMPDIR**。
@@ -70,7 +70,7 @@
   (本 shell 自带 `TMPDIR=H:\Temp`), `unset TMPDIR` 后干净重跑。为什么没命中: 评审、包生成、文档
   回填每一步都盯住了, 唯独把「跑 pytest 前先清 TMPDIR」留成失败后的补救动作 —— 与复发 3/5/6/7/8
   完全同款; 前缀必须挂在 `test.full` 命令本身, 不等失败行提示。
-- **复发**: 11(2026-11-19)—— 置前焦点修复轮: ①首次聚焦 pytest(`uv run pytest tests/test_utils_windows.py`)
+- **复发**: 11(2026-11-19)—— 置前焦点修复轮: ①首次聚焦 pytest(`uv run pytest tests/unit/test_utils_windows.py`)
   直跑 rc=4(本 shell 自带 `TMPDIR=C:\Users\…\AppData\Local\Temp`); ②加了前缀跑测试后, **评审前置链
   `commands run ship.gate` 又裸跑**, 闸门内部 test.quick 同 env 再 rc=4 一次(同复发 4/9 的间接调用教训)。
   为什么没命中: AGENTS.md 顶部警告读过, 但没把「跑任何 pytest 前先 `env -u TMPDIR`」和「前缀挂整条

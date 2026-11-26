@@ -22,6 +22,6 @@
 
 ## 守阵
 
-- `tests/test_module_host.py::test_eventbus_registration_order_and_suppress`(两字段协议段: 挂请求不吞相位 / take 读走请求位 / 读走即清除)。
-- `tests/test_modules_p5.py::test_rebuild_within_window_still_delivers_queue_rebuilt`(抑制窗内二次重建 queue_rebuilt 不被吞, issue 26-10-01-0750 回归)。
-- `tests/test_modules_p5.py::test_suppression_request_survives_failed_round`(失败轮不丢请求位 + 下一成功轮抑制生效, 审计 M1 回归)。
+- `tests/unit/test_module_host.py::test_eventbus_registration_order_and_suppress`(两字段协议段: 挂请求不吞相位 / take 读走请求位 / 读走即清除)。
+- `tests/unit/test_modules_p5.py::test_rebuild_within_window_still_delivers_queue_rebuilt`(抑制窗内二次重建 queue_rebuilt 不被吞, issue 26-10-01-0750 回归)。
+- `tests/unit/test_modules_p5.py::test_suppression_request_survives_failed_round`(失败轮不丢请求位 + 下一成功轮抑制生效, 审计 M1 回归)。

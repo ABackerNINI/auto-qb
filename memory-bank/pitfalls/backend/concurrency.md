@@ -81,7 +81,7 @@
   本轮重复弹出过闸), 执行批次之后统一回填; 让位扫描面另以 `max_tasks * _DEFER_SCAN_FACTOR`
   封顶 —— **让位是"跳过"不是"执行", 放开预算后必须另有上界**, 否则一轮 tick 会把整条队列扫穿。
   `run_due` 返回值同步改为**实际执行数**(不再含让位者)。改这条语义时先跑
-  `tests/test_taskqueue.py` 的两条守阵(预算 / 扫描上界)。
+  `tests/unit/test_taskqueue.py` 的两条守阵(预算 / 扫描上界)。
 - **登记点**: QbApi 四入口 `start/stop/pause/resume` 在 raw client 调用**成功后** `note_own_write`;
   纯内存态(同 `state_snapshot`), **不落盘**, 热重载 `reset_runtime` 清空。
 - **同一容器供两种语义用, 禁双轨**: `own_write_pending(hash, group=True)` 走组维度(deferral);

@@ -1,6 +1,6 @@
 # seed_store 传子列表 = 整体替换 by_hash, 不是增量追加
 
-> 摘要: `tests/helpers.py::seed_store(mgr, torrents)` 的形参像「灌入这些种子」(增量), 实际语义是
+> 摘要: `tests/unit/helpers.py::seed_store(mgr, torrents)` 的形参像「灌入这些种子」(增量), 实际语义是
 > **整体替换** `store.by_hash`(与 store.refresh 全量轮同构: 新 dict 换引用, 旧条目即淘汰) —— 测试中途
 > 想追加几个种子时把子列表传进去, 会把既有种子全部挤出快照, 症状是「刚还好好的用例突然 1/2 个种子
 > 不存在」「部分组判定静默漏组」且无报错。追加口径 = 不传列表(取 `client.torrents` 全量)。

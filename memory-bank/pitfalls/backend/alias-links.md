@@ -19,7 +19,7 @@
   `ReparseDataLength = 8 + len(PathBuffer)`, 总长 `8 + ReparseDataLength`;
   SubstituteName 用 NT 命名空间 `\??\<绝对路径>`, 两段名字各自以 `\x00\x00` 结尾(长度不含结尾)。
   建完必须**回读验证**(`alias_kind_of == junction` + 穿透读一个文件), 不能只看调用返回值。
-- **守阵**: `tests/test_alias_fs.py::test_junction_roundtrip`(Windows: 建 -> 形态识别 -> 穿透读 -> 删)、
+- **守阵**: `tests/unit/test_alias_fs.py::test_junction_roundtrip`(Windows: 建 -> 形态识别 -> 穿透读 -> 删)、
   `test_probe_junction_platform`
 
 ### `WinError 1314` 有二义性: 长路径与「权限不足」同一个码
@@ -31,7 +31,7 @@
 - **处置**: 归因顺序固定 —— **先按路径长度分类**(`len(os.path.abspath(link)) >= 260` 一律判长路径,
   出路是改用目录别名或缩短路径), **再按错误码分类**(<260 且 1314/EPERM/EACCES 才判需提权)。
   顺序反了就是把长路径误诊成权限问题。单点: `infra/alias_fs.py::classify_link_failure`。
-- **守阵**: `tests/test_alias_fs.py::test_classify_link_failure_order`(两条分支各一断言, 且注明
+- **守阵**: `tests/unit/test_alias_fs.py::test_classify_link_failure_order`(两条分支各一断言, 且注明
   「别拿长路径的 1314 冒充权限的 1314」)
 
 ### WSL 的 Windows 盘: fstype 是 `9p`, 「drvfs」只写在挂载选项里
@@ -45,5 +45,5 @@
   ②WSL 里挂载点形如 `/mnt/<单个盘符>`(兜底, 不依赖选项文本)。Docker Desktop 的 `9p`/`virtiofs`
   共享挂载**不要**顺手归进来 —— 同一形态在 macOS 宿主上可用, 容器内分不出宿主 OS,
   记「未实测」而不是猜。单点: `infra/alias_fs.py::windows_backed_mount`。
-- **守阵**: `tests/test_alias_fs.py::test_mount_info_and_windows_backed`(注入真实挂载表文本)、
+- **守阵**: `tests/unit/test_alias_fs.py::test_mount_info_and_windows_backed`(注入真实挂载表文本)、
   `test_probe_capability_notes_foreign_mount`(整机探测落到 `container_cross_os` 拒绝)

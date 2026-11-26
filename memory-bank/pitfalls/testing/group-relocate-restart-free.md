@@ -22,4 +22,4 @@
   仍返回 True」, 相位一路前进到 armed。
 - **处置**: 不要用「删目标」模拟悬空。按被测行为注入(`monkeypatch` 掉 `_penetration_ok`)或改跨卷 symlink 形态;
   真要物理悬空就同时删两个名字, 但那已经不是「链接在却读不到」的现场了。
-- **守阵**: `tests/test_relocate_paths.py::test_exec_penetration_failure_keeps_scene`(注入式)。
+- **守阵**: `tests/unit/test_relocate_paths.py::test_exec_penetration_failure_keeps_scene`(注入式)。
