@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-11-24
-**Updated:** 2026-11-24
+**Updated:** 2026-11-27
 **Summary:** 外部旧路径种子通知账启动自愈与探测确认 UX 记账
 **Topics:** backend-relocate-foreign-notified-cleanup
-**Refs:** memory-bank/plans/26-11-24-2204-plan-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-24-2150-bug-relocate-probe-reask-ui-loop.html, memory-bank/testing/baselines/26-11-24-2221-relocate-foreign-notified-cleanup-and-confirm-ux-accounting.md
+**Refs:** memory-bank/plans/26-11-24-2204-plan-relocate-foreign-notified-cleanup.html, memory-bank/issues/26-11-24-2150-bug-relocate-probe-reask-ui-loop.html, memory-bank/testing/baselines/26-11-24-2221-relocate-foreign-notified-cleanup-and-confirm-ux-accounting.md, memory-bank/testing/baselines/26-11-27-0250-relocate-foreign-startup-cleanup.md
 
 ## 本篇只回答
 
@@ -47,7 +47,7 @@
 | T2 | 新建探测确认 UX issue 并补双向反链 | Done(2026-11-24) |
 | T3 | grilling 出启动自愈计划并落 D1–D8 决策 | Done(2026-11-24) |
 | T4 | 评审、闸门、全量测试、基线/切片/档案回写并随本专题入库 | Done(2026-11-24) |
-| T5 | 按计划实现启动自愈清理函数与接线 | Open |
+| T5 | 按计划实现启动自愈清理函数与接线 | Done(2026-11-27) |
 | T6 | 补测试并用测试 qB `real.up` 验收 | Open |
 
 ## 进度日志
@@ -57,3 +57,5 @@
 诊断确认历史误报家族已被 B1 封堵，滞留来自终态/清史窗口缺失；新建 UX issue 与窄版自愈计划，按拍板保留 D4 重告警语义；两轮只读评审零 actionable，闸门与全量测试全绿（见 kb.baseline），基线切片、会话切片与本档案随本专题入库。
 
 - 2026-11-24 22:22 只读诊断旧路径外部种子滞留与确认回环根因: 新建探测确认 UX issue 与启动自愈窄版清理计划, 保留 D4 终态重告警语义; 两轮评审零 actionable, kb.check/kb.docmap/ship.gate 全绿, 全量测试全绿见 kb.baseline 26-11-24-2221; 实现与测试 qB real.up 验收留作后续
+
+- 2026-11-27 02:50 按计划实现启动自愈清理函数/接线/D4 交叉守阵，全量测试全绿并落新基线; 三轮评审零 blocker、1 条 minor 已修、检 1/1; 真机 real.up 验收留阶段 5
