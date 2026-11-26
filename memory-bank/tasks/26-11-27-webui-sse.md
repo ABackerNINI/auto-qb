@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-11-27
 **Updated:** 2026-11-27
-**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; 零代码改动
+**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; S1(P1 错误日志推送化)已实施收口, 计划整体仍 Open(S2/S3 未做)
 **Topics:** webui-sse
-**Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html
+**Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/testing/baselines/26-11-27-0608-webui-sse-s1-frontend.md
 
 ## 本篇只回答
 
@@ -34,7 +34,7 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | S0 | 三路只读取证 + grilling 两轮 + 计划入库 + 认领链 | Done (2026-11-27) |
-| S1 | P1 错误日志推送化（后端事件 + 前端接线 + 对账 + 守阵） | Open |
+| S1 | P1 错误日志推送化（后端事件 + 前端接线 + 对账 + 守阵） | Done (2026-11-27) |
 | S2 | P2 transfer D5b 两段回执（受理段可区分 + 终态覆盖 + 前端两段 + 真机冒烟） | Open |
 | S3 | P3 抽屉推送化只读评估（空转率/缓存命中率 + 结论） | Open |
 
@@ -47,3 +47,12 @@
 - 2026-11-27 05:32 立项: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open(S1 P1 错误日志/S2 transfer D5b/S3 抽屉只读评估) + issue 0408 翻 In Progress + 档案立档; 零代码改动
 
 - 2026-11-27 05:42 评审收口: 三轮评审(major 1 + minor 1 全修, 第三轮零发现), S2 受理段定案=后端不推信号+前端本地渲染(避开 onCmdEvent/onTruthEvent 双终结路径); 计划 R1/R2/R3 回写, kb.check/kb.docmap/ship.gate 全绿
+
+### R1 · S1 实施收口 (2026-11-27)
+
+- S1-a(另批已提交): `append_err` 出锁后 `notify("errlog", {seq, level, msg})`, 只推单条小真值。
+- S1-b: `startEvents` 注册 `errlog` 监听, 载荷交 `lifecycle.onErrlogEvent` 落袋, 复用 `"b"+seq` 去重与 `errPanelOpen` 未读口径, 事件路径零 GET; 载荷无 ts 故以到达时刻补。
+- 乱序: 出锁广播到达序不等于 seq 序 —— 合并按 seq 降序插入(迟到的低 seq 不爬到新条上), 游标取 `max(现有, seq)` 只进不退; 后端重启 seq 归零仍由 `_errlogReseed` 清旧重拉。
+- S1-c: 60s GET 降为纯对账/游标校准(丢事件补齐、重启重拉), 不再计未读以免与事件双计; boot 开页全量合并语义不变。
+- 守阵: 扩 `test_webui_error_history.py`(静态接线) 与 `test_webui_static_r4_poll_auth_lifecycle.py`(SSE 监听断言 + 落袋/对账 node 电池), 新增双皮肤面板 e2e。`test.full` 实测数字见 kb.baseline 最新切片 `webui-sse-s1-frontend`。
+- 计划 26-11-27-0530 整体保持 Open(S2/S3 未做), issue 状态未动。

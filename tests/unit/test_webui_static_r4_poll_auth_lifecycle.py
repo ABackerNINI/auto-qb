@@ -4,6 +4,7 @@
 - test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer + 换票 await 期间登出落票后不开流(issue 26-11-08-0229 #7: authOk 复查拦在 EventSource 之前, _esBusy 不残留)
 - test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏); fail 路(fn 抛异常 reject)不走 onEnd、句柄表归置(issue 26-11-08-1621 契约定案: 清理归调用方, 文件头注释已写明); 在途合流守卫(2026-11-21): 多触发源并发直调 refresh 只发一次请求(第二拍记 _refreshQueued 返回, 同 rid 双发根除)、在途落定后补拍即取(ver 驱动新鲜度语义保留, 不静默丢弃)、补拍在途期再触发被 refresh() 再入守卫吃住(直调 _refreshOnce 绕守卫即红)、落定时刻已切后台不补拍(hidden 翻转变体钉住, 恒等守卫同口径)、壳不双排(schedN=每轮一次) + 切视图竞态: goView 置空 lastRid 不被在途旧视图轮的 rid 回写(adopt 守卫 reqView===viewMode), 补拍带空 rid+新视图名取全量, 落定后新视图 rid 正常采纳 + 早退xqueued: 401 早退时壳仍补拍(补拍轮同走早退恰拆两次幂等无循环, 不续排)
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
+- test_r4_errlog_event_and_reconcile_probe: S1-b/S1-c(计划 26-11-27-0530) —— errlog 事件落袋 + 对账 node 电池真跑: 事件入历史/未读/去重/游标只进不退 / 有 ts 兜底(载荷无 ts 不落 1970) / 乱序迟到低 seq 按 seq 降序插入 / 丢事件后 60s GET 补齐且不双计未读 / 后端重启 seq 归零后清旧重拉不丢新条目; 同电池首段在 SSE 状态机里钉 startEvents 注册 errlog 监听、坏帧忽略、事件路径零 GET
 - test_r4_logout_settles_modal_and_stops_events: R5#1 + R5#2 —— auth.js _logout 登出收口: 悬空模态先 resolve(false) 再复位(直接丢弃 _modalResolve 会让 confirmDialog/promptDialog 永久 pending, 删除流程在 await 处挂死)、await 侧恢复看到已复位框状态走取消分支、SSE 通道与轮询同口径一并拆(stopEvents 与 _qbTeardown 同收)、无框登出 no-op 不炸
 - test_r4_search_quiet_retry_backoff: R5#236 —— view.js 静默刷新失败重试退避真跑: searchBuilding 残留 true 时失败续查逐次翻倍夹 15s(2s/4s/8s/15s/15s, 与轮询失败退避 currentPollMs 同曲线口径), 服务端宕机不再形成固定 1 req/s 无限循环; 成功一轮计数清零且续查保持 1s 节拍、resetSearch 新会话从零起算
 - test_r4_lifecycle_unmounted_listener_sweep: R5#3 —— lifecycle.js mounted/unmounted 监听对称 node 电池真跑: mounted 挂的五支监听(click 收层/Esc 退栈/防抖 resize/visibilitychange/contextmenu)提为实例字段后 unmounted 逐一撤除(热重载句柄不再堆叠), stopPolling 与 stopEvents 同收, 既有撤除面(键盘引擎/守卫/storage/时钟 interval)零回归; S1(计划 26-11-14-0041)反引号显影链新增 document keydown(第 4 条)/keyup + window blur 三支监听, 同样注册/撤除对称(keydown 计数 3->4), 并真跑显影 handler 核对六约束判定面(合法反引号加 class / 反引号 repeat 维持按住不隐 / IME·输入态·录制态不加 / 每次非反引号 keydown 自愈 / keyup·blur·visibilitychange(hidden) 兜底清 / 不吞事件 I5); S5(同计划)常驻开关同电池: 挂载读本机偏好恢复开关态(刷新保留)/ 开挂 body.kbd-persist 且偏好落盘 autoqb.ui.kbdPersist / 常驻态按住反引号不叠加 kbd-reveal(两态互斥)/ 关后回到仅显影 / unmounted 清两态 body class; 26-11-19 ESC 残留框修复新增 document focusin(第 5 支 keydown = modality 记账)两支监听, 同电池核注册/撤除对称(keydown 4->5 + focusin x1), 并真跑三 handler 记账语义(鼠标焦点 fv=false 入账/键盘焦点 true 不入账/body·空 target 不入账 / Esc 归还鼠标遗留焦点 blur+清账 / 实键 End 清账/修饰键 Shift 与 Escape 自身不清账 / 键盘焦点不被 Esc 抹掉=标准语义保留); 26-11-20 计划 26-11-20-0009 S1 列风格引擎: storage 监听 2->3(列风格第 3 支, 独立监听同款理由)同样注册/撤除对称, created 首帧同步 _colStyleSyncAttrs 与 adoptColStyle 以替身放行(引擎常量真值单点在 app.js COLSTYLE_*, 引擎真跑面归 S6 电池)
@@ -99,6 +100,8 @@ const ok = (name, cond) => checks.push([name, !!cond]);
     toast(msg, kind) { this.toasts.push([kind, msg]); },
     refreshes: 0,
     refresh() { this.refreshes += 1; },
+    errEvents: [],
+    onErrlogEvent(p) { this.errEvents.push(p); },
     async api(path) { ticketCalls.push(path); return { ticket: "TK" + ticketCalls.length }; },
   });
   await P.startEvents.call(ctx);
@@ -150,6 +153,15 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   fireTimer(ctx._verTimer);
   await drain();
   ok("恢复可见 ver 照常拉(补拉由 visibilitychange 负责, 电池只钉 ver 路径)", ctx.refreshes === 2);
+
+  // 6b. S1-b: errlog 事件即到即交落袋单点, 不额外发 GET、坏帧忽略
+  ok("startEvents 注册 errlog 监听", (es2.handlers.errlog || []).length === 1);
+  es2.emit("errlog", { data: '{"seq":7,"level":"WARNING","msg":"S1-b"}' });
+  ok("errlog 事件原样交 onErrlogEvent(小真值, 不额外塞 ts)", ctx.errEvents.length === 1 &&
+    ctx.errEvents[0].seq === 7 && ctx.errEvents[0].msg === "S1-b" && !("ts" in ctx.errEvents[0]));
+  es2.emit("errlog", { data: "not-json" });
+  ok("errlog 坏帧忽略(不污染历史)", ctx.errEvents.length === 1);
+  ok("事件路径零 GET(只换过票)", ticketCalls.every((p) => p === "/api/events/ticket"));
 
   // 7. stopEvents 归置(R5#14: 断线沿状态位随连接会话归置)
   ctx.stopEvents();
@@ -489,6 +501,75 @@ ok("last>=cursor: 正常增量", _errlogReseed(5, 3) === false);
 ok("last==cursor: 正常(无新条目)", _errlogReseed(3, 3) === false);
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+# S1-b/S1-c: errlog 事件落袋 + 60s 对账 node 电池 ---------------------------------------------
+_NODE_ERRLOG_EVENT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* cap 单点在 ui_feedback.js(加载序先于 lifecycle.js) —— node 电池按源码实值注入, 不另写死 */
+const capSrc = fs.readFileSync(process.argv[2], "utf8");
+const capM = capSrc.match(/const ERR_HISTORY_CAP = (\d+);/);
+if (!capM) throw new Error("ui_feedback.js 缺 ERR_HISTORY_CAP(小波段守阵同步)");
+global.ERR_HISTORY_CAP = parseInt(capM[1], 10);
+eval(fs.readFileSync(process.argv[1], "utf8"));   // lifecycle.js
+const M = window.AQB_LIFECYCLE.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const TS = 1760000000;  // 固定 ts, 只验重启重拉形状
+const mk = () => Object.assign({}, M, {
+  authOk: true, errPanelOpen: false, _errUnread: 0, _errLogCursor: 0, _errHistory: [],
+  api: async () => ({ items: [], last: 0 }),
+});
+
+(async () => {
+  // 1. 事件落袋: 去重键 / 未读 / 游标 / 无 ts 载荷补到达时刻
+  const c = mk();
+  c.onErrlogEvent({ seq: 7, level: "WARNING", msg: "w7" });
+  ok("事件入历史且 id=b7", c._errHistory.length === 1 && c._errHistory[0].id === "b7");
+  ok("面板关闭计未读", c._errUnread === 1);
+  ok("游标推进到 seq", c._errLogCursor === 7);
+  const sec = Date.now() / 1000;
+  const clocks = [_errBackendClock(sec), _errBackendClock(sec - 1), _errBackendClock(sec + 1)];
+  ok("无 ts 载荷补到达时刻(不落 1970)", clocks.indexOf(c._errHistory[0].ts) >= 0);
+  c.onErrlogEvent({ seq: 7, level: "WARNING", msg: "w7 dup" });
+  ok("重复 seq 不重复入列/计未读", c._errHistory.length === 1 && c._errUnread === 1);
+
+  // 2. 乱序: 迟到的低 seq 按降序插在后面, 游标不倒退
+  c.onErrlogEvent({ seq: 5, level: "ERROR", msg: "e5 late" });
+  ok("迟到低 seq 按 seq 降序插入", c._errHistory.map((e) => e.seq).join(",") === "7,5");
+  ok("迟到低 seq 不倒退游标", c._errLogCursor === 7);
+  ok("迟到低 seq 仍计未读", c._errUnread === 2);
+
+  // 3. S1-c: 丢事件后 60s GET 补齐, 但不重复计未读
+  const c2 = mk();
+  c2.onErrlogEvent({ seq: 4, level: "WARNING", msg: "w4" });
+  c2.api = async (path) => path.indexOf("after=4") >= 0
+    ? { items: [{ seq: 5, ts: TS, level: "ERROR", msg: "e5 missed" }], last: 5 }
+    : { items: [], last: 5 };
+  await c2._pullErrlog(false);
+  ok("60s GET 补齐丢失事件", c2._errHistory.some((e) => e.id === "b5") && c2._errLogCursor === 5);
+  ok("周期 GET 不重复计未读", c2._errUnread === 1);
+
+  // 4. 后端重启 seq 归零: 清旧 backend 条目 -> 重拉全量不丢新条目
+  const c3 = mk();
+  c3.onErrlogEvent({ seq: 9, level: "WARNING", msg: "old9" });
+  c3.api = async (path) => {
+    if (path.indexOf("after=9") >= 0) return { items: [], last: 1 };
+    if (path.indexOf("after=0") >= 0) return { items: [
+      { seq: 1, ts: TS, level: "WARNING", msg: "n1" },
+      { seq: 2, ts: TS, level: "ERROR", msg: "n2" },
+    ], last: 2 };
+    return { items: [], last: 0 };
+  };
+  await c3._pullErrlog(false);
+  ok("重启后清掉旧 backend 条目", !c3._errHistory.some((e) => e.id === "b9"));
+  ok("重启重拉新条目不丢", c3._errHistory.some((e) => e.id === "b1") &&
+    c3._errHistory.some((e) => e.id === "b2") && c3._errLogCursor === 2);
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
 """
 
 # R5#1 + R5#2: _logout 登出收口(悬空模态结算 + SSE 通道同拆) ----------------------------------
@@ -1281,6 +1362,15 @@ def test_r4_poll_backoff_and_stop_onend():
 def test_r4_errlog_reseed_probe():
     """R5#16: lifecycle.js _errlogReseed 探针真跑(兑现「探针真跑」注释契约)。"""
     _assert_battery(_run_probe(_NODE_RESEED_PROBE, _shared("lifecycle.js")), "_errlogReseed 电池")
+
+
+def test_r4_errlog_event_and_reconcile_probe():
+    """S1-b/S1-c: errlog 事件落袋 + 对账 node 电池真跑。"""
+    _assert_battery(
+        _run_probe(_NODE_ERRLOG_EVENT_PROBE,
+                   [_shared("lifecycle.js"), _shared("ui_feedback.js")]),
+        "errlog 事件/对账电池",
+    )
 
 
 def test_r4_logout_settles_modal_and_stops_events():

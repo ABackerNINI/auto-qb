@@ -26,8 +26,12 @@ tests/test_webui_backend_errlog.py (S2), 本文件只管前端。
   下划线方法坑, issue 26-10-03-1412; 模板保留域守阵在 test_web, 本条聚焦面板复制钮的接线指向), 且
   commands.js 的 copyText 包装存在并委托 _copyText (别名不是空壳)
 - test_frontend_error_history_boot_merge_wired: lifecycle 含 errlog boot 拉取 (本机免鉴权 + auth.js
-  密钥路径两处各调一次 _pullErrlogBoot, boot 全量不计未读) + 60s 补拉定时器 (setInterval 60000) +
-  unmounted 撤定时器 (clearInterval _errPollTimer) 三处接线 (漏一处 = 后端条目进不了面板或热重载堆叠)
+  密钥路径两处各调一次 _pullErrlogBoot, boot 全量不计未读) + 60s 对账定时器 (setInterval 60000,
+  S1-c 改 false —— 未读归事件单点, 对账再计会双计) + unmounted 撤定时器 (clearInterval
+  _errPollTimer) 三处接线 (漏一处 = 后端条目进不了面板或热重载堆叠)
+- test_frontend_errlog_event_wired: S1-b/S1-c(计划 26-11-27-0530) —— startEvents 注册 errlog 监听
+  且事件只交 lifecycle.onErrlogEvent(零额外 GET); 落袋复用 _mergeBackendErrlog 的 "b"+seq 去重与
+  未读计数, 载荷无 ts 故补到达时刻; 合并按 seq 有序插入(乱序迟到的低 seq 不爬到新条上)、游标只进不退
 - test_frontend_tooltip_yields_to_err_panel: ui_feedback.js 的 place() (show 初显与显示期重定位
   共用的定位单点, 2026-10-07 锚定保活重构) 对已开 .err-panel 做落点相交检测 (命中即 hide 不弹,
   防「tooltip 与弹窗重叠」露半截) + MutationObserver addedNodes 分支在面板挂载时收起现显浮层
@@ -208,12 +212,33 @@ def test_frontend_error_history_boot_merge_wired() -> None:
     assert "this._pullErrlog(false)" in boot, "boot 全量必须不计未读(false; 开页即见, 计未读 = 开页就挂红色徽标)"
     assert "const ERR_POLL_INTERVAL_MS = 60000;" in life, "60s 补拉节拍常量缺失(被改名/改值后守阵同步)"
     poll = _fn_body(life, "_startErrPoll()")
-    assert "setInterval(() => this._pullErrlog(true), ERR_POLL_INTERVAL_MS);" in poll, (
-        "缺 60s 补拉定时器(boot 之后的后端增量条目进不了面板)"
+    assert "setInterval(() => this._pullErrlog(false), ERR_POLL_INTERVAL_MS);" in poll, (
+        "缺 60s 对账定时器(S1-c: 只补丢事件/校游标, 计未读会与 errlog 事件双计)"
     )
     assert "if (this._errPollTimer) return;" in poll, "补拉定时器必须幂等(双启动路径/重入不叠定时器)"
     unmounted = _fn_body(life, "unmounted()", indent=2)
     assert "clearInterval(this._errPollTimer);" in unmounted, "unmounted 缺撤补拉定时器(热重载句柄堆叠, 补拉越跑越密)"
+
+
+def test_frontend_errlog_event_wired() -> None:
+    """S1-b/S1-c: errlog 事件接线存在性(行为真跑在 r4 node 电池, 本条钉链路不断)"""
+    sse = _fn_body(_read("polling.js"), "async startEvents()")
+    assert 'es.addEventListener("errlog",' in sse, "startEvents 缺 errlog 监听(错误最坏仍等 60s)"
+    assert "this.onErrlogEvent(JSON.parse(" in sse, "errlog 事件未交 lifecycle 落袋单点"
+    assert "/api/errlog" not in sse, "事件路径额外发 GET(S1-b 明禁: 即到即落袋, GET 只作对账)"
+
+    life = _read("lifecycle.js")
+    handler = _fn_body(life, "onErrlogEvent(payload)")
+    assert "this._mergeBackendErrlog(" in handler and "countUnread: true" in handler, (
+        "事件落袋未复用 _mergeBackendErrlog 的去重/未读逻辑(面板关闭期错误静默丢失)"
+    )
+    assert "Date.now()" in handler, ("append_err 只推 {seq,level,msg}(无 ts), 落袋必须补到达时刻, 否则时钟落在 1970")
+    merge = _fn_body(life, "_mergeBackendErrlog(items, last, opts = {})")
+    assert '"b" + it.seq' in merge, "去重键 \"b\"+seq 被改坏(重拉/重复事件会重复计未读)"
+    assert "splice(" in merge and "old.seq < it.seq" in merge, ("缺按 seq 降序插入(出锁广播乱序时迟到的低 seq 会爬到新条上面)")
+    assert "last > (this._errLogCursor || 0)" in merge, "游标 max 只进不退被改坏(迟到低 seq 事件会把游标倒退)"
+    assert "_errlogReseed(last, this._errLogCursor || 0)" in _fn_body(life, "async _pullErrlog(countUnread)"
+                                                                     ), ("后端重启 seq 归零的重拉判定被摘掉")
 
 
 def test_frontend_tooltip_yields_to_err_panel() -> None:

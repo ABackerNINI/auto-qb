@@ -91,6 +91,11 @@ window.AQB_POLL = {
         // 成功已由批量回执/行状态覆盖; 规则侧发起的跳检没有回执, 失败靠这条浮条兜底。
         try { this.onSkipCheckEvent(JSON.parse((e && e.data) || "{}")); } catch (_) { /* 坏帧忽略 */ }
       });
+      es.addEventListener("errlog", (e) => {
+        // S1-b(计划 26-11-27-0530): 错误日志小真值 {seq,level,msg} 即到即落袋 ——
+        // 不额外发 GET; 去重/未读/乱序/游标全在 lifecycle.onErrlogEvent 单点。
+        try { this.onErrlogEvent(JSON.parse((e && e.data) || "{}")); } catch (_) { /* 坏帧忽略 */ }
+      });
       es.addEventListener("ver", (e) => {
         // 只带版本号、**不含数据** —— 收到后拉一次 /api/state。密集发布时去抖合并,
         // 免得一轮 sync 触发 N 次全量拉取(3000 种子一轮 63ms, 打满主线程的坑踩过)。

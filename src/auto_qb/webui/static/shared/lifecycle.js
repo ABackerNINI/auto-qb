@@ -7,8 +7,9 @@
  * ERR_HISTORY_CAP 单点在 ui_feedback.js, 加载序先于本文件):
  *   - boot 全量合并: 密钥验证成功(auth.js bootstrap)/ 本机免鉴权(lifecycle mounted)两条
  *     启动路径各拉一次 after=0, 不计未读(开页即见, 不算"错过");
- *   - 补拉: 60s 定时增量合并(after=已持游标), 面板关闭期每条计未读(对齐 _recordErrorToast
- *     的记账语义); 回包 last < 已持游标 = 后端重启过(seq 归零), 清游标重拉全量;
+ *   - 对账(S1-c): 60s 定时增量合并(after=已持游标)只补丢事件/校游标、不计未读 ——
+ *     未读由 /api/events 的 errlog 事件单点记账(事件路径零 GET), 对账再计会双计;
+ *     回包 last < 已持游标 = 后端重启过(seq 归零), 清游标重拉全量;
  *   - 拉取失败一律静默(后端不可达不打扰用户, 下轮补拉自愈), 零持久化、零新配置键。 */
 const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
 
@@ -586,20 +587,40 @@ window.AQB_LIFECYCLE = {
       for (const it of items || []) {
         const id = "b" + it.seq;
         if (this._errHistory.some((e) => e.id === id)) continue;  // 去重: 同 seq 重拉不再入列
-        this._errHistory.unshift({
+        const entry = {
           id,
           seq: it.seq,
           ts: _errBackendClock(it.ts),
           kind: _errLevelKind(it.level),
           text: it.msg,
           source: "backend",
-        });
+        };
+        // S1-b 乱序防护: append_err 出锁后广播, 到达序未必等于 seq 分配序 —— 按 seq 降序
+        // 插在首个更小 seq 的后端条之前(toast/notice 无 seq, 不参与比较), 迟到的低 seq
+        // 不爬到新条上面; 顺序 GET 回来的 items 本就升序, 逐条插入结果与原 unshift 等价。
+        let at = 0;
+        while (at < this._errHistory.length) {
+          const old = this._errHistory[at];
+          if (old.source === "backend" && typeof old.seq === "number" && old.seq < it.seq) break;
+          at++;
+        }
+        this._errHistory.splice(at, 0, entry);
         if (this._errHistory.length > ERR_HISTORY_CAP) this._errHistory.pop();
         if (countUnread && !this.errPanelOpen) this._errUnread++;
       }
       if (typeof last === "number" && last > (this._errLogCursor || 0)) {
         this._errLogCursor = last;  // 游标只进不退(倒退走 _pullErrlog 的重启重拉路径)
       }
+    },
+    /* S1-b: /api/events 的 errlog 事件落袋单点 —— 载荷只有 {seq,level,msg}(见 append_err,
+     * 不推 ts), 用到达时刻补 ts 后复用上面的去重("b"+seq)/未读/游标逻辑; 事件路径零 GET。
+     * 乱序由 merge 的 seq 有序插入兜住, 游标只进不退; 后端重启 seq 归零仍交 60s GET 的
+     * _errlogReseed 清旧重拉, 迟到的低 seq 事件不会把游标拉回去。 */
+    onErrlogEvent(payload) {
+      const it = payload || {};
+      if (typeof it.seq !== "number") return;
+      this._mergeBackendErrlog([{ seq: it.seq, level: it.level, msg: it.msg, ts: Date.now() / 1000 }],
+        it.seq, { countUnread: true });
     },
     /* 拉一次 /api/errlog(以实例游标为 after)并合并。boot 全量(after=0)与 60s 增量共用;
      * 失败静默 —— 网络/鉴权异常不弹 toast, 下一轮补拉自愈。回包 last 低于已持游标 =
@@ -629,7 +650,9 @@ window.AQB_LIFECYCLE = {
     },
     _startErrPoll() {
       if (this._errPollTimer) return;  // 幂等: 双路径/重入不叠定时器
-      this._errPollTimer = setInterval(() => this._pullErrlog(true), ERR_POLL_INTERVAL_MS);
+      // S1-c: 未读计数归事件路径单点; 60s GET 只做对账/游标校准(补丢事件、重启重拉)。
+      // 计未读会与 SSE 事件双计 —— 故 false(断线期补齐的条目进历史, 不重复亮徽标)。
+      this._errPollTimer = setInterval(() => this._pullErrlog(false), ERR_POLL_INTERVAL_MS);
     },
     /* R2 跳检菜单开关(计划 26-10-02-1955 W1): 登录后取一次 /api/webui/flags 写入 flags
      * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径, 两条 boot 入口走
