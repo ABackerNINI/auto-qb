@@ -3,7 +3,7 @@
 背景: test.pkg.scoped(计划 26-11-01-0434 方案 C)对改动包跑 `pytest .commands/<包>`,
 包内没有 test_*.py 时 pytest 收集为空 → 退出码 5 → 闸门 FAIL(fail-closed, 无豁免路径)。
 本文件是 real 包的最小守阵: 不跑任何真机动作, 只静态核配置与脚本的一致性 ——
-双环境的端口/EXE 真值在 tests-real/lib/env_registry.py, 那边改了这里跟着红。
+双环境的端口/EXE 真值在 tests/real/lib/env_registry.py, 那边改了这里跟着红。
 
 跑法: uv run pytest .commands/real -q --no-cov -n 8 (test.pkg.scoped 口径)
 
@@ -21,9 +21,9 @@ import tomllib
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]  # .commands/real/scripts/ → .commands/real/
-ROOT = PKG.parents[1]                      # → 仓库根
+ROOT = PKG.parents[1]  # → 仓库根
 
-sys.path.insert(0, str(ROOT / "tests-real"))
+sys.path.insert(0, str(ROOT / "tests/real"))
 
 import unittest
 
@@ -49,7 +49,7 @@ class RunnerSubCmdTest(unittest.TestCase):
     def test_runner_tasks_map_to_subcommands(self):
         import re
 
-        runner = (ROOT / "tests-real" / "runner.py").read_text(encoding="utf-8")
+        runner = (ROOT / "tests/real" / "runner.py").read_text(encoding="utf-8")
         declared = set(re.findall(r'sub\.add_parser\("([^"]+)"', runner))
         # up/down 走循环注册: for name, fn, text in (("up", cmd_up, ...), ...) —— 把元组里的名字也收进来
         declared |= set(re.findall(r'\("([a-z-]+)",\s*cmd_\w+', runner))

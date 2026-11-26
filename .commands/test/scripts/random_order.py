@@ -31,7 +31,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]  # .commands/test/scripts/ → �
 
 # 覆盖 pytest.ini addopts 的替换值: 保留并行度, 去掉 `-p no:randomly`(插件因此加载)与
 # 覆盖率旗标(巡检是采样不是门禁, 不吃覆盖率开销; pytest-cov 插件仍自动加载, 语义不变)。
-ADDOPTS_OVERRIDE = "-n 8"
+# R8: 必须拼入 `-m "not real_machine"` —— 整体替换会丢掉 ini 里的 marker 过滤, 真机用例
+# 会在巡检轮被收集执行(真机环境在位时产生真实副作用); 引号供 pytest 的 addopts shlex 解析。
+ADDOPTS_OVERRIDE = "-n 8 -m \"not real_machine\""
 
 
 def plan(argv: list[str]) -> tuple[int, int | None, list[str]]:

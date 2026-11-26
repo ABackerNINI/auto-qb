@@ -34,8 +34,8 @@ def test_free_port_single_source():
     offenders: list[str] = []
     pat = re.compile(r"def\s+(_free_port|free_port)\s*\(")
     for p in REPO.rglob("*.py"):
-        if ".venv" in p.parts or ".git" in p.parts or "tests-real" in p.parts:
-            continue  # tests-real/lib/app.py 是实机轨自己的段内分配器(语义不同), 不属于本单点口径
+        if ".venv" in p.parts or ".git" in p.parts or ("tests" in p.parts and "real" in p.parts):
+            continue  # tests/real/lib/app.py 是实机轨自己的段内分配器(语义不同), 不属于本单点口径
         if p.samefile(REPO / "tests" / "unit" / "_test_ports.py") or p.samefile(Path(__file__)):
             continue
         try:
@@ -294,12 +294,14 @@ def test_http_server_single_point():
     pat = re.compile(r"(?:http\.server\.)?ThreadingHTTPServer\s*\(")
     # 唯一豁免: test_flaky_timing_guards.py —— bind 扫描器的夹具文件, ThreadingHTTPServer
     # 构造位片段是字符串字面量里的合成源码(测试数据), 不是真实实例化(与
-    # test_free_port_single_source 对 tests-real 的豁免同口径)。本文件与 _test_ports.py
+    # test_free_port_single_source 对 tests/real 的豁免同口径)。本文件与 _test_ports.py
     # 不豁免: 措辞已避开命中模式, 守卫能扫自身才不留自豁免盲区。
     exempt = REPO / "tests" / "unit" / "test_flaky_timing_guards.py"
     for p in (REPO / "tests").rglob("*.py"):
         if p.samefile(exempt):
             continue
+        if "tests" in p.parts and "real" in p.parts:
+            continue  # 真机轨独立端口语义(S2 迁 tests/real), 与 test_free_port_single_source 同口径
         try:
             if pat.search(p.read_text(encoding="utf-8", errors="ignore")):
                 offenders.append(str(p))

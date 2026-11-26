@@ -2,7 +2,7 @@
 
 ## 测试计划
 2026-11-02 issue 26-11-02-1208 复验(L490 前置改显式入口, 移除隐藏卷依赖):
-- test_tests_real_source_has_no_hidden_volume_access: 扫描 tests-real/ 源码, 禁止
+- test_tests_real_source_has_no_hidden_volume_access: 扫描 tests/real/ 源码, 禁止
   FindFirstVolumeW/FindNextVolumeW/卷 GUID 字面量/隐藏卷 junction 构造函数名;
   一旦有人再引入隐藏卷路径即红。
 - test_small_target_guard_rejects_unsafe_paths: 入口守卫拒绝 UNC/无盘符/系统盘/
@@ -13,7 +13,7 @@
 - test_label_forbidden_keywords: Recovery/System/EFI 类卷标关键词判定。
 
 2026-11-06 issue 26-11-06-0448 修复(real.down 强杀 → WebAPI app/shutdown 优雅退出):
-- test_real_down_source_has_no_forced_kill: 扫 tests-real/runner.py 禁止进程强杀字面量,
+- test_real_down_source_has_no_forced_kill: 扫 tests/real/runner.py 禁止进程强杀字面量,
   并要求 cmd_down 走 .shutdown(); 旧实现(Stop-Process -Force)必红。
 - test_cmd_down_dry_run_never_touches_webapi: dry-run 零副作用, 不核验进程也不发 API。
 - test_cmd_down_uses_webapi_shutdown_and_waits_for_port_release: 正常路径只发一次 shutdown,
@@ -45,7 +45,7 @@
 2026-11-21 issue 26-11-21-0639 修复(guard「真实种子」计数把 real-fake 假种子计入):
 - test_guard_snapshot_skips_tagged_seeds: snapshot 的 skip_tags 语义 —— 带标签的不暂停
   不计入保护面, 缺省裸调才会把假种子计入(即 0639 的误标源)。
-- test_real_guard_snapshot_callers_pass_skip_tags: 静态守阵 —— tests-real 里所有
+- test_real_guard_snapshot_callers_pass_skip_tags: 静态守阵 —— tests/real 里所有
   snapshot 调用必须显式传 skip_tags; 自带已知违规活性探针, 防守阵死分支。
 - test_cmd_guard_reports_real_and_fake_counts / test_cmd_pause_all_skips_fakes:
   两条命令把豁免标签传给 snapshot, 且计数双口径(真实 N / 自造 M)分开报。
@@ -62,7 +62,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-TESTS_REAL = ROOT / "tests-real"
+TESTS_REAL = ROOT / "tests/real"
 
 
 def _load_small_target():
@@ -180,7 +180,7 @@ def _load_qb():
 
 
 def _load_runner(monkeypatch, ports=(36596, )):
-    """隔离加载 tests-real/runner.py: 注入假 lib 包, 全程不触 netstat / qB / 系统进程。
+    """隔离加载 tests/real/runner.py: 注入假 lib 包, 全程不触 netstat / qB / 系统进程。
 
     runner 模块级会 sys.path.insert, 先把 sys.path 换成可恢复的副本; `from lib import ...`
     由 sys.modules 里的假包承接, 不把真实 lib 命名空间带进主套件。
@@ -334,7 +334,7 @@ def test_qb_default_calls_stay_get(monkeypatch):
 
 
 def _load_guard(monkeypatch):
-    """隔离加载 tests-real/lib/guard.py: 假 lib 包承接相对导入, 环境注册表给桩值。"""
+    """隔离加载 tests/real/lib/guard.py: 假 lib 包承接相对导入, 环境注册表给桩值。"""
     fake_env_registry = types.ModuleType("lib.env_registry")
     fake_env_registry.active = lambda: {
         "primary": 36595,
@@ -418,7 +418,7 @@ def _snapshot_call_violations(text: str) -> list[str]:
 
 
 def test_real_guard_snapshot_callers_pass_skip_tags():
-    """tests-real 里所有 snapshot 调用必须显式传 skip_tags(issue 26-11-21-0639)。
+    """tests/real 里所有 snapshot 调用必须显式传 skip_tags(issue 26-11-21-0639)。
 
     活性探针先行: 注入已知违规必须命中、合规样本与注释行必须放行, 防守阵死分支
     (pitfalls/testing/guard-dead-branch.md)。
@@ -431,7 +431,7 @@ def test_real_guard_snapshot_callers_pass_skip_tags():
         rel = f.relative_to(ROOT)
         for v in _snapshot_call_violations(f.read_text(encoding="utf-8", errors="ignore")):
             hits.append(f"{rel}:{v}")
-    assert not hits, "tests-real 出现不带 skip_tags 的 snapshot 调用(假种子会被计入真实种子计数):\n" + "\n".join(hits)
+    assert not hits, "tests/real 出现不带 skip_tags 的 snapshot 调用(假种子会被计入真实种子计数):\n" + "\n".join(hits)
 
 
 def test_cmd_guard_reports_real_and_fake_counts(monkeypatch, capsys):
@@ -471,16 +471,16 @@ def test_cmd_pause_all_skips_fakes(monkeypatch, capsys):
 
 
 # ---- real.seed.clean 证据保护闸 (issue 26-11-12-2345) ----
-# clean 的旧契约是整目录清空 tests-real/.work —— 2026-11-12 S5 收尾一跑把整树测量证据
+# clean 的旧契约是整目录清空 tests/real/.work —— 2026-11-12 S5 收尾一跑把整树测量证据
 # (results/、复用脚本)清掉且 git 不可恢复。守阵钉死: .work 顶层出现 seeds/rmNN 之外的
 # 内容即拒跑(rc=1, dry-run 也拒, 删除动作一个都不发生); 只有 --dir 显式指名的子树
 # 可以逐处清, 不存在绕过闸门的一键全清。
 
 
 def _load_seed(monkeypatch, work: Path, ram: Path):
-    """隔离加载 tests-real/seed.py: 假 lib 包 + 落点改指 tmp 树。
+    """隔离加载 tests/real/seed.py: 假 lib 包 + 落点改指 tmp 树。
 
-    真实 tests-real/.work 正是闸门要守的证据面(本 clone 里就躺着 review-findings/
+    真实 tests/real/.work 正是闸门要守的证据面(本 clone 里就躺着 review-findings/
     reconcile-e2e 等), 守阵一律在 tmp 搭景, 不给真实证据面任何被误清的机会。
     """
     fake_guard = types.SimpleNamespace(

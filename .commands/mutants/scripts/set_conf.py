@@ -5,7 +5,7 @@
 
 用法::
 
-    python set_conf.py --target '**/config/*.py' --pool tests/test_config.py [tests/...] \
+    python set_conf.py --target '**/config/*.py' --pool tests/unit/test_config.py [tests/...] \
         [--pyproject pyproject.toml] [--also-copy a b c] [--deselect x y] \
         [--timeout-multiplier 15.0] [--print]
 
@@ -35,35 +35,35 @@ from pathlib import Path
 # 文本层守阵: 它们读源码文本做断言, 会被 mutmut 的变异体撑爆(实测报告 §10 #9)。
 # **首要纪律**: 新增/改名任何「读源码文本做断言」的测试(含 docstring 自称静态守阵的), 必须同步把
 # node id 加进本表; 否则该守阵在变异基线就红, 整轮直接中断。
-# 该表**会随测试文件拆分漂移**(test_web.py 已拆成 tests/test_web_*.py); 漂移由包内
+# 该表**会随测试文件拆分漂移**(test_web.py 已拆成 tests/unit/test_web_*.py); 漂移由包内
 # test_mutants.py 的 DeselectTableTest 对差守阵兜底(文件或函数改名即判红), 跑红时先核这里。
 DEFAULT_DESELECT = (
-    "tests/test_sim_corpus.py::test_fs_mock_coverage_static_guard",
-    "tests/test_web_seed_center.py::test_api_enqueue_wakes_main_loop",
-    "tests/test_traffic_store_codec.py::test_v4_parse_skeleton_single_point",
+    "tests/unit/test_sim_corpus.py::test_fs_mock_coverage_static_guard",
+    "tests/unit/test_web_seed_center.py::test_api_enqueue_wakes_main_loop",
+    "tests/unit/test_traffic_store_codec.py::test_v4_parse_skeleton_single_point",
     # W6(R30) 宽池轮新增: 以下 5 条读 core 目标源码文本(qbmanager/module 经 getsource/read_text
     # 或全 src 扫描), 在变异树里对 src 文本敏感 —— 同 R28 test_v4_parse_skeleton 先例 deselect。
-    "tests/test_qbmanager_loop.py::test_periodic_flush_is_wired_in_run_loop",
-    "tests/test_qbmanager_query.py::test_qbmanager_source_has_no_web_state_fields",
-    "tests/test_core_modules.py::test_no_private_notify_access_from_outside",
-    "tests/test_facade_modules.py::test_kernel_run_wiring_delegates_to_host",
-    "tests/test_sync.py::test_no_synthetic_state_write_site",
+    "tests/unit/test_qbmanager_loop.py::test_periodic_flush_is_wired_in_run_loop",
+    "tests/unit/test_qbmanager_query.py::test_qbmanager_source_has_no_web_state_fields",
+    "tests/unit/test_core_modules.py::test_no_private_notify_access_from_outside",
+    "tests/unit/test_facade_modules.py::test_kernel_run_wiring_delegates_to_host",
+    "tests/unit/test_sync.py::test_no_synthetic_state_write_site",
     # W8(R32) S5a 起: test_spawn_args_pinned 断言 Windows-only 的 subprocess.CREATE_NO_WINDOW
     # (测试缺平台守卫, 同 issue 26-10-31-1539-deselect-guards 族), WSL 镜像里基线恒红 ——
     # 不 deselect 会打断 stats 收集(首轮曾靠镜像内临时第 9 条绕过, 这里固化成默认)。
-    "tests/test_relocate_exec_misc.py::test_spawn_args_pinned",
+    "tests/unit/test_relocate_exec_misc.py::test_spawn_args_pinned",
 )
 
 # flaky 用例: 端口绑定 / 并发类, 全套件里会随机红, 会污染 verify 的「本次失败 - 基线」差集。
 # 只收**已实证**条目(W2-W4 轮真实撞到的); 未定位到具体 node id 的形态(如 W3 记的 relocate 类 1 条)
 # 不猜测, 实测到即补。
 FLAKY_DESELECT = (
-    "tests/test_hr_discovery.py::test_start_binds_first_free_candidate",
-    "tests/test_hr_discovery.py::test_runtime_discovery_bind_failure_keeps_data_endpoint",
-    "tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries",
-    "tests/test_web_views_reload.py::test_stop_web_server_releases_port_for_restart",
-    "tests/test_web_views_reload.py::test_start_web_server_reports_failure_when_port_taken",
-    "tests/test_commands_engine.py::test_wrapper_end_to_end_passes_args",
+    "tests/unit/test_hr_discovery.py::test_start_binds_first_free_candidate",
+    "tests/unit/test_hr_discovery.py::test_runtime_discovery_bind_failure_keeps_data_endpoint",
+    "tests/unit/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries",
+    "tests/unit/test_web_views_reload.py::test_stop_web_server_releases_port_for_restart",
+    "tests/unit/test_web_views_reload.py::test_start_web_server_reports_failure_when_port_taken",
+    "tests/unit/test_commands_engine.py::test_wrapper_end_to_end_passes_args",
 )
 
 # also_copy 推导时的排除项: vcs / 依赖 / 生成物 / 本工具自身产物 —— 都不该进 mutants/ 副本。

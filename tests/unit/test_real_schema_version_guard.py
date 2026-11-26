@@ -1,8 +1,8 @@
-"""tests-real 基座 schema_version 字面量守卫(issue 26-11-08-0044 修复轮防复发).
+"""tests/real 基座 schema_version 字面量守卫(issue 26-11-08-0044 修复轮防复发).
 
 ## 测试计划
-2026-11-10 issue 26-11-08-0044 修复(tests-real 各片基座 5→6)+ 评审 minor 防复发:
-- test_tests_real_base_schema_version_is_current: 扫 tests-real/**/*.py(排除 .work/),
+2026-11-10 issue 26-11-08-0044 修复(tests/real 各片基座 5→6)+ 评审 minor 防复发:
+- test_tests_real_base_schema_version_is_current: 扫 tests/real/**/*.py(排除 .work/),
   所有 `schema_version: <int>`(YAML 模板形)与 `"schema_version": <int>`(dict 形)字面量
   必须等于 infra.versioning.CURRENT_VERSIONS["config"]; rm09 keys 域(WebUI 快捷键模板包
   版本, 非配置 schema)按 (文件, 值) 白名单豁免。产品 bump v7 时本守卫直接红, 基座不再
@@ -21,7 +21,7 @@ import pytest
 from auto_qb.infra.versioning import CURRENT_VERSIONS
 
 ROOT = Path(__file__).resolve().parents[2]
-TESTS_REAL = ROOT / "tests-real"
+TESTS_REAL = ROOT / "tests/real"
 
 # 两种字面量形: YAML 模板形(基座 CONFIG_TEMPLATE 等模板常量)与 dict 形(yaml.safe_dump
 # 落盘前的 cfg 构造)。docstring 里的**散文**提法(schema_version: N 嵌在行文中)不匹配
@@ -38,7 +38,7 @@ _OTHER_DOMAIN = {
 
 
 def _scan() -> list[tuple[str, int, str]]:
-    """扫 tests-real 全部 .py(排除 .work/ 草稿), 回 [(相对路径, 值, 字面量形)]。"""
+    """扫 tests/real 全部 .py(排除 .work/ 草稿), 回 [(相对路径, 值, 字面量形)]。"""
     found: list[tuple[str, int, str]] = []
     for f in sorted(TESTS_REAL.rglob("*.py")):
         if ".work" in f.parts:
@@ -58,7 +58,7 @@ def test_tests_real_base_schema_version_is_current():
         (rel, val, form) for rel, val, form in _scan() if val != current and val not in _OTHER_DOMAIN.get(rel, set())
     ]
     assert not stale, (
-        f"tests-real 基座 schema_version 字面量与产品现行版本 v{current} 不一致"
+        f"tests/real 基座 schema_version 字面量与产品现行版本 v{current} 不一致"
         "(会走启动物化迁移改写+留版本号备份, issue 26-11-08-0044 同款): " + "; ".join(f"{rel}={val}({form})" for rel, val, form in stale)
     )
 

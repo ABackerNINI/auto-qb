@@ -8,7 +8,7 @@ import { openApp } from './lib/gestures.mjs';
  * 设置 → 站点 → 「导入缺失站点」三分支 GUI 回归(issue 26-11-04-2312)
  *
  * 背景: 计划 26-11-03-2337 M4 的三路径验收曾靠一次性 Playwright 脚本 + gitignore 的
- * `tests-real/.work` 证据, 仓库内只有 test_frontend_sites_import_wiring 的静态子串断言 ——
+ * `tests/real/.work` 证据, 仓库内只有 test_frontend_sites_import_wiring 的静态子串断言 ——
  * 改 config_hub_tracker.js 的 hubImportSites / _hubImportPerDomain 或三钮模板时, 静态断言仍绿
  * 而真实 DOM 分支已坏。本 spec 用 ui_harness 桩服务 + page.route 注入三形态载荷, 把三分支钉成
  * 可重复执行的回归。

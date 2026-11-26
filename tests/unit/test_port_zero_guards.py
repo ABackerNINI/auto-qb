@@ -9,7 +9,7 @@
 - test_dev_webui_defaults_to_zero: --web-port 默认 0, 无 8177/顺延链
 - test_global_teardown_reads_captured_port: teardown 读 UI_HARNESS_PORT, 不导入固定 PORT
 - test_no_reusable_port_helper_in_scripts: scripts/ 下无取号模块/`def free_port`
-- test_tests_real_free_port_has_rebind_selfcheck: tests-real 取号含回绑自验且 RETRIES=3
+- test_tests_real_free_port_has_rebind_selfcheck: tests/real 取号含回绑自验且 RETRIES=3
 - test_e2e_modules_use_lazy_base_url: e2e 全部 .mjs 不得引用已删除的 BASE_URL(新增 spec 回潮守阵)
 """
 from __future__ import annotations
@@ -105,7 +105,7 @@ def test_no_reusable_port_helper_in_scripts():
 
 
 def test_tests_real_free_port_has_rebind_selfcheck():
-    text = _read("tests-real/lib/app.py")
+    text = _read("tests/real/lib/app.py")
     assert "回绑自验" in text
     assert "RETRIES = 3" in text, "重试上限须与 tests/_test_ports.py 对齐"
     assert 'probe.bind(("127.0.0.1", port))' in text, "探空后必须再次 bind 自验"

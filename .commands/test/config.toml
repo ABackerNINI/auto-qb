@@ -100,4 +100,4 @@ doc     = "../../memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html"
 script  = "random_order.py"
 timeout = 1800
 when    = "pytest-randomly 随机序周巡检(顺序依赖采样): 红先固定 seed 复现归因再走 flaky 台账; 主套件默认顺序不受本任务影响"
-note    = "缺省 1 轮随机 seed; `-- --samples 3` 多轮统计采样, `-- --seed 42` 固定 seed 复现红灯, `--` 后其余参数透传 pytest。每轮头部打印 `--randomly-seed=<N>`(可复现); 任一轮红退出非零并打印复现命令 —— **不用 rerun 插件**(D9: reruns 不是修复), 红灯归因走 memory-bank/testing/flaky-ledger.md「巡检约定」节。实现: pytest.ini addopts 被 -o addopts=-n 8 整体替换(去掉 -p no:randomly 与覆盖率旗标, 插件才加载); 脚本纯函数有单测(test_random_order.py, 随 test.pkg 跑)"
+note    = "缺省 1 轮随机 seed; `-- --samples 3` 多轮统计采样, `-- --seed 42` 固定 seed 复现红灯, `--` 后其余参数透传 pytest。每轮头部打印 `--randomly-seed=<N>`(可复现); 任一轮红退出非零并打印复现命令 —— **不用 rerun 插件**(D9: reruns 不是修复), 红灯归因走 memory-bank/testing/flaky-ledger.md「巡检约定」节。实现: pytest.ini addopts 被 -o addopts=-n 8 -m 'not real_machine' 整体替换(去掉 -p no:randomly 与覆盖率旗标, 插件才加载; R8: 同串拼入 marker 过滤, 防真机用例在巡检轮被收集执行); 脚本纯函数有单测(test_random_order.py, 随 test.pkg 跑)"

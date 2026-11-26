@@ -31,7 +31,7 @@
   形态用 .torrent 对现算 infohash 匹配, 不猜命名规则。
 
 bencode: 解码复用 hr.bencode(同一套畸形拒绝口径, infohash 计算同源); 编码模块内实现
-(仓库现无编码器, 键序排序等行为口径参照实验区 tests-real/lib/bencode.py —— 但只收
+(仓库现无编码器, 键序排序等行为口径参照实验区 tests/real/lib/bencode.py —— 但只收
 bdecode 闭包内的类型, 不收 str: 解码域只有 bytes, 收 str 会造成「编码后解码 != 原值」,
 打破往返自校验这个保命不变量; 禁止 import 实验区)。
 """
@@ -67,7 +67,7 @@ def bencode(value: BValue) -> bytes:
     """最小 bencode 编码, 只收 bdecode 闭包内的类型: bytes/int/list|tuple/dict(键 bytes)。
 
     键按字节序排序, 与 hr.bencode 解码域对称 => 「编码产物解码后与原值逐键一致」由构造
-    保证, 是往返自校验的不变量底盘。排序等行为口径参照实验区 tests-real/lib/bencode.py
+    保证, 是往返自校验的不变量底盘。排序等行为口径参照实验区 tests/real/lib/bencode.py
     (N2 实测该口径重编码的 fastresume qB 原生加载无损); str/float/None 等解码域外类型
     一律 TypeError(调用方编码前显式 encode, 不做隐式转换)。
     """

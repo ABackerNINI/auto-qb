@@ -76,6 +76,8 @@ def _py_sources(base: str):
     for p in sorted((REPO / base).rglob("*.py")):
         if any(x in p.parts for x in (".venv", "node_modules", "__pycache__")):
             continue
+        if "tests" in p.parts and "real" in p.parts:
+            continue  # 真机轨独立节奏/端口语义(S2 迁 tests/real), 不进主套件 flaky 台账口径
         yield p.relative_to(REPO).as_posix(), p.read_text(encoding="utf-8", errors="ignore")
 
 

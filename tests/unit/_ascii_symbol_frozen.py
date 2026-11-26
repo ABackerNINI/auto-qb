@@ -33,7 +33,7 @@ BAN_CLASSES: dict[str, tuple[tuple[int, int], ...]] = {
 SCAN_ROOTS = (
     "src",
     "tests",
-    "tests-real",
+    "tests/real",
     "e2e",
     "tools",
     "scripts",
