@@ -932,6 +932,14 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, ForeignMixin, BaseMod
         if reconciled:
             self._persist()  # 回写落账(状态盒; 磁盘刷盘由接管面写穿与 state 服务周期双兜底)
         self._publish_snapshot()
+        # 启动守阵(S2): 清孤儿 A/mismatch 账后换代(WebUI 陈旧行消失)。换代必须先记「账已在」
+        # (换代走写面, 无账时跳过才不 materialize 键, 黄金法则 2); 落点=回写后/prune 前,
+        # 结果随尾部接管写穿同窗落盘; 只读视图判在 + pop 幂等, 重复启动零副作用。
+        if not self._dry_run():
+            had_foreign = bool(self._state_foreign_notified_view())
+            self._foreign_cleanup_stale_notified()
+            if had_foreign:
+                self._foreign_publish_view()
         # S3 终态分级保留(D3, 计划 26-11-15-2340 §03.4): 账接管完成后滚一次成功历史 ——
         # 覆盖迁移器转入的旧账与停机期间累积的超限 done 账(触发面口径见 prune_success_history)
         self.prune_success_history()

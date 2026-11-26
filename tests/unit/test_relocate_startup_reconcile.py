@@ -35,6 +35,17 @@
   B2 终态清理(评审 major, journal 失窗恢复面)—— state 非终态 + 盘上 journal 终相位
   (ts 锚定本世)回写终态后, 陈旧 kind=A/mismatch 通知条目随回写清理、kind=B 保留, 随
   _load_jobs 尾部单次 _persist 同窗落盘; 无 foreign 段的采纳支零建键(黄金法则 2)
+### 启动守阵(S2, 阶段 2: _load_jobs 尾部接线; 逐 job 采纳支清理之后跑全表兜底)
+- test_load_jobs_cleans_stale_notified_entries_on_startup: 启动扫全表 —— job 不在/已终态的
+  A+mismatch 清, B 与活跃 job 的 A/mismatch 留; 与上面的 journal 采纳支逐 job 清理并存
+  (逐 job 先跑, 本守阵兜底全表, 幂等不冲突)
+- test_load_jobs_dry_run_zero_writes: dry-run 零写账 —— 账内容不变, 不调清理/换代, 不写盘
+- test_load_jobs_repeat_idempotent: 重复 _load_jobs 零副作用 —— 第二轮零删除零日志,
+  发布视图引用恒稳(内容相等不换代)
+- test_load_jobs_foreign_off_no_account_no_materialize: foreign_torrent=false 且无账 ——
+  启动不 materialize relocate.foreign.notified(黄金法则 2; 换代仅账已在时跑)
+- test_load_jobs_publishes_view_after_cleanup: 清理后 WebUI 只读视图换代 —— 陈旧条目从
+  foreign_notified_view() 消失 + mark_dirty(full) 通知; 与逐 job 采纳支清理不冲突
 - test_flag_consumed_once_no_runtime_rejudgment: flag 消费即清 —— 首轮判「保留 failed」
   后, 运行期物理现状变好(qB 现值改到 dst)也不重判(运行期新失败/新现状都不属于本口)
 - test_qb_down_defers_reconcile_until_first_connect: qB 探不活(未连上)=> flag 保持不
@@ -332,6 +343,148 @@ def test_load_jobs_reconcile_adopts_terminal_and_cleans_foreign_entries(tmp_path
     mod2._load_jobs()
     assert mod2.get_job("jb").phase == ru.PHASE_CANCELLED
     assert "foreign" not in mod2._ctx.state.data["relocate"], "采纳支不得 materialize relocate.foreign"
+
+
+# ---------------------------------------------------------------- 启动守阵(S2, 阶段 2: _load_jobs 尾部接线)
+
+
+def _foreign_entry(kind, job_id, phase="armed", root="r:/old", location="R:/new"):
+    """通知账条目(形状与 _foreign_record_hit 同构; 键名在用例里自定, 不一定是真实 hash)"""
+    return {
+        "root": root,
+        "kind": kind,
+        "job_id": job_id,
+        "phase": phase,
+        "location": location,
+        "first_seen": 1.0,
+    }
+
+
+def _startup_mod(tmp_path, *, jobs, notified=None, foreign_torrent=True, dry_run=False):
+    """裸模块 + 内存直写 state 账: foreign 段按 notified 是否在决定建不建(无账守阵的前提)"""
+    mod = _bare_mod(
+        relocate=RelocateConfig(enabled=True, foreign_torrent=foreign_torrent),
+        data_dir=str(tmp_path / "data"),
+    )
+    data = {"relocate": {"jobs": {jid: ru.job_to_dict(job) for jid, job in jobs.items()}}}
+    if notified is not None:
+        data["relocate"]["foreign"] = {"notified": dict(notified)}
+    mod._ctx.state.data = data
+    if dry_run:
+        mod._dry = True
+    return mod
+
+
+def test_load_jobs_cleans_stale_notified_entries_on_startup(tmp_path):
+    """启动扫全表: job 不在/已终态的 A+mismatch 清, B 与活跃 job 的 A/mismatch 留;
+    与上面 journal 采纳支逐 job 清理并存(逐 job 先跑, 本守阵兜底全表)"""
+    mod = _startup_mod(
+        tmp_path,
+        jobs={
+            "ja": _job("ja", phase=ru.PHASE_ARMED),
+            "jd": _job("jd", phase=ru.PHASE_DONE),
+        },
+        notified={
+            "OA": _foreign_entry("A", "gone"),
+            "OM": _foreign_entry("mismatch", "gone"),
+            "DA": _foreign_entry("A", "jd"),
+            "DM": _foreign_entry("mismatch", "jd"),
+            "OB": _foreign_entry("B", "gone", phase="done"),
+            "AA": _foreign_entry("A", "ja"),
+            "AM": _foreign_entry("mismatch", "ja"),
+        },
+    )
+    mod._load_jobs()
+    notified = mod._ctx.state.data["relocate"]["foreign"]["notified"]
+    assert "OA" not in notified and "OM" not in notified, "job 不在 _jobs: A/mismatch 清"
+    assert "DA" not in notified and "DM" not in notified, "job 已终态: A/mismatch 清"
+    assert notified["OB"]["kind"] == "B", "kind=B 一律保留(D4)"
+    assert "AA" in notified and "AM" in notified, "活跃 job 的 A/mismatch 保留(前提仍在途)"
+    assert mod.get_job("ja").phase == ru.PHASE_ARMED, "清理不碰 job 账"
+
+
+def test_load_jobs_dry_run_zero_writes(tmp_path, monkeypatch):
+    """dry-run 零写账: 账内容不变, 不调清理/换代, 不写盘(与 _migrate_legacy_accounts 同判)"""
+    mod = _startup_mod(
+        tmp_path,
+        jobs={"ja": _job("ja", phase=ru.PHASE_ARMED)},
+        notified={"OA": _foreign_entry("A", "gone")},
+        dry_run=True,
+    )
+    calls = []
+    monkeypatch.setattr(mod, "_foreign_cleanup_stale_notified", lambda: calls.append("cleanup"))
+    monkeypatch.setattr(mod, "_foreign_publish_view", lambda: calls.append("publish"))
+    saves = []
+    mod._ctx.state.save = lambda: saves.append("save")
+    before = dict(mod._state_foreign_notified_view())
+    mod._load_jobs()
+    assert mod._state_foreign_notified_view() == before, "dry-run 账内容不变"
+    assert calls == [], "dry-run 不调清理/换代"
+    assert saves == [], "dry-run 不写盘"
+
+
+def test_load_jobs_repeat_idempotent(tmp_path):
+    """重复 _load_jobs 零副作用: 第二轮零删除零日志, 发布视图引用恒稳(内容相等不换代)"""
+    mod = _startup_mod(
+        tmp_path,
+        jobs={"ja": _job("ja", phase=ru.PHASE_ARMED)},
+        notified={
+            "OA": _foreign_entry("A", "gone"),
+            "OB": _foreign_entry("B", "gone", phase="done"),
+        },
+    )
+    mod._load_jobs()
+    after_first = dict(mod._ctx.state.data["relocate"]["foreign"]["notified"])
+    view = mod.foreign_notified_view()
+    assert set(after_first) == {"OB"}, "首轮清掉孤儿 A"
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._load_jobs()
+    assert mod._ctx.state.data["relocate"]["foreign"]["notified"] == after_first, "第二轮零改动"
+    assert not [m for m in cap.messages if "启动接管清理孤儿账" in m], "第二轮零命中零日志"
+    assert mod.foreign_notified_view() is view, "内容相等不换代(引用恒稳)"
+
+
+def test_load_jobs_foreign_off_no_account_no_materialize(tmp_path):
+    """黄金法则 2: foreign_torrent=false 且无账时启动不 materialize relocate.foreign.notified"""
+    mod = _startup_mod(
+        tmp_path,
+        jobs={"ja": _job("ja", phase=ru.PHASE_ARMED)},
+        foreign_torrent=False,
+    )
+    mod._load_jobs()
+    assert "foreign" not in mod._ctx.state.data["relocate"], "无账不建键(只读视图守卫)"
+    assert set(mod.foreign_notified_view()) == set()
+    # 对照: 账真已在时 foreign_torrent=false 仍照清(清理函数不受 foreign_torrent 限制)
+    mod2 = _startup_mod(
+        tmp_path,
+        jobs={"ja": _job("ja", phase=ru.PHASE_ARMED)},
+        notified={"OA": _foreign_entry("A", "gone")},
+        foreign_torrent=False,
+    )
+    mod2._load_jobs()
+    assert not mod2._state_foreign_notified_view(), "foreign 关但账已在: 清理照跑"
+
+
+def test_load_jobs_publishes_view_after_cleanup(tmp_path):
+    """清理后 WebUI 只读视图换代: 陈旧条目从 foreign_notified_view() 消失 + mark_dirty(full)"""
+    mod = _startup_mod(
+        tmp_path,
+        jobs={"ja": _job("ja", phase=ru.PHASE_ARMED)},
+        notified={
+            "OA": _foreign_entry("A", "gone"),
+            "OB": _foreign_entry("B", "gone", phase="done"),
+        },
+    )
+    mod._foreign_publish_view()  # 预发布含陈旧条目的旧视图(模拟上一拍)
+    before = mod.foreign_notified_view()
+    assert "OA" in before, "旧视图确有陈旧条目"
+    dirty = []
+    mod._ctx.web = types.SimpleNamespace(mark_dirty=lambda full=False, reason="": dirty.append((full, reason)))
+    mod._load_jobs()
+    view = mod.foreign_notified_view()
+    assert view is not before, "清完换代(引用变化)"
+    assert "OA" not in view and "OB" in view, "陈旧条目消失, B 保留"
+    assert (True, "relocate_foreign") in dirty, "换代通知 Web 刷视图"
 
 
 def test_flag_consumed_once_no_runtime_rejudgment(tmp_path, monkeypatch):
