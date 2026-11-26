@@ -224,6 +224,21 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
   cancelled 无边形态, 与重落形态对照)—— mismatch 落账 -> _fail 翻 failed(条目随终态
   清理)-> 种子仍挂旧根: 时机扫 classify 无边可走, 「从来不是旧根」静默口径(零账零告警
   零重落, 候选出队不重试)
+
+启动接管期孤儿账清理(S1, 阶段 1: 直接测函数, 不经 _load_jobs):
+
+- test_stale_cleanup_removes_orphan_a_and_mismatch_keeps_b: job 不在 _jobs 的 A/mismatch 删除,
+  kind=B 保留, 纯 DEBUG 计数零 WARNING
+- test_stale_cleanup_removes_terminal_job_entries: done/failed/cancelled/superseded 四类终态
+  job 的 A/mismatch 删除, kind=B 保留
+- test_stale_cleanup_keeps_active_job_entries_and_b: 活跃 job 的 A/mismatch 保留, kind=B 全留,
+  无命中零动作零日志
+- test_stale_cleanup_no_matches_zero_action: 无命中(账空 / 账在但全 B)零动作零 DEBUG, 账空零建键
+- test_stale_cleanup_no_materialize_when_foreign_off: 只读视图守卫 —— foreign_torrent=False
+  不得新建 relocate.foreign.notified 键
+- test_stale_cleanup_pop_idempotent: pop(h, None) 幂等 —— 重复调用不报错零副作用(第二轮零 DEBUG)
+- test_stale_cleanup_skips_non_dict_entries: 异物条目(非 dict / 形状不符 dict)跳过不崩不被误删,
+  正常命中照清
 """
 import logging
 from dataclasses import replace
@@ -963,6 +978,123 @@ def test_foreign_terminal_cleanup_failed_no_edge_silent_dismissal():
     assert "MX" not in mod._state_foreign_notified_view(), "failed 无自身边: 不重落不误报"
     assert not mod._foreign_pending, "classify None 候选出队不重试(不占池位不空转)"
     assert not [m for m in cap_scan.records if m.levelno >= logging.WARNING], "静默口径: 零告警"
+
+
+# ---------- 启动接管期孤儿账清理(S1, 阶段 1: 直接测函数, 不经 _load_jobs) ----------
+
+
+def test_stale_cleanup_removes_orphan_a_and_mismatch_keeps_b():
+    """job 不在 _jobs: A/mismatch 删除, kind=B 一律保留; 纯 DEBUG 计数(零 WARNING)"""
+    mod, _store, _client = _env()
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "OA", "A", "gone")
+    _plant_entry(notified, "OM", "mismatch", "gone")
+    _plant_entry(notified, "OB", "B", "gone", phase="done")  # 孤儿 job 的 B 也保留
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_cleanup_stale_notified()
+    notified = mod._state_foreign_notified()
+    assert "OA" not in notified and "OM" not in notified
+    assert notified["OB"]["kind"] == "B"
+    assert not [m for m in cap.records if m.levelno >= logging.WARNING]  # 纯 DEBUG
+    assert any("启动接管清理孤儿账 2 条" in m.getMessage() for m in cap.records if m.levelno == logging.DEBUG)
+
+
+def test_stale_cleanup_removes_terminal_job_entries():
+    """job 已终态(done/failed/cancelled/superseded 四类): A/mismatch 删除, B 保留"""
+    mod, _store, _client = _env()
+    phases = {
+        "jd": ru.PHASE_DONE,
+        "jf": ru.PHASE_FAILED,
+        "jc": ru.PHASE_CANCELLED,
+        "js": ru.PHASE_SUPERSEDED,
+    }
+    for jid, phase in phases.items():
+        mod._jobs[jid] = _job(jid, phase=phase, src=f"R:/o-{jid}", dst=f"R:/n-{jid}")
+    notified = mod._state_foreign_notified()
+    for jid in phases:
+        _plant_entry(notified, f"{jid}A", "A", jid)
+        _plant_entry(notified, f"{jid}M", "mismatch", jid)
+        _plant_entry(notified, f"{jid}B", "B", jid, phase="done")
+    mod._foreign_cleanup_stale_notified()
+    notified = mod._state_foreign_notified()
+    for jid in phases:
+        assert f"{jid}A" not in notified and f"{jid}M" not in notified, f"{jid} 终态条目应清"
+        assert notified[f"{jid}B"]["kind"] == "B", f"{jid} 的 B 保留"
+
+
+def test_stale_cleanup_keeps_active_job_entries_and_b():
+    """活跃 job 的 A/mismatch 保留(前提仍在途); kind=B 全留; 无命中零动作零日志"""
+    mod, _store, _client = _env()
+    mod._jobs["ja"] = _job("ja", phase=ru.PHASE_ARMED, src=OLD, dst=NEW)
+    mod._jobs["jw"] = _job("jw", phase=ru.PHASE_MOVING, src="R:/o2", dst="R:/n2")
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "AA", "A", "ja")
+    _plant_entry(notified, "AM", "mismatch", "ja")
+    _plant_entry(notified, "WA", "A", "jw")
+    _plant_entry(notified, "OB", "B", "gone")  # 孤儿 job 的 B 也保留
+    before = dict(notified)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_cleanup_stale_notified()
+    assert mod._state_foreign_notified() == before  # 零删除
+    assert not [m for m in cap.records if "启动接管清理孤儿账" in m.getMessage()]  # 无命中零日志
+
+
+def test_stale_cleanup_no_matches_zero_action():
+    """无命中(账空 / 账在但全 B): 零动作零 DEBUG, 且账空时不建键"""
+    mod, _store, _client = _env()
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_cleanup_stale_notified()  # 账不在
+    assert mod._ctx.state.data == {}  # 只读视图守卫: 零建键
+    assert not [m for m in cap.records if "启动接管清理孤儿账" in m.getMessage()]
+    # 账在但条目全 B: 零删除零日志
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "OB", "B", "gone")
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod._foreign_cleanup_stale_notified()
+    assert "OB" in mod._state_foreign_notified()
+    assert not [m for m in cap2.records if "启动接管清理孤儿账" in m.getMessage()]
+
+
+def test_stale_cleanup_no_materialize_when_foreign_off():
+    """只读视图守卫: foreign_torrent=False 时函数不得新建 relocate.foreign.notified 键"""
+    mod, _store, _client = _env(foreign=False)
+    mod._foreign_cleanup_stale_notified()
+    assert mod._ctx.state.data == {}, "foreign 关且账不在: 零 materialize"
+    # 账已真在(外部预置)但无命中: 只读视图足够, 不触发写面改动
+    data = mod._ctx.state.data
+    data["relocate"] = {"foreign": {"notified": {}}}
+    mod._foreign_cleanup_stale_notified()
+    assert data["relocate"]["foreign"]["notified"] == {}
+
+
+def test_stale_cleanup_pop_idempotent():
+    """pop(h, None) 幂等: 重复调用不报错、零副作用(第二轮零 DEBUG)"""
+    mod, _store, _client = _env()
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "OA", "A", "gone")
+    _plant_entry(notified, "OB", "B", "gone")
+    mod._foreign_cleanup_stale_notified()
+    assert set(mod._state_foreign_notified()) == {"OB"}
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._foreign_cleanup_stale_notified()
+        mod._foreign_cleanup_stale_notified()
+    assert set(mod._state_foreign_notified()) == {"OB"}
+    assert not [m for m in cap.records if "启动接管清理孤儿账" in m.getMessage()]
+
+
+def test_stale_cleanup_skips_non_dict_entries():
+    """异物条目(非 dict / 形状不符 dict)跳过不崩, 不被误删; 正常命中照清"""
+    mod, _store, _client = _env()
+    notified = mod._state_foreign_notified()
+    notified["STR"] = "not a dict"  # 非 dict
+    notified["NONE"] = None
+    notified["SHAPE"] = {"root": OLD}  # dict 但缺 kind/job_id(形状不符)
+    _plant_entry(notified, "OA", "A", "gone")  # 正常命中
+    mod._foreign_cleanup_stale_notified()
+    notified = mod._state_foreign_notified()
+    assert "OA" not in notified
+    assert notified["STR"] == "not a dict" and notified["NONE"] is None
+    assert notified["SHAPE"] == {"root": OLD}
 
 
 # ---------- 场景 B 通知面(T5/S5: 只通知 D8, R7 映射已过期, 发布视图) ----------

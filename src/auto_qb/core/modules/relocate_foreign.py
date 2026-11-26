@@ -966,3 +966,43 @@ class ForeignMixin:
             f"relocate | foreign | job {job_id} 翻终态, 清理通知账 kind=A/mismatch 条目 "
             f"{len(dropped)} 条({head}{more}; kind=B 条目保留, B2)"
         )
+
+    def _foreign_cleanup_stale_notified(self) -> None:
+        """启动接管期清孤儿账(阶段 1 S1): 清掉「账在但 job 已不在途」的 A/mismatch 条目
+
+        判据: 条目 kind ∈ {A, mismatch} 且(job_id 不在 self._jobs 或 job.phase ∈
+        ru.TERMINAL_PHASES)=> 删除; kind=B 一律保留(通知主体, 留到种子消失清理); 活跃 job
+        的 A/mismatch 保留(前提仍在途)。不推翻 D4「终态 mismatch 重落 + 恰重发一次
+        WARNING」—— 被清条目交时机扫/差集消费面自然重判, 本函数只清账不处置。
+
+        只读视图先行(_state_foreign_notified_view): 先 zero-side-effect 判存在, 无命中零
+        动作; foreign_torrent=False 的合法配置不得因本守卫 materialize 持久键
+        relocate.foreign.notified(黄金法则 2) —— 只有确有删除时才经写面取容器
+        (_state_foreign_notified), 彼时段已在, pop(h, None) 幂等。异物条目(非 dict /
+        形状不符)跳过不崩; 清理纯 DEBUG 计数。本函数自身只受 dry-run 限制(守卫在调用点,
+        阶段 2 在 _load_jobs 包 if not self._dry_run()), 不受 foreign_torrent 限制。
+        """
+        notified = self._state_foreign_notified_view()
+        if not notified:
+            return  # 账不在/空: 零副作用零建键(黄金法则 2)
+        dropped = []
+        for h, e in notified.items():
+            if not isinstance(e, dict):
+                continue  # 账面异物: 非 dict 跳过(形状不符条目 kind 落空, 同样不命中)
+            if str(e.get("kind") or "") not in (_KIND_SCENARIO_A, _KIND_MISMATCH):
+                continue  # kind=B / 未知 kind 一律保留
+            job = self._jobs.get(str(e.get("job_id") or ""))
+            if job is not None and getattr(job, "phase", None) not in ru.TERMINAL_PHASES:
+                continue  # 活跃 job 的条目保留(前提仍在途)
+            dropped.append(h)
+        if not dropped:
+            return  # 无命中零动作(幂等; 零建键)
+        container = self._state_foreign_notified()  # 确有删除才取写容器(只读视图已判存在)
+        for h in dropped:
+            container.pop(h, None)
+        head = ", ".join(h[:8] for h in dropped[:5])
+        more = "..." if len(dropped) > 5 else ""
+        logger.debug(
+            f"relocate | foreign | 启动接管清理孤儿账 {len(dropped)} 条({head}{more}; "
+            f"kind=B 保留, A/mismatch 的 job 不在账或已终态)"
+        )
