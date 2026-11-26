@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>webui/server/auth.py 变异测试审计</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="mutation-webui-auth">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-27-0321">
+<meta name="doc-updated" content="26-11-27-0517">
+<meta name="doc-refs" content="memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: mutation-webui-auth</div>
+<h1>webui/server/auth.py 变异测试审计</h1>
+<p class="lede">本篇只回答: 如何把 <code>src/auto_qb/webui/server/auth.py</code> 作为唯一变异目标, 用两文件定向池完成首轮、三分类、必要补测与同池复跑, 并把结果落到基线切片和常驻锚。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-27-0321 · <b>doc-updated</b> 26-11-27-0517 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「做一次变异测试, 参考常驻锚, 先写一个计划」; 常驻锚 §07; mutation-testing skill; 当前源码与测试池盘点。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>1.1 目标与完成判据</h3>
+<ul>
+  <li>只审计 <code>src/auto_qb/webui/server/auth.py</code>: 它是 Web UI 的鉴权与跨站防护单点, 出错代价高于普通 IO 胶水层; 不跑 <code>webui/server/</code> 整包。</li>
+  <li>首轮后每条 <code>survived</code> 都必须落进「真洞 / 等价变异 / 假存活」之一并给一句理由; <code>no tests</code> 视为函数面缺口, 先补池或补用例, 不拿残缺数字收尾。</li>
+  <li>确认的真洞各自入池或当场补断言; 新守阵必须做同构变异红验, 再按同目标、同池复跑。</li>
+  <li>复跑存活数不高于首轮; 新增存活必须解释。最终出一条基线切片、追加任务档案轮次, 并更新常驻锚 §07。</li>
+</ul>
+<h3>1.2 设计不变量</h3>
+<ul>
+  <li>目标永远只有一个模块; 池只取直接相关的两个测试文件, 禁止退化成全 <code>tests/</code>。</li>
+  <li>命令一律走 <code>.commands/mutants/</code> 包 task id; <code>forkserver</code>、<code>-n 0 --no-cov</code>、文本层守阵 deselect 由包脚本内建。</li>
+  <li>基线不绿不开跑; <code>TIMEOUT / UNKNOWN / APPLY_FAIL / FLAKY / SUSPICIOUS / SEGFAULT</code> 是未判定, 既不算杀死也不算存活。</li>
+  <li>量化只认 <code>mutants.run</code> 同池复跑; 手搓变异只用于形态复验和新守阵红验。</li>
+  <li>本计划阶段不改 <code>src/</code> 或 <code>tests/</code>, 不执行变异测试; 实施前先完成 §05 拍板。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 当前规模与风险面</h3>
+<table>
+  <tr><th>对象</th><th>盘点事实</th><th>审计含义</th></tr>
+  <tr><td><code>webui/server/auth.py</code></td><td>208 行; 7 个模块级函数 + 1 个依赖闭包; AST 粗点 40 个分支类节点</td><td>Host/Origin 解析与跨站闸在 <code>61–149</code> 行; token、loopback、公开端点与 SSE 票据在 <code>152–208</code> 行。本轮只覆盖公开路径的免 token 分支与回环判据消费; 路由层 loopback-only 门和 127/8 实现属池外集成守阵, 不计入本轮变异覆盖</td></tr>
+  <tr><td><code>tests/unit/test_web_auth.py</code></td><td>613 行; 19 个测试; 121 个断言</td><td>直接覆盖鉴权、跨站防护、解析 helper、公开端点、非 ASCII token 与票据纪律; 常量时间比较与票据×外部 Host/Origin 矩阵见 §03.3 开跑前核验</td></tr>
+  <tr><td><code>tests/unit/test_web_traffic_stream.py</code></td><td>930 行; 31 个测试; 121 个断言</td><td>只有 <code>test_traffic_stream_ticket_discipline</code>(<code>157–184</code> 行)直接补第二张 SSE 票据路径; 其余为流量流测试</td></tr>
+</table>
+<p>按历史变异密度 <code>0.84–1.23 / 行</code> 估算, 本轮约 <b>175–256 个变异</b>; 这是排期估算, 不是验收数字。首轮与报告是分钟级, <code>verify</code> 才是时间大头, 必须先收窄候选。</p>
+<h3>2.2 为什么要做</h3>
+<ul>
+  <li>常驻锚 §07 仍把 <code>infra/</code> 与 <code>webui/server/</code> 合并在「待做」行; <code>auth.py</code> 尚无变异刻度。</li>
+  <li>覆盖率不能证明鉴权守阵的强弱: 一个 <code>and/or</code>、边界端口、票据路径集合或 fail-closed 分支被改错, 现有状态码断言可能仍绿。</li>
+  <li>计划盘点时该目标的容器镜像仓尚未建立; S1 必须先 <code>mutants.setup</code>, 不能把历史 <code>versioning.py</code> 结果当本轮基线。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 范围与显式排除</h3>
+<ul>
+  <li><b>目标</b>: <code>src/auto_qb/webui/server/auth.py</code>。</li>
+  <li><b>定向池</b>: <code>tests/unit/test_web_auth.py</code> + <code>tests/unit/test_web_traffic_stream.py</code>。</li>
+  <li><b>排除</b>: <code>webui/server/</code> 其余模块(含 <code>routes/config.py</code> 的公开端点路由门)、<code>infra/</code>(含 <code>utils_parse.py</code> 的 127/8 判据实现)、JS 前端、真实 qB 行为、生产配置与运行时数据; 计划外发现只记录, 不顺手修。</li>
+</ul>
+<h3>3.2 函数面核对</h3>
+<table>
+  <tr><th>目标函数</th><th>池内直接守阵</th><th>结论</th></tr>
+  <tr><td><code>_host_header_parts</code></td><td><code>test_auth_host_origin_parsing_helpers</code></td><td>已覆盖</td></tr>
+  <tr><td><code>_allowed_hostnames</code> / <code>_hostname_allowed</code> / <code>_origin_allowed</code></td><td>helper 单测 + Host 白名单 + 写方法 Origin 用例</td><td>已覆盖; S1 补 HTTP 80 / HTTPS 443 默认端口与 Host 无端口矩阵</td></tr>
+  <tr><td><code>_log_reject</code></td><td>跨站拒绝用例的 caplog 断言</td><td>已覆盖</td></tr>
+  <tr><td><code>_reject_cross_site</code></td><td>Host、Origin、全部写端点、凭证绕过、默认关闭用例</td><td>已覆盖; S1 补票据凭证 × 外部 Host/Origin 组合</td></tr>
+  <tr><td><code>make_require_token</code> / <code>require_token</code></td><td><code>test_web_auth.py</code> 全部鉴权用例 + <code>test_traffic_stream_ticket_discipline</code></td><td>已覆盖; 两张 SSE 路径都在池内; S1 核 <code>compare_digest</code> 调用守阵</td></tr>
+</table>
+<h3>3.3 开跑前安全矩阵核验</h3>
+<ul>
+  <li>只在既有两文件内补用例: HTTP 默认 80 / HTTPS 默认 443、Host 无端口、显式端口不一致的正负矩阵。</li>
+  <li>补 valid/invalid ticket、外部 Host/Origin、两张 SSE 路径与集合外路径的组合, 钉住 <code>presented</code> 的 <code>or qticket</code> 与票据消费语义。</li>
+  <li>用确定性 spy 断言 ASCII 与非 ASCII token 都调用 <code>secrets.compare_digest</code> 且两侧为 UTF-8 bytes; 把 <code>compare_digest</code> 换成 <code>==</code> 纳入红验。</li>
+  <li>补完先跑定向池与 <code>test.quick</code>; 若必须新增第三个池文件才能覆盖, 停手改计划并另立轮次, 不混入本轮同池对比。</li>
+</ul>
+<h3>3.4 三分类与确认策略</h3>
+<p>本轮是两文件窄池, 适合用 <code>mutants.verify</code> 捞「相关测试不在池里」的假存活; 但不对全部存活无差别开跑。候选文件纳入安全高相关项、所有无法判等价的行为改变项, 以及 <code>timeout / suspicious / segfault / no tests</code> 等非 killed 项; 安全高相关只决定优先顺序。读 diff 只能筛可证明全输入等价的明显项并记录理由, 其余必须 verify, 或在全套件上做同构手工确认后再分类。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>动作</th><th>验收判据</th></tr>
+  <tr><td>S0 入场</td><td><code>commands run my-commit-flow.sync</code>; <code>commands run test.quick</code>; 容器不在运行先 <code>commands run test.linux-env</code>; 重新读远端任务档案取真实 R 号</td><td>基线绿; R 号不撞车; 只动当前 clone</td></tr>
+  <tr><td>S1 建镜像</td><td>S0 同步后, 开跑前先把常驻锚 §07 的 <code>infra/ · webui/server/</code> 合并行拆成 <code>infra/</code> 与 <code>webui/server/</code> 两行待做, 新增 <code>webui/server/auth.py</code> 待做行与本计划指针; 再执行 <code>commands run mutants.setup -- --target 'src/auto_qb/webui/server/auth.py'</code>; 完成 §03.3 矩阵核验, 按包内说明把两池文件同步进选定镜像并确认内容, 再跑定向池与 <code>test.quick</code>。D3 若选专用镜像, S1–S6 全部追加上同一个 <code>--mirror &lt;容器内绝对路径&gt;</code></td><td>锚待做行已插且父包未被标已做; 镜像仓可读写; 工具版本可记录; 安全矩阵无缺项; 镜像内两池文件与工作树一致</td></tr>
+  <tr><td>S2 首轮</td><td><code>commands run mutants.run -- --target 'src/auto_qb/webui/server/auth.py' --pool tests/unit/test_web_auth.py tests/unit/test_web_traffic_stream.py --children 3 --timeout-multiplier 15 --no-refresh</code></td><td>记变异数 / 杀死率 / 墙时与 CPU 耗时 / 工具版本 / children / timeout multiplier / 机器 / 选择池</td></tr>
+  <tr><td>S3 导出</td><td><code>commands run mutants.report -- --target 'src/auto_qb/webui/server/auth.py' --status 'survived,no tests,timeout,suspicious,segfault'</code></td><td>拿到带 unified diff 的非 killed 清单; 不用纯 id 清单分类</td></tr>
+  <tr><td>S4 确认</td><td>按 §03.4 从 S3 清单提取候选 id, 写成每行一个 id 的 <code>&lt;候选ids&gt;</code>, 执行 <code>commands run mutants.verify -- --ids-file &lt;候选ids&gt; --target 'src/auto_qb/webui/server/auth.py' --workers 3 --suite-timeout 1200 --no-refresh --recompute-baseline</code>; diff-only 只判明显等价项</td><td><code>KILLED</code> 记假存活; <code>SURVIVED</code> 逐个判真洞/等价; 未判定项复跑或记工具盲区, 不硬归类; 记候选覆盖数与 <code>KILLED</code> 数</td></tr>
+  <tr><td>S5 处置</td><td>真洞各自入池或当场补断言; 新守阵做同构变异红验: 锚点 <code>count == 1</code>, 字节级替换前后比对, 原字节恢复并确认 <code>src/</code> 无差异, 再 <code>commands run test.full</code></td><td>红验确实变红; 锚点唯一且替换落地; 还原复绿; <code>src/</code> 零残留; 真洞 100% 有处置</td></tr>
+  <tr><td>S6 复跑</td><td>同目标同池同一镜像再跑: 给 S2 命令保留 <code>--no-refresh</code> 与 D3 的同一 <code>--mirror</code>; 新测试先同步进镜像。复跑后立即用同一 target/mirror/状态集再执行 <code>commands run mutants.report</code>, 保留首轮与复跑两份 dump</td><td>复跑存活 ≤ 首轮; 新增存活按两份 diff 逐条解释; 池文件集合与镜像不变</td></tr>
+  <tr><td>S7 记录</td><td><code>commands run kb.new baseline mutation-webui-auth --title 'webui/server/auth.py 变异测试审计' --total '&lt;test.full 原始汇总行&gt;' --refs 'memory-bank/tasks/26-10-08-test-mutation-audit.md'</code> 建切片; 写目标/池/计数/杀死率/墙时与 CPU 耗时/版本/children/超时倍率/机器/S4 候选覆盖数与 KILLED 数/未判定最终状态/首轮与复跑/真洞链接; 任务档案追加 R 号</td><td>字段齐; <code>--total</code> 逐字取自 test.full; 测试数字只在切片; 切片引用任务档案</td></tr>
+  <tr><td>S8 更锚</td><td>把 S1 登记的 <code>webui/server/auth.py</code> 待做行回填为实测行, 填日期/变异数/杀死率/轮次/切片与计划指针; 状态按复跑终态选择: 无残留标 <code>已做(已清)</code>, 有余量标 <code>已做(余量在池)</code></td><td>只更新该模块行, <code>infra/</code> 与 <code>webui/server/</code> 父包仍标待做; 状态与最终残留一致; 数字与切片逐位一致</td></tr>
+</table>
+
+<h3>4.1 验收(可判定)</h3>
+<ul>
+  <li>每条存活变异都有分类与理由; 每条真洞都有 issue 或已补断言, 且新守阵红验通过。</li>
+  <li><code>no tests</code> 已清零或有明确函数面缺口处置; <code>TIMEOUT / UNKNOWN / APPLY_FAIL / FLAKY / SUSPICIOUS / SEGFAULT</code> 未被计入存活, 且逐条复跑或明确记为工具盲区。</li>
+  <li>同池复跑完成, 存活数不升; 基线切片、任务档案、常驻锚三处指针闭环。</li>
+  <li>未修改生产配置、运行时数据或计划外模块; 未把单模块结果外推成整包结论。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>本轮目标</td><td>按本计划审计 <code>webui/server/auth.py</code>, 两文件定向池</td><td>暂缓 Web 鉴权面, 改做 <code>infra/utils_parse.py</code>; 业务风险较低</td></tr>
+  <tr><td>D2</td><td>确认策略</td><td>安全高相关候选走全套件 <code>verify</code>, 明显等价项读 diff</td><td>全部存活逐条 <code>verify</code>; 证据最齐, 但时间成本最高</td></tr>
+  <tr><td>D3</td><td>镜像策略</td><td>默认按目标派生镜像; 检出同目标并行立即改用专用 <code>--mirror</code> 且 children 降为 2; 选定值贯穿 S1–S6 与复跑 report</td><td>全程专用镜像, 多占约一份镜像仓磁盘, 但免疫同目标默认仓撞车; 同一个路径贯穿 S1–S6 与复跑 report</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="cm">尚未拍板。D1–D3 确认后回填结论与日期, 计划才转入执行; 当前保持 Open。</p>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>基线不绿</td><td><code>test.quick</code> 或 mutmut 自带基线失败</td><td>停手先修基线; 不带病开跑, 不用 verify 的差集口径掩盖计划内红测</td></tr>
+  <tr><td>同目标镜像互冲</td><td>另一会话同时跑同 target, <code>mutants/</code> 的 meta 被删或串目标</td><td>停跑; 专用 <code>--mirror</code> + children 2; 已损坏轮次不作数</td></tr>
+  <tr><td>安全变异被误应用</td><td>候选 diff 看起来像鉴权绕过或跨站放行</td><td>只在容器镜像仓 apply/还原; 不碰运行中的生产实例; 先读 diff 再 verify</td></tr>
+  <tr><td>超时或 flaky</td><td>出现 <code>TIMEOUT / UNKNOWN / APPLY_FAIL / FLAKY / SUSPICIOUS / SEGFAULT</code></td><td>记未判定并复跑同一条; 仍不稳定就记工具盲区, 不伪报杀死或存活</td></tr>
+  <tr><td>函数面遗漏</td><td>报告出现 <code>no tests</code></td><td>只在既有两文件内补对应用例; 若必须新增池文件, 停手改计划并另立轮次基线, 不与首轮直接比较</td></tr>
+  <tr><td>文本层守阵污染</td><td>基线阶段读源码文本的守阵先红</td><td>依赖包脚本默认 deselect; 若仍红, 按坑档修正守阵表, 不手工绕过</td></tr>
+  <tr><td>复跑冲掉新测试</td><td>新增测试只在工作树, 默认 run 刷新镜像</td><td>先同步测试进镜像, 再 <code>--no-refresh</code>; 镜像内确认测试文件已更新</td></tr>
+  <tr><td>红验假红假绿</td><td>锚点重复、替换未落地或还原不完整</td><td>锚点 <code>count == 1</code>; 字节级比对替换前后; 原字节恢复并确认 <code>src/</code> 无差异后才跑 <code>test.full</code></td></tr>
+  <tr><td>范围漂移</td><td>发现 <code>auth.py</code> 之外的相关缺陷</td><td>不顺手修; 按范围守卫记录, 是否入池另行授权</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-27-0321</span> 初版。来源: 用户要求先写变异测试计划。按当前源码盘点把目标收敛到 <code>webui/server/auth.py</code>, 核定两文件定向池与函数面覆盖, 给出 S0–S8、三分类/verify、红验、同池复跑、基线与常驻锚收口判据。零 <code>src/</code> / <code>tests/</code> 改动; 未执行变异测试。</li>
+  <li><span class="tag">R1 · 26-11-27-0458</span> S7 基线创建命令显式引用任务档案，闭合认领链</li>
+  <li><span class="tag">R2 · 26-11-27-0517</span> 接缝终审修正：S1 开轮先登记待做锚行，S8 按最终残留选择已做状态</li>
+</ul>
+
+</div>
+</body>
+</html>
