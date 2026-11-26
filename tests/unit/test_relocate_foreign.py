@@ -239,6 +239,14 @@ job 登记直写 mod._jobs(与 test_relocate_history 同款); on_task_line 驱�
 - test_stale_cleanup_pop_idempotent: pop(h, None) 幂等 —— 重复调用不报错零副作用(第二轮零 DEBUG)
 - test_stale_cleanup_skips_non_dict_entries: 异物条目(非 dict / 形状不符 dict)跳过不崩不被误删,
   正常命中照清
+
+启动自愈 × D4 交叉守阵(阶段 3):
+
+- test_stale_cleanup_then_rescan_mismatch_rerecords_and_rewarns_once: 启动清理清掉终态 job
+  的陈旧 mismatch 后, 同 hash 在后续重连时机扫重落 mismatch(first_seen 刷新)且恰重发一次
+  WARNING; 在账去重位随即恢复(再扫零再发)
+- test_stale_cleanup_keeps_b_and_full_scan_skips_in_account: kind=B 不被启动清理删(即使 job
+  终态), 全量扫在账 hash 跳过不入池, 零重复告警, 账条目与 first_seen 原样
 """
 import logging
 from dataclasses import replace
@@ -1095,6 +1103,86 @@ def test_stale_cleanup_skips_non_dict_entries():
     assert "OA" not in notified
     assert notified["STR"] == "not a dict" and notified["NONE"] is None
     assert notified["SHAPE"] == {"root": OLD}
+
+
+# ---------- 启动自愈 × D4 交叉守阵(阶段 3; 不经 _load_jobs, 直接钉清理+重判链路) ----------
+
+
+def test_stale_cleanup_then_rescan_mismatch_rerecords_and_rewarns_once():
+    """启动清理清掉终态 job 的陈旧 mismatch 后, 同一 hash 在后续重连时机扫重落 mismatch
+    (first_seen 刷新)且恰重发一次 WARNING; 在账去重位随即恢复(再扫零再发)"""
+    mod, store, client = _env()
+    _hold_phase_machine(mod)
+    _done_job(mod)  # jd done: OLD -> NEW 终态账边(场景 B 命中源)
+    client.files_map["MX"] = _seed(match=False)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap1:
+        mod.on_task_line()  # 启动首轮扫: D4 判异 -> mismatch 条目 + WARNING 恰一次
+    notified = mod._state_foreign_notified()
+    assert notified["MX"]["kind"] == "mismatch" and notified["MX"]["job_id"] == "jd"
+    assert notified["MX"]["phase"] == ru.PHASE_DONE
+    old_first_seen = notified["MX"]["first_seen"]
+    assert len([m for m in cap1.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()]) == 1
+
+    # 启动自愈: job jd 已终态 -> 陈旧 mismatch 条目被清(只读视图先行, 纯 DEBUG)
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap_clean:
+        mod._foreign_cleanup_stale_notified()
+    assert "MX" not in mod._state_foreign_notified_view()
+    assert not [m for m in cap_clean.records if m.levelno >= logging.WARNING]  # 清理零 WARNING
+    assert any("启动接管清理孤儿账" in m.getMessage() for m in cap_clean.records if m.levelno == logging.DEBUG)
+
+    # 后续时机扫(重连): 同 hash 已出账 -> 全量扫不再跳过 -> D4 重判 -> 重落 + 恰重发一次
+    mod._clock.advance(30.0)
+    store.reset_sync()
+    mod.on_task_line()  # 观测 epoch 变化, 记重连锚(尚无应用轮不扫)
+    store.refresh([FakeTorrent(hash="MX", name="diff", save_path=OLD)])
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap2:
+        mod.on_task_line()  # rounds 越锚: reconnect 时机扫 -> 重判
+    notified = mod._state_foreign_notified()
+    assert notified["MX"]["kind"] == "mismatch" and notified["MX"]["job_id"] == "jd"
+    assert notified["MX"]["first_seen"] > old_first_seen  # 假钟推进过, 首见刷新
+    assert len([m for m in cap2.records if m.levelno == logging.WARNING and "同内容根目录下内容不一致" in m.getMessage()]) == 1, \
+        "恰重发一次(拍板 a: 不抑制重发)"
+    before = dict(notified["MX"])  # 不可变快照: 末尾断言账条目原样, 不与活容器自比
+
+    # 在账去重位恢复: 重扫在账 hash 跳过, 零再发
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap3:
+        assert mod._foreign_full_scan("verify_in_account") == 0
+    assert not mod._foreign_pending, "在账跳过不入池"
+    assert not [m for m in cap3.records if m.levelno >= logging.WARNING]
+    assert any(
+        "MX" in m.getMessage() and "已入账(notified)" in m.getMessage() for m in cap3.records if m.levelno == logging.DEBUG
+    )
+    assert mod._state_foreign_notified()["MX"] == before
+
+
+def test_stale_cleanup_keeps_b_and_full_scan_skips_in_account():
+    """启动自愈 × 在账跳过: kind=B 条目即使 job 已终态也不被启动清理删; 随后全量扫
+    在账 hash 跳过不入池, 零重复告警, 账条目与 first_seen 原样"""
+    mod, store, client = _env()
+    _done_job(mod)
+    client.files_map["BX"] = _seed()
+    store.refresh([FakeTorrent(hash="BX", name="IYUU-辅种", save_path=OLD)])
+    notified = mod._state_foreign_notified()
+    _plant_entry(notified, "BX", "B", "jd", phase=ru.PHASE_DONE)
+    before = dict(notified["BX"])
+
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap_clean:
+        mod._foreign_cleanup_stale_notified()
+        mod._foreign_cleanup_stale_notified()  # 幂等重放
+    assert mod._state_foreign_notified()["BX"] == before, "kind=B 清理全留(job 终态也不删)"
+    assert not [m for m in cap_clean.records if "启动接管清理孤儿账" in m.getMessage()]
+
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap_scan:
+        enqueued = mod._foreign_full_scan("reconnect")
+    assert enqueued == 0, "在账 hash 全量扫跳过不入池"
+    assert not mod._foreign_pending, "零候选入池"
+    assert not [m for m in cap_scan.records if m.levelno >= logging.WARNING], "零重复告警"
+    assert mod._state_foreign_notified()["BX"] == before
+    assert any(
+        "BX" in m.getMessage() and "已入账(notified)" in m.getMessage()
+        for m in cap_scan.records if m.levelno == logging.DEBUG
+    )
 
 
 # ---------- 场景 B 通知面(T5/S5: 只通知 D8, R7 映射已过期, 发布视图) ----------
