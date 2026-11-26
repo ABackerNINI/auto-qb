@@ -744,7 +744,7 @@ def test_rebuild_benchmark_5000_seeds(capsys):
     - 如何(零脚本): 1. `uv run pytest tests/test_modules_p5.py -k rebuild_benchmark -q -rP -n 0`
       连跑 ≥6 次(每次独立进程即冷启动), 从 PASSES 段抓 `[5000-seed benchmark]` 行 ——
       中位数 print 在 capsys.readouterr() 之后, 常规输出被吞, 只有 -rP 能看到; 该命令带
-      pytest.ini 默认 --cov, 天然与断言环境同源(想看裸跑对照加 --no-cov);
+      pyproject 的 addopts 默认 --cov, 天然与断言环境同源(想看裸跑对照加 --no-cov);
       2. 取中位, 开发机档阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度); CI 档另取
       CI 日志 `[5000-seed benchmark]` 行的最坏值 × 2-3(打印行带档位与所用阈值, 可直接对照);
       3. 连同实测分布 / 采样日期 / 当时 commit 更新 perf_baseline.json, 并同步本 docstring

@@ -27,7 +27,7 @@ _SERIAL_LOCK = Path(__file__).resolve().parents[1] / ".work" / "rm01" / "serial.
 def serial():
     """跨进程串行: 本片每条都要抢端口 + 起真实进程 + 写同一个注册表值。
 
-    `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**,
+    根 pyproject `[tool.pytest.ini_options]` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**,
     9 条会摊到 8 个 worker 并行 ⇒ 互相抢 39000-39999 段(实测: 前一条刚停的进程还没放端口,
     后一条就 bind 到同一个, 10048)。官方跑法 `real.suite` 传 `-n 0` 本就没这问题, 但直接
     `pytest tests/real/...` 的人也该拿到稳定结果 —— 一把文件锁比"记得加 -n 0"可靠。

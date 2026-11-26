@@ -341,7 +341,7 @@ _BUNDLE_FILES: dict = {}
 def bundle_file(name):
     """node 探针用: 把域聚合文本落一个临时脚本文件, 探针仍按「单文件」加载(与拆分前 argv 语义一致)
 
-    !落点按进程隔离(pid 入文件名): pytest.ini 默认 -n 8, xdist 各 worker 继承同一自举实例根
+    !落点按进程隔离(pid 入文件名): pyproject 的 addopts 默认 -n 8, xdist 各 worker 继承同一自举实例根
     (TMPDIR, 见 _tmp_bootstrap.py), 同名文件会被另一 worker 的 open(..., "w") 先截断再写 ——
     Linux CI 实测有 worker 在截断窗读到 0 字节, node 电池因 src 为空而报
     "Cannot read properties of undefined (reading 'methods')"(window.AQB_SHORTCUTS 未定义)。

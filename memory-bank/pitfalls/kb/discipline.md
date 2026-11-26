@@ -21,7 +21,7 @@
 - **处置**: 每条验收口径**指派交付物**; 前端埋点要覆盖**整条链路**(补丁 / POST / 排队 / 执行 / 端到端),
   只量一段会在真机慢时无从下手。
 - **实例(2026-09-24)**: `.commands/my-commit-flow/scripts/test_pipeline.py`(47 条)一直**没有任何闸门在跑**
-  —— `pytest.ini` 的 `testpaths = tests` 只收 `tests/`, 而提交闸门里也只有 `--help` 冒烟。
+  —— pyproject `[tool.pytest.ini_options]` 的 `testpaths = tests` 只收 `tests/`, 而提交闸门里也只有 `--help` 冒烟。
   后果不是"测试白写"这么轻: 包脚本里一条与 rebase 禁令相撞的旧文案("让工作区变干净再 rebase")就这样
   **躺到有人走查**才被发现。**判据**: 新写的守卫要能回答"哪条闸门 / 哪个 testpaths 会跑它";
   答不上来就是埋点没人消费 —— 已补 task `test.pkg` + 闸门 `match = [".commands/", ".agents/skills/commands/"]`。

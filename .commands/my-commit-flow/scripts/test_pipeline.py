@@ -2,7 +2,7 @@
 
 为什么放在包目录而不是项目的 `tests/`: 这份包是**跨项目资产**, 绑进某个仓库的 `tests/`
 会把两边耦合起来; 它依赖的是包自己的脚本, 不是那个仓库的 `src/`。
-(本项目 `pytest.ini` 的 `testpaths = tests` 也不会收集到它 —— 正合预期; 提交闸门 test.pkg 会跑。)
+(本项目 pyproject `[tool.pytest.ini_options]` 的 `testpaths = tests` 也不会收集到它 —— 正合预期; 提交闸门 test.pkg 会跑。)
 
 跑法:
     python <包>/scripts/test_pipeline.py

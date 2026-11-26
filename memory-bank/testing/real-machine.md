@@ -114,7 +114,7 @@ qB 5.2 API 差异已封装在 `lib/qb.py`; 诊断入口 `tests-real/tools/diag_l
 
 ## 09 用例怎么写
 
-- 位置 `tests-real/<rmNN>_<slug>/`, id 写 docstring 首行 `[RMxx-nn] <一句话>`; 可 pytest 单跑但 **pytest.ini testpaths 不改**(基线零扰动)。
+- 位置 `tests-real/<rmNN>_<slug>/`, id 写 docstring 首行 `[RMxx-nn] <一句话>`; 可 pytest 单跑但 **pyproject [tool.pytest.ini_options] 的 testpaths 不改**(基线零扰动)。
 - 每条必写四行: 前置 / 副作用 / 回滚 / 失败判据; 只断言外部可观测事实(内部实现归单测); 幂等(开跑清场收尾删净); L3 红验与单测同口径。
 - 禁止: 非白名单端口、读仓库根 `config.yml`、依赖人工点击(除非标 L0)、`try/except: pass` 吞异常。
 - 等待轮询用各文件的 `wait_until(fn, timeout, desc, interval)`; desc 拼带「最后观测值」的 f-string **必须传 lambda**(`lambda: (f"…")`) —— str 是调用期求值, 超时报错里显示等待前旧值; 基座已支持 callable 惰性求值(超时报错时才调), 见 issue 26-11-08-0044。

@@ -11,7 +11,7 @@
 ### 闸门连续红且错误形态是超时 —— 先查 worker 数与内存, 再怀疑内容
 
 - **触发**: 跑 `ship.commit` 闸门**连续多轮红**, 报错是 `timekit --check` 超时 (常态 4s, 实测涨到 45-60s)、node battery 偶发 flake; 工作树内容与前一轮无实质变化 (2026-11-09 实测 5 连红)。
-- **判别**: ①错误形态是**超时 / 资源型**, 不是断言失败 —— 单项耗时比常态膨胀一个数量级, 输出里没有 `FAILED` 用例; ②算峰值并发: `.commands/my-commit-flow/scripts/_pipeline.py:489` 的 `GATE_WORKERS = 4`(闸门线程池) × `pytest.ini:17` 的 `addopts = -n 8`(pytest 类闸门自身的 xdist 并行) = **4 × 8 = 32 worker**; ③看内存: 12GB 机器被压到 Free 2.6GB / Committed 13.3GB, 已进换页; ④反证: 同一份内容把闸门串行化后零 flake。
+- **判别**: ①错误形态是**超时 / 资源型**, 不是断言失败 —— 单项耗时比常态膨胀一个数量级, 输出里没有 `FAILED` 用例; ②算峰值并发: `.commands/my-commit-flow/scripts/_pipeline.py:489` 的 `GATE_WORKERS = 4`(闸门线程池) × pyproject `[tool.pytest.ini_options]` 的 `addopts = -n 8`(pytest 类闸门自身的 xdist 并行) = **4 × 8 = 32 worker**; ③看内存: 12GB 机器被压到 Free 2.6GB / Committed 13.3GB, 已进换页; ④反证: 同一份内容把闸门串行化后零 flake。
 - **处置**: **运行时 monkeypatch 后调 `commit.main`**, 零文件改动:
   ```bash
   python -c "import sys; sys.path.insert(0,'.commands/my-commit-flow/scripts'); import _pipeline; _pipeline.GATE_WORKERS = 1; import commit; sys.exit(commit.main(['--no-push']))"

@@ -28,7 +28,7 @@ _SERIAL_LOCK = Path(__file__).resolve().parents[1] / ".work" / "rm02" / "serial.
 def serial():
     """跨进程串行: 本片每条都要起真实产品进程(数条还占 39000-39999 段端口)。
 
-    `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**
+    根 pyproject `[tool.pytest.ini_options]` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**
     (RM01 实测), 直跑 pytest 会互相抢端口; 官方跑法 `real.suite` 传 `-n 0` 本就没问题,
     但一把文件锁比"记得加 -n 0"可靠 —— 照抄 rm01_startup/conftest.py。
     """

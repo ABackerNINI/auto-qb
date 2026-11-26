@@ -138,7 +138,7 @@ def pytest_configure(config):
     Windows 是有效卡口。⇒ 分档: Windows 仍按 99.5 卡, 其余平台按 99.0 卡(实测值向下取整留 ~0.24pt
     余量)。口径与 `tools/global-traffic-monitor` 的「双 OS 阈值取较低者」一致。
 
-    !闸值单点: 阈值**不再写进** `pytest.ini` 的 addopts(写死就两侧共用), 只在这里定。显式传
+    !闸值单点: 阈值**不再写进** pyproject `[tool.pytest.ini_options]` 的 addopts(写死就两侧共用), 只在这里定。显式传
     `--cov-fail-under=<非零>` 时本钩子让路; `=0` 按「未设」处理 —— pytest-cov 自己就把 0 当
     「不卡」(`> 0` 才判), 语义一致。要彻底不测覆盖率用 `--no-cov`。
 

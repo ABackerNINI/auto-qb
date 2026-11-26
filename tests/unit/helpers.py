@@ -1,6 +1,6 @@
 """测试公共组件: 模拟 qB 客户端 / 种子 / 配置 + 构造辅助 + 本地假 qB 服务
 
-由 pytest.ini 的 pythonpath=src 处理 src 导入, 无需 sys.path 处理。
+由 pyproject 的 [tool.pytest.ini_options] pythonpath=["src"] 处理 src 导入, 无需 sys.path 处理。
 """
 import copy
 import json

@@ -21,7 +21,7 @@ silent_success = true
 run     = ['uv run pytest tests -q --no-cov -n 8']
 timeout = 900
 when    = "只要结论、不要覆盖率报表（提交闸门用这条）"
-note    = "TMPDIR 由 tests/unit/_tmp_bootstrap.py 自举(2026-11-02 起); 显式 -n 8 覆盖 pytest.ini 默认(-n 4): 2772 个用例实测 -n 4 43.8s → -n 8 26.6s(2026-10-08)。**别再降回 -n 4** —— 那是按 tests/ 老体量定的, 用例长到 2772 后已不是甜点; 详见 memory-bank/pitfalls/testing/parallel-run.md。silent_success: 成功只出结论行"
+note    = "TMPDIR 由 tests/unit/_tmp_bootstrap.py 自举(2026-11-02 起); 显式 -n 8 覆盖 pyproject [tool.pytest.ini_options] 默认(-n 4): 2772 个用例实测 -n 4 43.8s → -n 8 26.6s(2026-10-08)。**别再降回 -n 4** —— 那是按 tests/ 老体量定的, 用例长到 2772 后已不是甜点; 详见 memory-bank/pitfalls/testing/parallel-run.md。silent_success: 成功只出结论行"
 silent_success = true
 
 [tasks."test.pkg"]
@@ -93,11 +93,11 @@ note    = "默认**演练**(无参 = 只读盘点三层, 不动任何东西; 保
 doc     = "../../memory-bank/plans/26-11-12-0152-plan-linux-testbed-docker.html"
 
 # 随机序周巡检(flaky 治理计划 26-11-05-0118 S6/D10/D13): pytest-randomly 是 dev 依赖,
-# 但主套件默认**整体禁用**(pytest.ini addopts 的 -p no:randomly, 顺序必须不动);
+# 但主套件默认**整体禁用**([tool.pytest.ini_options] addopts 的 -p no:randomly, 顺序必须不动);
 # 本 task 是唯一显式随机序入口, 用脚本而非一行 run: `-o addopts=` 替换值含空格,
 # 引擎在 Windows 走 cmd.exe 引号地狱必踩(cmdline 组装单点在脚本 build_cmd, 有单测)。
 [tasks."test.random-order"]
 script  = "random_order.py"
 timeout = 1800
 when    = "pytest-randomly 随机序周巡检(顺序依赖采样): 红先固定 seed 复现归因再走 flaky 台账; 主套件默认顺序不受本任务影响"
-note    = "缺省 1 轮随机 seed; `-- --samples 3` 多轮统计采样, `-- --seed 42` 固定 seed 复现红灯, `--` 后其余参数透传 pytest。每轮头部打印 `--randomly-seed=<N>`(可复现); 任一轮红退出非零并打印复现命令 —— **不用 rerun 插件**(D9: reruns 不是修复), 红灯归因走 memory-bank/testing/flaky-ledger.md「巡检约定」节。实现: pytest.ini addopts 被 -o addopts=-n 8 -m 'not real_machine' 整体替换(去掉 -p no:randomly 与覆盖率旗标, 插件才加载; R8: 同串拼入 marker 过滤, 防真机用例在巡检轮被收集执行); 脚本纯函数有单测(test_random_order.py, 随 test.pkg 跑)"
+note    = "缺省 1 轮随机 seed; `-- --samples 3` 多轮统计采样, `-- --seed 42` 固定 seed 复现红灯, `--` 后其余参数透传 pytest。每轮头部打印 `--randomly-seed=<N>`(可复现); 任一轮红退出非零并打印复现命令 —— **不用 rerun 插件**(D9: reruns 不是修复), 红灯归因走 memory-bank/testing/flaky-ledger.md「巡检约定」节。实现: [tool.pytest.ini_options] addopts 被 -o addopts=-n 8 -m 'not real_machine' 整体替换(去掉 -p no:randomly 与覆盖率旗标, 插件才加载; R8: 同串拼入 marker 过滤, 防真机用例在巡检轮被收集执行); 脚本纯函数有单测(test_random_order.py, 随 test.pkg 跑)"

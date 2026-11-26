@@ -43,7 +43,7 @@ def test_build_cmd_shape():
     assert "-o" in cmd and f"addopts={ADDOPTS_OVERRIDE}" in cmd  # 随机序开关 + R8 marker 过滤 = 替换 ini addopts
     assert "--randomly-seed=123" in cmd
     assert cmd[-2:] == ["-k", "hr"]
-    assert "-p" not in cmd  # 不再禁用 randomly(禁用在被替换掉的 pytest.ini addopts 里)
+    assert "-p" not in cmd  # 不再禁用 randomly(禁用在被替换掉的 [tool.pytest.ini_options] addopts 里)
     # 复现命令是可直接粘进 shell 的形态(list2cmdline): 含空格的 addopts 值必须带引号,
     # 值内引号按 Windows 规则转义(R8: marker 过滤串必须随替换值一起落到 argv)
     assert reproduction_cmd(123, []) == subprocess.list2cmdline(build_cmd(123, []))

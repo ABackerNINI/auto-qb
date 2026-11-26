@@ -53,9 +53,9 @@ dev = [
     "bump-my-version==1.8.1",
     "pytest==9.2.0",
     "pytest-cov==7.1.0",
-    # 并行跑测试: 全量 19.4s → 5.0s(`-n 4`)。见 pytest.ini 的 addopts 与
+    # 并行跑测试: 全量 19.4s → 5.0s(`-n 4`)。见本文 [tool.pytest.ini_options] 的 addopts 与
     # memory-bank/pitfalls/testing/parallel-run.md (含 sidefx 台账在并行下的回传机制)。
-    # 随机序周巡检(flaky 治理计划 26-11-05-0118 S6/D10/D13): **默认禁用**(pytest.ini addopts
+    # 随机序周巡检(flaky 治理计划 26-11-05-0118 S6/D10/D13): **默认禁用**([tool.pytest.ini_options] addopts
     # `-p no:randomly`, 主套件默认顺序不变), 显式巡检入口 `commands run test.random-order`。
     # 巡检约定单点: memory-bank/testing/flaky-ledger.md「巡检约定」节。
     "pytest-randomly==5.0.0",
@@ -77,6 +77,27 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# pytest 配置(原 pytest.ini 逐项平移, 计划 D10/S3): 本文件即 rootdir 锚。
+# -n 8: 并行甜点随用例体量与负载形态变: unit 是 CPU 轻量单测(2772 例 -n 4 43.8s, -n 8 26.6s);
+#   .commands 那批真实 git 子进程是 IO 密集, 同样 -n 8; -n auto(32 worker)打满机器致夹具超时, 别用。
+#   单文件排查加 -n 0(worker 启动反而慢); sidefx 台账并行下靠 conftest workeroutput 回传,
+#   覆盖率与串行差 1 个单位, 换并行要重刷基线(memory-bank/pitfalls/testing/parallel-run.md)。
+# -p no:randomly: pytest-randomly 默认整体禁用, 主套件顺序不动; 唯一显式随机序入口 test.random-order
+#   用 -o addopts= 整体替换本行加载插件(替换串已拼入 -m "not real_machine", R8)。
+# 覆盖率闸不在这里写死: 两侧分母不同(Windows 独有代码 Linux 跑不到), 单一阈值必有一侧恒红;
+#   阈值单点在 tests/unit/conftest.py::pytest_configure(Windows 99.5 / 其余 99.0)。
+# filterwarnings 按消息前缀精确匹配, 不整体关 DeprecationWarning/UserWarning; starlette 那条是
+#   UserWarning 子类, 按类别匹配会落空, 只认消息前缀。
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-n 8 --cov=src --cov-report=term-missing --cov-branch -p no:randomly -m \"not real_machine\""
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient`:",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:",
+]
+markers = ["real_machine: 真机实测轨用例(默认 deselect, 走 real.run/real.suite)"]
 
 # 版本号单源接线: 构建时从 __init__.py 的 __version__ 行提取(计划 26-09-22-2318 v2 §4.2/§05)。
 [tool.hatch.version]

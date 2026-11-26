@@ -29,7 +29,7 @@ def serial():
     """跨进程串行: RM10-01/02 起真 CLI 连 qB, RM10-03/04/08 写 HKCU 注册表 + 弹 toast ——
     并行跑会互相污染观测窗(进程表采样)。
 
-    `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**
+    根 pyproject `[tool.pytest.ini_options]` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` 标记**不生效**
     (RM01 实测), 直跑 pytest 会互相抢资源; 官方跑法 `real.suite` 传 `-n 0` 本就没问题,
     但一把文件锁比"记得加 -n 0"可靠 —— 照抄 rm08_webui_read/conftest.py。
     """

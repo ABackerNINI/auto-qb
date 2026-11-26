@@ -7,7 +7,7 @@
     commands run test.random-order -- -- -k hr            # `--` 后再传参透传给 pytest
 
 设计:
-- **主套件默认顺序不动**: pytest.ini addopts 以 `-p no:randomly` 整体禁用该插件; 本入口用
+- **主套件默认顺序不动**: [tool.pytest.ini_options] addopts 以 `-p no:randomly` 整体禁用该插件; 本入口用
   `-o addopts=...` 整体替换 ini addopts(去掉禁用行), 插件才加载 —— 随机序只在这条入口发生。
 - **可复现**: 每轮打印 `--randomly-seed=<N>`(pytest-randomly 头部输出); 红灯时额外打印
   固定 seed 的完整复现命令。
@@ -29,7 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]  # .commands/test/scripts/ → 仓库根
 
-# 覆盖 pytest.ini addopts 的替换值: 保留并行度, 去掉 `-p no:randomly`(插件因此加载)与
+# 覆盖 [tool.pytest.ini_options] addopts 的替换值: 保留并行度, 去掉 `-p no:randomly`(插件因此加载)与
 # 覆盖率旗标(巡检是采样不是门禁, 不吃覆盖率开销; pytest-cov 插件仍自动加载, 语义不变)。
 # R8: 必须拼入 `-m "not real_machine"` —— 整体替换会丢掉 ini 里的 marker 过滤, 真机用例
 # 会在巡检轮被收集执行(真机环境在位时产生真实副作用); 引号供 pytest 的 addopts shlex 解析。

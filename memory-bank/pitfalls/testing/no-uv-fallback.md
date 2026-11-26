@@ -25,7 +25,7 @@
   $env:TMPDIR='C:/Users/<用户>/AppData/Local/Temp'      # 不存在则先 New-Item -ItemType Directory
   $env:COVERAGE_FILE="$env:TMPDIR/aqb.coverage"          # 覆盖率文件不能落仓库根(tmpdir.md)
   $bt = "$env:TMPDIR/aqb-bt-" + [guid]::NewGuid().ToString('N').Substring(0,8)  # basetemp 必须"全新"
-  .venv/Scripts/python.exe -m pytest tests -q --basetemp=$bt   # -n 8 等由 pytest.ini addopts 供
+  .venv/Scripts/python.exe -m pytest tests -q --basetemp=$bt   # -n 8 等由 pyproject [tool.pytest.ini_options] addopts 供
   ```
 
   单文件 / 筛选用例: 把 `tests` 换成目标文件并补 `-n 0 --no-cov`(与 `test.one` 口径一致; 单文件跑并行反而慢在 worker 启动, 覆盖率门槛只对全量收集面有意义, 见 `single-file-coverage-gate.md`)。全量判据看**末行**: `N passed, M skipped in …` + `Required test coverage of 98% reached`(exit=0)。

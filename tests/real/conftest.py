@@ -1,6 +1,6 @@
 """真机实测轨的 pytest 基座 —— 守卫 fixture + 伪 tracker + 临时目录。
 
-本目录已随测试树三分并入 `tests/real`, 落在 `pytest.ini` 的 `testpaths` 下: 靠本文件无条件
+本目录已随测试树三分并入 `tests/real`, 落在 pyproject `[tool.pytest.ini_options]` 的 `testpaths` 下: 靠本文件无条件
 打上的 `real_machine` 标记, 由 addopts 的 `-m "not real_machine"` 统一过滤, 主套件零扰动。
 跑真机一律走 `real.run` / `real.suite`(task id, 内部 `-m real_machine` 反向选择), 不要裸 pytest
 —— 裸跑会跳过守卫 fixture 之外的环境核验(例如实例没起时应该给一句人话, 而不是 30 条红)。

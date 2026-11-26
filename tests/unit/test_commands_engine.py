@@ -1,6 +1,6 @@
 """test_commands_engine 测试计划: commands 引擎(`.agents/skills/commands/scripts/`)的输出契约与 id 解析
 
-引擎不在 `src/` 下(pytest.ini 的 pythonpath 只含 src), 用路径显式装载。
+引擎不在 `src/` 下(pyproject 的 [tool.pytest.ini_options] pythonpath 只含 src), 用路径显式装载。
 输出契约守阵(2026-09-30 定调): 默认**全文透传**, 无有损摘要、无「略过 N 行」提示;
 省 token 走声明式 silent_success(成功只出结论行)—— 摘要 + 提示会逼 agent 调用方
 show → 裸跑两步返工, 会话后期每步都是带全量历史的整轮请求(token 税)。
