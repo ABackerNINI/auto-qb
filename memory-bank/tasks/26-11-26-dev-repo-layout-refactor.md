@@ -1,9 +1,9 @@
 # 26-11-26-dev-repo-layout-refactor — 仓库目录结构重构
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-26
-**Updated:** 2026-11-26
-**Summary:** 仓库目录结构重构:测试树三分(tests/{unit,e2e,real})与根目录瘦身;方案权威在计划 26-11-26-0503(Open),本档案跟踪执行 S0–S5 与验收
+**Updated:** 2026-11-27
+**Summary:** 仓库目录结构重构已落地:测试树三分(tests/{unit,e2e,real})+根目录瘦身+docker归置+pytest配置并入pyproject+文档回写,零逻辑改动;方案权威在计划 26-11-26-0503(Done),本档案记 S0–S5 执行与验收,全量绿见 kb.baseline 26-11-27-0125
 **Topics:** dev-repo-layout-refactor
 **Refs:** memory-bank/plans/26-11-26-0503-plan-repo-layout-refactor.html
 
@@ -35,11 +35,11 @@
 |---|---|---|
 
 | S0 | 前置快照与各 clone WIP 核验 | Done |
-| S1 | 根瘦身批(assets/minimal/sim+qb_capture/hatch_build/env.sh/config/.dockerignore) | Open |
-| S2 | 测试树批(tests/unit + tests/e2e + tests/real) | Open |
-| S3 | pytest.ini 并入 pyproject | Open |
-| S4 | 回写批(AGENTS/README/conventions/pitfalls) | Open |
-| S5 | 终验收尾(守阵/test.full 基线切片/grep 清零) | Open |
+| S1 | 根瘦身批(assets/minimal/sim+qb_capture/hatch_build/env.sh/config/.dockerignore) | Done |
+| S2 | 测试树批(tests/unit + tests/e2e + tests/real) | Done |
+| S3 | pytest.ini 并入 pyproject | Done |
+| S4 | 回写批(AGENTS/README/conventions/pitfalls) | Done |
+| S5 | 终验收尾(守阵/test.full 基线切片/grep 清零) | Done |
 
 ## 进度日志
 
@@ -49,3 +49,5 @@
 
 - 2026-11-26 05:21 立项轮: 全库引用面盘点 + grilling 九问拍板(D1-D11, R1 扩围 qb_capture 三件) + 计划 26-11-26-0503 入库 Open + 档案立档; 零代码改动
 - 2026-11-26 22:06 S0 前置落档: collect-only 基线 7042 tests collected; 仓库根锚实测 83 处(69 文件, 比计划写的 64 多 19, 留 S2a 处理, 本批不管); tracked 数 tests 366 / e2e 90 / tests-real 65 / assets 17 / tools 34 / scripts 31 / resources 64; 冻结清单要点: 活口径最密集 tests-real/e2e/pytest.ini/scripts/sim_/qb_capture, 纯冻结豁免组 env.sh(全库无活口径引用)
+
+- 2026-11-27 01:25 仓库目录结构重构 S0-S5 全落地: 测试树三分 + 根瘦身 + docker 归置 + pytest 合并 + 文档回写, 全量绿基线切片已落

@@ -7,9 +7,9 @@
 <title>仓库目录结构重构: 测试树三分统一与根目录瘦身</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="repo-layout-refactor">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-26-0503">
-<meta name="doc-updated" content="26-11-26-0628">
+<meta name="doc-updated" content="26-11-27-0125">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-26-dev-repo-layout-refactor.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>仓库目录结构重构: 测试树三分统一与根目录瘦身</h1>
 <p class="lede">本篇只回答: 仓库目录怎么重组 —— 测试树三分(tests/{unit,e2e,real})、根目录瘦身(minimal.yml / hatch_build.py / assets / sim_* / env.sh)、docker 资产归置(config/ 并入 docker/ + .dockerignore 补窟窿)、pytest 配置并入 pyproject;全程零逻辑改动,纯移动 + 引用更新。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-26-0503 · <b>doc-updated</b> 26-11-26-0628 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-26-0503 · <b>doc-updated</b> 26-11-27-0125 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 2026-11-26 会话: 用户提出结构混乱清单 → 全库只读盘点(引用面取证, HEAD 303164f1) → grilling 一轮九问(Q1–Q9) → 用户拍板(四处改判, 见 §06)。
 </div>
 
