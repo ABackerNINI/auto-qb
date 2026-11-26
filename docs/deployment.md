@@ -16,14 +16,14 @@ auto-qb 是单进程长驻 Python 程序, 与容器的契约面很小: **配置�
     └── 容器 auto-qb:latest
         ├── auto-qb 进程 (ENTRYPOINT auto-qb, CMD /config/config.yml)
         │     └── 经 qB WebUI API 操作种子 —— 不经手种子文件, 无需挂载下载目录
-        ├── /config  ← bind mount ./config        (config.yml, 必须可写)
+        ├── /config  ← bind mount ./docker/config (config.yml, 必须可写)
         ├── /data    ← named volume auto-qb-data  (state.json / 锁 / 日志 / web.token)
         └── 8080     ← 宿主 8081                   (Web UI; 健康检查探的就是它)
 ```
 
 | 边界 | 容器内路径 | 挂载方式 | 说明 |
 |---|---|---|---|
-| 配置 | `/config` | bind mount `./config` | **必须可写**: Web UI 保存配置会写回 config.yml 并留 `.bak`, 挂只读会废掉配置能力 |
+| 配置 | `/config` | bind mount `./docker/config` | **必须可写**: Web UI 保存配置会写回 config.yml 并留 `.bak`, 挂只读会废掉配置能力 |
 | 数据 | `/data` | named volume `auto-qb-data` | `data_dir`: state.json / 单实例锁 / 日志 / web.token / hr/ / 跳检备份全在此; 换容器不丢状态 |
 | 端口 | `8080` | 映射宿主 `8081` | 宿主 qB WebUI 若占 8080, 映射侧避开; 改 `web.port` 需同步 compose 的 `ports` 与 `healthcheck` |
 
@@ -40,13 +40,13 @@ auto-qb 是单进程长驻 Python 程序, 与容器的契约面很小: **配置�
 
 ```bash
 # 0. (可选但建议) 预跑一遍校验, 免得容器反复重启才发现配置写错
-uv run python -c "from auto_qb.config import load_config; load_config('config/config.yml'); print('OK')"
+uv run python -c "from auto_qb.config import load_config; load_config('docker/config/config.yml'); print('OK')"
 
-# 1. 准备配置目录(必须在仓库根执行: compose 挂载 ./config)
-mkdir config
-cp docker/config.example.yml config/config.yml
+# 1. 准备配置目录(必须在仓库根执行: compose 挂载 ./docker/config)
+mkdir -p docker/config
+cp docker/config.example.yml docker/config/config.yml
 
-# 2. 编辑 config/config.yml: 填 qbittorrent 的 host / port / username / password
+# 2. 编辑 docker/config/config.yml: 填 qbittorrent 的 host / port / username / password
 #    容器示例默认 host: host.docker.internal(qB 在宿主机), NAS/远程填 IP
 
 # 3. 构建并启动(首次构建约 3.7 分钟; 依赖不变时只重建源码层, 约 9 秒)
@@ -58,7 +58,7 @@ docker exec auto-qb cat /data/web.token
 # 5. 浏览器打开 http://localhost:8081 (宿主 8081 -> 容器 web.port 8080), 输入密钥登录
 ```
 
-> ⚠ `config/` 已在 `.gitignore` 里(2026-09-26 起) —— 部署配置含真实 qB 凭据, 与根 `config.yml` 同一红线口径, 不会也不应进仓库。
+> ⚠ `docker/config/` 已在 `.gitignore` 里(2026-09-26 起) —— 部署配置含真实 qB 凭据, 与根 `config.yml` 同一红线口径, 不会也不应进仓库。
 
 ## 4. 配置详解(容器场景)
 
@@ -153,8 +153,8 @@ docker run --rm -v <项目名>_auto-qb-data:/data -v "$(pwd)":/backup alpine \
 ```
 
 > 卷名前缀是 compose 项目名(目录名), 不同目录部署时以 `docker volume ls` 实际输出为准。
-> 配置侧备份就是 `config/config.yml` 本身; Web UI 每次保存都会把上一版留到 `<data_dir>/config.yml.bak`
-> (❗在**数据卷**里, 不在 config/ 旁边 —— 设计如此, 见 [webui/server/common.py](../src/auto_qb/webui/server/common.py))。
+> 配置侧备份就是 `docker/config/config.yml` 本身; Web UI 每次保存都会把上一版留到 `<data_dir>/config.yml.bak`
+> (❗在**数据卷**里, 不在 docker/config/ 旁边 —— 设计如此, 见 [webui/server/common.py](../src/auto_qb/webui/server/common.py))。
 
 ## 9. 健康检查语义
 
@@ -294,7 +294,7 @@ A 类(除 #1 外)全部是"路径看不见"造成的。两条救回路径:
 services:
   auto-qb:
     volumes:
-      - ./config:/config
+      - ./docker/config:/config
       - auto-qb-data:/data
       - /volume1/downloads:/volume1/downloads:ro   # ← 与 qB 报回的 save_path 逐字一致
 ```
@@ -312,7 +312,7 @@ qB 报回 `D:\Downloads\...` 盘符路径, Linux 容器里挂载点只能是 `/m
 services:
   auto-qb:
     volumes:
-      - ./config:/config
+      - ./docker/config:/config
       - auto-qb-data:/data
       - D:\Downloads:/mnt/downloads:ro             # Windows 宿主(Docker Desktop 文件共享须包含该盘, 见 §4)
 ```

@@ -6,7 +6,7 @@
 #   4. notify.enabled: false 显式写死 —— 无桌面环境, 平台通知预期不可用
 #   5. grouping.check_missing_files: false —— 缺文件扫描读宿主磁盘, 不关会误暂停整组并打 MISSING 标签
 #      (2026-09-26 补; 逐项依据见 docs/deployment.md §11)
-# 用法: cp docker/config.example.yml config/config.yml, 改好 qbittorrent 三项后 docker compose up -d --build
+# 用法: cp docker/config.example.yml docker/config/config.yml, 改好 qbittorrent 三项后 docker compose up -d --build
 # [!] qB 凭据请占位替换, 不要把真实密码提交进仓库
 config:
     interval: 60S

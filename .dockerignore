@@ -4,9 +4,11 @@
 # 🔴 红线: 生产配置与运行时数据绝不进镜像 (AGENTS.md; 容器场景走 bind mount / named volume)
 config.yml
 auto-qb-data/
+docker/config/
 
 # 版本控制与 AI 工具链
 .git/
+.github/
 .gitignore
 .zcode/
 .trae/
@@ -22,6 +24,7 @@ commands.cmd
 
 # 开发 / 测试 / 文档资产
 .venv/
+node_modules/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -31,7 +34,12 @@ htmlcov/
 cov-report.txt
 dist/
 tests/
+e2e/
+tests/e2e/
+tests-real/
+tests/real/
 scripts/
+tools/
 extensions/
 resources/
 assets/
@@ -39,7 +47,11 @@ docs/
 memory-bank/
 logs/
 skip-check-backup/
-minimal.yml
+tmp-analysis/
+package*.json
+playwright.config.mjs
+compose.yaml
+examples/
 uv.lock.bak
 
 # 杂项文档 (README.md / LICENSE 除外, 见顶部说明)
@@ -47,3 +59,10 @@ AGENTS.md
 CLAUDE.md
 TODO.md
 想法.md
+
+# 显式保留: 镜像构建必需, 不随上述宽泛排除误伤
+!README.md
+!LICENSE
+!pyproject.toml
+!uv.lock
+!src/

@@ -1,5 +1,5 @@
 # auto-qb 单服务编排 (plan 26-09-25-2241 · D3/D4/D6/D7)
-# 用法: 先 cp docker/config.example.yml config/config.yml 并填好 qB 地址, 再 docker compose up -d --build
+# 用法: 先 cp docker/config.example.yml docker/config/config.yml 并填好 qB 地址, 再 docker compose up -d --build
 # 详见 docs/deployment.md
 services:
   auto-qb:
@@ -13,7 +13,7 @@ services:
     ports:
       - "8081:8080" # 宿主 8081 -> 容器 web.port(避开宿主 qB WebUI 的 8080; 改 config.web.port 需同步这里与 healthcheck)
     volumes:
-      - ./config:/config # config.yml 所在; 必须可写(Web UI 保存写回 + 自动 .bak, 挂只读会废掉配置能力)
+      - ./docker/config:/config # config.yml 所在; 必须可写(Web UI 保存写回 + 自动 .bak, 挂只读会废掉配置能力)
       - auto-qb-data:/data # data_dir: state.json / 单实例锁 / 日志 / web.token / hr/ / 跳检备份
       # 下载目录挂载示例(plan 26-09-27-1407): 配合 config.yml 的 fs.path_map(样例见 docker/config.example.yml)。
       # Windows 宿主(Docker Desktop 部署前提: Settings → Resources → File Sharing 须包含该盘, WSL2 后端默认可用):
