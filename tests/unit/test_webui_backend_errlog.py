@@ -17,6 +17,10 @@
 ### T2a 覆盖率第三轮
 - test_public_traffic_view_shapes: 轮询流量快照出口 —— falsy 原样返回 / 常规视图浅拷贝摘 history 原视图不动
 - test_emit_swallows_poisoned_record: emit 静默兜底 —— 坏格式参数记录不逃逸, 错误环零污染
+### S1-a errlog 事件入口(计划 26-11-27-0530)
+- test_errlog_event_payload_and_seq_monotonic: append_err 出锁推 errlog 小真值 payload{seq,level,msg}, seq 单调且与环对齐
+- test_notify_called_outside_err_lock: notify 在 err_log_lock 出锁后调用(不持锁广播, 无锁嵌套)
+- test_log_thread_notify_nonblocking_and_dropped: 日志线程并发调用不阻塞/不死锁; 满额/慢消费者走既有 notify_dropped
 """
 import inspect
 import logging
@@ -229,3 +233,85 @@ def test_emit_swallows_poisoned_record():
     poisoned = _record(logging.WARNING, "bad %d", args=("not-a-number", ))
     WebErrLogHandler(rt).emit(poisoned)  # 不得抛(收集器永不干扰业务日志)
     assert len(rt.err_log_ring) == 0 and rt.err_log_seq == 0
+
+
+# ---------- S1-a: append_err 出锁后 notify("errlog", {seq, level, msg}) ----------
+
+
+def test_errlog_event_payload_and_seq_monotonic():
+    """事件载荷与 seq 单调性: 每条 WARNING+ 恰推一条 errlog, payload 只带小真值, seq 与环逐条对齐
+
+    绝不推全量环(计划 D3): payload 键集严格 {seq, level, msg}, 不含 ts/环数组。
+    DEBUG/INFO 不入环也不推事件; seq 进程内单调递增, 重启归零语义不变。
+    """
+    rt = _runtime()
+    q = rt.subscribe()
+    _emit(rt, logging.DEBUG, "debug 不推")
+    _emit(rt, logging.INFO, "info 不推")
+    assert q.empty(), "DEBUG/INFO 不得推 errlog 事件"
+
+    triples = [(logging.WARNING, "WARNING", "w1"), (logging.ERROR, "ERROR", "e1"), (logging.CRITICAL, "CRITICAL", "c1")]
+    for levelno, _level, msg in triples:
+        _emit(rt, levelno, msg)
+
+    events = [q.get_nowait() for _ in triples]
+    assert q.empty(), "每条 WARNING+ 恰推一条事件, 不多推"
+    assert all(e["type"] == "errlog" for e in events)
+    assert [e["payload"]["seq"] for e in events] == [1, 2, 3], "事件 seq 单调自增"
+    for ev, (_levelno, level, msg) in zip(events, triples):
+        payload = ev["payload"]
+        assert set(payload) == {"seq", "level", "msg"}, f"payload 只带小真值, 不发全量环: {payload}"
+        assert payload["level"] == level and payload["msg"] == msg
+    # 事件 seq 与环 seq 逐条对齐(环内 seq 单调; 事件取自同一自增计数器)
+    assert [e["seq"] for e in rt.err_log_ring] == [e["payload"]["seq"] for e in events]
+
+
+def test_notify_called_outside_err_lock():
+    """出锁广播: append_err 调 notify 时 err_log_lock 已释放(无锁嵌套, 日志线程安全例外成立)
+
+    若 notify 被挪进 err_log_lock 临界区, 锁嵌套会与 _sub_lock 形成潜在反序竞争;
+    本用例把锁状态作为可观测事实钉死 D3 的「出锁后」约束。spy 仍转发真实 notify, 事件照常落袋。
+    """
+    rt = _runtime()
+    q = rt.subscribe()
+    observed = []
+    orig_notify = rt.notify
+
+    def spy(etype, payload):
+        observed.append((etype, dict(payload), rt.err_log_lock.locked()))
+        return orig_notify(etype, payload)
+
+    rt.notify = spy
+    _emit(rt, logging.WARNING, "锁外推")
+    assert observed == [("errlog", {"seq": 1, "level": "WARNING", "msg": "锁外推"}, False)], observed
+    assert q.get_nowait()["payload"]["seq"] == 1, "spy 转发后事件仍真实送达"
+
+
+def test_log_thread_notify_nonblocking_and_dropped():
+    """日志线程并发调用不阻塞/不死锁; 满额或慢消费者走既有 notify_dropped
+
+    背景线程模拟 WebErrLogHandler 的日志线程: 订阅队列容量 1 且不消费(慢消费者),
+    连推 N 条 —— 第 1 条入队, 其余走 notify 既有 queue.Full -> notify_dropped 分支。
+    线程必须能在超时内跑完(任一处阻塞/死锁都会挂住 join), 且环 seq 与计数精确。
+    """
+    import queue
+    import threading
+
+    rt = _runtime()
+    slow_q = queue.Queue(maxsize=1)
+    with rt._sub_lock:
+        rt._subscribers.append(slow_q)
+
+    n = 50
+
+    def worker():
+        for i in range(n):
+            _emit(rt, logging.WARNING, f"线程日志 {i}")
+
+    t = threading.Thread(target=worker, daemon=True)  # 真死锁时断言失败后不拖住解释器退出
+    t.start()
+    t.join(timeout=5)
+    assert not t.is_alive(), "日志线程调用 append_err/notify 不得阻塞或死锁"
+    assert rt.err_log_seq == n and len(rt.err_log_ring) == n, "环 seq/条目数不受队列满影响"
+    assert rt.notify_dropped == n - 1, f"满额应走既有 notify_dropped(第 1 条入队, 其余丢): {rt.notify_dropped}"
+    assert slow_q.qsize() == 1, "慢消费者队列只留首条, 不 backpressure 日志线程"

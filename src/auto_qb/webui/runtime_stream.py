@@ -74,10 +74,19 @@ class StreamMixin:
     # ------------------------------------------------------------------ 错误历史(/api/errlog)
 
     def append_err(self, msg: str, level: str) -> None:
-        """入环一条 WARNING+ 记录(日志线程经 WebErrLogHandler 调用): seq 自增, 环满挤最旧"""
+        """入环一条 WARNING+ 记录(日志线程经 WebErrLogHandler 调用): seq 自增, 环满挤最旧
+
+        出锁后 notify("errlog", {seq, level, msg}) 只推小真值(计划 26-11-27-0530 S1-a/D3):
+        发布点在日志线程是明示例外, 靠 notify 的 _sub_lock 复制订阅者 + put_nowait 非阻塞
+        保证安全 —— 不引入线程交接队列, 不改 seq 重启归零语义, 不推全量环。
+        """
         with self.err_log_lock:
             self.err_log_seq += 1
-            self.err_log_ring.append({"seq": self.err_log_seq, "ts": self._clock.now(), "level": level, "msg": msg})
+            seq = self.err_log_seq
+            self.err_log_ring.append({"seq": seq, "ts": self._clock.now(), "level": level, "msg": msg})
+        # 出锁再广播: 不在 err_log_lock 临界区内持锁调 notify(避免锁嵌套); 队列满/异常
+        # 由 notify 既有 notify_dropped 计数承载, 慢消费者靠 60s GET 对账补, 不加静默计时器。
+        self.notify("errlog", {"seq": seq, "level": level, "msg": msg})
 
     def err_log_since(self, after: int) -> Tuple[List[dict], int]:
         """只读增量(Web 线程): 回 (seq > after 的条目, 环当前最大 seq)
