@@ -7,9 +7,9 @@
 <title>webui/server/auth.py 变异测试审计</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="mutation-webui-auth">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-11-27-0321">
-<meta name="doc-updated" content="26-11-27-0517">
+<meta name="doc-updated" content="26-11-27-0630">
 <meta name="doc-refs" content="memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html, memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>webui/server/auth.py 变异测试审计</h1>
 <p class="lede">本篇只回答: 如何把 <code>src/auto_qb/webui/server/auth.py</code> 作为唯一变异目标, 用两文件定向池完成首轮、三分类、必要补测与同池复跑, 并把结果落到基线切片和常驻锚。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-27-0321 · <b>doc-updated</b> 26-11-27-0517 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-27-0321 · <b>doc-updated</b> 26-11-27-0630 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「做一次变异测试, 参考常驻锚, 先写一个计划」; 常驻锚 §07; mutation-testing skill; 当前源码与测试池盘点。
 </div>
 
@@ -93,7 +93,7 @@
   <li>命令一律走 <code>.commands/mutants/</code> 包 task id; <code>forkserver</code>、<code>-n 0 --no-cov</code>、文本层守阵 deselect 由包脚本内建。</li>
   <li>基线不绿不开跑; <code>TIMEOUT / UNKNOWN / APPLY_FAIL / FLAKY / SUSPICIOUS / SEGFAULT</code> 是未判定, 既不算杀死也不算存活。</li>
   <li>量化只认 <code>mutants.run</code> 同池复跑; 手搓变异只用于形态复验和新守阵红验。</li>
-  <li>本计划阶段不改 <code>src/</code> 或 <code>tests/</code>, 不执行变异测试; 实施前先完成 §05 拍板。</li>
+  <li>立项阶段未改 <code>src/</code> 或 <code>tests/</code>、未执行变异测试; D1–D3 已于 2026-11-27 拍板, 计划转入 <code>In Progress</code>, 后续按 §04 分批实施。</li>
 </ul>
 
 <h2><span class="no">§02</span>现状与痛点</h2>
@@ -107,9 +107,9 @@
 <p>按历史变异密度 <code>0.84–1.23 / 行</code> 估算, 本轮约 <b>175–256 个变异</b>; 这是排期估算, 不是验收数字。首轮与报告是分钟级, <code>verify</code> 才是时间大头, 必须先收窄候选。</p>
 <h3>2.2 为什么要做</h3>
 <ul>
-  <li>常驻锚 §07 仍把 <code>infra/</code> 与 <code>webui/server/</code> 合并在「待做」行; <code>auth.py</code> 尚无变异刻度。</li>
+  <li>立项时常驻锚 §07 把 <code>infra/</code> 与 <code>webui/server/</code> 合并在「待做」行; S1 已拆成两个父包待做行, 并新增 <code>webui/server/auth.py</code> 待做行, 尚无变异刻度。</li>
   <li>覆盖率不能证明鉴权守阵的强弱: 一个 <code>and/or</code>、边界端口、票据路径集合或 fail-closed 分支被改错, 现有状态码断言可能仍绿。</li>
-  <li>计划盘点时该目标的容器镜像仓尚未建立; S1 必须先 <code>mutants.setup</code>, 不能把历史 <code>versioning.py</code> 结果当本轮基线。</li>
+  <li>计划盘点时该目标的容器镜像仓尚未建立; S1 用 <code>mutants.setup</code> 建立本轮镜像, 不能把历史 <code>versioning.py</code> 结果当本轮基线。</li>
 </ul>
 
 <h2><span class="no">§03</span>方案总览</h2>
@@ -141,14 +141,14 @@
 <h2><span class="no">§04</span>实施步骤</h2>
 <table>
   <tr><th>步</th><th>动作</th><th>验收判据</th></tr>
-  <tr><td>S0 入场</td><td><code>commands run my-commit-flow.sync</code>; <code>commands run test.quick</code>; 容器不在运行先 <code>commands run test.linux-env</code>; 重新读远端任务档案取真实 R 号</td><td>基线绿; R 号不撞车; 只动当前 clone</td></tr>
-  <tr><td>S1 建镜像</td><td>S0 同步后, 开跑前先把常驻锚 §07 的 <code>infra/ · webui/server/</code> 合并行拆成 <code>infra/</code> 与 <code>webui/server/</code> 两行待做, 新增 <code>webui/server/auth.py</code> 待做行与本计划指针; 再执行 <code>commands run mutants.setup -- --target 'src/auto_qb/webui/server/auth.py'</code>; 完成 §03.3 矩阵核验, 按包内说明把两池文件同步进选定镜像并确认内容, 再跑定向池与 <code>test.quick</code>。D3 若选专用镜像, S1–S6 全部追加上同一个 <code>--mirror &lt;容器内绝对路径&gt;</code></td><td>锚待做行已插且父包未被标已做; 镜像仓可读写; 工具版本可记录; 安全矩阵无缺项; 镜像内两池文件与工作树一致</td></tr>
-  <tr><td>S2 首轮</td><td><code>commands run mutants.run -- --target 'src/auto_qb/webui/server/auth.py' --pool tests/unit/test_web_auth.py tests/unit/test_web_traffic_stream.py --children 3 --timeout-multiplier 15 --no-refresh</code></td><td>记变异数 / 杀死率 / 墙时与 CPU 耗时 / 工具版本 / children / timeout multiplier / 机器 / 选择池</td></tr>
-  <tr><td>S3 导出</td><td><code>commands run mutants.report -- --target 'src/auto_qb/webui/server/auth.py' --status 'survived,no tests,timeout,suspicious,segfault'</code></td><td>拿到带 unified diff 的非 killed 清单; 不用纯 id 清单分类</td></tr>
-  <tr><td>S4 确认</td><td>按 §03.4 从 S3 清单提取候选 id, 写成每行一个 id 的 <code>&lt;候选ids&gt;</code>, 执行 <code>commands run mutants.verify -- --ids-file &lt;候选ids&gt; --target 'src/auto_qb/webui/server/auth.py' --workers 3 --suite-timeout 1200 --no-refresh --recompute-baseline</code>; diff-only 只判明显等价项</td><td><code>KILLED</code> 记假存活; <code>SURVIVED</code> 逐个判真洞/等价; 未判定项复跑或记工具盲区, 不硬归类; 记候选覆盖数与 <code>KILLED</code> 数</td></tr>
+  <tr><td>S0 入场</td><td><code>commands run test.quick</code>; 容器不在运行先 <code>commands run test.linux-env</code>; 按 §06 分支边界核对本地任务档案与真实 R 号, 并只读核验远端 <code>develop</code> 上的共享任务档案。本轮本地分支无远端对应, 固定基线 <code>0ef94309</code>; S0/阶段开跑不运行 <code>my-commit-flow.sync</code>, 逐批本地提交。已实测远端 <code>develop</code> tip=<code>60fe6f3f03b4f026ad9d9c9e23c301e5deb3df61</code>, 共享任务档案最新 R43, R44 未占用; 最终合流再复核。收口按 §06 的 B7 顺序执行</td><td>基线绿; R 号不撞车; 只动当前 clone</td></tr>
+  <tr><td>S1 建镜像</td><td>S0 基线核验后, 开跑前先核验常驻锚 §07 已存在 <code>infra/</code>、<code>webui/server/</code>、<code>webui/server/auth.py</code> 三个待做行及 <code>auth.py</code> 行的计划/任务指针, 且 <code>infra/</code> 与 <code>webui/server/</code> 父包仍待做; 仅缺项才补建, 不重复拆分已不存在的合并行。再执行 <code>commands run mutants.setup -- --target 'src/auto_qb/webui/server/auth.py'</code>; 完成 §03.3 矩阵核验, 按包内说明把两池文件同步进选定镜像并确认内容, 再跑定向池与 <code>test.quick</code>。D3 若选专用镜像, S1–S6 全部追加上同一个 <code>--mirror &lt;容器内绝对路径&gt;</code></td><td>三个待做行与指针齐备且父包未被标已做; 镜像仓可读写; 工具版本可记录; 安全矩阵无缺项; 镜像内两池文件与工作树一致</td></tr>
+  <tr><td>S2 首轮</td><td>默认执行 <code>commands run mutants.run -- --target 'src/auto_qb/webui/server/auth.py' --pool tests/unit/test_web_auth.py tests/unit/test_web_traffic_stream.py --children 3 --timeout-multiplier 15 --no-refresh</code>; D3 撞车分支用同一命令将 <code>--children 3</code> 覆盖为 <code>--children 2</code> 并追加选定 <code>--mirror &lt;容器内绝对路径&gt;</code>。选定 children 与 mirror 一起贯穿首轮、复跑、report 与基线; verify 使用与首轮 children 等值的 workers, 并沿用同一选定 mirror</td><td>记变异数 / 杀死率 / 墙时与 CPU 耗时 / 工具版本 / children / timeout multiplier / 机器 / 选择池</td></tr>
+  <tr><td>S3 导出</td><td><code>commands run mutants.report -- --target 'src/auto_qb/webui/server/auth.py' --status 'survived,no tests,timeout,suspicious,segfault'</code>; D3 若选专用镜像, 同一命令追加选定 <code>--mirror &lt;容器内绝对路径&gt;</code>, 沿用首轮 children 口径</td><td>拿到带 unified diff 的非 killed 清单; 不用纯 id 清单分类</td></tr>
+  <tr><td>S4 确认</td><td>按 §03.4 从 S3 清单提取候选 id, 写成每行一个 id 的 <code>&lt;候选ids&gt;</code>, 执行 <code>commands run mutants.verify -- --ids-file &lt;候选ids&gt; --target 'src/auto_qb/webui/server/auth.py' --workers 3 --suite-timeout 1200 --no-refresh --recompute-baseline</code>; D3 撞车分支在同一 verify 命令中将 <code>--workers 3</code> 覆盖为 <code>--workers 2</code>, 并追加选定 <code>--mirror &lt;容器内绝对路径&gt;</code>; verify workers 与首轮 children 同数值, mirror 沿用同一专用路径; diff-only 只判明显等价项</td><td><code>KILLED</code> 记假存活; <code>SURVIVED</code> 逐个判真洞/等价; 未判定项复跑或记工具盲区, 不硬归类; 记候选覆盖数与 <code>KILLED</code> 数</td></tr>
   <tr><td>S5 处置</td><td>真洞各自入池或当场补断言; 新守阵做同构变异红验: 锚点 <code>count == 1</code>, 字节级替换前后比对, 原字节恢复并确认 <code>src/</code> 无差异, 再 <code>commands run test.full</code></td><td>红验确实变红; 锚点唯一且替换落地; 还原复绿; <code>src/</code> 零残留; 真洞 100% 有处置</td></tr>
-  <tr><td>S6 复跑</td><td>同目标同池同一镜像再跑: 给 S2 命令保留 <code>--no-refresh</code> 与 D3 的同一 <code>--mirror</code>; 新测试先同步进镜像。复跑后立即用同一 target/mirror/状态集再执行 <code>commands run mutants.report</code>, 保留首轮与复跑两份 dump</td><td>复跑存活 ≤ 首轮; 新增存活按两份 diff 逐条解释; 池文件集合与镜像不变</td></tr>
-  <tr><td>S7 记录</td><td><code>commands run kb.new baseline mutation-webui-auth --title 'webui/server/auth.py 变异测试审计' --total '&lt;test.full 原始汇总行&gt;' --refs 'memory-bank/tasks/26-10-08-test-mutation-audit.md'</code> 建切片; 写目标/池/计数/杀死率/墙时与 CPU 耗时/版本/children/超时倍率/机器/S4 候选覆盖数与 KILLED 数/未判定最终状态/首轮与复跑/真洞链接; 任务档案追加 R 号</td><td>字段齐; <code>--total</code> 逐字取自 test.full; 测试数字只在切片; 切片引用任务档案</td></tr>
+  <tr><td>S6 复跑</td><td>同目标同池同一镜像再跑: 沿用 S2 完整命令与选定 <code>--mirror</code>, 默认保留 <code>--children 3</code>, D3 撞车分支保留覆盖后的 <code>--children 2</code>; 保留 <code>--no-refresh</code>, 新测试先同步进镜像。复跑后立即用同一 target/mirror/children 口径与状态集再执行 <code>commands run mutants.report</code>, 保留首轮与复跑两份 dump; verify 使用与首轮 children 等值的 workers, 并沿用同一选定 mirror</td><td>复跑存活 ≤ 首轮; 新增存活按两份 diff 逐条解释; 池文件集合与镜像不变; children 与 mirror 和首轮一致; verify workers 与首轮 children 等值</td></tr>
+  <tr><td>S7 记录</td><td><code>commands run kb.new baseline mutation-webui-auth --title 'webui/server/auth.py 变异测试审计' --total '&lt;test.full 原始汇总行&gt;' --refs 'memory-bank/tasks/26-10-08-test-mutation-audit.md'</code> 建切片; 写目标/池/计数/杀死率/墙时与 CPU 耗时/版本/children/mirror/超时倍率/机器/S4 候选覆盖数与 KILLED 数/未判定最终状态/首轮与复跑/真洞链接; 任务档案追加 R 号</td><td>字段齐; <code>--total</code> 逐字取自 test.full; 测试数字只在切片; 切片引用任务档案</td></tr>
   <tr><td>S8 更锚</td><td>把 S1 登记的 <code>webui/server/auth.py</code> 待做行回填为实测行, 填日期/变异数/杀死率/轮次/切片与计划指针; 状态按复跑终态选择: 无残留标 <code>已做(已清)</code>, 有余量标 <code>已做(余量在池)</code></td><td>只更新该模块行, <code>infra/</code> 与 <code>webui/server/</code> 父包仍标待做; 状态与最终残留一致; 数字与切片逐位一致</td></tr>
 </table>
 
@@ -160,18 +160,21 @@
   <li>未修改生产配置、运行时数据或计划外模块; 未把单模块结果外推成整包结论。</li>
 </ul>
 
-<h2><span class="no">§05</span>待拍板清单</h2>
+<h2><span class="no">§05</span>拍板清单</h2>
 <table>
   <tr><th>编号</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
   <tr><td>D1</td><td>本轮目标</td><td>按本计划审计 <code>webui/server/auth.py</code>, 两文件定向池</td><td>暂缓 Web 鉴权面, 改做 <code>infra/utils_parse.py</code>; 业务风险较低</td></tr>
   <tr><td>D2</td><td>确认策略</td><td>安全高相关候选走全套件 <code>verify</code>, 明显等价项读 diff</td><td>全部存活逐条 <code>verify</code>; 证据最齐, 但时间成本最高</td></tr>
-  <tr><td>D3</td><td>镜像策略</td><td>默认按目标派生镜像; 检出同目标并行立即改用专用 <code>--mirror</code> 且 children 降为 2; 选定值贯穿 S1–S6 与复跑 report</td><td>全程专用镜像, 多占约一份镜像仓磁盘, 但免疫同目标默认仓撞车; 同一个路径贯穿 S1–S6 与复跑 report</td></tr>
+  <tr><td>D3</td><td>镜像策略</td><td>默认按目标派生镜像, 首轮/复跑默认 <code>--children 3</code>; 检出同目标并行立即改用专用 <code>--mirror</code>, 用同一 run 命令将 <code>--children 3</code> 覆盖为 <code>--children 2</code>; 选定 children 与 mirror 一起贯穿首轮、复跑、report 与基线; verify 使用与首轮 children 等值的 workers, 并沿用同一选定 mirror</td><td>全程专用镜像, 多占约一份镜像仓磁盘, 但免疫同目标默认仓撞车; 选定 children 与 mirror 一起贯穿首轮、复跑、report 与基线; verify 使用与首轮 children 等值的 workers, 并沿用同一选定 mirror</td></tr>
 </table>
 
 <h2><span class="no">§06</span>拍板记录</h2>
-<p class="cm">尚未拍板。D1–D3 确认后回填结论与日期, 计划才转入执行; 当前保持 Open。</p>
+<p class="cm">2026-11-27 用户已拍板 D1–D3, 计划转入 <code>In Progress</code>。S0/S1 按本地分支 <code>task/mutation-webui-auth</code>、基线 <code>0ef94309</code> 执行; 该分支无远端对应, 阶段实施不运行 <code>my-commit-flow.sync</code>。每步评审后由主会话执行 <code>commands run ship.commit --no-push</code> 做本地提交。B7 收口顺序固定为: 先将本地 <code>develop</code> 同步到远端最新 tip, 再 rebase 任务分支保线性; 在合流后的树上跑 <code>commands run test.full</code> 并做接缝终审; 最终快进本地 <code>develop</code>; 之后等待提交指令。</p>
 <table>
   <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>按本计划审计 <code>src/auto_qb/webui/server/auth.py</code>; 定向池仅 <code>tests/unit/test_web_auth.py</code> + <code>tests/unit/test_web_traffic_stream.py</code>。</td><td>2026-11-27</td></tr>
+  <tr><td>D2</td><td>安全高相关及无法证明全输入等价的候选走全套件 <code>mutants.verify</code>; 明显等价项读 diff 并记录理由。</td><td>2026-11-27</td></tr>
+  <tr><td>D3</td><td>默认按目标派生镜像与 <code>--children 3</code>; 仅在同 target 并行时切换唯一容器绝对路径的专用 <code>--mirror</code>, 同一 run 命令覆盖为 <code>--children 2</code>; 选定 children 与 mirror 贯穿首轮、复跑、report 与基线; verify 使用与首轮 children 等值的 workers, 并沿用同一选定 mirror。</td><td>2026-11-27</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -193,6 +196,11 @@
   <li><span class="tag">R0 · 26-11-27-0321</span> 初版。来源: 用户要求先写变异测试计划。按当前源码盘点把目标收敛到 <code>webui/server/auth.py</code>, 核定两文件定向池与函数面覆盖, 给出 S0–S8、三分类/verify、红验、同池复跑、基线与常驻锚收口判据。零 <code>src/</code> / <code>tests/</code> 改动; 未执行变异测试。</li>
   <li><span class="tag">R1 · 26-11-27-0458</span> S7 基线创建命令显式引用任务档案，闭合认领链</li>
   <li><span class="tag">R2 · 26-11-27-0517</span> 接缝终审修正：S1 开轮先登记待做锚行，S8 按最终残留选择已做状态</li>
+  <li><span class="tag">R3 · 26-11-27-0543</span> 用户拍板 D1–D3 并启动实施: 目标锁定 webui/server/auth.py 与两文件定向池, 安全高相关及非显然等价候选走全套件 verify, 镜像默认按目标派生且同 target 并行才切专用路径并降 children=2; 计划转 In Progress, 同步本地分支执行边界与 S1 锚行拆分现状。</li>
+  <li><span class="tag">R4 · 26-11-27-0556</span> S0/S1 实施步骤与本地无远端分支边界对齐：固定 0ef94309 基线、核对本地任务档案；S0/阶段开跑不做远端 sync，逐批本地提交，收口同步本地 develop；S1 从基线核验后开始。</li>
+  <li><span class="tag">R5 · 26-11-27-0600</span> 校正 Stage 1 与七批收口边界：阶段开跑不跑远端 sync；逐批评审后由主会话执行 ship.commit --no-push 本地提交；B7 接缝终审后同步本地 develop 并 rebase 保线性；推送仅由提交指令触发。</li>
+  <li><span class="tag">R6 · 26-11-27-0620</span> 修复 Stage 1 分面评审 3 条 major：B7 收口顺序、S0 远端共享档案轮次核验、D3/S2/S6 children 与 mirror 全链路；顺带修正 S1 锚行核验为缺项补建。</li>
+  <li><span class="tag">R7 · 26-11-27-0630</span> 修复 Stage 1 第二轮增量遗漏：S4 在 D3 撞车分支将 verify workers 从 3 覆盖为 2，明确其与首轮 children 等值且 mirror 沿用同一专用路径，并同步 S2/S6/D3/§06 链路口径</li>
 </ul>
 
 </div>

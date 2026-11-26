@@ -265,13 +265,31 @@
         <td><code>baselines/26-11-01-2024-mutation-core-w9b-modules-small.md</code><br><code>baselines/26-11-01-1734-mutation-core-w9a-grouping-ops.md</code><br><code>baselines/26-11-01-1430-mutation-core-w8-relocate.md</code><br><code>baselines/26-11-01-1017-mutation-audit.md</code><br><code>baselines/26-11-01-0722-mutation-core-w6-orchestrator.md</code><br><code>baselines/26-11-01-0218-mutation-core-w5-traffic-sample.md</code><br><code>baselines/26-10-31-1612-mutants-core-traffic-store.md</code><br><code>baselines/26-10-31-1227-mutants-core-tvshows-episodes-curves.md</code><br><code>baselines/26-10-31-0848-mutants-core-traffic-limits-grid.md</code><br><code>baselines/26-10-31-0518-mutants-core-state-taskqueue.md</code><br><code>plans/26-10-31-0128-plan-mutation-core.html</code>(W1–W9b)</td>
       </tr>
       <tr>
-        <td><code>infra/</code> · <code>webui/server/</code></td>
+        <td><code>infra/</code></td>
         <td>—</td>
         <td>—</td>
         <td>—</td>
         <td>—</td>
         <td><span class="badge">待做(最低, 可跳)</span></td>
-        <td>估值最低(IO 胶水层)</td>
+        <td>父包待做; <code>infra/versioning.py</code> 单模块流程已跑通, 见上表</td>
+      </tr>
+      <tr>
+        <td><code>webui/server/</code></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span class="badge">待做</span></td>
+        <td>父包待做; <code>webui/server/auth.py</code> 单模块见下一条</td>
+      </tr>
+      <tr>
+        <td><code>webui/server/auth.py</code></td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>R44(S0/S1)</td>
+        <td><span class="badge">待做</span></td>
+        <td><a href="../plans/26-11-27-0321-plan-mutation-webui-auth.html"><code>plans/26-11-27-0321-plan-mutation-webui-auth.html</code></a><br><a href="../tasks/26-10-08-test-mutation-audit.md"><code>tasks/26-10-08-test-mutation-audit.md</code></a>(R44)</td>
       </tr>
     </table>
     </div>

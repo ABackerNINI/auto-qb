@@ -352,3 +352,26 @@
 - 2026-11-27 05:03 auth.py 变异测试计划完成全量测试并建立基线切片；结构、引用链、命令漂移与常驻锚校验通过
 
 - 2026-11-27 05:19 接缝终审两条 minor 已修正，增量复评零 actionable；全量测试与基线切片完成，未执行变异实跑
+
+### 2026-11-27 R44 — webui/server/auth.py 变异审计第一批(S0/S1 环境、镜像与安全矩阵只读核验)
+
+- **触发与边界**: 用户指派本代理只做计划 [`26-11-27-0321-plan-mutation-webui-auth`](../plans/26-11-27-0321-plan-mutation-webui-auth.html) 的 Stage 1，不派子智能体、不提交/推送/rebase/sync、不改 `src/` 或 `tests/`、不执行变异。当前 clone 为本地分支 `task/mutation-webui-auth`，基线 `0ef94309`，无远端对应分支；开工工作树无未声明改动。
+- **D1–D3 拍板**: D1 目标 `src/auto_qb/webui/server/auth.py`，定向池仅 `tests/unit/test_web_auth.py` 与 `tests/unit/test_web_traffic_stream.py`；D2 安全高相关及无法证明全输入等价的候选走全套件 `mutants.verify`，明显等价项才读 diff；D3 默认按目标派生镜像，仅同 target 并行时切专用绝对路径并把 children 降为 2，选定值贯穿 S1–S6 与复跑 report。
+- **七批拆分**:
+  1. B1(S0/S1)：计划/锚/任务回写，环境基线、并行检查、镜像 setup、两池同步与安全矩阵只读核验。
+  2. B2(S1 收口)：只在既有两池文件补齐安全矩阵缺口，更新测试计划清单，跑定向池与快速基线。
+  3. B3(S2/S3)：默认或已选定镜像首轮变异，导出带 diff 的非 killed 清单。
+  4. B4(S3/S4)：按三分类读 diff，候选全套件 verify，逐项记录 KILLED/SURVIVED/未判定。
+  5. B5(S5)：真洞处置或显式余量，新增守阵同构红验并还原复绿，跑全量测试。
+  6. B6(S6)：同目标同池同镜像复跑并导出第二份清单，逐 id 对差解释新增存活。
+  7. B7(S7/S8)：收口先将本地 develop 同步到远端最新 tip，再 rebase 任务分支保线性；在合流后的树上跑 test.full；建最终基线切片、追加任务轮次、回填常驻锚并完成 KB 双向链与校验；做接缝终审；最终快进本地 develop；推送仅在后续收到提交指令时触发。
+
+Stage 1 子代理自身不提交；各步评审后的本地提交由主会话执行 `commands run ship.commit --no-push`。
+- **S0 实际**: 日期取 `commands run kb.time`；计划已转 `In Progress`，§06 已回填 D1–D3，变更记录由 `commands run kb.bump` 追加。常驻锚 §07 已把合并行拆为 `infra/` 与 `webui/server/` 两个父包待做行，并新增挂本计划指针的 `webui/server/auth.py` 待做行，`commands run kb.anchor` 通过。容器 `auto-qb-testbed` 已在运行，未重建环境；`commands run test.quick` 通过，数字留最终切片（见 `kb.baseline`）。
+- **S0 远端轮次只读核验**: 本地分支阶段未运行 `my-commit-flow.sync`；已只读核验远端 `develop` 共享任务档案，实测远端 `develop` tip=`60fe6f3f03b4f026ad9d9c9e23c301e5deb3df61`，档案最新 R43，R44 未占用；最终合流再复核。
+- **S1 并行与镜像**: `mutants.status` 显示 mutation 根目录尚不存在，容器内无 `mutmut run`/`mutants.py` 进程，未检出同 target 并行。采用默认镜像 `/root/auto-qb-tests/mutation/src-auto-qb-webui-server-auth-py`，setup 成功，镜像分支 `develop`、HEAD `0ef943093703`；children=3；镜像 venv 实测 `mutmut, version 3.8.1`。
+- **S1 两池同步核验**: 已把两池文件同步进上述镜像；宿主与镜像原始字节及 CRLF→LF 归一化内容均一致。`test_web_auth.py` 的 raw/LF SHA256 均为 `22632ad4a89388edb0818ab8f74ad5c24e18c22d71f473e6a0b4c3a26f6b698a`；`test_web_traffic_stream.py` 均为 `982ceaffedd38c1dd778814a298e618de9e5c3aaae1194294ccc35da9bca8886`。`docker cp` 带入的可执行位已恢复为 `0644`，镜像工作树随后无差异。
+- **S1 安全矩阵只读结果**: 既有池已覆盖 Host/Origin 解析与跨站拒绝、两张 SSE 路径票据消费及非 ASCII token 行为；本批发现三项待补：HTTP 80/HTTPS 443 默认端口显式正负断言、valid/invalid ticket × 外部 Host/Origin × 两张 SSE 路径组合、ASCII/非 ASCII 均以 UTF-8 bytes 调用 `secrets.compare_digest` 的确定性 spy。按 Stage 1 边界未改测试、未补跑定向池，三项留 B2；因此 S1「安全矩阵无缺项」尚未收口。
+- **后续撞车切换条件**: 任一后续批次开跑前若检出同 target 的活跃 `mutmut run`/`mutants.py` 进程、`only_mutate` 被改成别的目标，或默认仓出现别的 target 的 `mutants/*.meta`，立即停用默认仓；按当次 `kb.time` stamp 建立 `/root/auto-qb-tests/mutation/webui-server-auth-<stamp>` 专用镜像、children 降为 2，重新 setup/同步两池，并让该同一路径贯穿后续 S1–S6、verify 与复跑 report。本批未触发切换。
+- **本批结果**: 仅回写计划、常驻锚与本任务档案；未跑任何变异，未改 `src/`/`tests/`，未碰生产配置或运行数据，工作树保持已改未提交。
+- **Review 记录**: Stage 1 三轮评审累计 6 送检/4 过检/2 REFUTE；3 条 major 已修，verify workers 遗漏自主修正；收口复评 1 条引文过检但事实不成立（commit.py:432/587 明确支持 --no-push），零 actionable。
