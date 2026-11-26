@@ -9,9 +9,9 @@
 <meta name="issue-stamp" content="26-11-20-0408">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-sse">
-<meta name="doc-refs" content="memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/tasks/26-11-27-webui-sse.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="SSE 推送候选全景盘点: 流量图/错误日志/长任务/抽屉的推送化机会与排除项">
 <meta name="issue-summary" content="盘点 /api/events 基建之外可用 SSE 优化的功能面, 标出 P0-P3 候选与不宜推送的轮询面">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0408-feat-webui-sse-candidate-inventory</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 04:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
 </div>
@@ -176,7 +176,8 @@ memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html §04:
   <h2><span class="no">§07</span>状态变更日志</h2>
   <ul>
     <li>2026-11-20 04:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-  </ul>
+    <li>2026-11-27 — 状态 Open → In Progress（kb.status）</li>
+</ul>
   <h3>复验</h3>
   <p>2026-11-20 04:00 已按 HEAD <code>7bd4e7f4</code> 逐条核对 §04 锚点；认领后重跑对应 grep 关键词确认锚点仍有效，并按当时的面板状态确认轮询面仍存在。</p>
   <h3>修复后补充</h3>

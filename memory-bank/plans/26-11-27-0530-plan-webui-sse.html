@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>SSE 推送候选 P1/P2/P3 联合实施</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-sse">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-27-0530">
+<meta name="doc-updated" content="26-11-27-0542">
+<meta name="doc-refs" content="memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/tasks/26-11-27-webui-sse.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-sse</div>
+<h1>SSE 推送候选 P1/P2/P3 联合实施</h1>
+<p class="lede">本篇只回答: 候选全景清单中 P1 错误日志、P2 transfer 两段回执怎么落地，P3 抽屉为什么只做只读评估不出实施代码。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-27-0530 · <b>doc-updated</b> 26-11-27-0542 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 两轮(2026-11-27, D1-D12 全按推荐) + 三路只读取证(2026-11-27) + issue 26-11-20-0408 候选清单
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>把候选清单 issue 26-11-20-0408 的 P1/P2/P3 从「盘点」推进到「可开工」: P1 实施错误日志推送化, P2 只补 transfer D5b 两段回执（relocate 半边已交付不重做）, P3 出只读评估结论、不写实施代码。一份计划三阶段, 共用一套 SSE 纪律, 不另建子 issue。</p>
+<h3>设计底线（不变量）</h3>
+<ul>
+  <li><b>单一写线程</b>: 主循环线程纪律不破; P1 的发布点是日志线程, 靠 <code>notify</code> 非阻塞保证安全（不引入线程交接队列）。</li>
+  <li><b>只推信号与小真值</b>: 绝不推全量状态（3000 种子一轮全量约 63ms, 见 <code>events.py:40-41</code>）。</li>
+  <li><b>复用既有基建</b>: 一次性票据 / 心跳 / 满额 503 退轮询 / 单调 seq + 低频对账, 不加配置键。</li>
+  <li><b>通道分工</b>: 高频 per-scope 流走专用通道（P0 E1 已落地, 本计划不碰）; 全局低频通知走 <code>/api/events</code> 枢纽。</li>
+  <li><b>范围守恒</b>: P0 收口、relocate 两段回执、抽屉实施均不在本计划内; 计划外缺陷一律入池 issue。</li>
+  <li><b>幂等</b>: 重复执行无副作用; 状态变更只走 state_file 与既有回执面。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p class="aside">以下行号均系取证 2026-11-27（HEAD <code>eda5ae15</code>）, 认领后按符号与 grep 词复核。</p>
+<h3>P1 错误日志: 全链现成, 只缺事件入口</h3>
+<ul>
+  <li>后端 <code>err_log_since(after) -&gt; (items, last)</code> 与 seq 环在 <code>runtime_stream.py:76-90</code>; seq 进程内单调、重启归零（<code>runtime.py:263-269</code>）, 环容量 200（<code>runtime_common.py:39</code>）。</li>
+  <li><code>/api/errlog?after=</code> 路由 <code>system.py:53-64</code>; 前端 60s 补拉 <code>lifecycle.js:13/609-633</code>, 去重键 <code>"b"+seq</code>、未读计数看 <code>errPanelOpen</code>（<code>:587-598</code>）, 重启判定 <code>_errlogReseed(last&lt;cursor)</code>（<code>:43-45</code>）。</li>
+  <li><code>startEvents</code> 当前只监听 <code>cmd/truth/skip_check/ver</code>（<code>polling.js:80-102</code>）, 无 <code>errlog</code>; 精确检索 <code>notify("errlog"</code> 与 <code>addEventListener("errlog"</code> 在 src/tests 零命中。</li>
+  <li><b>痛点</b>: 错误最坏等 60s 才进面板; <code>notify</code> 的入环点是日志线程（<code>runtime_common.py:115-126</code>）, 与 issue 原文「发布点只在主循环线程」的纪律字面冲突——需在计划中明确例外, 否则实施者会卡在这里。</li>
+</ul>
+<h3>P2 长任务: relocate 已交付, transfer D5b 是唯一缺口</h3>
+<ul>
+  <li>relocate 探针 D8 两段回执已实施闭合: 计划 26-11-10-2350 状态 <code>Superseded</code>, R3 记提交 <code>7d99ce32</code>（T4 web 两段回执）, RM11 真机复验 PASS 后专题闭合。</li>
+  <li>transfer 验证计划 26-11-20-0127 状态 <code>Done</code>, 但 D5b 两段回执明示「后续阶段, 未排期, 不在本计划实施面」（<code>:76/158/189/258</code>）——这是 P2 唯一真实缺口。</li>
+  <li>回执基建已就位: <code>cmd</code> 事件带 <code>cmd_id</code> 广播（<code>runtime_commands.py:315-318</code>）, 前端按 id 过滤兑现（<code>commands.js:323-324</code>）, <code>waitCmd</code> 事件与轮询赛跑（<code>:210-215</code>）; transfer 终态经 <code>receipt_port -&gt; set_result</code> 已接线（<code>runtime_transfer.py:564</code>）。</li>
+  <li><b>关键陷阱</b>: 通用 <code>waitCmd</code> 把 <code>warn</code> 当终结态（<code>commands.js:234-235</code>）, 而 relocate 受理段正是 <code>warn</code>（<code>commands_torrents.py:472-479</code>）。transfer 若照抄, 受理段会被误判为终态、提前结算。S2 必须显式区分受理段与终态。</li>
+</ul>
+<h3>P3 抽屉: 收益被服务短缓存封顶</h3>
+<ul>
+  <li><code>startPoll("drawer")</code> 节拍为主节拍 1.5/2/3s（<code>drawer_store.js:172-198</code>）; 渲染是「写字段不重建 + Vue 同值不触发」（<code>:30-48/260-262</code>）。</li>
+  <li>1s/2s 来自本项目 Web 服务端 <code>RoCache</code>（<code>context.py:31</code>, <code>torrent_detail.py:88-91</code>）, <b>不是 qB 自身缓存</b>——issue 原文措辞有偏差, 本计划按代码事实修正, 不改 issue 原文。</li>
+  <li>P0 前置条件: 专用通道代码已交付（<code>traffic_stream.py:60-61</code>, <code>runtime_stream.py:125-134</code>）, 但计划 26-11-18-0037 状态仍 <code>Open</code>, 档案 26-11-18-webui-traffic-stepwise 仍 <code>In Progress</code>, Docker e2e 与真机冒烟两项补验未清偿。本计划不碰 P0 收口。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>（拍板 D1-D12, 见 §06）: 一份计划三阶段——S1 把错误日志接进 <code>/api/events</code> 枢纽并降级 60s GET 为对账; S2 只补 transfer D5b 两段回执, relocate 不再动; S3 只读评估抽屉推送化收益, 出结论不出代码。三阶段共用一套票据/心跳/503/seq/对账纪律, 逐批独立评审。</p>
+<table>
+  <tr><th>阶段</th><th>范围</th><th>落点</th><th>不做</th></tr>
+  <tr><td>S1 · P1</td><td>错误日志推送化</td><td><code>runtime_stream.py</code> 的 <code>append_err</code> 出锁后 <code>notify("errlog", {seq, level, msg})</code>; <code>polling.js</code> 加监听; <code>lifecycle.js</code> 事件入历史 + 60s GET 保留对账</td><td>不扩专用端点; 不新增配置键; 不改 seq 重启归零语义</td></tr>
+  <tr><td>S2 · P2</td><td>transfer D5b 两段回执</td><td>受理段由<b>前端 POST 返回即本地渲染</b>（沿用 <code>transfer_flow.js:337</code> 的 pending 图标形态）, 后端不推受理信号; 终态由现有 <code>receipt_port -&gt; set_result -&gt; notify("cmd")</code> 覆盖同 <code>cmd_id</code>; <code>waitCmd</code> 兜底</td><td>不动 relocate; 受理信号不进任何 SSE 事件面(cmd/truth 均不推); 不改通用 <code>waitCmd</code> 三态终结语义; 不建新事件类型</td></tr>
+  <tr><td>S3 · P3</td><td>抽屉推送化收益评估</td><td>量化 <code>startPoll("drawer")</code> 空转率与 <code>RoCache</code> 命中率, 结论写回本节</td><td>不写实施代码; 不建 report/子 issue; 不碰 P0 收口</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1-a</td><td>后端: <code>append_err</code> 在锁外 <code>notify("errlog", {seq, level, msg})</code>; payload 只带一条条目, 不发全量环</td><td>单测: 事件载荷字段与 seq 单调性; 日志线程调用不阻塞、不死锁; 满额/慢消费者仍走既有 <code>notify_dropped</code> 计数</td></tr>
+  <tr><td>S1-b</td><td>前端: <code>startEvents</code> 注册 <code>errlog</code> 监听, 复用 <code>_pullErrlog</code> 的落袋/去重/未读逻辑; 不额外发 GET</td><td>node 电池: 事件到达即入历史、面板关闭计未读、重复 seq 不重复计数; 双皮肤 e2e 面板可见</td></tr>
+  <tr><td>S1-c</td><td>对账: 60s GET 保留但只做校准; <code>_errlogReseed</code> 继续处理后端重启 seq 归零</td><td>单测/e2e: 模拟丢事件后下一轮 60s GET 补齐; 重启后游标重置重拉、不丢新条目</td></tr>
+  <tr><td>S1-d</td><td>守阵收尾: 既有 <code>test_webui_backend_errlog.py</code>(10) + <code>test_webui_error_history.py</code>(8) + <code>test_webui_static_r4_poll_auth_lifecycle.py</code>(11) 扩 NEW</td><td><code>commands run test.full</code> 全绿; 新基线切片; 无新增配置键（<code>validate_config</code> 守阵不动）</td></tr>
+  <tr><td>S2-a</td><td><b>后端不推受理信号</b>（根因: <code>onCmdEvent</code> 按 id 无条件兑现 + <code>warn</code> 终结态 <code>commands.js:234-235/323-324</code>; <code>onTruthEvent</code> 认 <code>truth</code> 即结算 <code>:348-372</code> —— 任何服务端受理信号都会触发两条终结路径之一）。受理段由 POST 返回的 <code>cmd_id</code> 在前端本地渲染; 终态仍由现有 <code>receipt_port -&gt; set_result -&gt; notify("cmd")</code> 覆盖同 <code>cmd_id</code></td><td>单测: 无新增事件类型/推送点; 终态覆盖同 id 且正常兑现; 单写线程纪律不变; 既有事件面清单守阵不增项</td></tr>
+  <tr><td>S2-b</td><td>前端: <code>transfer_flow.js</code> 在 POST 返回后本地渲染受理段（pending 行图标 + 「后台验证中」文案, 沿用 <code>:337</code> 形态）, 终态回执到达才结算三件套; <code>waitCmd</code> 保留作 SSE 丢事件兜底</td><td>node 电池 + 双皮肤 e2e: 受理段渲染后不结算、终态到达才结算; SSE 断开退回轮询仍正确</td></tr>
+  <tr><td>S2-c</td><td>真机时序冒烟: 「受理段先到、终态后到」两跳可见</td><td>按 <code>real.guard</code> 判定; qB 不可用记 BLOCKED, 不阻断入库; 可用则真机两跳断言</td></tr>
+  <tr><td>S3-a</td><td>只读量化: <code>drawer</code> 轮询空转率（同页签多拍无变化比例）+ <code>RoCache</code> 命中率</td><td>给出实测数字与取数方式; 不依赖 qB 真机数据</td></tr>
+  <tr><td>S3-b</td><td>结论入 §03/§07: 明确「现在做/条件触发/不做」三选一及理由</td><td>结论写入本计划变更记录; 无新建 issue/report; 若判定值得做, 另起独立排期（不在本计划内实施）</td></tr>
+</table>
+<p class="aside">分批顺序: S1 → S2 → S3, 每批收尾按 code-review skill 评审 + 回写 + 基线切片; S3 为纯只读批, 免真机轨。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— 本计划经两轮 grilling（2026-11-27, D1-D12）全部拍板, 结论见 §06。实施中若出现新决策点, 按协议追加 grilling 轮并回填本节与 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D#</th><th>问题</th><th>结论（2026-11-27, grilling 两轮, 全按推荐）</th></tr>
+  <tr><td>D1</td><td>联合计划形态</td><td>一份计划三阶段, 共用一套 SSE 纪律; 不拆三份独立计划。</td></tr>
+  <tr><td>D2</td><td>P1 通道</td><td>扩 <code>/api/events</code> 枢纽新增 <code>errlog</code> 事件; 不开专用端点（低频全局通知 vs 高频 per-scope）。</td></tr>
+  <tr><td>D3</td><td>P1 载荷与发布点</td><td><code>append_err</code> 出锁后 <code>notify("errlog", {seq, level, msg})</code>, 小真值非全量; 日志线程发布点为例外, 靠非阻塞保证安全。</td></tr>
+  <tr><td>D4</td><td>P2 范围裁剪</td><td>只做 transfer D5b; relocate 半边已交付, 标为不重做。</td></tr>
+  <tr><td>D5</td><td>P3 处置</td><td>只做只读评估 + 条件触发后续, 本轮不写实施代码。</td></tr>
+  <tr><td>D6</td><td>认领与状态</td><td>本计划认领 issue 26-11-20-0408 并翻 <code>In Progress</code>, 补双向链; 不建三个子 issue。</td></tr>
+  <tr><td>D7</td><td>P1 断档口径</td><td>payload 只带小真值; 队列满丢事件不加静默计时器, 靠保留的 60s GET 对账兜底。</td></tr>
+  <tr><td>D8</td><td>P1 前端消费</td><td>事件到达即用 payload 入历史（沿用去重 + 未读计数）, 不额外 GET; 60s GET 仅对账与游标校准。</td></tr>
+  <tr><td>D9</td><td>P2 两段回执形态</td><td>受理段即时回执 + 终态由现有 <code>receipt_port -&gt; set_result</code> 覆盖同 <code>cmd_id</code>; 前端两段消费, <code>waitCmd</code> 兜底。（两段回执的用户可见语义不变; 受理段实现按 R2 评审修复钉死: 后端不推信号、前端本地渲染。）</td></tr>
+  <tr><td>D10</td><td>P3 评估产物</td><td>结论直接写本计划, 不建 report/子 issue。</td></tr>
+  <tr><td>D11</td><td>测试与真机口径</td><td>P1/P2 单测+node+e2e 三层; P1 纯桩可验; P2 回执机制桩可验, 真机只做两跳时序冒烟, qB 不可用记 BLOCKED; P3 免真机。</td></tr>
+  <tr><td>D12</td><td>批次与认领链</td><td>S1(P1)/S2(P2)/S3(P3 评估) 三批逐批评审; issue 翻 <code>In Progress</code>, 不另建子 issue。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>P1 事件丢 &amp; 后端重启 seq 归零</td><td><code>notify</code> 队列满 / 服务重启</td><td>60s GET 对账补齐; <code>_errlogReseed</code> 处理游标倒退; 不加静默计时器避免轮询回流。</td></tr>
+  <tr><td>日志线程调用 <code>notify</code></td><td>WARNING+ 日志由后台线程写出</td><td><code>notify</code> 用 <code>_sub_lock</code> 复制订阅者 + <code>put_nowait</code> 非阻塞, 不引入线程交接; S1-a 单测钉死不死锁。</td></tr>
+  <tr><td class="wr">受理段被当终态提前结算</td><td><code>onCmdEvent</code> 按 <code>cmd_id</code> 无条件兑现 waiter 且 <code>warn</code> 终结（<code>commands.js:234-235/323-324</code>）; <code>onTruthEvent</code> 认 <code>truth</code> 即结算（<code>:348-372</code>）—— 服务端受理信号无论走 cmd 还是 truth 都会被当终态</td><td><span class="wr">S2-a 硬约束</span>: <b>后端不推受理信号</b>, 受理段由前端 POST 返回即本地渲染; 终态才走 <code>set_result -&gt; notify("cmd")</code>; 不改 <code>waitCmd</code>、不建新事件类型。这是 S2 最高优先级风险。</td></tr>
+  <tr><td>双跳时序竞态</td><td>终态在受理段渲染前到达</td><td>前端两段处理须幂等: 终态先到直接结算, 受理段后到不改变已结算态。</td></tr>
+  <tr><td>P0 未收口污染本计划</td><td>有人要求顺手补 P0 的 Docker e2e / 真机冒烟</td><td>范围守恒: P0 收口留在 26-11-18-0037 与 26-11-18-webui-traffic-stepwise, 本计划不碰。</td></tr>
+  <tr><td>P3 评估结论悬空</td><td>量化数据不足以下结论</td><td>写「条件触发」并列出触发阈值（空转率/缓存命中率的实测值）, 另起独立排期, 不在本计划内扩大范围。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-27-0530</span> 初版。来源: 会话 grilling 两轮（D1-D12 全按推荐）+ 三路只读取证。要点: 一份计划三阶段（S1 错误日志推送化 / S2 transfer D5b 两段回执 / S3 抽屉只读评估）; 修正两处 issue 原文偏差（1s/2s 为 Web RoCache 非 qB、P1 发布点在日志线程）; 钉死 S2 受理段 warn 与 waitCmd 终结态的冲突; issue 26-11-20-0408 认领翻 <code>In Progress</code>; 双向链补 3 件。</li>
+  <li><span class="tag">R1 · 26-11-27-0530</span> 评审修复(major 1 条): S2 受理段从「带 stage 标记的 warn 回执」改为「<b>不进 cmd 回执面</b>的非通道信号」, 终态才走 <code>set_result -&gt; notify("cmd")</code>。原方案与 <code>onCmdEvent</code> 无条件兑现 + warn 终结态冲突, 照做会在受理段提前结算。§03/§04 S2-a/§07 同步, 不改 D9 拍板结论。</li>
+  <li><span class="tag">R2 · 26-11-27-0530</span> 复评修复(minor 1 条): R1 的「复用 truth 事件带 stage 标记」候选被 <code>onTruthEvent</code>（<code>commands.js:348-372</code>）认 truth 即结算击穿, 与 cmd 兑现路径同为终结态。定案: <b>后端不推受理信号</b>, 受理段由前端 POST 返回即本地渲染（<code>transfer_flow.js:337</code> pending 形态）, 终态仍走 <code>set_result -&gt; notify("cmd")</code>。两段回执的用户可见语义与 D9 不变, 仅实现落点从「服务端推受理」改为「前端本地渲染」; §03/§04 S2-a/S2-b/§06 D9/§07 同步。</li>
+  <li><span class="tag">R3 · 26-11-27-0542</span> 三轮评审修复完成(major 1 + minor 1, 第三轮零发现): S2 受理段定案=后端不推信号、前端本地渲染</li>
+</ul>
+
+</div>
+</body>
+</html>
