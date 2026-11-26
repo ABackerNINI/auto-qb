@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>docker build 缺 hatch 构建钩子文件: 补 COPY 行还是维持既有事实待拍板 · question · 计划外问题（便签）</title>
+<meta name="issue-slug" content="docker-build-hatch-hook-missing">
+<meta name="issue-stamp" content="26-11-27-0134">
+<meta name="issue-type" content="question">
+<meta name="doc-topic" content="repo-layout-refactor">
+<meta name="doc-refs" content="memory-bank/plans/26-11-26-0503-plan-repo-layout-refactor.html, memory-bank/tasks/26-11-26-dev-repo-layout-refactor.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="docker build 缺 hatch 构建钩子文件: 补 COPY 行还是维持既有事实待拍板">
+<meta name="issue-summary" content="Dockerfile 从未 COPY hatch_build.py, docker build 命中 OSError: Build script does not exist; 计划 R4 定性既有事实, 处置方式(补 COPY 行/维持)二选一待人工拍板">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（便签）· question</div>
+<h1>docker build 缺 hatch 构建钩子文件: 补 COPY 行还是维持既有事实待拍板</h1>
+<p class="lede">Dockerfile 从未 COPY hatch_build.py, docker build 命中 OSError: Build script does not exist; 计划 R4 定性既有事实, 处置方式(补 COPY 行/维持)二选一待人工拍板</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-27-0134-question-docker-build-hatch-hook-missing</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-27 01:34</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象</h2>
+  <p>真实 <code>docker build</code> 失败：<code>OSError: Build script does not exist: scripts/hatch_build.py</code> —— 镜像构建环境里没有 hatchling custom hook 文件，wheel 构建期报缺。此为 <strong>既有事实</strong>（Dockerfile 从未 COPY 过该文件进 builder 阶段；重构前钩子在根目录时虽在 build context 里，同样未被 COPY），非本次仓库结构重构引入；但容器构建路径始终不可用。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>位置</h2>
+  <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+  <ul>
+    <li><code>Dockerfile:16</code>（取证 2026-11-27 01:34）· grep <code>uv sync --frozen --no-dev --no-editable</code> —— builder 阶段只 COPY <code>pyproject.toml</code>/<code>uv.lock</code>/<code>README.md</code>/<code>LICENSE</code>/<code>src</code>（:9/:14/:15），从不 COPY 钩子脚本。</li>
+    <li><code>pyproject.toml:109-110</code> · grep <code>tool.hatch.build.hooks.custom</code> —— <code>path = "scripts/hatch_build.py"</code>（本重构 S1a 由根 <code>hatch_build.py</code> 迁来，配置路径已同步）。</li>
+    <li><code>.dockerignore:41</code> · grep <code>scripts/</code> —— 排除 <code>scripts/</code>，即使补 COPY 行也会被忽略（若走补 COPY 行方案需同步放开白名单）。</li>
+    <li>计划 <code>memory-bank/plans/26-11-26-0503-plan-repo-layout-refactor.html</code> §07 R4 已记此现象，定性「既有事实、不混入本次提交、单独拍板」。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>建议<span class="opt">（可选）</span></h2>
+  <p>待拍板二选一：<strong>(a)</strong> 补 Dockerfile COPY 行把钩子脚本放进 builder 阶段并放开 .dockerignore 对应排除项，使容器构建可用；<strong>(b)</strong> 维持现状（本地 <code>uv build</code> 正常，容器构建本就不在项目交付路径上）。选 (a) 需评估镜像内 hook 依赖 git 上下文的副作用（BUILD_ID 取 git hash，sdist 两段式下为空——计划 R4 既有观察）。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-27 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+</section>
+
+<footer>
+  26-11-27-0134-question-docker-build-hatch-hook-missing.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

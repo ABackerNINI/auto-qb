@@ -5,7 +5,7 @@
 **Updated:** 2026-11-27
 **Summary:** 仓库目录结构重构已落地:测试树三分(tests/{unit,e2e,real})+根目录瘦身+docker归置+pytest配置并入pyproject+文档回写,零逻辑改动;方案权威在计划 26-11-26-0503(Done),本档案记 S0–S5 执行与验收,全量绿见 kb.baseline 26-11-27-0125
 **Topics:** dev-repo-layout-refactor
-**Refs:** memory-bank/plans/26-11-26-0503-plan-repo-layout-refactor.html
+**Refs:** memory-bank/plans/26-11-26-0503-plan-repo-layout-refactor.html, memory-bank/issues/26-11-27-0134-question-docker-build-hatch-hook-missing.html
 
 ## 本篇只回答
 
