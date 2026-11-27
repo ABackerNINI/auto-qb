@@ -53,14 +53,14 @@
 - S1-a(另批已提交): `append_err` 出锁后 `notify("errlog", {seq, level, msg})`, 只推单条小真值。
 - S1-b: `startEvents` 注册 `errlog` 监听, 载荷交 `lifecycle.onErrlogEvent` 落袋, 复用 `"b"+seq` 去重与 `errPanelOpen` 未读口径, 事件路径零 GET; 载荷无 ts 故以到达时刻补。
 - 乱序: 出锁广播到达序不等于 seq 序 —— 合并按 seq 降序插入(迟到的低 seq 不爬到新条上), 游标取 `max(现有, seq)` 只进不退; 后端重启 seq 归零仍由 `_errlogReseed` 清旧重拉。
-- S1-c: 60s GET 降为纯对账/游标校准(丢事件补齐、重启重拉), 不再计未读以免与事件双计; boot 开页全量合并语义不变。
+- S1-c: 60s GET 保留对账/游标校准(丢事件补齐、重启重拉)并计未读以覆盖 SSE 断档窗口; 与事件不双计靠 merge 先按 `"b"+seq` 去重; boot 开页全量与 reseed 重启全量不计未读。
 - 守阵: 扩 `test_webui_error_history.py`(静态接线) 与 `test_webui_static_r4_poll_auth_lifecycle.py`(SSE 监听断言 + 落袋/对账 node 电池), 新增双皮肤面板 e2e。`test.full` 实测数字见 kb.baseline 最新切片 `webui-sse-s1-frontend`。
 - 计划 26-11-27-0530 整体保持 Open(S2/S3 未做), issue 状态未动。
 
 ### R2 · S1 补充单游标回捞 (2026-11-27)
 
 - 用户新拍板 D13: 出锁广播 + 游标只进不退下, 低 seq 事件被 notify 队列丢弃而高 seq 事件先到推进游标后, 60s GET 用 after=cursor 回捞不到该低 seq 条目 —— 采用**保守游标回捞**, 不新增机制。已回填计划 §05/§06 D13/§10 R4。
-- 落点 `lifecycle.js`: `created` 初始化 `_errReconcileAfter = null`; `onErrlogEvent` 在合并推进游标**之前**侦测间隙(到达 seq > 游标+1), 记回退游标 = `min(已有 ?? 当前游标, 到达seq-1)`(多缺口保最早); `_pullErrlog` 的 `after` 改用 `_errReconcileAfter ?? _errLogCursor`, 回捞走既有 `_mergeBackendErrlog`(`"b"+seq` 去重 / 按 seq 有序插入 / 游标 max)且对账不计未读; 仅当本次 `after` 仍等于回退游标时清空(GET 在途新缺口不误清, 失败保留), reseed 路径同步清空。
+- 落点 `lifecycle.js`: `created` 初始化 `_errReconcileAfter = null`; `onErrlogEvent` 在合并推进游标**之前**侦测间隙(到达 seq > 游标+1), 记回退游标 = `min(已有 ?? 当前游标, 到达seq-1)`(多缺口保最早); `_pullErrlog` 的 `after` 改用 `_errReconcileAfter ?? _errLogCursor`, 回捞走既有 `_mergeBackendErrlog`(`"b"+seq` 去重 / 按 seq 有序插入 / 游标 max)且对账计未读(去重先行不双计); 仅当本次 `after` 仍等于回退游标时清空(GET 在途新缺口不误清, 失败保留), reseed 路径同步清空。
 - 口径澄清: 后端 `/api/errlog` 的 `after` 是严格 `seq > after`(`runtime_stream.py:98`), 故拍板公式 `?? seq` 的基准取「最后连续位=游标」, 并以到达 seq-1 封顶, 才满足「回退点不超过第一个可疑缺口」并真能捞回被丢条目; 字面取到达 seq-1 只会捞回到达事件及其后, 与目标相反。
 - 守阵: `test_webui_static_r4_poll_auth_lifecycle.py` 的 `_NODE_ERRLOG_EVENT_PROBE` 扩九组缺口回捞断言(回捞成功/降序落位/不去重计/游标不倒退/成功后清空/多缺口保最早/GET 期间新缺口不误清/失败保留/reseed 清); `test_webui_error_history.py` 静态接线 +6 断言。定向 21 passed。
 - 计划整体仍 Open(S2/S3 未做), issue 26-11-20-0408 状态未动; `test.full` 数字与基线切片见 kb.baseline 最新 `webui-sse-s1-gap-recover`。
@@ -83,3 +83,11 @@
 - review: 降级自查(§⑧) 20 条逐条走; 首轮发现 2 minor(空转率 0% 口径限定 1 / 推送化改造成本反面证据 1)均属本批且当场修, 复评轮零发现零 actionable; review.check 检 2/2 通过弃 0; ship.gate 全绿; 本地分支态(ls-remote 无 ref)跳过 pack 前置 sync; 24 行 基 61b2d0509044
 
 - 2026-11-27 13:37 S3 抽屉推送化只读评估收口: 实测空转率/RoCache 命中率 + 结论条件触发; 三阶段全收口
+
+### R5 · 接缝终审 60s 对账未读口径修复 (2026-11-27)
+
+- 接缝终审 major(用户拍板「修复后同步」): S1-c 曾把 60s 对账 GET 的 `countUnread` 改为 false, 理由是「与 SSE 事件双计」—— 但 `_mergeBackendErrlog` 先按 `"b"+seq` 去重、之后才计未读, 双计并不存在; 真实后果是 SSE 断档/丢事件窗口内由 GET 补回的错误只进历史、不亮未读徽标(`_errUnread` 为 statusbar 可见徽标)。
+- 修复口径三处: 60s 周期对账 `_pullErrlog(true)`; boot 开页全量仍 `false`; reseed 重启全量显式 `{ countUnread: false }`(后端重启后整环旧条目不刷爆徽标)。注释/文档口径同步回正, 计划与 issue 状态均不动。
+- 守阵: `test_webui_error_history.py` 静态接线改 true 断言 + reseed 显式 false 钉; `test_webui_static_r4_poll_auth_lifecycle.py` 的 `_NODE_ERRLOG_EVENT_PROBE` 扩真验(断档补回未读 +1 / 同 seq 先 SSE 后 GET 不二次计 / reseed 全量不计未读 / 桩 setInterval 真放拍验回调传 true)。定向全绿。
+- 计划 26-11-27-0530 §03 S1-c / §06 D8·D13 / §10 R4·R7 口径回正, 整体仍 Done; issue 26-11-20-0408 状态未动。`test.full` 实测数字与基线切片见 kb.baseline 最新 `webui-sse-seam-unread-count`。
+- review: 降级自查(§⑧) 20 条逐条走; 首轮发现 1 minor(node 电池断言名与场景不符)当场修, 复评轮零发现零 actionable; review.check 检 1/1 弃 0; ship.gate 全绿; 本地分支态(git ls-remote 无 ref)跳过前置 sync; 86 行 基 bdcc353d2d93

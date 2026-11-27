@@ -128,7 +128,7 @@
   <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
   <tr><td>S1-a</td><td>后端: <code>append_err</code> 在锁外 <code>notify("errlog", {seq, level, msg})</code>; payload 只带一条条目, 不发全量环</td><td>单测: 事件载荷字段与 seq 单调性; 日志线程调用不阻塞、不死锁; 满额/慢消费者仍走既有 <code>notify_dropped</code> 计数</td></tr>
   <tr><td>S1-b</td><td>前端: <code>startEvents</code> 注册 <code>errlog</code> 监听, 复用 <code>_pullErrlog</code> 的落袋/去重/未读逻辑; 不额外发 GET</td><td>node 电池: 事件到达即入历史、面板关闭计未读、重复 seq 不重复计数; 双皮肤 e2e 面板可见</td></tr>
-  <tr><td>S1-c</td><td>对账: 60s GET 保留但只做校准; <code>_errlogReseed</code> 继续处理后端重启 seq 归零</td><td>单测/e2e: 模拟丢事件后下一轮 60s GET 补齐; 重启后游标重置重拉、不丢新条目</td></tr>
+  <tr><td>S1-c</td><td>对账: 60s GET 保留并计未读以覆盖 SSE 断档窗口（去重先行, 同一 seq 只计一次）; <code>_errlogReseed</code> 继续处理后端重启 seq 归零（重启全量不计未读）</td><td>单测/e2e: 模拟丢事件后下一轮 60s GET 补齐且未读 +1; 重启后游标重置重拉、不丢新条目且不刷未读</td></tr>
   <tr><td>S1-d</td><td>守阵收尾: 既有 <code>test_webui_backend_errlog.py</code>(10) + <code>test_webui_error_history.py</code>(8) + <code>test_webui_static_r4_poll_auth_lifecycle.py</code>(11) 扩 NEW</td><td><code>commands run test.full</code> 全绿; 新基线切片; 无新增配置键（<code>validate_config</code> 守阵不动）</td></tr>
   <tr><td>S2-a</td><td><b>后端不推受理信号</b>（根因: <code>onCmdEvent</code> 按 id 无条件兑现 + <code>warn</code> 终结态 <code>commands.js:234-235/323-324</code>; <code>onTruthEvent</code> 认 <code>truth</code> 即结算 <code>:348-372</code> —— 任何服务端受理信号都会触发两条终结路径之一）。受理段由 POST 返回的 <code>cmd_id</code> 在前端本地渲染; 终态仍由现有 <code>receipt_port -&gt; set_result -&gt; notify("cmd")</code> 覆盖同 <code>cmd_id</code></td><td>单测: 无新增事件类型/推送点; 终态覆盖同 id 且正常兑现; 单写线程纪律不变; 既有事件面清单守阵不增项</td></tr>
   <tr><td>S2-b</td><td>前端: <code>transfer_flow.js</code> 在 POST 返回后本地渲染受理段（pending 行图标 + 「后台验证中」文案, 沿用 <code>:337</code> 形态）, 终态回执到达才结算三件套; <code>waitCmd</code> 保留作 SSE 丢事件兜底</td><td>node 电池 + 双皮肤 e2e: 受理段渲染后不结算、终态到达才结算; SSE 断开退回轮询仍正确</td></tr>
@@ -151,12 +151,12 @@
   <tr><td>D5</td><td>P3 处置</td><td>只做只读评估 + 条件触发后续, 本轮不写实施代码。</td></tr>
   <tr><td>D6</td><td>认领与状态</td><td>本计划认领 issue 26-11-20-0408 并翻 <code>In Progress</code>, 补双向链; 不建三个子 issue。</td></tr>
   <tr><td>D7</td><td>P1 断档口径</td><td>payload 只带小真值; 队列满丢事件不加静默计时器, 靠保留的 60s GET 对账兜底。</td></tr>
-  <tr><td>D8</td><td>P1 前端消费</td><td>事件到达即用 payload 入历史（沿用去重 + 未读计数）, 不额外 GET; 60s GET 仅对账与游标校准。</td></tr>
+  <tr><td>D8</td><td>P1 前端消费</td><td>事件到达即用 payload 入历史（沿用去重 + 未读计数）, 不额外 GET; 60s GET 对账与游标校准并计未读以覆盖 SSE 断档窗口, 去重先行（<code>"b"+seq</code>）保证同一 seq 不双计。</td></tr>
   <tr><td>D9</td><td>P2 两段回执形态</td><td>受理段即时回执 + 终态由现有 <code>receipt_port -&gt; set_result</code> 覆盖同 <code>cmd_id</code>; 前端两段消费, <code>waitCmd</code> 兜底。（两段回执的用户可见语义不变; 受理段实现按 R2 评审修复钉死: 后端不推信号、前端本地渲染。）</td></tr>
   <tr><td>D10</td><td>P3 评估产物</td><td>结论直接写本计划, 不建 report/子 issue。</td></tr>
   <tr><td>D11</td><td>测试与真机口径</td><td>P1/P2 单测+node+e2e 三层; P1 纯桩可验; P2 回执机制桩可验, 真机只做两跳时序冒烟, qB 不可用记 BLOCKED; P3 免真机。</td></tr>
   <tr><td>D12</td><td>批次与认领链</td><td>S1(P1)/S2(P2)/S3(P3 评估) 三批逐批评审; issue 翻 <code>In Progress</code>, 不另建子 issue。</td></tr>
-  <tr><td>D13</td><td>P1 单游标回捞缺口（实施期新拍板, 2026-11-27 S1 补充）</td><td><b>保守游标回捞, 不新增机制</b>: 事件到达路径侦测 seq 间隙（到达 seq &gt; 已持游标+1）即记对账专用回退游标（最后连续位, 多缺口取 <code>min</code> 保最早）; 60s GET 的 <code>after</code> 改用回退游标重拉, 回捞仍走既有 merge（<code>"b"+seq</code> 去重 / 按 seq 有序 / 游标 max）, 对账仍不计未读; 仅当本次 <code>after</code> 仍等于回退游标时清空（GET 在途新缺口不被误清, 失败保留）, 后端重启 reseed 同步清空。不加配置键/事件类型/端点, 不改后端与 seq 语义。</td></tr>
+  <tr><td>D13</td><td>P1 单游标回捞缺口（实施期新拍板, 2026-11-27 S1 补充）</td><td><b>保守游标回捞, 不新增机制</b>: 事件到达路径侦测 seq 间隙（到达 seq &gt; 已持游标+1）即记对账专用回退游标（最后连续位, 多缺口取 <code>min</code> 保最早）; 60s GET 的 <code>after</code> 改用回退游标重拉, 回捞仍走既有 merge（<code>"b"+seq</code> 去重 / 按 seq 有序 / 游标 max）, 对账计未读（去重先行不双计）; 仅当本次 <code>after</code> 仍等于回退游标时清空（GET 在途新缺口不被误清, 失败保留）, 后端重启 reseed 同步清空。不加配置键/事件类型/端点, 不改后端与 seq 语义。</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -176,9 +176,10 @@
   <li><span class="tag">R1 · 26-11-27-0530</span> 评审修复(major 1 条): S2 受理段从「带 stage 标记的 warn 回执」改为「<b>不进 cmd 回执面</b>的非通道信号」, 终态才走 <code>set_result -&gt; notify("cmd")</code>。原方案与 <code>onCmdEvent</code> 无条件兑现 + warn 终结态冲突, 照做会在受理段提前结算。§03/§04 S2-a/§07 同步, 不改 D9 拍板结论。</li>
   <li><span class="tag">R2 · 26-11-27-0530</span> 复评修复(minor 1 条): R1 的「复用 truth 事件带 stage 标记」候选被 <code>onTruthEvent</code>（<code>commands.js:348-372</code>）认 truth 即结算击穿, 与 cmd 兑现路径同为终结态。定案: <b>后端不推受理信号</b>, 受理段由前端 POST 返回即本地渲染（<code>transfer_flow.js:337</code> pending 形态）, 终态仍走 <code>set_result -&gt; notify("cmd")</code>。两段回执的用户可见语义与 D9 不变, 仅实现落点从「服务端推受理」改为「前端本地渲染」; §03/§04 S2-a/S2-b/§06 D9/§07 同步。</li>
   <li><span class="tag">R3 · 26-11-27-0542</span> 三轮评审修复完成(major 1 + minor 1, 第三轮零发现): S2 受理段定案=后端不推信号、前端本地渲染</li>
-  <li><span class="tag">R4 · 26-11-27-1241</span> S1 补充(用户新拍板 D13): 补上单游标回捞缺口 —— 事件路径间隙侦测记对账回退游标（最后连续位, <code>min</code> 保最早）, 60s GET 用回退游标回捞被 <code>notify</code> 丢弃的低 seq 条目（去重/排序/游标 max 复用 merge, 对账不计未读）, 成功后按条件清空、失败保留, reseed 同步清空; 后端 <code>after</code> 严格 <code>seq &gt; after</code>, 故回退基准取「最后连续位」并以到达 seq-1 封顶。扩 r4 node 电池 + error_history 静态守阵。计划整体仍 Open（S2/S3 未做）。</li>
+  <li><span class="tag">R4 · 26-11-27-1241</span> S1 补充(用户新拍板 D13): 补上单游标回捞缺口 —— 事件路径间隙侦测记对账回退游标（最后连续位, <code>min</code> 保最早）, 60s GET 用回退游标回捞被 <code>notify</code> 丢弃的低 seq 条目（去重/排序/游标 max 复用 merge, 对账计未读、去重先行不双计; reseed 重启全量不计未读）, 成功后按条件清空、失败保留, reseed 同步清空; 后端 <code>after</code> 严格 <code>seq &gt; after</code>, 故回退基准取「最后连续位」并以到达 seq-1 封顶。扩 r4 node 电池 + error_history 静态守阵。计划整体仍 Open（S2/S3 未做）。</li>
   <li><span class="tag">R5 · 26-11-27-1324</span> S2 transfer D5b 两段回执实施收口: 后端零改动守阵 + 前端 POST 返回后本地渲染受理段 + 本批局部 settled 双跳幂等 + 双皮肤 e2e; 真机 guard BLOCKED; 整体仍 Open(S3 未做)</li>
   <li><span class="tag">R6 · 26-11-27-1336</span> S3 抽屉推送化只读评估收口: 实测 RoCache 命中率(trackers@1.5s=50.00%/tp 双源=25.00%/2s·3s=0%)与抽屉轮询空转率(同口径 50.00%/25.00%/0%), 结论=条件触发(阈值见 §07, 三条同时满足才另起独立排期); 三阶段 S1/S2/S3 全完成, S2-c 真机 BLOCKED 按 D11 不阻断入库</li>
+  <li><span class="tag">R7 · 26-11-27</span> 接缝终审 major 修复(口径回正): 60s 对账 GET 由 <code>false</code> 改回 <code>true</code> —— 去重先行（<code>"b"+seq</code> 先判重再计未读）保证同一 seq 不双计, 计未读是为覆盖 SSE 断档/丢事件窗口（否则补回的错误只进历史、不亮徽标）; boot 开页全量与 reseed 重启全量仍不计未读。计划 Done 状态与 issue 状态均不动。</li>
 </ul>
 
 </div>

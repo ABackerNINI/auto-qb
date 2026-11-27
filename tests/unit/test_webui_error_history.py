@@ -27,8 +27,8 @@ tests/test_webui_backend_errlog.py (S2), 本文件只管前端。
   commands.js 的 copyText 包装存在并委托 _copyText (别名不是空壳)
 - test_frontend_error_history_boot_merge_wired: lifecycle 含 errlog boot 拉取 (本机免鉴权 + auth.js
   密钥路径两处各调一次 _pullErrlogBoot, boot 全量不计未读) + 60s 对账定时器 (setInterval 60000,
-  S1-c 改 false —— 未读归事件单点, 对账再计会双计) + unmounted 撤定时器 (clearInterval
-  _errPollTimer) 三处接线 (漏一处 = 后端条目进不了面板或热重载堆叠)
+  对账 GET 计未读以覆盖 SSE 断档窗口; 与事件不双计靠 merge 先按 "b"+seq 去重; reseed 重启
+  全量显式不计未读) + unmounted 撤定时器 (clearInterval _errPollTimer) 三处接线 (漏一处 = 后端条目进不了面板或热重载堆叠)
 - test_frontend_errlog_event_wired: S1-b/S1-c(计划 26-11-27-0530) —— startEvents 注册 errlog 监听
   且事件只交 lifecycle.onErrlogEvent(零额外 GET); 落袋复用 _mergeBackendErrlog 的 "b"+seq 去重与
   未读计数, 载荷无 ts 故补到达时刻; 合并按 seq 有序插入(乱序迟到的低 seq 不爬到新条上)、游标只进不退;
@@ -214,8 +214,8 @@ def test_frontend_error_history_boot_merge_wired() -> None:
     assert "this._pullErrlog(false)" in boot, "boot 全量必须不计未读(false; 开页即见, 计未读 = 开页就挂红色徽标)"
     assert "const ERR_POLL_INTERVAL_MS = 60000;" in life, "60s 补拉节拍常量缺失(被改名/改值后守阵同步)"
     poll = _fn_body(life, "_startErrPoll()")
-    assert "setInterval(() => this._pullErrlog(false), ERR_POLL_INTERVAL_MS);" in poll, (
-        "缺 60s 对账定时器(S1-c: 只补丢事件/校游标, 计未读会与 errlog 事件双计)"
+    assert "setInterval(() => this._pullErrlog(true), ERR_POLL_INTERVAL_MS);" in poll, (
+        "缺 60s 对账定时器(true: 补回 SSE 断档期错误要亮未读徽标; 去重先行不双计)"
     )
     assert "if (this._errPollTimer) return;" in poll, "补拉定时器必须幂等(双启动路径/重入不叠定时器)"
     unmounted = _fn_body(life, "unmounted()", indent=2)
@@ -251,6 +251,7 @@ def test_frontend_errlog_event_wired() -> None:
     assert "this._errReconcileAfter === after" in pull, ("回捞成功缺条件清空(GET 在途新事件重新标记的缺口会被误清)")
     assert "this._errReconcileAfter = null;" in pull, "reseed 路径缺回退游标归置(旧代 seq 污染重拉)"
     assert "_errlogReseed(last, this._errLogCursor || 0)" in pull, ("后端重启 seq 归零的重拉判定被摘掉")
+    assert "{ countUnread: false }" in pull, ("reseed 重启全量必须显式不计未读(整环旧条目不把徽标刷爆)")
 
 
 def test_frontend_tooltip_yields_to_err_panel() -> None:

@@ -7,12 +7,14 @@
  * ERR_HISTORY_CAP 单点在 ui_feedback.js, 加载序先于本文件):
  *   - boot 全量合并: 密钥验证成功(auth.js bootstrap)/ 本机免鉴权(lifecycle mounted)两条
  *     启动路径各拉一次 after=0, 不计未读(开页即见, 不算"错过");
- *   - 对账(S1-c): 60s 定时增量合并(after=已持游标)只补丢事件/校游标、不计未读 ——
- *     未读由 /api/events 的 errlog 事件单点记账(事件路径零 GET), 对账再计会双计;
- *     回包 last < 已持游标 = 后端重启过(seq 归零), 清游标重拉全量;
+ *   - 对账(S1-c): 60s 定时增量合并(after=已持游标)补丢事件/校游标并计未读 —— SSE 断档
+ *     期间的错误只能靠这轮 GET 补回, 不亮徽标就会静默丢失; 与事件路径不双计: merge 先按
+ *     "b"+seq 去重, 同一 seq 先经事件入历史后 GET 回捞直接跳过, 不会二次计未读;
+ *     回包 last < 已持游标 = 后端重启过(seq 归零), 清游标重拉全量(重启全量不计未读,
+ *     免整环旧条目把徽标刷爆);
  *   - 单游标回捞缺口(S1 补充): notify 队列满会丢事件, 高 seq 先到又把游标推过被丢条目,
  *     下轮 60s GET 用 after=cursor 就捞不回 —— 事件路径侦测到 seq 跳跃时记对账专用回退游标
- *     (最后连续位), 下轮 GET 从它重拉; 回捞仍走 merge 去重/排序/游标 max, 仍不计未读;
+ *     (最后连续位), 下轮 GET 从它重拉; 回捞仍走 merge 去重/排序/游标 max, 并计未读;
  *   - 拉取失败一律静默(后端不可达不打扰用户, 下轮补拉自愈), 零持久化、零新配置键。 */
 const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
 
@@ -587,8 +589,10 @@ window.AQB_LIFECYCLE = {
      * WARNING->warn / ERROR 及以上->error, ts 转完整 HH:MM:SS, source 固定 "backend"。
      * 已存在的 id 不重复入列(刷新重拉不产生重复); 新条目 unshift 到顶部(照 _errHistory
      * 新在上的排序, 与 toast 条目混排同式); 超 ERR_HISTORY_CAP 挤掉最旧(同 _recordErrorToast
-     * 的环形语义)。opts.countUnread: boot 合并不计未读; 补拉计未读 —— 面板关闭期每条 +1,
-     * 记账口径对齐 _recordErrorToast(打开时由 state.js 的 errPanelOpen watcher 清零)。 */
+     * 的环形语义)。去重先行: 先按 "b"+seq 判重, 已存在条目直接跳过 —— 同一 seq 无论先经
+     * SSE 事件还是先经 GET 回捞都只计一次未读(无双计)。opts.countUnread: boot 全量与
+     * reseed 重启全量不计未读; 60s 对账补拉计未读 —— 面板关闭期每条 +1, 记账口径对齐
+     * _recordErrorToast(打开时由 state.js 的 errPanelOpen watcher 清零)。 */
     _mergeBackendErrlog(items, last, opts = {}) {
       const countUnread = !!opts.countUnread;
       for (const it of items || []) {
@@ -643,9 +647,11 @@ window.AQB_LIFECYCLE = {
         it.seq, { countUnread: true });
     },
     /* 拉一次 /api/errlog(以实例游标为 after)并合并。boot 全量(after=0)与 60s 增量共用;
-     * 失败静默 —— 网络/鉴权异常不弹 toast, 下一轮补拉自愈。回包 last 低于已持游标 =
-     * 后端重启过(seq 归零): 撤掉旧 backend 条目(否则同 seq 新条目会被去重吞掉)后
-     * 清游标重拉全量; toast 条目不受影响(它们来自本会话前端, 与后端环无关)。 */
+     * countUnread 由调用方给定: 60s 对账传 true(覆盖 SSE 断档/丢事件窗口, 补回的错误要亮
+     * 徽标), boot 开页全量传 false(开页即见); reseed 重启全量在下方显式传 false(整环旧条目
+     * 不刷爆徽标), 与调用方入参无关。失败静默 —— 网络/鉴权异常不弹 toast, 下一轮补拉自愈。
+     * 回包 last 低于已持游标 = 后端重启过(seq 归零): 撤掉旧 backend 条目(否则同 seq 新条目
+     * 会被去重吞掉)后清游标重拉全量; toast 条目不受影响(它们来自本会话前端, 与后端环无关)。 */
     async _pullErrlog(countUnread) {
       if (!this.authOk) return;  // 无凭证不出网(照 api() 门口径, 免得登出后定时器空转触发 _logout)
       // S1 补充: 对账 GET 的 after 优先用回退游标 —— 事件路径侦测到间隙后, 从被丢条目之前的
@@ -659,7 +665,7 @@ window.AQB_LIFECYCLE = {
           this._errLogCursor = 0;
           this._errReconcileAfter = null;  // 旧代 seq 的回退点一并清掉, 不污染重拉全量
           const full = await this.api("/api/errlog?after=0");
-          this._mergeBackendErrlog((full && full.items) || [], (full && full.last) || 0, { countUnread });
+          this._mergeBackendErrlog((full && full.items) || [], (full && full.last) || 0, { countUnread: false });
           return;
         }
         this._mergeBackendErrlog((r && r.items) || [], last, { countUnread });
@@ -678,9 +684,9 @@ window.AQB_LIFECYCLE = {
     },
     _startErrPoll() {
       if (this._errPollTimer) return;  // 幂等: 双路径/重入不叠定时器
-      // S1-c: 未读计数归事件路径单点; 60s GET 只做对账/游标校准(补丢事件、重启重拉)。
-      // 计未读会与 SSE 事件双计 —— 故 false(断线期补齐的条目进历史, 不重复亮徽标)。
-      this._errPollTimer = setInterval(() => this._pullErrlog(false), ERR_POLL_INTERVAL_MS);
+      // 60s 对账计未读: SSE 断档/丢事件窗口内补回的错误要亮徽标, 否则静默丢失。与事件
+      // 路径不双计 —— merge 先按 "b"+seq 去重, 同 seq 先经事件入历史后 GET 回捞会跳过。
+      this._errPollTimer = setInterval(() => this._pullErrlog(true), ERR_POLL_INTERVAL_MS);
     },
     /* R2 跳检菜单开关(计划 26-10-02-1955 W1): 登录后取一次 /api/webui/flags 写入 flags
      * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径, 两条 boot 入口走
