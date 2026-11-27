@@ -16,10 +16,15 @@ S4 起脚本后端 wsl.exe -> docker exec(计划 26-11-12-0152 §04 S4 / §06 D6
                        APPLYFAIL / rc=124 / 无汇总 三种「未判定」不得落进 SURVIVED
 - SuiteCmdTest         全套件命令不得带 `-x`(会停在既有失败上), 必须带 `-B` + 禁写字节码 +
                        AUTO_QB_TESTBED=1(容器内挂钟基准按 testbed 档判, 与 test.linux 同口径)
-- SuiteCmdDeselectTest 全套件命令自动带 FLAKY_DESELECT 的 --deselect, 且保留既有并行度参数
+- SuiteCmdDeselectTest verify 只自动带 VERIFY_DESELECT 窄表与 FLAKY_DESELECT 随机红用例的 --deselect,
+                       不继承 DEFAULT_DESELECT 其余条目; 按 VERIFY+FLAKY 顺序精确去重且保留既有并行度参数
+- SuiteFingerprintTest   全套件命令 UTF-8 SHA256 前 12 位; workers/timeout/排除表变化必须换指纹
+- BaselineCacheTest      同 HEAD+workers 但 suite 指纹变化不得复用旧失败集合; 新缓存记录指纹
+- VerifyResumeTest       旧无指纹证据不得跳过候选; 同指纹续跑跳过已验 id, 换指纹重验; --fresh 只删当前证据
 - SetConfRenderTest    timeout_multiplier 显式写进 [tool.mutmut](默认=mutmut 默认); 覆盖式重写不残留旧值; 非正值拒绝
 - RunHeaderTest        结果文件账本头记录 target/池/并行度/timeout_multiplier/镜像HEAD/工具版本, 不与 @@@ 明细格式冲突
-- DeselectTableTest     DEFAULT_DESELECT / FLAKY_DESELECT 条目必须指向存在的测试文件与 def; 漂移即判红
+- DeselectTableTest     VERIFY_DESELECT / DEFAULT_DESELECT / FLAKY_DESELECT 条目必须指向存在的测试文件与 def;
+                       VERIFY_DESELECT 必须是 DEFAULT_DESELECT 子集; 漂移即判红
 - DoneIdsTest           未判定(APPLY_FAIL/TIMEOUT/FLAKY/UNKNOWN)不进 done; KILLED/SURVIVED 进 done
 - MirrorPathTest        镜像仓路径派生(--target slug -> /root/auto-qb-tests/mutation/<pkg>)与校验:
                         Windows/MSYS 改写路径与相对路径响亮拒绝; --mirror 显式优先; 都缺时 require 报错
@@ -34,7 +39,10 @@ S4 起脚本后端 wsl.exe -> docker exec(计划 26-11-12-0152 §04 S4 / §06 D6
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -179,6 +187,13 @@ class SuiteCmdTest(unittest.TestCase):
 
 
 class SuiteCmdDeselectTest(unittest.TestCase):
+    def test_deselect_nodes_keep_exact_verify_then_flaky_order_without_duplicates(self):
+        argv = shlex.split(mutants._suite_cmd(8, 1200))
+        nodes = [argv[i + 1] for i, arg in enumerate(argv[:-1]) if arg == "--deselect"]
+        expected = list(dict.fromkeys([*set_conf.VERIFY_DESELECT, *set_conf.FLAKY_DESELECT]))
+        self.assertEqual(nodes, expected)
+        self.assertEqual(len(nodes), len(set(nodes)))
+
     def test_all_flaky_entries_are_deselected(self):
         cmd = mutants._suite_cmd(8, 1200)
         for node in set_conf.FLAKY_DESELECT:
@@ -186,6 +201,155 @@ class SuiteCmdDeselectTest(unittest.TestCase):
         self.assertIn("-n 8", cmd)
         self.assertNotIn("-n 0", cmd)
         self.assertIn("--no-cov", cmd)
+
+    def test_all_verify_entries_are_deselected(self):
+        cmd = mutants._suite_cmd(8, 1200)
+        for node in set_conf.VERIFY_DESELECT:
+            with self.subTest(node=node):
+                self.assertIn(f"--deselect {node}", cmd)
+
+    def test_default_only_entries_are_not_deselected(self):
+        """DEFAULT_DESELECT 服务 mutmut 基线, 不能整体继承到 verify 误排行为断言。"""
+        cmd = mutants._suite_cmd(8, 1200)
+        verify_nodes = set(set_conf.VERIFY_DESELECT)
+        for node in set_conf.DEFAULT_DESELECT:
+            if node in verify_nodes:
+                continue
+            with self.subTest(node=node):
+                self.assertNotIn(f"--deselect {node}", cmd)
+
+        mixed_behavior_node = "tests/unit/test_web_seed_center.py::test_api_enqueue_wakes_main_loop"
+        self.assertIn(mixed_behavior_node, set_conf.DEFAULT_DESELECT)
+        self.assertNotIn(mixed_behavior_node, set_conf.VERIFY_DESELECT)
+        self.assertNotIn(f"--deselect {mixed_behavior_node}", cmd)
+
+
+class SuiteFingerprintTest(unittest.TestCase):
+    def test_fingerprint_is_short_sha256_of_full_suite_command(self):
+        expected = hashlib.sha256(mutants._suite_cmd(8, 1200).encode("utf-8")).hexdigest()[:12]
+        self.assertEqual(mutants._suite_fingerprint(8, 1200), expected)
+        self.assertRegex(expected, r"^[0-9a-f]{12}$")
+
+    def test_workers_timeout_and_deselect_tables_change_fingerprint(self):
+        baseline = mutants._suite_fingerprint(8, 1200)
+        self.assertNotEqual(mutants._suite_fingerprint(4, 1200), baseline)
+        self.assertNotEqual(mutants._suite_fingerprint(8, 60), baseline)
+        with mock.patch.object(mutants, "VERIFY_DESELECT", (*mutants.VERIFY_DESELECT, "tests/x.py::test_verify")):
+            self.assertNotEqual(mutants._suite_fingerprint(8, 1200), baseline)
+        with mock.patch.object(mutants, "FLAKY_DESELECT", (*mutants.FLAKY_DESELECT, "tests/x.py::test_flaky")):
+            self.assertNotEqual(mutants._suite_fingerprint(8, 1200), baseline)
+
+
+class BaselineCacheTest(unittest.TestCase):
+    def test_suite_change_does_not_reuse_failures_with_same_head_and_workers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            calls: list[str] = []
+            pytest_runs = 0
+
+            def fake_exec(script, *, check=True):
+                nonlocal pytest_runs
+                calls.append(script)
+                if "git rev-parse --short HEAD" in script:
+                    return subprocess.CompletedProcess([], 0, "abc1234\n", "")
+                if " -m pytest " in script:
+                    pytest_runs += 1
+                    failed = sorted(LINUX_BASELINE) if pytest_runs == 1 else ["tests/new.py::test_new"]
+                    return subprocess.CompletedProcess([], 1, _suite_output(failed), "")
+                return subprocess.CompletedProcess([], 0, "", "")
+
+            with mock.patch.object(mutants, "_exec", side_effect=fake_exec), \
+                    mock.patch.object(mutants, "_say"), mock.patch.object(mutants, "_DRY", False):
+                first, _ = mutants._baseline(f"{MUT_ROOT}/web", out, 8, 1200, recompute=False)
+                reused, _ = mutants._baseline(f"{MUT_ROOT}/web", out, 8, 1200, recompute=False)
+                with mock.patch.object(
+                    mutants, "VERIFY_DESELECT", (*mutants.VERIFY_DESELECT, "tests/x.py::test_verify")
+                ):
+                    changed, _ = mutants._baseline(f"{MUT_ROOT}/web", out, 8, 1200, recompute=False)
+
+            self.assertEqual(first, LINUX_BASELINE)
+            self.assertEqual(reused, first)
+            self.assertEqual(changed, {"tests/new.py::test_new"})
+            self.assertEqual(sum(" -m pytest " in script for script in calls), 2)
+            caches = sorted(out.glob("s4-baseline-abc1234-n8-*.json"))
+            self.assertEqual(len(caches), 2)
+            for cache in caches:
+                data = json.loads(cache.read_text(encoding="utf-8"))
+                self.assertEqual(data["head"], "abc1234")
+                self.assertEqual(data["workers"], 8)
+                self.assertRegex(data["suite_fingerprint"], r"^[0-9a-f]{12}$")
+
+
+class VerifyResumeTest(unittest.TestCase):
+    def test_resume_and_fresh_are_scoped_to_current_suite_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "out"
+            out.mkdir()
+            ids_file = root / "candidates.txt"
+            ids_file.write_text("abc123\n", encoding="utf-8")
+            legacy = out / "s4-verify-candidates.txt"
+            legacy_text = "# baseline 47 条既有失败\nabc123 :: SURVIVED :: 47 failed, 4144 passed\n"
+            legacy.write_text(legacy_text, encoding="utf-8")
+            args = mock.MagicMock(
+                from_report="",
+                ids_file=str(ids_file),
+                only_status="",
+                mirror=f"{MUT_ROOT}/web",
+                target="",
+                branch="develop",
+                no_refresh=True,
+                no_sync=True,
+                workers=8,
+                suite_timeout=1200,
+                recompute_baseline=False,
+                fresh=False,
+                out=str(out)
+            )
+            fingerprint = mutants._suite_fingerprint(args.workers, args.suite_timeout)
+            current = out / f"s4-verify-candidates-{fingerprint}.txt"
+            calls: list[str] = []
+
+            def fake_exec(script, *, check=True):
+                calls.append(script)
+                if "mutmut apply" in script:
+                    return subprocess.CompletedProcess([], 0, _suite_output([]), "")
+                return subprocess.CompletedProcess([], 0, "", "")
+
+            with mock.patch.object(mutants, "_ensure_mirror"), \
+                    mock.patch.object(mutants, "_ensure_tool"), \
+                    mock.patch.object(mutants, "_check_registry"), \
+                    mock.patch.object(mutants, "_purge_pycache"), \
+                    mock.patch.object(mutants, "_baseline", return_value=(set(), "4144 passed in 25.51s")), \
+                    mock.patch.object(mutants, "_say"), \
+                    mock.patch.object(mutants, "_exec", side_effect=fake_exec), \
+                    mock.patch.object(mutants, "_DRY", False):
+                self.assertEqual(mutants.cmd_verify(args), 0)
+                self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_text)
+                first_text = current.read_text(encoding="utf-8")
+                self.assertIn(f"# suite {fingerprint}\n", first_text)
+                self.assertIn("# baseline 0 条既有失败", first_text)
+                self.assertEqual(first_text.count("abc123 :: SURVIVED"), 1)
+                self.assertEqual(sum("mutmut apply abc123" in script for script in calls), 1)
+
+                self.assertEqual(mutants.cmd_verify(args), 0)
+                self.assertEqual(current.read_text(encoding="utf-8"), first_text)
+                self.assertEqual(sum("mutmut apply abc123" in script for script in calls), 1)
+
+                args.workers = 4
+                changed_fingerprint = mutants._suite_fingerprint(args.workers, args.suite_timeout)
+                changed = out / f"s4-verify-candidates-{changed_fingerprint}.txt"
+                self.assertEqual(mutants.cmd_verify(args), 0)
+                self.assertIn("abc123 :: SURVIVED", changed.read_text(encoding="utf-8"))
+                self.assertEqual(current.read_text(encoding="utf-8"), first_text)
+                self.assertEqual(sum("mutmut apply abc123" in script for script in calls), 2)
+
+                args.fresh = True
+                self.assertEqual(mutants.cmd_verify(args), 0)
+                self.assertEqual(changed.read_text(encoding="utf-8").count("abc123 :: SURVIVED"), 1)
+                self.assertEqual(current.read_text(encoding="utf-8"), first_text)
+                self.assertEqual(legacy.read_text(encoding="utf-8"), legacy_text)
+                self.assertEqual(sum("mutmut apply abc123" in script for script in calls), 3)
 
 
 class SetConfRenderTest(unittest.TestCase):
@@ -234,7 +398,7 @@ class RunHeaderTest(unittest.TestCase):
 
 
 class DeselectTableTest(unittest.TestCase):
-    """两张 deselect 表的漂移守阵: 测试文件拆分/改名后条目失效, 必须当场判红并提示改表。"""
+    """三张 deselect 表的漂移守阵: 测试文件拆分/改名后条目失效, 必须当场判红并提示改表。"""
 
     ROOT = Path(__file__).resolve().parents[3]
 
@@ -252,6 +416,12 @@ class DeselectTableTest(unittest.TestCase):
                     f"def {name}", fp.read_text(encoding="utf-8"),
                     f"{node}: 测试函数不存在(可能已改名) —— 测试文件拆分后路径漂移, 改 {table_name}"
                 )
+
+    def test_verify_deselect_is_subset_of_default_deselect(self):
+        self.assertLessEqual(set(set_conf.VERIFY_DESELECT), set(set_conf.DEFAULT_DESELECT))
+
+    def test_verify_deselect_entries_exist(self):
+        self._assert_table(set_conf.VERIFY_DESELECT, "VERIFY_DESELECT")
 
     def test_default_deselect_entries_exist(self):
         self._assert_table(set_conf.DEFAULT_DESELECT, "DEFAULT_DESELECT")

@@ -378,9 +378,16 @@ Stage 1 子代理自身不提交；各步评审后的本地提交由主会话执
 - **B2 实施**: 仅改 `tests/unit/test_web_auth.py`，新增 `test_auth_default_port_host_matrix`、`test_sse_ticket_external_headers_matrix`、`test_compare_digest_utf8_bytes_spy`，同步头部测试计划清单；`src/`、第二池文件、deselect 表、生产配置与运行数据均未改。格式化、两文件定向池与快速基线均通过，实测数字留最终切片（见 `kb.baseline`）。
 - **B2 Review**: 本地分支态探针 ref 不存在，跳过 sync；首轮 `ship.gate` 全绿后 `review.pack` 取锚 `d575c47e7e49`、114 行、基哈希 `88fd6d11cf3f`。按正确性/安全/测试缺口三分面串行评审，共 3 次派遣、1 条 major 送检且引文过检：`test_auth_default_port_host_matrix` 把 Host 无端口时任意显式 Origin 端口放行固化为安全期望。处置为只删该参数行，保留 Host 无端口默认端口正例及显式端口同/异、跨 scheme 负例，不越权改生产逻辑；定向池复绿。修复触发第二轮 `ship.gate`（全绿）与 `review.pack`，终态 113 行、基哈希 `a0998f703024`，增量复评零发现。累计 1 送检/1 过检、修 1、入池 0、零 actionable；未新建 issue、未改源码。
 - **B3 首轮实跑**: 未检出同 target 并行，沿用默认镜像 `/root/auto-qb-tests/mutation/src-auto-qb-webui-server-auth-py`（HEAD `0ef943093703`）与 children=3；timeout multiplier=15，mutmut 3.8.1，`--no-refresh`。两池最终文件同步后 raw/LF SHA256 一致：`test_web_auth.py`=`9e77ea606a3a5b1db069a2884824750f7c9466799210da388427a74fed53d085`，`test_web_traffic_stream.py`=`982ceaffedd38c1dd778814a298e618de9e5c3aaae1194294ccc35da9bca8886`，权限均 0644。首轮 215 变异：162 killed / 53 survived / no tests 0 / timeout 0 / suspicious 0 / segfault 0，杀死率 75.35%；dump=`H:\Temp\auto-qb-mutants\26-11-27-0714-src-auto-qb-webui-server-auth-py-mutants-dump.txt`。工具结果文件未落盘，墙时与 CPU 耗时标“未提供”；当前容器实测 Linux WSL2 / x86_64 / 8 vCPU / 可见内存约 11.68 GiB。B4 先按 diff 分类，再对安全高相关及无法证明全输入等价候选跑全套件 verify。
+- **B4 分类**: 53 条存活全部闭合为 47 条 verify 候选与 6 条严格等价。等价项为 `_log_reject__mutmut_8`（`X` 已在 `isalnum` 真集）、`_reject_cross_site__mutmut_5/37`（Headers 大小写不敏感）、`make_require_token__mutmut_1`（唯一读点真值相同）、`make_require_token__mutmut_77/80`（UTF-8 编码名大小写解析同一 codec）；候选清单无重复、无未知 id、无漏项。
+- **B4 首次 verify 无效轮**: 47 条全部落 SURVIVED，但基线为红（两条全仓唯一性扫描被 `mutants/` 下 Python 副本触发），违反计划“基线不绿不开跑”，该结果只保留为无效轮证据，不用于最终三分类。根因证据为 `mutants_py=793`、重复 `_free_port` 定义与 `TMP_ROOT_CANDIDATES` 定义；首次宿主包装在 600 秒处中断，已按原命令续跑，第二段 4744.2 秒完成，不虚构单段总墙时。
+- **B4 工具链修复**: verify 的自动 deselect 从整个 `DEFAULT_DESELECT` 收窄为新增 `VERIFY_DESELECT` 两条已证静态扫描，并继续叠加 `FLAKY_DESELECT`；`DEFAULT_DESELECT` 仅复用这两条，混合行为用例 `test_api_enqueue_wakes_main_loop` 保持启用。首版过度继承已经正确性评审捕获并修正。随后按安全/测试缺口评审补上完整 suite 命令指纹：verify 结果文件与基线缓存都带同一指纹，旧无指纹证据自然成为历史，同配置续跑仍跳过已判定 id，换配置必须重验，`--fresh` 只删当前指纹文件。
+- **B4 Review**: 本地分支态探针 ref 不存在，跳过 sync；末轮 `ship.gate` 全绿，`review.pack` 为 223 行、基哈希 `c6d5fec98c60`。正确性/安全/测试缺口三分面串行复评；累计 8 送检/8 过检，修 5、入池 0。后 3 条过检主张要求把结果身份泛化到任意 mirror/HEAD/工作树/注册表组合，均属计划外工具链增强；本计划固定同一镜像、HEAD 与候选清单且强制 `--recompute-baseline`，当前执行边界不会触发，裁决为非 actionable，未新建 issue。定向守阵、快速基线与 `git diff --check` 通过，数字见 `kb.baseline`。
+- **B4 下一步**: 保留红基线无效轮文件，以新候选清单和指纹结果文件重跑 47 条 verify；只接受绿基线，逐条记录 KILLED/SURVIVED/未判定，再对 SURVIVED 做真洞/等价判断。
 
 - 2026-11-27 06:56 B2 补齐 Web 鉴权三类安全矩阵，定向池与快速基线通过；三分面评审 1 条过检但属既有生产设计，本批零 actionable，随本批本地入库
 
 - 2026-11-27 07:05 B2 终态：删除 Host 无端口时任意显式 Origin 端口放行的可疑正例；定向池复绿，两轮闸门全绿，增量复评零发现，113 行基哈希 a0998f703024，随本批本地入库
 
 - 2026-11-27 07:21 B3 首轮完成：215 变异 / 162 killed / 53 survived，杀死率 75.35%；无 no tests/timeout/suspicious/segfault，dump 已导出，进入 B4 分类与 verify
+
+- 2026-11-27 11:39 B4 工具链修复完成并随本批本地入库，红基线无效轮保留，下一步重跑绿基线 verify

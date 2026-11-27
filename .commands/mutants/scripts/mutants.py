@@ -63,6 +63,7 @@ mutmut 不在锁文件/模板 venv 里, 由 `_ensure_tool` 按版本核对后经
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -85,7 +86,7 @@ for _p in (str(_PKG_SCRIPTS), str(_TEST_SCRIPTS)):
 import linux_ci  # noqa: E402  (TESTS_ROOT / 模板 venv / DEFAULT_PYTHON 的单点)
 import linux_env  # noqa: E402  (容器名与状态核验的单点)
 import set_conf  # noqa: E402  (同目录渲染器: timeout_multiplier 的单点默认值)
-from set_conf import FLAKY_DESELECT  # noqa: E402
+from set_conf import FLAKY_DESELECT, VERIFY_DESELECT  # noqa: E402
 
 CONTAINER = linux_env.CONTAINER_NAME
 #: 容器内测试态单根(linux_ci 单点); 镜像仓收敛在它下面的 mutation/ 子根
@@ -106,7 +107,7 @@ DEFAULT_OUT = os.path.join(tempfile.gettempdir(), "auto-qb-mutants")  # 别落�
 HEAD_LINES = 30
 #: 结果导出脚本(仓库内, 由本脚本推进容器 /tmp 后执行) —— 它 import mutmut 内部 API, 只能在镜像仓 venv 里跑
 DUMP_SCRIPT_REL = ".commands/mutants/scripts/mutants_dump.py"
-#: 基线失败清单缓存前缀 —— 内容由(镜像 HEAD, 并行度)决定, 两者任一变化都必须重算
+#: 基线失败清单缓存前缀 —— 内容由(镜像 HEAD, 并行度, 全套件命令指纹)决定, 任一变化都必须重算
 BASELINE_CACHE_PREFIX = "s4-baseline"
 
 _PROGRESS = (re.compile(r"\d+/\d+\s"), re.compile(r"pytest-gremlins: Progress "))
@@ -526,14 +527,21 @@ def _suite_cmd(workers: int, timeout_s: int, target: str = "tests/") -> str:
     `AUTO_QB_TESTBED=1` 与 test.linux 同口径: 全套件里的挂钟型性能基准按 testbed 档判 ——
     容器配额 + 并行会话对挂钟的放大是合法调度非回归, 不导出它基线会多一批假红污染差集。
 
-    flaky 用例从 FLAKY_DESELECT(set_conf.py)自动派生 --deselect, 不让人手拼。
+    verify 只从 VERIFY_DESELECT(set_conf.py 中已证会被 mutants/ 副本触发的两条全仓唯一性扫描)与
+    FLAKY_DESELECT(随机红用例)派生 --deselect, 按该顺序去重, 不让人手拼; 不整体继承
+    DEFAULT_DESELECT, 以免误排混合在静态守阵里的行为用例。
     """
-    deselects = " ".join(f"--deselect {shlex.quote(d)}" for d in FLAKY_DESELECT)
+    deselects = " ".join(f"--deselect {shlex.quote(d)}" for d in dict.fromkeys([*VERIFY_DESELECT, *FLAKY_DESELECT]))
     return (
         f"AUTO_QB_TESTBED=1 PYTHONDONTWRITEBYTECODE=1 timeout {timeout_s} "
         f".venv/bin/python -B -m pytest {target} -q --no-cov -p no:cacheprovider -rfE --tb=no -n {workers}" +
         (f" {deselects}" if deselects else "")
     )
+
+
+def _suite_fingerprint(workers: int, timeout_s: int) -> str:
+    """全套件命令的稳定短指纹; 参数、排除表或命令构造变化都会产生新的证据版本。"""
+    return hashlib.sha256(_suite_cmd(workers, timeout_s).encode("utf-8")).hexdigest()[:12]
 
 
 def _fail_ids(text: str) -> set[str]:
@@ -590,15 +598,16 @@ def _purge_pycache(mirror: str) -> None:
 def _baseline(mirror: str, out: Path, workers: int, timeout_s: int, *, recompute: bool) -> tuple[set[str], str]:
     """量出「未变异时本来就红」的集合 —— verify 的判据是**与它的差集**, 不是「套件有没有失败」。
 
-    直接拿「套件失败」当 KILLED 会让每条候选都判 KILLED(全杀 = 没杀); 基线随镜像 HEAD 与并行度
-    变化, 所以缓存键带上两者; 命中就复用, 续跑不必重付这一遍。
+    直接拿「套件失败」当 KILLED 会让每条候选都判 KILLED(全杀 = 没杀); 基线随镜像 HEAD、并行度与
+    全套件命令指纹变化, 所以缓存键带上三者; 命中就复用, 续跑不必重付这一遍。
     """
     mq = _bq(mirror)
     if _DRY:
         _say("[baseline] (dry-run 未跑)")
         return set(), "(dry-run)"
     head = _exec(f"cd {mq} && git rev-parse --short HEAD", check=False).stdout.strip() or "unknown"
-    cache = out / f"{BASELINE_CACHE_PREFIX}-{head}-n{workers}.json"
+    fingerprint = _suite_fingerprint(workers, timeout_s)
+    cache = out / f"{BASELINE_CACHE_PREFIX}-{head}-n{workers}-{fingerprint}.json"
     if cache.exists() and not recompute:
         data = json.loads(cache.read_text(encoding="utf-8"))
         fails = set(data.get("failures") or ())
@@ -618,6 +627,7 @@ def _baseline(mirror: str, out: Path, workers: int, timeout_s: int, *, recompute
             {
                 "head": head,
                 "workers": workers,
+                "suite_fingerprint": fingerprint,
                 "failures": sorted(fails),
                 "summary": summary
             },
@@ -693,7 +703,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     KILLED = 全套件能杀 ⇒ 池没选到(假存活); SURVIVED = 全套件仍杀不掉 ⇒ 真洞候选或等价变异。
     这是整轮的时间大头(实测 ~15s/条), 所以先 `mutants.report` 再挑候选。**幂等可续跑**:
-    已写进结果文件的 id 会跳过。
+    同一全套件命令指纹下, 已写进结果文件的 id 会跳过; 套件配置变化会换证据文件并重验。
 
     **判据是差集, 不是「套件有没有失败」**: 先跑一遍未变异套件拿到基线失败集合, 每条候选只看
     `本次失败 - 基线失败` 是否非空。基线本来就红时, 老口径「有 failed 就算 KILLED」会把每条候选
@@ -716,9 +726,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    # 结果文件按**输入清单**定名(不是时间戳): 否则跨分钟重跑就换了个文件, 「已验 id 跳过」形同虚设
+    # 结果文件按输入清单与全套件指纹定名: 跨分钟续跑复用, 套件配置变化后旧证据自然成为历史
     stem = _slug(Path(args.from_report or args.ids_file).stem)
-    path = out / f"s4-verify-{stem}.txt"
+    fingerprint = _suite_fingerprint(args.workers, args.suite_timeout)
+    path = out / f"s4-verify-{stem}-{fingerprint}.txt"
     if args.fresh and path.exists():
         path.unlink()
     done = set()
@@ -739,6 +750,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     if not path.exists():
         path.write_text(
+            f"# suite {fingerprint}\n"
             f"# baseline {len(baseline)} 条既有失败 · {baseline_summary} · {', '.join(sorted(baseline))}\n",
             encoding="utf-8"
         )
@@ -903,8 +915,10 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_SUITE_TIMEOUT,
         help=f"verify: 单次全套件硬截止秒数(默认 {DEFAULT_SUITE_TIMEOUT}); 超时记 TIMEOUT(未判定), 不记 SURVIVED"
     )
-    p.add_argument("--recompute-baseline", action="store_true", help="verify: 强制重跑基线(默认按 镜像HEAD+并行度 复用缓存; 镜像树被手改过时用)")
-    p.add_argument("--fresh", action="store_true", help="verify: 丢弃已有结果文件, 所有候选重验")
+    p.add_argument(
+        "--recompute-baseline", action="store_true", help="verify: 强制重跑基线(默认按 镜像HEAD+并行度+全套件指纹 复用缓存; 镜像树被手改过时用)"
+    )
+    p.add_argument("--fresh", action="store_true", help="verify: 丢弃当前全套件指纹的结果文件, 所有候选重验")
     p.add_argument(
         "--status", default="survived,no tests,timeout,suspicious,segfault", help="report: 导出哪些状态(逗号分隔; 默认全部非 killed)"
     )

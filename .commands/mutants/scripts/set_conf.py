@@ -32,6 +32,14 @@ import re
 import sys
 from pathlib import Path
 
+# verify 窄表: 仅收已被 mutants/ 副本触发、且会全仓扫描源码文件个数的两条唯一性扫描。
+# 它们与当前变异行为无关, 可安全从基线/复现排除; DEFAULT_DESELECT 的其余用例不得整体继承到
+# verify, 否则会连带跳过混合在静态守阵里的真实行为断言。
+VERIFY_DESELECT = (
+    "tests/unit/test_free_port.py::test_free_port_single_source",
+    "tests/unit/test_tmp_bootstrap.py::test_candidates_single_source",
+)
+
 # 文本层守阵: 它们读源码文本做断言, 会被 mutmut 的变异体撑爆(实测报告 §10 #9)。
 # **首要纪律**: 新增/改名任何「读源码文本做断言」的测试(含 docstring 自称静态守阵的), 必须同步把
 # node id 加进本表; 否则该守阵在变异基线就红, 整轮直接中断。
@@ -52,6 +60,7 @@ DEFAULT_DESELECT = (
     # (测试缺平台守卫, 同 issue 26-10-31-1539-deselect-guards 族), WSL 镜像里基线恒红 ——
     # 不 deselect 会打断 stats 收集(首轮曾靠镜像内临时第 9 条绕过, 这里固化成默认)。
     "tests/unit/test_relocate_exec_misc.py::test_spawn_args_pinned",
+    *VERIFY_DESELECT,
 )
 
 # flaky 用例: 端口绑定 / 并发类, 全套件里会随机红, 会污染 verify 的「本次失败 - 基线」差集。
