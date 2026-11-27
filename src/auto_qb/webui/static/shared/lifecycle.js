@@ -10,6 +10,9 @@
  *   - 对账(S1-c): 60s 定时增量合并(after=已持游标)只补丢事件/校游标、不计未读 ——
  *     未读由 /api/events 的 errlog 事件单点记账(事件路径零 GET), 对账再计会双计;
  *     回包 last < 已持游标 = 后端重启过(seq 归零), 清游标重拉全量;
+ *   - 单游标回捞缺口(S1 补充): notify 队列满会丢事件, 高 seq 先到又把游标推过被丢条目,
+ *     下轮 60s GET 用 after=cursor 就捞不回 —— 事件路径侦测到 seq 跳跃时记对账专用回退游标
+ *     (最后连续位), 下轮 GET 从它重拉; 回捞仍走 merge 去重/排序/游标 max, 仍不计未读;
  *   - 拉取失败一律静默(后端不可达不打扰用户, 下轮补拉自愈), 零持久化、零新配置键。 */
 const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
 
@@ -79,6 +82,10 @@ window.AQB_LIFECYCLE = {
     this._rowPre = {};
     // 通知 S3(非响应式: 游标与定时器句柄无渲染依赖, 刻意不进 data —— 同上 P1-2 口径)
     this._errLogCursor = 0;  // /api/errlog 已持游标(环内最大已拉 seq; 后端重启时清零重拉)
+    // S1 补充: 对账专用回退游标 —— 事件路径侦测到 seq 间隙时记「最后连续位」, 供 60s GET
+    // 用更靠前的 after 回捞被 notify 丢弃的低 seq 条目。null = 无缺口(正常走 _errLogCursor)。
+    // 纯标量缓存, 与 _errLogCursor 同族刻意不进 data(P1-2 口径)。
+    this._errReconcileAfter = null;
     this._errPollTimer = 0;  // 60s 补拉定时器句柄(unmounted 撤除防热重载堆叠)
     // 键位提示显影态(计划 26-11-14-0041 S1/W1): body.kbd-reveal 的有无。纯显示态缓存,
     // 刻意不进 data —— 每次 keydown 都要写它, 进 data 会平白触发整表重渲染(P1-2 口径)。
@@ -619,6 +626,19 @@ window.AQB_LIFECYCLE = {
     onErrlogEvent(payload) {
       const it = payload || {};
       if (typeof it.seq !== "number") return;
+      /* S1 补充(单游标回捞): notify 队列满会丢事件, 高 seq 先到即把游标推过被丢的低 seq,
+       * 下轮 60s GET 用 after=游标就捞不回。故在**合并推进游标之前**侦测间隙: 到达 seq
+       * 超过「已持游标 + 1」= 中间必有未到达条目, 记一个对账专用回退游标。
+       * 基准取已持游标(最后连续位)—— 它是 strictly-greater 的 after 能捞回丢条目的最大点;
+       * 再以「到达 seq - 1」封顶, 保证回退点不超过第一个可疑缺口。多个缺口连续到达时
+       * min 只退不进, 保住最早那个缺口; 无缺口时不记, 对账照旧用游标。 */
+      const cursor = this._errLogCursor || 0;
+      if (it.seq > cursor + 1) {
+        this._errReconcileAfter = Math.min(
+          this._errReconcileAfter != null ? this._errReconcileAfter : cursor,
+          it.seq - 1
+        );
+      }
       this._mergeBackendErrlog([{ seq: it.seq, level: it.level, msg: it.msg, ts: Date.now() / 1000 }],
         it.seq, { countUnread: true });
     },
@@ -628,18 +648,26 @@ window.AQB_LIFECYCLE = {
      * 清游标重拉全量; toast 条目不受影响(它们来自本会话前端, 与后端环无关)。 */
     async _pullErrlog(countUnread) {
       if (!this.authOk) return;  // 无凭证不出网(照 api() 门口径, 免得登出后定时器空转触发 _logout)
+      // S1 补充: 对账 GET 的 after 优先用回退游标 —— 事件路径侦测到间隙后, 从被丢条目之前的
+      // 连续位重拉, 把游标推过之后再也捞不回的低 seq 条目补回来; 无缺口时照旧用已持游标。
+      const after = this._errReconcileAfter != null ? this._errReconcileAfter : (this._errLogCursor || 0);
       try {
-        const r = await this.api(`/api/errlog?after=${this._errLogCursor || 0}`);
+        const r = await this.api(`/api/errlog?after=${after}`);
         const last = (r && r.last) || 0;
         if (_errlogReseed(last, this._errLogCursor || 0)) {
           this._errHistory = this._errHistory.filter((e) => e.source !== "backend");
           this._errLogCursor = 0;
+          this._errReconcileAfter = null;  // 旧代 seq 的回退点一并清掉, 不污染重拉全量
           const full = await this.api("/api/errlog?after=0");
           this._mergeBackendErrlog((full && full.items) || [], (full && full.last) || 0, { countUnread });
           return;
         }
         this._mergeBackendErrlog((r && r.items) || [], last, { countUnread });
-      } catch (e) { /* 静默: 后端不可达不打扰用户, 下轮补拉自愈 */ }
+        /* 回捞成功才清回退游标, 且仅当本次用的 after 仍是当前回退点 —— GET 在途期间新事件
+         * 可能重新标记缺口(回退点与本次 after 不同, 那时要留着下轮继续捞); 失败走 catch 同理。
+         * 不能无条件清: 否则 GET 期间新标缺口会被这次回包顺手抹掉, 缺口永久滞留。 */
+        if (this._errReconcileAfter === after) this._errReconcileAfter = null;
+      } catch (e) { /* 静默: 后端不可达不打扰用户, 下轮补拉自愈(回退游标保留, 下轮再试) */ }
     },
     /* boot 全量合并入口: 两条启动路径(auth.js bootstrap 成功 / 本机免鉴权)各调一次;
      * 不计未读(开页即见), 拉完(或失败)即起 60s 补拉定时器 —— 首拉失败也照起, 靠自愈。 */

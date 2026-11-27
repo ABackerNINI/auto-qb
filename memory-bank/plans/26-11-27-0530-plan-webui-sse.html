@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-sse">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-27-0530">
-<meta name="doc-updated" content="26-11-27-0542">
+<meta name="doc-updated" content="26-11-27-1241">
 <meta name="doc-refs" content="memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/tasks/26-11-27-webui-sse.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>SSE 推送候选 P1/P2/P3 联合实施</h1>
 <p class="lede">本篇只回答: 候选全景清单中 P1 错误日志、P2 transfer 两段回执怎么落地，P3 抽屉为什么只做只读评估不出实施代码。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-27-0530 · <b>doc-updated</b> 26-11-27-0542 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-27-0530 · <b>doc-updated</b> 26-11-27-1241 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 两轮(2026-11-27, D1-D12 全按推荐) + 三路只读取证(2026-11-27) + issue 26-11-20-0408 候选清单
 </div>
 
@@ -139,7 +139,7 @@
 <p class="aside">分批顺序: S1 → S2 → S3, 每批收尾按 code-review skill 评审 + 回写 + 基线切片; S3 为纯只读批, 免真机轨。</p>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
-<p>无待拍板项 —— 本计划经两轮 grilling（2026-11-27, D1-D12）全部拍板, 结论见 §06。实施中若出现新决策点, 按协议追加 grilling 轮并回填本节与 §06。</p>
+<p>两轮 grilling（2026-11-27, D1-D12）已全部拍板, 结论见 §06。<b>实施期新增 1 项拍板（2026-11-27 S1 补充, D13）</b>: 出锁广播 + 游标只进不退时, 低 seq 事件被 <code>notify</code> 队列丢弃而高 seq 事件先到把游标推过后, 下一轮 60s GET 用 <code>after=cursor</code> 回捞不到该低 seq 条目 —— 采用<b>保守游标回捞</b>（事件路径间隙侦测记对账专用回退游标, 60s GET 从回退点重拉, 复用既有去重/计入/游标语义）, <b>不新增机制</b>（不加配置键/事件类型/端点, 不改后端与 seq 语义）。结论已回填 §06 D13; 无其它待拍板项。</p>
 
 <h2><span class="no">§06</span>拍板记录</h2>
 <table>
@@ -156,6 +156,7 @@
   <tr><td>D10</td><td>P3 评估产物</td><td>结论直接写本计划, 不建 report/子 issue。</td></tr>
   <tr><td>D11</td><td>测试与真机口径</td><td>P1/P2 单测+node+e2e 三层; P1 纯桩可验; P2 回执机制桩可验, 真机只做两跳时序冒烟, qB 不可用记 BLOCKED; P3 免真机。</td></tr>
   <tr><td>D12</td><td>批次与认领链</td><td>S1(P1)/S2(P2)/S3(P3 评估) 三批逐批评审; issue 翻 <code>In Progress</code>, 不另建子 issue。</td></tr>
+  <tr><td>D13</td><td>P1 单游标回捞缺口（实施期新拍板, 2026-11-27 S1 补充）</td><td><b>保守游标回捞, 不新增机制</b>: 事件到达路径侦测 seq 间隙（到达 seq &gt; 已持游标+1）即记对账专用回退游标（最后连续位, 多缺口取 <code>min</code> 保最早）; 60s GET 的 <code>after</code> 改用回退游标重拉, 回捞仍走既有 merge（<code>"b"+seq</code> 去重 / 按 seq 有序 / 游标 max）, 对账仍不计未读; 仅当本次 <code>after</code> 仍等于回退游标时清空（GET 在途新缺口不被误清, 失败保留）, 后端重启 reseed 同步清空。不加配置键/事件类型/端点, 不改后端与 seq 语义。</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -175,6 +176,7 @@
   <li><span class="tag">R1 · 26-11-27-0530</span> 评审修复(major 1 条): S2 受理段从「带 stage 标记的 warn 回执」改为「<b>不进 cmd 回执面</b>的非通道信号」, 终态才走 <code>set_result -&gt; notify("cmd")</code>。原方案与 <code>onCmdEvent</code> 无条件兑现 + warn 终结态冲突, 照做会在受理段提前结算。§03/§04 S2-a/§07 同步, 不改 D9 拍板结论。</li>
   <li><span class="tag">R2 · 26-11-27-0530</span> 复评修复(minor 1 条): R1 的「复用 truth 事件带 stage 标记」候选被 <code>onTruthEvent</code>（<code>commands.js:348-372</code>）认 truth 即结算击穿, 与 cmd 兑现路径同为终结态。定案: <b>后端不推受理信号</b>, 受理段由前端 POST 返回即本地渲染（<code>transfer_flow.js:337</code> pending 形态）, 终态仍走 <code>set_result -&gt; notify("cmd")</code>。两段回执的用户可见语义与 D9 不变, 仅实现落点从「服务端推受理」改为「前端本地渲染」; §03/§04 S2-a/S2-b/§06 D9/§07 同步。</li>
   <li><span class="tag">R3 · 26-11-27-0542</span> 三轮评审修复完成(major 1 + minor 1, 第三轮零发现): S2 受理段定案=后端不推信号、前端本地渲染</li>
+  <li><span class="tag">R4 · 26-11-27-1241</span> S1 补充(用户新拍板 D13): 补上单游标回捞缺口 —— 事件路径间隙侦测记对账回退游标（最后连续位, <code>min</code> 保最早）, 60s GET 用回退游标回捞被 <code>notify</code> 丢弃的低 seq 条目（去重/排序/游标 max 复用 merge, 对账不计未读）, 成功后按条件清空、失败保留, reseed 同步清空; 后端 <code>after</code> 严格 <code>seq &gt; after</code>, 故回退基准取「最后连续位」并以到达 seq-1 封顶。扩 r4 node 电池 + error_history 静态守阵。计划整体仍 Open（S2/S3 未做）。</li>
 </ul>
 
 </div>

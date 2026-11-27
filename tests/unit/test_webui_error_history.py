@@ -31,7 +31,9 @@ tests/test_webui_backend_errlog.py (S2), 本文件只管前端。
   _errPollTimer) 三处接线 (漏一处 = 后端条目进不了面板或热重载堆叠)
 - test_frontend_errlog_event_wired: S1-b/S1-c(计划 26-11-27-0530) —— startEvents 注册 errlog 监听
   且事件只交 lifecycle.onErrlogEvent(零额外 GET); 落袋复用 _mergeBackendErrlog 的 "b"+seq 去重与
-  未读计数, 载荷无 ts 故补到达时刻; 合并按 seq 有序插入(乱序迟到的低 seq 不爬到新条上)、游标只进不退
+  未读计数, 载荷无 ts 故补到达时刻; 合并按 seq 有序插入(乱序迟到的低 seq 不爬到新条上)、游标只进不退;
+  S1 补充单游标回捞静态接线(行为真跑在 r4 node 电池): created 初始化 _errReconcileAfter /
+  onErrlogEvent 间隙侦测记回退游标 / _pullErrlog 的 after 优先用回退游标且仅相等时清空 / reseed 同步清回退游标
 - test_frontend_tooltip_yields_to_err_panel: ui_feedback.js 的 place() (show 初显与显示期重定位
   共用的定位单点, 2026-10-07 锚定保活重构) 对已开 .err-panel 做落点相交检测 (命中即 hide 不弹,
   防「tooltip 与弹窗重叠」露半截) + MutationObserver addedNodes 分支在面板挂载时收起现显浮层
@@ -237,8 +239,18 @@ def test_frontend_errlog_event_wired() -> None:
     assert '"b" + it.seq' in merge, "去重键 \"b\"+seq 被改坏(重拉/重复事件会重复计未读)"
     assert "splice(" in merge and "old.seq < it.seq" in merge, ("缺按 seq 降序插入(出锁广播乱序时迟到的低 seq 会爬到新条上面)")
     assert "last > (this._errLogCursor || 0)" in merge, "游标 max 只进不退被改坏(迟到低 seq 事件会把游标倒退)"
-    assert "_errlogReseed(last, this._errLogCursor || 0)" in _fn_body(life, "async _pullErrlog(countUnread)"
-                                                                     ), ("后端重启 seq 归零的重拉判定被摘掉")
+    # S1 补充(单游标回捞): 静态接线存在性(行为真跑在 test_webui_static_r4_poll_auth_lifecycle 电池)
+    created = _fn_body(life, "created()", indent=2)
+    assert "this._errReconcileAfter = null;" in created, "created 缺对账回退游标初值(undefined 会让 ?? 误判)"
+    assert "it.seq > cursor + 1" in handler, "onErrlogEvent 缺间隙侦测(seq 跳跃 = 有事件被 notify 丢弃)"
+    assert "this._errReconcileAfter = Math.min(" in handler, "间隙侦测未记回退游标(缺口永久滞留)"
+    pull = _fn_body(life, "async _pullErrlog(countUnread)")
+    assert "this._errReconcileAfter != null ? this._errReconcileAfter : (this._errLogCursor || 0)" in pull, (
+        "60s GET 的 after 未优先用回退游标(游标推过后低 seq 条目捞不回)"
+    )
+    assert "this._errReconcileAfter === after" in pull, ("回捞成功缺条件清空(GET 在途新事件重新标记的缺口会被误清)")
+    assert "this._errReconcileAfter = null;" in pull, "reseed 路径缺回退游标归置(旧代 seq 污染重拉)"
+    assert "_errlogReseed(last, this._errLogCursor || 0)" in pull, ("后端重启 seq 归零的重拉判定被摘掉")
 
 
 def test_frontend_tooltip_yields_to_err_panel() -> None:

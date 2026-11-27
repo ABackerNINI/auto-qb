@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-11-27
 **Updated:** 2026-11-27
-**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; S1(P1 错误日志推送化)已实施收口, 计划整体仍 Open(S2/S3 未做)
+**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; S1(P1 错误日志推送化)已实施收口, S1 补充(单游标回捞缺口 D13)已收口, 计划整体仍 Open(S2/S3 未做)
 **Topics:** webui-sse
-**Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/testing/baselines/26-11-27-0608-webui-sse-s1-frontend.md
+**Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/testing/baselines/26-11-27-0608-webui-sse-s1-frontend.md, memory-bank/testing/baselines/26-11-27-1244-webui-sse-s1-gap-recover.md
 
 ## 本篇只回答
 
@@ -56,3 +56,11 @@
 - S1-c: 60s GET 降为纯对账/游标校准(丢事件补齐、重启重拉), 不再计未读以免与事件双计; boot 开页全量合并语义不变。
 - 守阵: 扩 `test_webui_error_history.py`(静态接线) 与 `test_webui_static_r4_poll_auth_lifecycle.py`(SSE 监听断言 + 落袋/对账 node 电池), 新增双皮肤面板 e2e。`test.full` 实测数字见 kb.baseline 最新切片 `webui-sse-s1-frontend`。
 - 计划 26-11-27-0530 整体保持 Open(S2/S3 未做), issue 状态未动。
+
+### R2 · S1 补充单游标回捞 (2026-11-27)
+
+- 用户新拍板 D13: 出锁广播 + 游标只进不退下, 低 seq 事件被 notify 队列丢弃而高 seq 事件先到推进游标后, 60s GET 用 after=cursor 回捞不到该低 seq 条目 —— 采用**保守游标回捞**, 不新增机制。已回填计划 §05/§06 D13/§10 R4。
+- 落点 `lifecycle.js`: `created` 初始化 `_errReconcileAfter = null`; `onErrlogEvent` 在合并推进游标**之前**侦测间隙(到达 seq > 游标+1), 记回退游标 = `min(已有 ?? 当前游标, 到达seq-1)`(多缺口保最早); `_pullErrlog` 的 `after` 改用 `_errReconcileAfter ?? _errLogCursor`, 回捞走既有 `_mergeBackendErrlog`(`"b"+seq` 去重 / 按 seq 有序插入 / 游标 max)且对账不计未读; 仅当本次 `after` 仍等于回退游标时清空(GET 在途新缺口不误清, 失败保留), reseed 路径同步清空。
+- 口径澄清: 后端 `/api/errlog` 的 `after` 是严格 `seq > after`(`runtime_stream.py:98`), 故拍板公式 `?? seq` 的基准取「最后连续位=游标」, 并以到达 seq-1 封顶, 才满足「回退点不超过第一个可疑缺口」并真能捞回被丢条目; 字面取到达 seq-1 只会捞回到达事件及其后, 与目标相反。
+- 守阵: `test_webui_static_r4_poll_auth_lifecycle.py` 的 `_NODE_ERRLOG_EVENT_PROBE` 扩九组缺口回捞断言(回捞成功/降序落位/不去重计/游标不倒退/成功后清空/多缺口保最早/GET 期间新缺口不误清/失败保留/reseed 清); `test_webui_error_history.py` 静态接线 +6 断言。定向 21 passed。
+- 计划整体仍 Open(S2/S3 未做), issue 26-11-20-0408 状态未动; `test.full` 数字与基线切片见 kb.baseline 最新 `webui-sse-s1-gap-recover`。
