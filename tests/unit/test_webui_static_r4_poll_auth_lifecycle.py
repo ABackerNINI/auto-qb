@@ -1,7 +1,7 @@
 """test_webui_static_r4_poll_auth_lifecycle 测试计划: 存量评审 R4 static 主题清池 P08 —— 轮询/鉴权/生命周期/视图域 行为修复回归 + 纯逻辑 node 电池
 
 ## 测试计划(每个测试函数一条)
-- test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer + 换票 await 期间登出落票后不开流(issue 26-11-08-0229 #7: authOk 复查拦在 EventSource 之前, _esBusy 不残留)
+- test_r4_sse_edge_reconnect_state_machine: R5#14(major) + R5#15 —— SSE 断线沿判定与换票重连状态机 node 电池真跑(兑现 polling.js 文件头「探针真跑」注释契约, 兑现前 tests/ 零命中): _esDisconnectEdge 纯函数三分型(undefined 首断/true->false 跳变/重试期 false 非沿) + startEvents 换票接线(POST /api/events/ticket + ?ticket= 连流) + onopen 回置 + 首断沿恰一条 toast + 重试期重复 onerror 只发一条 toast 不叠重试定时器 + 重连必关旧连接换新票 + ver 驱动 60ms 去抖合并(R5#4 修复回归: 落拍 document.hidden 短路, 后台标签不吃 ver 驱动, 恢复可见照常拉) + stopEvents 归置 _esConnected/_esRetry/_verTimer + 换票 await 期间登出落票后不开流(issue 26-11-08-0229 #7: authOk 复查拦在 EventSource 之前, _esBusy 不残留); S2-a 守阵: 事件面清单恰为 cmd/truth/skip_check/errlog/ver 五项, 受理段不进 SSE 事件面(后端不推受理信号)
 - test_r4_poll_backoff_and_stop_onend: R5#17 + R5#5 —— 轮询失败退避曲线真跑分型(骨架探针把 currentPollMs 桩成常量的绕过面在此补上): pollFails=0..4 序列(1.5s 档 3000/6000/12000/15000 封顶)、大库 3s 档与总量未知 2s 档、refresh 成功清零/失败递增封顶 4/401 分支停轮询+拆推送不续排(R5#2 第二半); stopPoll 对 awaitPoll 收摊走 onEnd 且兑现 null(文件头契约「收敛/耗尽/到点都走」含外部叫停), startPoll 顶掉同 key 有界等待 onEnd 不双调, 收敛路径(finish)与叫停路径互斥不双调; onEnd 抛异常不吞 settle(issue 26-11-08-0229 #8: stopPoll 与 finish 两路同式 try/finally, settle 必达、异常照常上抛不吞不藏); fail 路(fn 抛异常 reject)不走 onEnd、句柄表归置(issue 26-11-08-1621 契约定案: 清理归调用方, 文件头注释已写明); 在途合流守卫(2026-11-21): 多触发源并发直调 refresh 只发一次请求(第二拍记 _refreshQueued 返回, 同 rid 双发根除)、在途落定后补拍即取(ver 驱动新鲜度语义保留, 不静默丢弃)、补拍在途期再触发被 refresh() 再入守卫吃住(直调 _refreshOnce 绕守卫即红)、落定时刻已切后台不补拍(hidden 翻转变体钉住, 恒等守卫同口径)、壳不双排(schedN=每轮一次) + 切视图竞态: goView 置空 lastRid 不被在途旧视图轮的 rid 回写(adopt 守卫 reqView===viewMode), 补拍带空 rid+新视图名取全量, 落定后新视图 rid 正常采纳 + 早退xqueued: 401 早退时壳仍补拍(补拍轮同走早退恰拆两次幂等无循环, 不续排)
 - test_r4_errlog_reseed_probe: R5#16 —— lifecycle.js _errlogReseed node 电池真跑(兑现「探针真跑」注释契约, 兑现前 tests/ 零命中): cursor 0(尚无游标)不判重启 / last<cursor 判重启(seq 进程内只增, 倒退唯一路径是重启归零) / last>=cursor 正常
 - test_r4_errlog_event_and_reconcile_probe: S1-b/S1-c(计划 26-11-27-0530) —— errlog 事件落袋 + 对账 node 电池真跑: 事件入历史/未读/去重/游标只进不退 / 有 ts 兜底(载荷无 ts 不落 1970) / 乱序迟到低 seq 按 seq 降序插入 / 丢事件后 60s GET 补齐且不双计未读 / 后端重启 seq 归零后清旧重拉不丢新条目; S1 补充单游标回捞: 低 seq 被 notify 丢弃+高 seq 先到推游标后 60s GET 用回退游标回捞成功(按 seq 降序落位/不重复计数/游标不倒退/成功后清空) / 多缺口 min 保住最早回退点 / GET 在途新缺口标记不被误清 / GET 失败保留回退游标 / 重启 reseed 同步清回退游标; 同电池首段在 SSE 状态机里钉 startEvents 注册 errlog 监听、坏帧忽略、事件路径零 GET
@@ -162,6 +162,11 @@ const ok = (name, cond) => checks.push([name, !!cond]);
   es2.emit("errlog", { data: "not-json" });
   ok("errlog 坏帧忽略(不污染历史)", ctx.errEvents.length === 1);
   ok("事件路径零 GET(只换过票)", ticketCalls.every((p) => p === "/api/events/ticket"));
+  // 6c. S2-a 守阵: 受理段不进 SSE 事件面(后端不推受理信号) —— 事件类型清单恰为既有五项,
+  //     无新增事件类型/监听点; cmd 仍是唯一回执兑现入口(终态 set_result->notify("cmd"))。
+  ok("S2-a 事件面清单不增项(cmd/truth/skip_check/errlog/ver 五项)",
+     JSON.stringify(Object.keys(es2.handlers).sort()) ===
+     JSON.stringify(["cmd", "errlog", "skip_check", "truth", "ver"]));
 
   // 7. stopEvents 归置(R5#14: 断线沿状态位随连接会话归置)
   ctx.stopEvents();

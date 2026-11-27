@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-11-27
 **Updated:** 2026-11-27
-**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; S1(P1 错误日志推送化)已实施收口, S1 补充(单游标回捞缺口 D13)已收口, 计划整体仍 Open(S2/S3 未做)
+**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; S1(P1 错误日志推送化)与 S1 补充(单游标回捞缺口 D13)已收口, S2(P2 transfer D5b 两段回执)已实施收口(真机 BLOCKED), 计划整体仍 Open(S3 未做)
 **Topics:** webui-sse
-**Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/testing/baselines/26-11-27-0608-webui-sse-s1-frontend.md, memory-bank/testing/baselines/26-11-27-1244-webui-sse-s1-gap-recover.md
+**Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/testing/baselines/26-11-27-0608-webui-sse-s1-frontend.md, memory-bank/testing/baselines/26-11-27-1244-webui-sse-s1-gap-recover.md, memory-bank/testing/baselines/26-11-27-1324-webui-sse-s2-transfer-two-hop.md
 
 ## 本篇只回答
 
@@ -35,7 +35,7 @@
 |---|---|---|
 | S0 | 三路只读取证 + grilling 两轮 + 计划入库 + 认领链 | Done (2026-11-27) |
 | S1 | P1 错误日志推送化（后端事件 + 前端接线 + 对账 + 守阵） | Done (2026-11-27) |
-| S2 | P2 transfer D5b 两段回执（受理段可区分 + 终态覆盖 + 前端两段 + 真机冒烟） | Open |
+| S2 | P2 transfer D5b 两段回执（受理段可区分 + 终态覆盖 + 前端两段 + 真机冒烟） | Done (2026-11-27) |
 | S3 | P3 抽屉推送化只读评估（空转率/缓存命中率 + 结论） | Open |
 
 ## 进度日志
@@ -64,3 +64,13 @@
 - 口径澄清: 后端 `/api/errlog` 的 `after` 是严格 `seq > after`(`runtime_stream.py:98`), 故拍板公式 `?? seq` 的基准取「最后连续位=游标」, 并以到达 seq-1 封顶, 才满足「回退点不超过第一个可疑缺口」并真能捞回被丢条目; 字面取到达 seq-1 只会捞回到达事件及其后, 与目标相反。
 - 守阵: `test_webui_static_r4_poll_auth_lifecycle.py` 的 `_NODE_ERRLOG_EVENT_PROBE` 扩九组缺口回捞断言(回捞成功/降序落位/不去重计/游标不倒退/成功后清空/多缺口保最早/GET 期间新缺口不误清/失败保留/reseed 清); `test_webui_error_history.py` 静态接线 +6 断言。定向 21 passed。
 - 计划整体仍 Open(S2/S3 未做), issue 26-11-20-0408 状态未动; `test.full` 数字与基线切片见 kb.baseline 最新 `webui-sse-s1-gap-recover`。
+
+### R3 · S2 transfer D5b 两段回执收口 (2026-11-27)
+
+- S2-a 后端守阵: 代码本就无缺口, 零产品后端改动。确认 transfer 受理路径无新增 notify 推送点(`runtime_transfer.py` 零 `notify(`)、无新增事件类型、事件面清单恰为 `cmd/truth/skip_check/errlog/ver` 五项; 终态仍走既有 `receipt_port -> _transfer_receipt -> set_result -> notify("cmd")` 覆盖同 `cmd_id`(`runtime_commands.py:318` 全 webui 唯一 `notify("cmd")` 点); 单写线程纪律不变(回执端口只在主循环 `drain` 路径收敛, worker 线程只投结果队列); `waitCmd` 三态终结语义不改。新增 `test_tf_backend_no_accept_signal_guard` 静态钉死六项, SSE node 电池 +1 事件面清单断言。
+- S2-b 前端两段消费: `transfer_flow.js::_transferExec` 受理段从 POST **之前**挪到 POST 成功返回 `cmd_id` **之后**本地渲染(pending 图标 +「后台验证中」文案, 沿用原 pending 形态), 投递失败路径不再误挂 pending(连图标调用都不发生); `waitCmd(resp.cmd_id, timeoutMs)` 保留作 SSE 丢事件兜底; 终态回执到达才结算三件套(逐项行内 ok/warn/error + toast 三态 + 目标缓存刷新)。
+- 双跳时序幂等: 本批内局部 `settled` Set(`_transferRenderAccepted` / `_transferSettleIcon` 成对共用), 终态先到先记账, 后到的受理段渲染遇 settled 跳过, 已结算行不被降级回「后台验证中」; 不引入跨批全局状态。node 电池强制反序验证幂等 + 两段共用同一集合, 双皮肤 e2e 验可见性与不降级。
+- 测试与真机: 定向 `test_transfer_flow_confirm.py` 5 passed、SSE 电池 1 passed; 新增 `tests/e2e/transfer-two-hop.spec.mjs` 双皮肤(prism/atlas)2 passed(4.5s); `commands run test.full` 全绿, 基线切片 `webui-sse-s2-transfer-two-hop`(见 kb.baseline)。真机 S2-c: `real.guard` FAIL(端口 56589/56590 均无监听进程), 按 D11 记 BLOCKED, 不阻断入库; 未手工杀进程、未拉共享实例。
+- 计划整体仍 Open(S3 抽屉只读评估未做), issue 26-11-20-0408 状态未动。
+
+- 2026-11-27 13:24 S2 transfer D5b 两段回执实施收口: 后端零改动守阵 + 前端 POST 后本地渲染受理段 + 本批局部 settled 双跳幂等 + 双皮肤 e2e + 真机 guard BLOCKED

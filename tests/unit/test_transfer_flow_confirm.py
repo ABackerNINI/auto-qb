@@ -26,12 +26,18 @@ orchestrator.gate_verdict 同口径); export 可用性与目标连通性后置�
   收口; 确认取消零副作用; 确认执行 POST /api/transfer/run 载荷(target_id/hashes/
   keep_source 提供才透传) + 结算三件套(回执中文三态 -> 行内图标 ok/warn/error, toast
   失败/跳过/全成三态, truth 缺失不谎称成功) + keep_source 不清选中集 / 默认删源成功后
-  清选中集 + 单飞闸(执行中重复 transferOpen 直接返回) + 发送失败撤 pending 图标
+  清选中集 + 单飞闸(执行中重复 transferOpen 直接返回) + 发送失败不误挂 pending 图标
 - test_tf_wiring_static: 静态接线守阵 —— app.js mixin(window.AQB_TRANSFER_FLOW); 三份
   manifest 装载序 transfer_targets.js < transfer_flow.js < app.js; 顶层声明(TR_*/trMap)
   全仓唯一(classic script 顶层撞名 = 整文件 SyntaxError); 字段/类型标签只从
   transfer_targets.js 的 window 挂载面取(transfer_flow.js 不出现第二份标签字面量);
-  弹窗复用 _openModal(checks/details) 不新增 tpl 分片; 结算走 setRowIcon/toast/_finishToast
+  弹窗复用 _openModal(checks/details) 不新增 tpl 分片; 结算走 setRowIcon/toast/_finishToast;
+  S2 两段: _transferRenderAccepted/_transferSettleIcon/「后台验证中」在位, 且受理段只在
+  POST 返回后渲染(静态顺序钉)
+- test_tf_backend_no_accept_signal_guard: S2-a 后端守阵 —— transfer 后端零 notify 推送点;
+  全 webui 仅 set_result 一处 notify("cmd") 且在函数体内; 终态经 _transfer_receipt -> set_result
+  覆盖同 cmd_id; SSE 事件面恰五项无新增; waitCmd 三态终结语义未改; 回执端口只在主循环
+  drain 收敛(worker 线程只投结果队列)
 """
 import json
 import os
@@ -164,7 +170,7 @@ function makeVm() {
       ["h-up", { hash: "h-up", name: "C", state: "stalledUP", save_path: "/other/c" }],
     ]),
     _transferRunning: false,
-    toasts: [], icons: {}, apiCalls: [], reloads: 0, cleared: 0,
+    toasts: [], icons: {}, iconLog: [], apiCalls: [], reloads: 0, cleared: 0,
     modalCfg: null,
     cmdResult: null,
     confirmRes: null,
@@ -188,7 +194,7 @@ function makeVm() {
       if (text) vm.toast(text, kind);
       return Promise.resolve();
     },
-    setRowIcon(hash, kind, msg) { vm.icons[hash] = { kind, msg }; },
+    setRowIcon(hash, kind, msg) { vm.icons[hash] = { kind, msg }; vm.iconLog.push([hash, kind, msg]); },
     api(path, options) {
       if (vm.apiShouldThrow) return Promise.reject(new Error("boom"));
       vm.apiCalls.push([path, options]);
@@ -306,18 +312,64 @@ vm.cmdResult = { ok: false, error: "转移目标未启用: 副种机" };
 await vm.transferOpen("副种机", ["h-ok"]);
 out.cmdFail = { icons: vm.icons, toast: lastToast() };
 
-// ---- 8. 发送失败: 撤 pending 图标 + toast error
+// ---- 8. 发送失败: POST 抛错不误挂 pending 图标 + toast error
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.apiShouldThrow = true;
 await vm.transferOpen("副种机", ["h-ok"]);
-out.sendFail = { icons: vm.icons, toast: lastToast(), running: vm._transferRunning };
+out.sendFail = { icons: vm.icons, log: vm.iconLog.slice(), toast: lastToast(), running: vm._transferRunning };
 
 // ---- 9. 单飞闸: 执行中重复 transferOpen 直接返回(不开弹窗不投递)
 vm = makeVm();
 vm._transferRunning = true;
 await vm.transferOpen("副种机", ["h-ok"]);
 out.singleFlight = { modal: vm.modalCfg, api: vm.apiCalls.length };
+
+// ---- 10. 两段可见(S2-b): POST 返回后受理段 pending「后台验证中」 -> 终态才结算三件套
+vm = makeVm();
+vm.confirmRes = { checks: { keep_source: false } };
+vm.cmdResult = { ok: true, truth: { results: [
+  { hash: "h-ok", "状态": "成功", "原因": "" },
+], summary: { success: 1, skipped: 0, failed: 0 }, target: "副种机" } };
+const seen = {};
+vm.waitCmd = (cmdId, ms) => {
+  seen.cmdId = cmdId; seen.ms = ms;
+  seen.icons = JSON.parse(JSON.stringify(vm.icons));
+  seen.iconLog = vm.iconLog.slice();
+  return Promise.resolve(vm.cmdResult);
+};
+await vm.transferOpen("副种机", ["h-ok"]);
+out.twoHop = {
+  atWait: seen, icons: vm.icons, toast: lastToast(),
+  apiPaths: vm.apiCalls.map((c) => c[0]),
+};
+
+// ---- 11. 双跳竞态(S2): 终态先记账, 后到的受理段渲染不得降级已结算行
+vm = makeVm();
+vm.confirmRes = { checks: { keep_source: false } };
+vm.cmdResult = { ok: true, truth: { results: [
+  { hash: "h-ok", "状态": "成功", "原因": "" },
+], summary: { success: 1, skipped: 0, failed: 0 }, target: "副种机" } };
+const cap = {};
+vm._transferRenderAccepted = (s, settled, ms) => {
+  cap.acceptSet = settled;
+  return M._transferRenderAccepted.call(vm, s, settled, ms);
+};
+vm._transferSettleIcon = (settled, h, k, r) => {
+  cap.settleSet = settled;
+  return M._transferSettleIcon.call(vm, settled, h, k, r);
+};
+await vm.transferOpen("副种机", ["h-ok"]);
+const beforeLate = JSON.parse(JSON.stringify(vm.icons["h-ok"]));
+// 强制反序: 终态已结算后再来一次受理段渲染(真实流里渲染先于 waitCmd), 验幂等
+M._transferRenderAccepted.call(vm, ["h-ok"], cap.settleSet, 40000);
+out.race = {
+  sameSet: cap.acceptSet === cap.settleSet,
+  settled: [...cap.settleSet],
+  before: beforeLate,
+  after: { ...vm.icons["h-ok"] },
+  log: vm.iconLog.slice(),
+};
 
 console.log(JSON.stringify(out));
 
@@ -326,7 +378,7 @@ console.log(JSON.stringify(out));
 
 
 def test_tf_open_flow_vm_probe():
-    """node 真 vm 桩跑 transferOpen 全链: 预检排除/弹窗行表/执行载荷/结算三件套/单飞闸"""
+    """node 真 vm 桩跑 transferOpen 全链: 预检/弹窗/载荷/结算三件套/单飞闸/两段可见/双跳幂等"""
     node = shutil.which("node")
     if not node:
         return
@@ -384,13 +436,30 @@ def test_tf_open_flow_vm_probe():
     assert rep["cmdFail"]["icons"]["h-ok"]["kind"] == "error", rep["cmdFail"]["icons"]
     assert rep["cmdFail"]["toast"]["kind"] == "error" and "未启用" in rep["cmdFail"]["toast"]["text"]
 
-    # ---- 8. 发送失败: pending 撤下(图标清空) + 单飞闸复位
-    assert rep["sendFail"]["icons"]["h-ok"]["kind"] == "", rep["sendFail"]["icons"]
-    assert rep["sendFail"]["toast"]["kind"] == "error"
-    assert rep["sendFail"]["running"] is False
+    # ---- 8. 发送失败: POST 抛错从未渲染 pending(不撤销不落红谎报) + 单飞闸复位
+    sf = rep["sendFail"]
+    assert sf["icons"].get("h-ok", {}).get("kind", "") == "" and sf["log"] == [], sf
+    assert sf["toast"]["kind"] == "error" and sf["running"] is False
 
     # ---- 9. 单飞闸
     assert rep["singleFlight"] == {"modal": None, "api": 0}, rep["singleFlight"]
+
+    # ---- 10. 两段可见: POST 返回后受理段 pending「后台验证中」, 终态回执才结算三件套
+    th = rep["twoHop"]
+    assert th["atWait"]["cmdId"] == "c1", th["atWait"]
+    aw = th["atWait"]["icons"]["h-ok"]
+    assert aw["kind"] == "pending" and "后台验证中" in aw["msg"], th["atWait"]
+    assert th["atWait"]["iconLog"][0] == ["h-ok", "pending", "后台验证中"], th["atWait"]["iconLog"]
+    assert th["icons"]["h-ok"]["kind"] == "ok", th["icons"]
+    assert th["toast"]["kind"] == "ok" and "/api/config" in th["apiPaths"], th
+
+    # ---- 11. 双跳竞态幂等: 两段共用同一 settled, 迟到受理段不降级已结算行
+    rc = rep["race"]
+    assert rc["sameSet"] is True, "受理段与终态段未共用本批 settled 集合"
+    assert rc["settled"] == ["h-ok"], rc["settled"]
+    assert rc["before"]["kind"] == "ok" and rc["after"]["kind"] == "ok", rc
+    assert rc["after"]["msg"] == rc["before"]["msg"], rc
+    assert len(rc["log"]) == 2, "已结算后迟到的受理段渲染不应再落 pending 图标"
 
 
 def test_tf_wiring_static():
@@ -422,6 +491,58 @@ def test_tf_wiring_static():
     assert "window.AQB_TRANSFER_FIELDS" in tf and "window.AQB_TRANSFER_TYPE_LABELS" in tf, (
         "transfer_flow.js 未从挂载面取字段/类型标签"
     )
-    # 弹窗复用 _openModal(不新增 tpl 分片); 结算三件套走单点
-    for needle in ("_openModal", "setRowIcon", "waitCmd", "_finishToast", "/api/transfer/run"):
+    # 弹窗复用 _openModal(不新增 tpl 分片); 结算三件套走单点; S2 两段渲染/结算成对共用 settled
+    for needle in (
+        "_openModal", "setRowIcon", "waitCmd", "_finishToast", "/api/transfer/run", "_transferRenderAccepted",
+        "_transferSettleIcon", "后台验证中"
+    ):
         assert needle in tf, f"transfer_flow.js 缺 {needle}(四段式接线断裂)"
+    # 受理段只在 POST 返回后渲染: pending 图标 SET 不得出现在 this.api(...) 之前
+    exec_body = tf[tf.index("async _transferExec("):]
+    assert "this.api(\"/api/transfer/run\"" in exec_body
+    assert exec_body.index("this._transferRenderAccepted(") > exec_body.index("this.api(\"/api/transfer/run\""), \
+        "受理段不得在 POST 之前渲染"
+
+
+def test_tf_backend_no_accept_signal_guard():
+    """S2-a 守阵(计划 26-11-27-0530): 后端不推受理信号 / 事件面不增项 / 单写线程纪律不变
+
+    受理段一旦由服务端推, 无论走 cmd 还是 truth 都会被当终结态(onCmdEvent 按 id 无条件
+    兑现 + warn 终结 / onTruthEvent 认 truth 即结算), 受理段会提前结算 —— 故后端零推送点
+    是本批最高优先级硬约束。终态只经既有 receipt_port -> set_result -> notify("cmd") 覆盖
+    同 cmd_id; waitCmd 三态终结语义不改; 不建新事件类型; 回执端口只在主循环 drain 路径收敛。
+    """
+    webui = os.path.dirname(STATIC_ROOT)
+    tr = open(os.path.join(webui, "runtime_transfer.py"), encoding="utf-8").read()
+    cmds = open(os.path.join(webui, "runtime_commands.py"), encoding="utf-8").read()
+    rt = open(os.path.join(webui, "runtime.py"), encoding="utf-8").read()
+    polling = open(os.path.join(STATIC_ROOT, "shared", "polling.js"), encoding="utf-8").read()
+    commands_js = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+
+    # 1. transfer 后端零 notify 推送点(受理信号绝不从服务端进事件面)
+    assert "notify(" not in tr, "runtime_transfer.py 出现 notify: 受理段被服务端推出, 会被当终态提前结算"
+    # 2. 全 webui 仅 set_result 一处 notify("cmd"), 且在 set_result 函数体内
+    hits = []
+    for name in os.listdir(webui):
+        if not name.endswith(".py"):
+            continue
+        text = open(os.path.join(webui, name), encoding="utf-8").read()
+        hits += [(name, i + 1) for i, line in enumerate(text.splitlines()) if 'notify("cmd"' in line]
+    assert len(hits) == 1 and hits[0][0] == "runtime_commands.py", f"notify(cmd) 推送点非唯一: {hits}"
+    body = cmds[cmds.index("    def set_result("):]
+    body = body[:body.index("\n    def ")]
+    assert 'notify("cmd"' in body, "notify(cmd) 不在 set_result 内(终态覆盖单点漂移)"
+    # 3. 终态经门面 _transfer_receipt -> set_result 覆盖同 cmd_id
+    assert "receipt_port=self._transfer_receipt" in rt and 'self.set_result(cmd_id, "ok", truth=payload)' in rt
+    # 4. 事件面清单不增项: 恰为既有五项, 无受理段事件类型
+    evs = re.findall(r'addEventListener\("([^"]+)"', polling)
+    assert sorted(evs) == ["cmd", "errlog", "skip_check", "truth", "ver"], f"事件面清单漂移: {evs}"
+    # 5. waitCmd 三态终结语义不改(warn 仍是终结态)
+    assert 'r.status === "ok" || r.status === "error" || r.status === "warn"' in commands_js
+    # 6. 单一写线程: 回执端口只在 drain 主循环路径收敛, worker 线程只投结果队列
+    worker = tr[tr.index("    def _worker_loop("):]
+    worker = worker[:worker.index("\n    def ")]
+    assert "_receipt_port" not in worker, "worker 线程直写回执端口, 破坏单写线程纪律"
+    drain = tr[tr.index("    def drain("):]
+    drain = drain[:drain.index("\n    def ")]
+    assert "_collect_results" in drain, "回执端口未在 drain 主循环路径收敛"

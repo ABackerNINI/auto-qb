@@ -34,7 +34,8 @@
  *     map_save_path 逐位同语义, 守阵 test_transfer_flow_confirm.py 用后端真函数对账) /
  *     跳检警示(skip_check 开时) / 「仅本次保留源种子」勾选(默认不勾, D1)。
  *   执行: 确认后 POST /api/transfer/run 走 waitCmd(超时随批量放大); _transferRunning
- *     单飞闸禁重复触发; 行内 pending 图标兜底随超时放大。
+ *     单飞闸禁重复触发; 受理段 = POST 成功返回 cmd_id 后才本地渲染 pending「后台验证中」
+ *     (仅供可见, 不结算 —— 后端不推受理信号), 双跳竞态 settled 局部标记防终态被降级。
  *   结算(批量管线三件套: waitCmd 回执 + toast 三态 + setRowIcon 行内图标): 回执 truth.
  *     results 逐项落图标(成功/跳过/失败 -> ok/warn/error, 原因进图标 tooltip); toast 按
  *     失败>跳过>全成 三态给计数与首因; truth 缺失不谎称成功(统一 warn, reannounce 同口径)。
@@ -322,11 +323,31 @@ window.AQB_TRANSFER_FLOW = {
       });
     },
     /* 执行段 + 结算段: 确认后 POST /api/transfer/run 走 waitCmd, 回执逐项结算。
+     * 两段可见(计划 26-11-27-0530 S2/D9): 受理段 = POST 成功返回 cmd_id 后**前端本地渲染**
+     *   (pending 图标 + 「后台验证中」, 只给可见不结算 —— 后端不推受理信号: 服务端受理信号
+     *   走 cmd 会被 onCmdEvent 按 id 无条件兑现 + warn 终结态当终态, 走 truth 会被
+     *   onTruthEvent 认 truth 即结算, 两条路都会提前结算); 终态段 = 既有 receipt_port ->
+     *   set_result -> notify("cmd") 覆盖同 cmd_id, waitCmd 兑现才落三件套(事件/SSE 丢失退回
+     *   轮询兜底)。_transferRenderAccepted / _transferSettleIcon 共用本批 settled 集合:
+     *   终态先到先记账, 后到的受理段渲染遇 settled 跳过, 不把已结算行降级回「后台验证中」。
      * _transferRunning 单飞闸: 执行中重复触发直接返回(删除流"确认后不可再改主意"同纪律);
      * waitCmd 超时随批量放大(串行逐种子, 单条最坏 = export+添加+验证 10s, 见 §07 风险 3),
-     * 行内 pending 图标兜底同步放大。结算三件套: 回执 truth.results 逐项 setRowIcon
+     * 受理段 pending 图标兜底同步放大。结算三件套: 回执 truth.results 逐项 setRowIcon
      * (成功/跳过/失败 -> ok/warn/error, 原因进 tooltip) + toast 三态(失败>跳过>全成) +
      * 完成后刷新目标缓存(列表态交 rid 轮询自然对齐, 与删除流同口径)。 */
+    /* 受理段渲染(第一跳): POST 成功返回 cmd_id 后才本地渲染 —— pending 行图标 +
+     * 「后台验证中」文案(沿用原 pending 形态, 文案点明语义), 只给可见性不结算。
+     * settled = 本批已结算 hash 集合; 已结算的跳过 —— 双跳竞态下终态先到先记账,
+     * 后到的受理段渲染不得把已结算行降级回「后台验证中」。 */
+    _transferRenderAccepted(send, settled, timeoutMs) {
+      for (const h of send) if (!settled.has(h)) this.setRowIcon(h, "pending", "后台验证中", timeoutMs + 5000);
+    },
+    /* 终态落行图标(第二跳): 先把 hash 记进 settled 再落终态图标 —— 后到的受理段渲染
+     * 经 settled 跳过, 已结算态不被改变(与 _transferRenderAccepted 成对, 同一集合)。 */
+    _transferSettleIcon(settled, hash, kind, reason) {
+      settled.add(hash);
+      this.setRowIcon(hash, kind, reason);
+    },
     async _transferExec(targetId, name, send, skips, keepSource) {
       if (this._transferRunning) return;
       this._transferRunning = true;
@@ -334,17 +355,21 @@ window.AQB_TRANSFER_FLOW = {
       const run = this._runningToast(
         `转移已开始: ${send.length} 个种子到「${name}」, 串行执行, 数据文件不动`
       );
-      for (const h of send) this.setRowIcon(h, "pending", "转移中…", timeoutMs + 5000);
+      const settled = new Set();  // 本批已结算标记(双跳竞态; 局部, 不引入跨批全局状态)
       let r = null;
+      let posted = false;
       try {
         const body = { target_id: targetId, hashes: send };
         if (keepSource) body.keep_source = true;  // 「提供才透传」, 与路由口径一致(缺省 = 默认删源)
         const resp = await this.api("/api/transfer/run", { method: "POST", body: JSON.stringify(body) });
+        posted = true;
+        // 第一跳: POST 成功返回 cmd_id 后才渲染受理段(失败路径不误挂 pending)
+        this._transferRenderAccepted(send, settled, timeoutMs);
         r = await this.waitCmd(resp.cmd_id, timeoutMs);
       } catch (e) {
-        /* 投递失败(网络/400): 一批全未执行 —— 撤 pending 图标(不落 error: 种子没被碰过,
-         * 落红图标反而谎报), 只 toast。 */
-        for (const h of send) this.setRowIcon(h, "", "");
+        /* POST 投递失败(网络/400): 从未渲染 pending —— 不撤销不落 error(种子没被碰过, 落红
+         * 反而谎报), 只 toast。waitCmd 异常: pending 已渲染, 对未结算的撤销。 */
+        if (posted) for (const h of send) if (!settled.has(h)) this.setRowIcon(h, "", "");
         this._finishToast(run.tid, "error", "转移命令发送失败: " + ((e && e.message) || e), 8000);
         this._transferRunning = false;
         return;
@@ -370,16 +395,16 @@ window.AQB_TRANSFER_FLOW = {
             skipN += 1;
             if (!firstSkip) firstSkip = reason;
           }
-          this.setRowIcon(hash, kind, reason);
+          this._transferSettleIcon(settled, hash, kind, reason);
         }
       } else if (!r.ok) {
         failN = send.length;
         firstFail = String(r.error || "执行失败");
-        for (const h of send) this.setRowIcon(h, "error", firstFail);
+        for (const h of send) this._transferSettleIcon(settled, h, "error", firstFail);
       } else {
         skipN = send.length;
         firstSkip = "未收到逐项结果(以程序日志为准)";
-        for (const h of send) this.setRowIcon(h, "warn", firstSkip);
+        for (const h of send) this._transferSettleIcon(settled, h, "warn", firstSkip);
       }
       const allSkip = skipN + skips.length;
       const head = `转移结算: 目标「${name}」, 成功 ${okN}, 跳过 ${allSkip}, 失败 ${failN}`;
