@@ -12,7 +12,9 @@
 - test_cross_site_host_rejection_contract: 直调跨站闸钉死缺 Host / attacker.com 的 403 detail 与恰好一条 WARNING 逐字契约(缺 Host 保留冒号后空值与尾随空格)
 - test_cross_site_origin_rejection_contract: 直调跨站闸钉死合法 Host + POST + 跨站 Origin 的 403 detail 与 WARNING 逐字契约
 - test_cross_site_origin_port_mismatch_rejected_before_enqueue: 同主机异端口 Origin 在入队前 403, detail 精确且命令队列与唤醒记录均为空; 同源正对照先证明暂停端点确会入队并唤醒
-- test_require_token_missing_client_fails_closed: skip=true + 合法 Host + client=None + 无 Authorization 直调鉴权 -> 401 invalid token, 不抛 AttributeError
+- test_require_token_missing_client_fails_closed: skip=true + 合法 Host + client=None + 无 Authorization 直调鉴权 -> 必须抛出 HTTPException 401 invalid token; 正常返回(含返回异常对象)按 fail-open 断言拒绝, 其他异常由类型断言转 AssertionError
+- test_require_token_invalid_token_detail_contract: 远端 + skip=false 直调鉴权, 空/畸形/错 token 均 401 且 detail 精确 invalid token; 仅错 token 恰一条 WARNING 逐字契约
+- test_skip_local_verify_info_contract_once_after_bearer: 新 factory + loopback + skip=true, 正确 Bearer 不记 INFO; 首次无凭证恰一条精确 INFO, 后续不新增
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
 - test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性 / *.localhost 后缀判定)
 - test_allowed_hostnames_normalizes_configured_host: 自配 Host 精确归一化(去空白/方括号、转小写), loopback 与 X 字符边界用完整 frozenset 相等钉死
@@ -430,7 +432,7 @@ def test_cross_site_origin_port_mismatch_rejected_before_enqueue(web_env):
 
 
 def test_require_token_missing_client_fails_closed(web_env):
-    """缺 request.client 时不得抛 AttributeError: 无凭证 fail-closed 落 401 invalid token"""
+    """缺 request.client 时必须抛出 HTTPException 401 invalid token, 正常返回按 fail-open 拒绝"""
     from fastapi import HTTPException
 
     from auto_qb.webui.server.auth import make_require_token
@@ -439,10 +441,79 @@ def test_require_token_missing_client_fails_closed(web_env):
     mgr.config.web.skip_local_verify = True
     require_token = make_require_token(mgr)
     request = _auth_request(client=None)
-    with pytest.raises(HTTPException) as ei:
+    captured = None
+    raised = False
+    try:
         require_token(request, "")
+    except Exception as exc:
+        captured = exc
+        raised = True
+    assert raised, "request.client=None 时必须抛出 HTTPException, 正常返回即为 fail-open"
+    assert isinstance(captured, HTTPException), (
+        f"request.client=None 时应 fail-closed 抛出 HTTPException 401 invalid token, "
+        f"实际得到 {type(captured).__name__}: {captured}"
+    )
+    assert captured.status_code == 401
+    assert captured.detail == "invalid token"
+
+
+def test_require_token_invalid_token_detail_contract(web_env, caplog):
+    """远端 + skip=false: 空/畸形/错 token 的 401 detail 与 WARNING 逐字契约"""
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import make_require_token
+
+    mgr, _client = web_env
+    mgr.config.web.skip_local_verify = False
+    require_token = make_require_token(mgr)
+    request = _auth_request(path="/api/status", client=("203.0.113.9", 50000))
+    web_logger = "auto_qb.web"
+    caplog.set_level(logging.WARNING, logger=web_logger)
+
+    for authorization in ("", "Token xyz", "Bearer", "Bearer "):
+        caplog.clear()
+        with pytest.raises(HTTPException) as ei:
+            require_token(request, authorization)
+        assert ei.value.status_code == 401, authorization
+        assert ei.value.detail == "invalid token", authorization
+        warns = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.WARNING]
+        assert warns == [], f"畸形/空 token {authorization!r} 不应记 WARNING"
+
+    caplog.clear()
+    with pytest.raises(HTTPException) as ei:
+        require_token(request, "Bearer wrong")
     assert ei.value.status_code == 401
     assert ei.value.detail == "invalid token"
+    warns = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.WARNING]
+    assert len(warns) == 1
+    assert warns[0].getMessage() == "WEB 鉴权失败: 密钥不匹配"
+
+
+def test_skip_local_verify_info_contract_once_after_bearer(web_env, caplog):
+    """新 factory 的 skip-local INFO: 正确 Bearer 不记, 首次无凭证恰一条, 后续不新增"""
+    from auto_qb.webui.server.auth import make_require_token
+
+    mgr, _client = web_env
+    mgr.config.web.skip_local_verify = True
+    require_token = make_require_token(mgr)
+    request = _auth_request(path="/api/status", client=("127.0.0.1", 50000), host="127.0.0.1:8080")
+    web_logger = "auto_qb.web"
+    caplog.set_level(logging.INFO, logger=web_logger)
+
+    caplog.clear()
+    assert require_token(request, f"Bearer {mgr.web.token}") is None
+    infos = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.INFO]
+    assert infos == [], "正确 Bearer 已显式携带凭证, 不应记 skip-local INFO"
+
+    caplog.clear()
+    assert require_token(request, "") is None
+    infos = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.INFO]
+    assert len(infos) == 1
+    assert infos[0].getMessage() == "WEB 跳过本地验证: 本机连接免密钥放行(web.skip_local_verify=true)"
+
+    assert require_token(request, "") is None
+    infos = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.INFO]
+    assert len(infos) == 1, "同一 factory 的 skip-local INFO 只能记一次"
 
 
 @pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
