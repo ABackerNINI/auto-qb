@@ -16,4 +16,4 @@
   · 电池脚本走 stdin: argv 位固定为小包装器 `_NODE_STDIN_WRAPPER = "eval(require('fs').readFileSync(0,'utf8'))"`, 探针经 `subprocess.run(..., input=<探针>)` 送 stdin —— 包装器形状恒定不随探针增长; 探针内 `process.argv[1]` 契约不变(图表路径仍 argv[1], `node -e script extra-arg` 与 `-e wrapper + input` 的 argv 形状一致);
   · 注意: 纯 `node -`(stdin)会把 `process.argv[1]` 占成 `-`, 破坏探针的 argv[1] 契约 —— 必须用小包装器形态;
   · 探针体内禁顶层 `return`/顶层 `await`(eval 作用域 SyntaxError; await 收进 async IIFE);
-  · 本仓已落地样板: `tests/unit/test_webui_static_dom_panel_traffic.py` 13 处调用点 + `_NODE_STDIN_WRAPPER` 常量, 新探针照抄该形态, 不要回潮 `-e` 直内联。
+  · 本仓已落地样板: `_NODE_STDIN_WRAPPER` 常量在 `tests/unit/webui_dom_panel_support.py`, 13 处调用点分属拆分后的 `tests/unit/test_webui_static_dom_panel_traffic_*.py` 八份域文件, 新探针照抄该形态, 不要回潮 `-e` 直内联。

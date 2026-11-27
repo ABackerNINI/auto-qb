@@ -109,7 +109,7 @@
 - **处置**: ① 在 `state.js` 加 `watch(drawerVisible)`: 退场 `_qbChartDestroy(scope)`(连 ResizeObserver 一起断),
   进场 `_qbReloadOnEnter(scope)` 补拉一发(`_qbLoad` 内含 `$nextTick` 建图), 并对在途 `loading` 让路
   (打开路径本就先发一发, 否则首次打开的请求翻倍); ② Esc 两处名单改判 `drawerVisible`。
-- **守阵**: `tests/unit/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_drawer_page_guard`(可见性单点 / 三挂点 active 同宽 /
+- **守阵**: `tests/unit/test_webui_static_dom_panel_traffic_guards.py::test_frontend_qb_traffic_drawer_page_guard`(可见性单点 / 三挂点 active 同宽 /
   入口页面归一 / watcher 退场销毁 + 进场补拉)。
 
 > 已外迁: 列表变短致 sticky 吸底脱锚、面板跳动的几何守阵 → [attachments/26-11-22-dock-sticky-detach.md](attachments/26-11-22-dock-sticky-detach.md)(26-11-22 cap 清零)
@@ -123,7 +123,7 @@
 - **处置**: 流量形态由 `drawer.js::drawerPanelStyle()` 给**确定高度**(`drawerHeightPx` 有值就用它,
   没有则回落 42vh = 与 CSS 默认上限同值), 高度因此也与种子详情**共用同一 drawerHeightPx**;
   建图侧 `_qbChartBuild` 量 `host.clientHeight` 当图高, ResizeObserver 宽高**双观察**才能跟着拖拽实时长。
-- **守阵**: `tests/unit/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
+- **守阵**: `tests/unit/test_webui_static_dom_panel_traffic_wiring.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
   撑满段成对 + RO 宽高双观察) + `tests/unit/test_web_shortcuts_drawer.py::test_drawer_height_w3`(面板高度单点)。
 
 ### 让位触发界收紧到界源实缘: 未被覆盖的行绝对不动 (2026-11-13/14 用户拍板)
