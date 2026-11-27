@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 6/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `node-e-cmdline-limit.md` … `real-probe-rid-window.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `no-uv-fallback.md` … `read-source-static-guard-mutation.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [no-uv-fallback.md](no-uv-fallback.md) | 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任务在第一行就失败(`'uv' is not recognized`), 闸门同理; `.commands/test/config.toml` 的 `TMPDIR=R:/Temp/auto-qb/tests` 指向的 **R: 盘本机也不存在**。首选处置 = **本次调用前把该目录前置进 PATH**(包内 task/闸门全线恢复, 实测), 次选 = 用仓库 venv 的 python 直跑 pytest + `TMPDIR` 指到 C 盘临时区。 | 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE, basetemp |
 | [node-e-cmdline-limit.md](node-e-cmdline-limit.md) | `node -e <整段探针脚本>` 在 Windows 触顶 CreateProcess 32k 命令行上限(WinError 206 文件名或扩展名太长), 探针越长越接近实爆 —— 电池脚本改走 stdin(固定小 `-e` 包装器 + `input=探针`), argv 形状保持不变。 | node 探针, node -e, WinError 206, 文件名或扩展名太长, CreateProcess, 命令行上限, node 电池, 测试探针, subprocess.run, 追加用例后突然全 battery 红 |
 | [node-guards-silent-skip.md](node-guards-silent-skip.md) | 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass** | node, nodejs, 静默跳过, 假绿, 全绿, 出生即红, 新电池真跑, site-caps, 配额, 阈值, 硬上限, 守阵, test_extension_proxy, test_webui_static_r4_node_batteries, |
 | [parallel-run.md](parallel-run.md) | **已设为默认**(`pyproject [tool.pytest.ini_options]` 的 `addopts = -n 8`, 2026-10-08 由 `-n 4` 上调) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失。⚠ `-n 0` 曾对**包脚本那批真实临时仓库用例**挂住 —— 根因是 **Windows `subprocess` 无限挂死**(非仓库逻辑), 2026-10-03 用 `_pipeline.run_capture` 看门狗修复(见下节); 覆盖率分支 partial 与串行差 1。**并行甜点= -n 8, 不是 `-n auto`**(32 worker 打满机器, `test.pkg` 会 2 failed + 16 errors) —— 见下节「甜点随笔例体量与负载形态变」。 | 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess, 聚合脚本, bundle_file, 空文件, node 电池, 共享实例根, 截断 |
@@ -23,4 +24,3 @@
 | [qb-profile-nic.md](qb-profile-nic.md) | 换机抄 qB profile 残留原机网卡标识 ⇒ connection_status=disconnected 假红 | disconnected, 网卡, ethernet_, profile, 换机, firewalled, real.up, connection_status |
 | [qb-tags-multi-split-strip.md](qb-tags-multi-split-strip.md) | qBittorrent 的 tags 字段以「, 」(逗号+空格)连接多标签; `split(",")` 不 strip 会把第二个标签解析成带前导空格的串(`" real-fake"` != `"real-fake"`), 所有「按标签认领种子」的成员判断随即静默失明。单标签时无空白无感, 第二个标签(实测: 产品打的 MISSING)进场即中招。 | 按标签认领/过滤种子, 写 tags 成员判断, tests/real 基建, qB API tags 字段 |
 | [read-source-static-guard-mutation.md](read-source-static-guard-mutation.md) | S4「全套件手工确认」的判据是「同构变异 **是否让某条用例变红**」。若池里含**读源码文本**的静态守卫(措辞守卫 / 数字守卫, 断言 `read_text()` 里的包内字符串/数字与冻结常数一致), 它们在挂载环境里**基线就红或本就近红**, 于是**任何** src 变异都会让它们继续红/转红 —— 机器把全部候选报成 `KILLED`(假存活), 真洞清单被洗成零, 整轮判据报废。判别: 报「全杀」时先看基线绿不绿(有既有红守卫就可能伪杀), 再 `grep` 池里有没有 `read_text`/`Path(...).read_text` 型断言。处置: **变异判据排除读源码文本的静态守卫**(显式 `--deselect`), 且 S4 前必须先跑一次基线确认 `passed`。 | 变异测试, mutmut, S4, 全套件确认, 假存活, 全杀, 幸存清零, 真洞清单为零, 读源码文本, 静态守卫, 措辞守卫, 数字守卫, read_text, 基线就红, 既有红守卫, 镜像 memory-bank 落后, deselect, 判据污染, 结构性伪影 |
-| [real-probe-rid-window.md](real-probe-rid-window.md) | 真机探针增量窗口: trigger 后重置 rid 会把窗口内事件被全量冲掉(假阴性) | 真机探针, 增量窗口, rid 重置, 全量冲掉, 假阴性, sync/maindata, torrents_removed, 删后重加, 探针方法论 |

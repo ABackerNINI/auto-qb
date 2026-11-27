@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 3/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `fake-seed-injection.md` … `guard-dead-branch.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `fake-config-shared-mutables.md` … `group-relocate-restart-free.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
 | [fake-seed-injection.md](fake-seed-injection.md) | 大批量注入 qB 假种子(压测/测量库形)三坑合档 —— ①qB 默认入库逐种子校验 ~1s/种, 3000 种 = 45 分钟, 必须 skip_checking; ②手搓注入变体「配方漂移」三处全坏(漏 payload 数据文件 = 全组 missingFiles + 漏 announce = 永不归组 + leech 等不到 seeder)而脚本不报错(rc 只看成员数); ③首同步风暴丢归组的根因是「成员缺 announce 永不自愈」, 风暴只是放大器 —— 全员自带 announce 后风暴不丢归组。 | 批量注入, 假种子, 测量库形, skip_checking, missingFiles, 永不归组, 首同步风暴, 归组, tracker 匹配, 注入配方, inject.py, 压测库, 真机轨, stalledUP |
 | [fake-server-reuse-bind.md](fake-server-reuse-bind.md) | 测试里自起回环 HTTP 假服若用裸 `ThreadingHTTPServer`, 它继承 `HTTPServer.allow_reuse_address = 1`(SO_REUSEADDR) —— Windows 上允许抢绑已监听端口, `-n 8` 并行下两把假服可能 bind(0) 到同一端口, 连接被递给别人的假服/已关闭的 socket ⇒ 客户端 ConnectionError(被中止) 假红。修法单点: `tests/unit/_test_ports.py::http_server`(独占 bind, 对齐生产 `_EndpointServer` 口径), tests/ 下禁裸实例化。 | ThreadingHTTPServer, 假服, 双绑, SO_REUSEADDR, allow_reuse_address, ConnectionError, 回环 HTTP, 并发假红, http_server 单点, 独占 bind |
 | [fakeclient-default-tracker-masks-unconfigured.md](fakeclient-default-tracker-masks-unconfigured.md) | FakeClient.torrents_trackers 在 trackers_map 未命中时默认回 HHan URL(helpers.py:122-125), 于是「全库种子 tracker 未配置」场景在桩里被静默改写成「全库已配 HHan」, 基于「无 matched_added」的守阵恒绿; 守阵必须显式把每个种子的 trackers_map 映射到未配域名, 才能真验全未配分支。 | FakeClient, torrents_trackers, trackers_map, 默认回退, HHan, 未配库, 全未配, matched_added, tracker 重匹配, 桩假绿, 守阵空跑, site_provisional, no_site_conf |
@@ -23,4 +24,3 @@
 | [ghost-pkg-residue.md](ghost-pkg-residue.md) | 包源码迁走后, 旧目录在 git 里已删但磁盘残留只含 `__pycache__` 的空壳目录 (gitignored 未跟踪, 检出/同步不清掉), 被幽灵包守阵 (test_no_ghost_pkg_dirs) 判红 —— 是环境残留不是代码缺陷, 整目录删除即绿。 | 跑 pytest 时 test_src_has_no_ghost_pkg_dirs 红, 报 src/ 下某目录; 或排障时发现某包「还在」但 import 不到。 |
 | [global-open-probe-pollution.md](global-open-probe-pollution.md) | 测试用 monkeypatch 替换**进程级**单点(`builtins.open`/`subprocess.Popen` 等)当探针记录被测行为时, 记录面默认是「全进程」; -n 8 并行下同 worker 进程里**前序测试遗留的守护线程**(tests/ 有 20+ 文件起线程, xdist 每 worker 是独立进程但进程内测试按序复用)可能在被测窗口内并发触发同类调用 —— 它们打开的是**别的 tmp_path** 下的文件, 只按「路径含某子串」收录就会把残账记进本用例的期望集 ⇒ 断言假红(单跑恒绿, 并行偶发, 无法稳定复现取证)。对策: 探针收录面按**本用例的目标根目录前缀**收窄(被测代码只可能触碰自己的根目录, 收窄不放松断言语义); 守阵双向红验(跨根打开不入探针 + 自家根打开入探针)。 | builtins.open 探针, open 计数, 进程级 monkeypatch, 探针污染, xdist 遗留线程, 守护线程, tmp_path, 读集假红, 探针收窄, data_dir 前缀, global-open-probe-pollution |
 | [group-relocate-restart-free.md](group-relocate-restart-free.md) | 写迁移执行体测试时两处「看起来对、其实恒真/恒假」的断言形态 —— `ActionResult.ok` 是 classmethod 不是属性; 同卷硬链接下删目标路径不会造出悬空链接。 | ActionResult,is_ok,硬链接,悬空,迁移执行体,jar |
-| [guard-dead-branch.md](guard-dead-branch.md) | 扫描型守阵的「没扫到」与「扫了没有违规」输出完全一样 —— 正则后来为 `\1` 回引用补了捕获组, 消费处组号没跟着挪, 整个分支从此恒扫引号字符, 检出能力归零而 pytest 照样全绿(issue 26-10-11-2030 实证: 保留前缀守阵的指令表达式分支死了很久, docstring 宣称的两类形态覆盖实际只覆盖一类, 连白名单回退式红验都被骗过)。防死单点 = 扫描逻辑抽函数 + 守阵内**恒久活性探针**(已知违规样本必须命中); 红验必须「注入已知违规」, 不能只「收紧白名单」。 | 守阵, 死分支, 捕获组, group(1), group(2), 正则改形, 回引用, 假绿, 红绿双验, 活性探针, 扫描型守阵, 静态守卫, 检出能力, docstring 宣称, 白名单回退 |

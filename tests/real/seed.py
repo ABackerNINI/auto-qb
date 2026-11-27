@@ -19,7 +19,7 @@
 用法示例:
   uv run python tests/real/seed.py add --yes                             # 默认 256K 伪随机, 加到 副实例 并做种(零外连)
   uv run python tests/real/seed.py add --size 512K --pattern text --yes   # 可读文本行, 便于人眼看/手改
-  uv run python tests/real/seed.py add --size 2G --pattern zeros --yes    # 大种子自动落 R:(内存盘, 免写盘代价)
+  uv run python tests/real/seed.py add --size 2G --pattern zeros --yes    # 大种子自动落内存盘(候选探测: R:/qbt-fake → Z:/R/qbt-fake)
   uv run python tests/real/seed.py add --size 3G --no-data --yes          # >2G 只造元数据: 不落盘就不拦
   uv run python tests/real/seed.py add --size 3G --allow-huge --reason "测限速曲线" --yes   # 真落盘要显式授权+原因
   uv run python tests/real/seed.py add --size 8M --no-data --yes          # 只有元数据, 不占磁盘
@@ -29,12 +29,14 @@
   uv run python tests/real/seed.py clean --yes
 
 落点口径: **默认 KB 级小种子**(256K), 落仓库内 `tests/real/.work/`(gitignore, 随用例一起清);
-只有 ≥ 32M 的大种子才落 `R:/qbt-fake/` —— R 盘是内存盘, 写多少都不心疼, 但**重启即清空**,
-所以大种子只当次会话有效(要长期留着就显式 `--dir` 指到磁盘)。
+只有 ≥ 32M 的大种子才落内存盘 `R:/qbt-fake/`(环境2 经共享挂载 `Z:/R/qbt-fake`, 同一物理盘,
+候选探测 26-11-28) —— 内存盘写多少都不心疼, 但**重启即清空**, 所以大种子只当次会话有效
+(要长期留着就显式 `--dir` 指到磁盘)。
 """
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import sys
@@ -48,11 +50,36 @@ from lib import guard, instances, torrent  # noqa: E402
 
 WORK_ROOT = HERE / ".work"  # 自造物/用例工作区根(gitignored); clean 的证据闸盯它的顶层
 WORK = WORK_ROOT / "seeds"
-RAM_ROOT = Path("R:/qbt-fake")  # R 盘是内存盘: 大种子写这里, 免写盘代价(重启即清空)
+# 内存盘落点候选, 按序探测(26-11-28): 环境1 用宿主机 R:\(ImDisk 内存盘); 环境2(VM) 的 Z:\R 是
+# 宿主机 R:\ 的共享挂载 —— 与环境1 同一物理目录。种子数据只要普通写, 探针不验重解析点
+# (junction 在共享盘上不可建, 需要它的用例面走 rm04 自己的探针)。都缺席 ⇒ None(全退 .work)。
+RAM_ROOT_CANDIDATES = (
+    Path("R:/qbt-fake"),
+    Path("Z:/R/qbt-fake"),
+)
+
+
+def _pick_ram_root() -> Path | None:
+    """候选按序探测: 首个「盘存在且可写探针」者胜; 都缺席返回 None。"""
+    for cand in RAM_ROOT_CANDIDATES:
+        if not cand.anchor or not Path(cand.anchor).exists():
+            continue  # 盘缺席走下一级(非失败)
+        try:
+            cand.mkdir(parents=True, exist_ok=True)
+            probe = cand / f".probe-{os.getpid()}"
+            probe.write_bytes(b"x")
+            probe.unlink()
+            return cand
+        except OSError:
+            continue
+    return None
+
+
+RAM_ROOT = _pick_ram_root()
 BIG_SIZE = 32 * 1024 * 1024  # ≥ 32M 才算"大种子", 默认落内存盘
 HUGE_SIZE = 2 * 1024**3  # > 2G 原则上不许造: 要 --allow-huge + --reason 显式授权
 DEFAULT_SIZE = "256K"  # 默认 KB 级: 造种子是为了看状态, 不是为了塞满盘
-ALLOWED_ROOTS = (WORK_ROOT, RAM_ROOT)
+ALLOWED_ROOTS = (WORK_ROOT, *(() if RAM_ROOT is None else (RAM_ROOT, )))
 TAG = guard.REAL_FAKE_TAG  # 自造种子标签单点在 guard(issue 26-11-21-0639), 工具族只留短别名
 DEFAULT_PORT = instances.SECONDARY  # 副实例: 空库, 拿它当草稿本
 
@@ -75,7 +102,7 @@ def fmt_size(n: float) -> str:
 
 
 def _allowed(path: Path) -> Path:
-    """落点白名单: 自造物只许进 `tests/real/.work/`(仓库内, gitignore) 或 `R:/qbt-fake/`(内存盘)。
+    """落点白名单: 自造物只许进 `tests/real/.work/`(仓库内, gitignore) 或内存盘 `qbt-fake`(候选探测, 见 RAM_ROOT_CANDIDATES)。
 
     按路径分量判严格包含 —— 裸字符串前缀会把 `.work-20261112` 这类兄弟目录误收进来
     (issue 26-11-12-2345 评审轮1发现), --dir 指过去就能绕过证据闸整树清。
@@ -89,7 +116,8 @@ def _allowed(path: Path) -> Path:
 
 
 def _ram_ready() -> bool:
-    return RAM_ROOT.anchor != "" and Path(RAM_ROOT.anchor).exists()
+    """内存盘是否可用 —— 盘存在性/可写性已在模块级探测(_pick_ram_root), 这里只看探测结果。"""
+    return RAM_ROOT is not None
 
 
 def _free_bytes(path: Path) -> int:
@@ -107,9 +135,9 @@ def _pick_dir(size: int, name: str) -> tuple[Path, str]:
     """按大小挑落点: 小种子进仓库, 大种子进内存盘。返回 (目录, 一句话理由)。"""
     stem = Path(name).stem
     if size >= BIG_SIZE and _ram_ready():
-        return RAM_ROOT / stem, f"{fmt_size(size)} ≥ {fmt_size(BIG_SIZE)} ⇒ 落 R:(内存盘, 免写盘代价, 重启即清空)"
+        return RAM_ROOT / stem, f"{fmt_size(size)} ≥ {fmt_size(BIG_SIZE)} ⇒ 落 {RAM_ROOT}(内存盘, 免写盘代价, 重启即清空)"
     if size >= BIG_SIZE:
-        return WORK / stem, f"{fmt_size(size)} 偏大但 R: 不可用 ⇒ 退回仓库 .work(会真写盘)"
+        return WORK / stem, f"{fmt_size(size)} 偏大但内存盘不可用 ⇒ 退回仓库 .work(会真写盘)"
     return WORK / stem, f"{fmt_size(size)} 是小种子 ⇒ 落仓库 .work(gitignore, 随用例一起清)"
 
 
@@ -202,7 +230,7 @@ def cmd_add(args) -> int:
             )
         else:
             print(f"[warn] 已授权创建 {fmt_size(size)} 的大文件(> {fmt_size(HUGE_SIZE)}): {args.reason.strip()}")
-            print(f"[warn] 用完请 rm/clean; R: 重启即清空, 落磁盘的不会自己消失")
+            print(f"[warn] 用完请 rm/clean; 内存盘重启即清空, 落磁盘的不会自己消失")
 
     print(f"[plan ] 大小 {fmt_size(size)}({size} B) · 生成方式 {pattern}" + (f" · salt={salt}" if not args.from_path else ""))
     print(f"[plan ] 落点 {datadir} —— {why}")
@@ -381,11 +409,11 @@ def cmd_clean(args) -> int:
                     print(f"      ... 还有 {len(files) - 5} 个")
             print("[hint] 逐处确认后用 --dir tests/real/.work/<rmNN> --yes 指名清(每次一处); 零文件的空壳整扫会顺带收掉。")
             return 1
-    roots = [_allowed(Path(args.dir))] if args.dir else [r for r in (work, RAM_ROOT) if r.exists()]
+    roots = [_allowed(Path(args.dir))] if args.dir else [r for r in (work, RAM_ROOT) if r and r.exists()]
     for root in roots:
         _clean_root(root, args.yes)
     if not args.yes:
-        print("[dry-run] 加 --yes 才真删(只动 tests/real/.work/ 与 R:/qbt-fake/)")
+        print("[dry-run] 加 --yes 才真删(只动 tests/real/.work/ 与内存盘 qbt-fake)")
     else:
         print("[hint] qB 里的种子条目请用 rm 删, clean 不碰 qB")
     return 0

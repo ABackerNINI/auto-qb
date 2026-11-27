@@ -13,11 +13,11 @@
 | 卷 | 主题范围 | 条数 |
 |---|---|---|
 | [1](_index-1.md) | `annotations-lazy-eval.md` … `commands-wrapper-from-python.md` | 16 |
-| [2](_index-2.md) | `config-validation-test-input.md` … `fake-config-shared-mutables.md` | 16 |
-| [3](_index-3.md) | `fake-seed-injection.md` … `guard-dead-branch.md` | 16 |
-| [4](_index-4.md) | `guard-literal-comment-trip.md` … `log-capture.md` | 16 |
-| [5](_index-5.md) | `long-task-background-checkpoint.md` … `no-uv-fallback.md` | 16 |
-| [6](_index-6.md) | `node-e-cmdline-limit.md` … `real-probe-rid-window.md` | 16 |
-| [7](_index-7.md) | `real-suite-cascade-skip.md` … `side-effects.md` | 16 |
-| [8](_index-8.md) | `sidefx-diagnostic-probe.md` … `test-plan-docstring-sections.md` | 16 |
-| [9](_index-9.md) | `tests-real-qb-api-traps.md` … `xdist-worker-global-snapshot.md` | 15 |
+| [2](_index-2.md) | `config-validation-test-input.md` … `event-handler-mock.md` | 16 |
+| [3](_index-3.md) | `fake-config-shared-mutables.md` … `group-relocate-restart-free.md` | 16 |
+| [4](_index-4.md) | `guard-dead-branch.md` … `inproc-server-conn-abort.md` | 16 |
+| [5](_index-5.md) | `log-capture.md` … `nested-pytest-config.md` | 16 |
+| [6](_index-6.md) | `no-uv-fallback.md` … `read-source-static-guard-mutation.md` | 16 |
+| [7](_index-7.md) | `real-probe-rid-window.md` … `seed-store-full-replace.md` | 16 |
+| [8](_index-8.md) | `side-effects.md` … `test-lock-path-injection.md` | 16 |
+| [9](_index-9.md) | `test-plan-docstring-sections.md` … `xdist-worker-global-snapshot.md` | 16 |

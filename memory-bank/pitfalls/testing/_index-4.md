@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 4/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `guard-literal-comment-trip.md` … `log-capture.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `guard-dead-branch.md` … `inproc-server-conn-abort.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [guard-dead-branch.md](guard-dead-branch.md) | 扫描型守阵的「没扫到」与「扫了没有违规」输出完全一样 —— 正则后来为 `\1` 回引用补了捕获组, 消费处组号没跟着挪, 整个分支从此恒扫引号字符, 检出能力归零而 pytest 照样全绿(issue 26-10-11-2030 实证: 保留前缀守阵的指令表达式分支死了很久, docstring 宣称的两类形态覆盖实际只覆盖一类, 连白名单回退式红验都被骗过)。防死单点 = 扫描逻辑抽函数 + 守阵内**恒久活性探针**(已知违规样本必须命中); 红验必须「注入已知违规」, 不能只「收紧白名单」。 | 守阵, 死分支, 捕获组, group(1), group(2), 正则改形, 回引用, 假绿, 红绿双验, 活性探针, 扫描型守阵, 静态守卫, 检出能力, docstring 宣称, 白名单回退 |
 | [guard-literal-comment-trip.md](guard-literal-comment-trip.md) | 「X 已移除/退役, 不得回潮」类守阵按 `assert "标识符" not in 源码` 扫描**整份源文本**(含注释与 docstring) —— 在同一份源码里写退役说明注释时把标识符原文写进去, 守阵立刻判红, 且报错信息极具迷惑性(明明只是注释)。写退役说明要么换措辞避开标识符, 要么守阵侧排除注释。 | 移除功能, 反回潮守阵, 退役注释, assert not in, 判红, 注释, 文档字符串, 源码扫描 |
 | [gz-plaintext-assertion.md](gz-plaintext-assertion.md) | 对 .gz 原始字节做子串断言恒真, 必须解压后扫文本再验内容 | gz,压缩产物,脱敏断言,假绿,no_credentials |
 | [harness-host-platform-data-leak.md](harness-host-platform-data-leak.md) | e2e/冒烟桩(ui_harness)给被测环境钉沙箱时, 容易只钉「项目自己的文件面」(config_path / data_dir / state 文件)而漏掉「整机共享的用户级平台目录」—— 代码若消费这类全局状态(本仓: gtm 发现指针 `pointer_dir()`, 单点解析到 %LOCALAPPDATA% / $XDG_DATA_HOME 或 ~/Library, 指针是**整机共享一处**的用户级文件), 断言前提就从「桩决定」变成「宿主机决定」: 宿主真跑 gtm 工具的开发机上 probe 真阳性 -> bundle.gtm 非 null -> settings-backup.spec 8 例确定性红, 而 Linux/容器机器上恒绿 —— 同一 spec 两台机器两种命运, 还会误判成 flaky/前提过期。**附带污染面更要命**: 可达后导入用例的真 POST 会经 `backup._apply_gtm_section` PUT 打到**宿主真实 gtm 工具**覆写其配置(复现轮在假 gtm 上捕到 2 笔 PUT 实证)。对策: 桩启动早期(任何 probe/create_app 之前)把发现单点重定向进桩私有目录 —— 合流机制是 `agent.pointer_dir` 单点 monkeypatch 到 `<tmp>/gtm-pointer`(`_isolate_gtm_discovery`); 加单测锁「隔离后指针面在桩私有目录」并用红验(调用前解析回宿主真实平台目录)证明判据非恒绿。 | e2e 桩, ui_harness, 沙箱隔离, 宿主泄漏, 用户级目录, XDG_DATA_HOME, LOCALAPPDATA, 整机级状态, gtm 指针, endpoint.json, pointer_dir, bundle.gtm, 单机红他机绿, 环境依赖断言, harness-host-platform-data-leak |
@@ -23,4 +24,3 @@
 | [iab-click-rerender-flake.md](iab-click-rerender-flake.md) | 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting for locator` —— 事后独立观测页面状态全是正确值, 埋点 (捕获阶段 click 日志 + 全局状态变量采样) 也复现不出。是自动化侧竞态, 不是被测功能坏了。 | 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。 |
 | [importlib-sys-modules-dataclass.md](importlib-sys-modules-dataclass.md) | importlib 就地加载 future-annotations dataclass 模块, 不先注册 sys.modules 会在 3.13 上炸 NoneType | importlib, spec_from_file_location, exec_module, sys.modules, dataclass, NoneType, 3.13, 就地加载, 守阵加载引擎, find_skill_dir |
 | [inproc-server-conn-abort.md](inproc-server-conn-abort.md) | 测试自起 `http.server.ThreadingHTTPServer(("127.0.0.1", 0))` 当假服, test.full(并行 + 覆盖率插桩)高载下, **真客户端打真本地服**的段偶发 `ProtocolError: Connection aborted, ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接')` —— 0 端口无抢号问题(fixed-port / free-port TOCTOU 两族都不沾), 是**已建立的连接被本机中止**。被测行为的主断言往往此时已全过, 红在末段"机制自证/红验"的对照组; 单跑绿 + 复跑全量绿即定性偶发, 别当回归去修测试。 | 10053, ConnectionAbortedError, Connection aborted, 你的主机中的软件中止了一个已建立的连接, ProtocolError, ThreadingHTTPServer, 进程内假服, 本地假服, 真客户端, 对照组, 红验回放, 机制自证, xdist, 并行高载, 偶发红, 单跑绿, urlopen, urllib3 |
-| [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |

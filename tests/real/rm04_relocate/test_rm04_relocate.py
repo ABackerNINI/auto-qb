@@ -25,7 +25,8 @@ Web UI 整组迁移 confirm 回路真机化(RM04-14: 浏览器点击 -> 确认�
   相位落盘走 state_save_interval(30S)周期, 断言等待窗按 30s+ 裕量给。
 
 跑法: `commands run real.suite -- --slice RM04 --yes`(不要裸 pytest)。真实种子全程非活跃;
-十一条全部 L1 假种子(零外连); 假种子一律 real-fake 标签; 落点只认 tests/real/.work/ 与 R:/qbt-fake/。
+十一条全部 L1 假种子(零外连); 假种子一律 real-fake 标签; 落点只认 tests/real/.work/ 与
+内存盘 qbt-fake(R:/qbt-fake 或 Z:/R/qbt-fake 共享挂载, 见 _ram_root)。
 """
 from __future__ import annotations
 
@@ -57,18 +58,66 @@ pytestmark = [
 WORK = Path(__file__).resolve().parents[1] / ".work" / "rm04"
 
 
-def _ram_root() -> Path:
-    """搬迁 src/大种子落点: R: 盘在用 R:/qbt-fake/rm04(内存盘, 重启即清空);
-    R: 缺席(环境2 C盘机)退 .work/rm04/ram/ 真写盘(漂移复测计划 §04 S2 的盘探测回退)。"""
-    r = Path("R:/qbt-fake/rm04")
+def _absent_drive() -> str:
+    """负向对照选「本机不存在的盘」, 候选逐个探, 全在则响亮失败报候选表。
+
+    别钉死盘符: Z: 曾是环境2 的不存在盘负向对照(issue 26-11-02-1144), 2026-11-28 起
+    环境2 把宿主机内存盘挂到 Z:\\R, 前提翻转 —— 改为运行时动态选不存在者。"""
+    for d in ("Q:", "W:", "X:", "Y:", "V:"):
+        if not Path(f"{d}/").exists():
+            return d
+    raise SystemExit("负向对照找不到不存在的盘(候选 Q/W/X/Y/V 全在), 请扩 _absent_drive 候选表")
+
+
+def _junction_ok(root: Path) -> bool:
+    """试建一个 junction 探重解析点能力(cmd 内建 mklink /J; 路径必须反斜杠 —— cmd 把 /x 当开关)。
+
+    背景(26-11-28 探针实证): 共享挂载盘上 junction 不可建(cmd 报「需要本地 NTFS 卷」),
+    而本用例的 alias 迁移要求 RAM 根能挂 junction —— RAM 根候选必须逐个试建, 探不过退 .work。"""
+    probe_t = root / f".jprobe-t-{os.getpid()}"
+    probe_l = root / f".jprobe-l-{os.getpid()}"
     try:
-        r.mkdir(parents=True, exist_ok=True)
-        probe = r / ".probe"
-        probe.write_bytes(b"x")
-        probe.unlink()
-        return r
+        probe_t.mkdir(exist_ok=True)
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(probe_l), str(probe_t)], capture_output=True)
+        return r.returncode == 0 and probe_l.is_dir()
     except OSError:
-        return WORK / "ram"
+        return False
+    finally:
+        try:
+            os.rmdir(probe_l)  # junction 只删本体(与产品回滚口径同), 不递归穿进去
+        except OSError:
+            pass
+        shutil.rmtree(probe_t, ignore_errors=True)
+
+
+def _ram_root() -> Path:
+    """搬迁 src/大种子落点: 内存盘候选 R:/qbt-fake/rm04(环境1)→ Z:/R/qbt-fake/rm04(环境2 的
+    宿主机内存盘共享挂载, 26-11-28; 同一物理盘); 探针 = mkdir+写+junction 试建(本用例要求
+    RAM 根支持重解析点)。全探不过(如环境2 C盘机无 R: 且共享盘不吃 junction)退
+    .work/rm04/ram/ 真写盘(漂移复测计划 §04 S2 的盘探测回退)。"""
+    for cand in (Path("R:/qbt-fake/rm04"), Path("Z:/R/qbt-fake/rm04")):
+        if not cand.anchor or not Path(cand.anchor).exists():
+            continue  # 盘缺席走下一级(非失败, 未 mkdir 无需回收)
+        try:
+            cand.mkdir(parents=True, exist_ok=True)
+            probe = cand / f".probe-{os.getpid()}"
+            probe.write_bytes(b"x")
+            probe.unlink()
+        except OSError:
+            _reclaim_empty(cand)
+            continue
+        if _junction_ok(cand):
+            return cand
+        _reclaim_empty(cand)  # 候选被否决(如共享盘 junction 探不过)不残壳 —— 空目录才收, 非空不碰
+    return WORK / "ram"
+
+
+def _reclaim_empty(cand: Path) -> None:
+    """候选目录被否决后回收: 仅当空(无残留探针/用户物)才 rmdir, 非空不碰。"""
+    try:
+        cand.rmdir()
+    except OSError:
+        pass
 
 
 RAM = _ram_root()
@@ -816,8 +865,10 @@ def test_rm04_05_same_volume_relocate_dir_alias():
           free_space_on_disk 恒 -1 ⇒ same_volume_proof 必败 ⇒ 多成员组被 GATE_SAME_FS 拒;
           用例临时把 56590 的 save_path 改指 C: 现存目录(qB 立即报出 C: 真值), 测毕逐字还原。
     触发 = 产品 WEB POST /api/torrents/{hash}/location (confirm=true, 目录别名提议需二次确认)。
-    负向对照(先于主链, 红验 = 给足 dst 即过): dst_neg = Z:/rm04_05_neg_ctl/dst(Z: 不存在盘,
-          上溯整链不可判定) → GATE_SPACE「剩余空间不可判定」拒绝 —— 回执 error + reasons 含
+    负向对照(先于主链, 红验 = 给足 dst 即过): dst_neg = <动态不存在盘>/rm04_05_neg_ctl/dst
+          (_absent_drive 运行时选本机不存在者; 旧口径钉死 Z:, 但 Z: 在环境2 2026-11-28 起为
+          宿主机内存盘共享, 前提翻转 —— 考证链保留 issue 26-11-02-1144) → 上溯整链不可判定 →
+          GATE_SPACE「剩余空间不可判定」拒绝 —— 回执 error + reasons 含
           gate=space + 零 started 零「迁移发起」(零副作用)。
     L490 空间不足负向对照(2026-11-02 issue 26-11-02-1208, 复验改为显式入口): 组数据
           2×64MiB=128MiB; 前置只认 QBT_REAL_SMALL_TARGET 指向的小容量卷空目录(lib/small_target.py
@@ -854,10 +905,12 @@ def test_rm04_05_same_volume_relocate_dir_alias():
 
         src = RAM / "rm04_05" / "src"
         dst = case / "dst"
-        # 负向对照专用路径: Z: 不存在盘, 上溯整链不可判定 → GATE_SPACE target_free=None + same_volume=None
-        # 真实命中(方案A, 2026-11-02 issue 26-11-02-1144): 原 dst=case/"dst" 在环境2 C盘充足时
-        # 上溯父目录即命中 73GB free + same_volume=True → 闸门放行(设计正确, 红验前提写窄)
-        dst_neg = Path("Z:/rm04_05_neg_ctl/dst")
+        # 负向对照专用路径: 动态选本机不存在盘(_absent_drive), 上溯整链不可判定 →
+        # GATE_SPACE target_free=None + same_volume=None。真实命中(方案A, 2026-11-02 issue
+        # 26-11-02-1144): 原 dst=case/"dst" 在环境2 C盘充足时上溯父目录即命中 73GB free +
+        # same_volume=True → 闸门放行(设计正确, 红验前提写窄); 曾钉死 Z:, 26-11-28 起 Z:\R
+        # 为环境2 的宿主机内存盘共享, 改动态选盘。
+        dst_neg = Path(f"{_absent_drive()}/rm04_05_neg_ctl/dst")
         purge_tree(src.parent)
         cfg, web_port = write_cfg(case, relocate=True, alias_threshold=1)
         p = app.start(cfg, case)
@@ -873,10 +926,10 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         assert wait_group(web_port, h1, {h1, h2}, 20, "两成员未成组(前提不成立)")
         wait_store_progress(web_port, [h1, h2])  # 闸门读产品快照, 等 1-2 个同步拍追平
 
-        # ---- 负向对照(L3 兑现): 不存在盘 Z: dst_neg → GATE_SPACE 上溯整链不可判定拒绝(零副作用)
+        # ---- 负向对照(L3 兑现): 不存在盘(动态选) dst_neg → GATE_SPACE 上溯整链不可判定拒绝(零副作用)
         #      原 dst=case/"dst" 在 C盘充足时上溯父目录即命中 free_space + same_volume → 闸门放行,
-        #      红灯失守(issue 26-11-02-1144)。改用 Z:/... 让 _volume_free_resolved 上溯整链失败 → None
-        #      + _same_volume_resolved 上溯整链失败 → None → GATE_SPACE 条件真实命中。
+        #      红灯失守(issue 26-11-02-1144)。用 _absent_drive() 选不存在盘让 _volume_free_resolved
+        #      上溯整链失败 → None + _same_volume_resolved 上溯整链失败 → None → GATE_SPACE 条件真实命中。
         result = cmd_post_and_wait(
             web_port, f"/api/torrents/{h1}/location", {
                 "location": str(dst_neg),

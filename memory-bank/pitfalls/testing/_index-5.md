@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 5/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `long-task-background-checkpoint.md` … `no-uv-fallback.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `log-capture.md` … `nested-pytest-config.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
 | [long-task-background-checkpoint.md](long-task-background-checkpoint.md) | 前台跑 >10min 无输出的长任务(基准矩阵/语料生成/全量回归)会被宿主按「无输出」切断, 模型配额也可能中途夭折 —— 两者都保留已落盘产出但丢未落盘进度; 委派长任务必须后台 + 分批落盘 + 幂等可续跑。 | 长任务, 后台, 宿主切断, 无输出超时, 配额耗尽, 中途夭折, 分批落盘, checkpoint, 可续跑, 幂等重跑, 基准矩阵, 语料生成, run_in_background, 子代理, 委派 |
 | [longtask-redverify-page-task.md](longtask-redverify-page-task.md) | 给 longtask 预算断言做红验(注入长任务证必红)时, Playwright `page.evaluate` 里直跑忙等 | longtask, 长任务, 红验, 红绿双验, 注入, 忙等, evaluate, PerformanceObserver, 量具, 预算断言 |
 | [manager-builder-single-point.md](manager-builder-single-point.md) | 测试构造单点参数面不足导致内联旁路 | 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder |
@@ -23,4 +24,3 @@
 | [mypy-config-cwd.md](mypy-config-cwd.md) | mypy 的 `[tool.mypy] files = [...]` 按**当前工作目录**解析相对路径, 不按 pyproject.toml 所在目录 —— 想跑「某个基线 commit 的类型检查」时, 若从别处指 `--config-file` 指到基线目录, 实际检查的仍是 cwd 下的工作树, 结果**静默张冠李戴**, 前后对比数字全部作废。 | mypy, files, 相对路径, cwd, 基线对比, 静默查错, 工作树, 改错文件, typecheck 前后对照 |
 | [mypy-isinstance-narrow-repeated-get.md](mypy-isinstance-narrow-repeated-get.md) | mypy 对重复调用 d.get(k) 的 isinstance 收窄失效: 类型残留 None | mypy, typecheck, union-attr, arg-type, isinstance, 收窄, 重复调用, dict.get |
 | [nested-pytest-config.md](nested-pytest-config.md) | 仓库内子目录独立包(自带 pyproject+venv)内 `uv run pytest` 会向上拾取仓库根 pytest 配置(pyproject [tool.pytest.ini_options]), rootdir 上移, 根配置的 addopts(-n/--cov 等)在子包 venv 不可用 → unrecognized arguments 直接报错 | 在 tools/ 下「仓库内嵌套、自带 pyproject 与 venv 的独立子包」内跑 pytest |
-| [no-uv-fallback.md](no-uv-fallback.md) | 包内 `test.*` 任务单点写着 `uv run pytest`, 而**本 clone 的工具 shell 的 PATH 里没有 `uv`**(实测 uv 本体已装在 `C:\Users\<用户>\.local\bin\uv.exe`, 只是不在 PATH) ⇒ 每个测试任务在第一行就失败(`'uv' is not recognized`), 闸门同理; `.commands/test/config.toml` 的 `TMPDIR=R:/Temp/auto-qb/tests` 指向的 **R: 盘本机也不存在**。首选处置 = **本次调用前把该目录前置进 PATH**(包内 task/闸门全线恢复, 实测), 次选 = 用仓库 venv 的 python 直跑 pytest + `TMPDIR` 指到 C 盘临时区。 | 跑测试, 提交, 闸门, uv, command not found, .local\bin, PATH, R:/Temp, 驱动器不存在, DriveNotFoundException, 全量, TMPDIR, COVERAGE_FILE, basetemp |

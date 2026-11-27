@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>perf 基准线值环境依赖: 环境相对化改造 · perf · 计划外问题</title>
+<meta name="issue-slug" content="perf-threshold-env-relative">
+<meta name="issue-stamp" content="26-11-28-0521">
+<meta name="issue-type" content="perf">
+<meta name="doc-topic" content="perf-threshold-env-relative">
+<meta name="doc-refs" content="memory-bank/pitfalls/testing/coverage-xdist-zero.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="perf 基准线值环境依赖: 环境相对化改造">
+<meta name="issue-summary" content="A4 组图等绝对墙钟阈值按标定机(环境1)校准, 换机即确定性翻红或被迫抬线削弱判别力; 正解是按本机定标脉冲缩放的相对阈值">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· perf</div>
+<h1>perf 基准线值环境依赖: 环境相对化改造</h1>
+<p class="lede">A4 组图等绝对墙钟阈值按标定机(环境1)校准, 换机即确定性翻红或被迫抬线削弱判别力; 正解是按本机定标脉冲缩放的相对阈值</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-28-0521-perf-perf-threshold-env-relative</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-28 05:21</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>2026-11-28 在环境2(VM)接入 Z:\R 内存盘共享的任务收尾提交时(ship.commit), 提交闸门的
+  test.quick 被 <code>tests/unit/test_traffic_qb_bucket_cache_perf.py</code> 的 A4 组图两用例
+  确定性打红: 空闲形态温态 p95 410.29ms 超线(250)。非本批改动回归 —— 同机多次独立复跑
+  (串行/闸门形态)结论一致(§02: 温态 p95 392-436ms, 最优轮 266-353ms), 连 best-of-3
+  最优轮都过不去原线。</p>
+  <p>模块 docstring「A4 组图空闲线值去抖」(26-11-19)已记载: 线值按标定机(环境1)实测钉定
+  (典型簇 97-114ms 的 2.19x, 覆盖压力尾 215.54)。环境2 的 VM 算力较环境1 慢 ~2.2x,
+  组图面放大到 ~3.5x —— 绝对墙钟线跨机器失效。当日已按用户拍板临时抬线(150/250 → 600)解堵提交,
+  本 issue 记录正解改造。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+<pre><code># 取证 2026-11-28 05:15-05:20, 环境2(VM), 串行 -n 0 空闲两轮 + ship.gate 闸门轮
+[A4 bench] 组图M=30活跃 冷态(2h/员史)=1464.3ms 温态p95(best-of-3)=403.90ms(线150) 轮p95[404.69/403.90/439.21] 最优轮min=314.13
+[A4 bench] 组图M=30活跃 (第2轮) 温态p95=397.03ms 轮p95[440.48/397.03/464.45] 最优轮min=314.52
+[A4 bench] 组图M=30空闲 冷态(24h/员史)=5437.8ms 温态p95(best-of-3)=435.78ms(线250) 轮p95[435.78/460.22/454.49] 最优轮min=352.86
+[A4 bench] 组图M=30空闲 (第2轮) 温态p95=392.16ms 轮p95[440.59/392.16/414.37] 最优轮min=266.21
+# ship.gate(提交闸门)实跑: 2 failed, 7075 passed —— AssertionError: 组图空闲温态 p95(best-of-3) 410.29ms 超 A4 线 250ms
+# 环境对照(标定机环境1, 模块 docstring 26-11-19 记录): 隔离 76-84ms / 闸门典型簇 97-114ms / 压力尾最劣 215.54ms
+# 单种两用例(线100)本机实测(2026-11-28 05:30, 串行): 温态p95 11.07/10.58ms —— 远低于线, 「不动」决策成立
+[A4 bench] 单种24h活跃 温态p95(best-of-3)=11.07ms(线100) 轮p95[11.07/11.73/12.16] 最优轮min=7.24
+[A4 bench] 单种24h空闲 温态p95(best-of-3)=10.58ms(线100) 轮p95[11.73/10.58/11.38] 最优轮min=7.37</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>任何非标定机(算力差 ~2x+)上跑 test.full / test.quick / 提交闸门 —— 组图 M=30 形态必现; 单种形态(线100)数字余量大暂未触线</td></tr>
+    <tr><td>影响范围</td><td>提交闸门在该机恒红或被迫抬线(已抬 600); 抬线使快机上组图回归判别力实质让位给隔离面打印数字(600 只拦 ~4-5x 级退化)</td></tr>
+    <tr><td>严重度</td><td>中 —— 不影响产品正确性, 但跨机协作时提交闸门不可用/判别力失真</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <ul>
+    <li><code>tests/unit/test_traffic_qb_bucket_cache_perf.py:343/394</code>(取证 2026-11-28 05:30, 行号为抬线后提交态)· 符号 <code>test_a4_bench_group_m30_warm</code> / <code>test_a4_bench_group_m30_idle_warm</code> · grep「A4 线」</li>
+    <li>标定记录单点: 同文件模块 docstring「A4 组图空闲线值去抖」「A4 温态断言 best-of-3 去抖」「A4 组图两线环境抬线」三节</li>
+    <li>伴生环境问题(覆盖率 0%, 同为"环境1 校准、环境2 失真"族): pitfall <code>memory-bank/pitfalls/testing/coverage-xdist-zero.md</code></li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <p>基准阈值是绝对墙钟值, 隐含「跑在标定机上」前提; 机器算力差被直接当成「回归」。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>环境相对化: 基准先跑一段定标脉冲(与被测对象同 I/O/CPU 形态的固定工作量), 取本机速度系数,
+  阈值 = 标定值 x 系数; 系数与实测值一起打印, 系数超出合理带宽(如 &gt;5x)时只打印不判 —— 防极端慢机误放真回归。
+  改造时同步: 四形态温态断言共用 <code>_warm_p95_best_of_3</code>, 相对化收口在同一助手内; 守阵补「定标稳定性」用例;
+  线值抬升历史(26-11-19 去抖 / 26-11-28 抬线)作为相对化后的废弃记录保留在 docstring。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-28 05:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+  <h3>修复后补充</h3>
+  <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+</section>
+
+<footer>
+  26-11-28-0521-perf-perf-threshold-env-relative.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>

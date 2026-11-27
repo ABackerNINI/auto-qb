@@ -43,7 +43,7 @@ note    = "<args> 传 --port <当前环境白名单端口>"
 run     = ["uv run python tests/real/seed.py add <args>"]
 timeout = 600
 when    = "造一个假种子并加入测试实例(手工探索用: 指定大小/落点/生成方式/是否落数据)"
-note    = "默认 dry-run, 加 --yes 才真造真加; 默认 256K(KB 级就够看状态), 关键参数 --size 8M | --pattern random|zeros|text | --dir <落点> | --from <现成文件> | --no-data(不落数据) | --paused | --port <当前环境白名单端口>(缺省副实例)。落点只认 tests/real/.work/ 与 R:/qbt-fake/: ≥32M 自动落 R:(内存盘, 免写盘代价, 重启即清空; R: 是环境1机器的硬件事实, 环境2 无 R: 时自动退回 .work 真写盘, 大种子优先 --no-data)。> 2G 原则上不造, 命令会停下来等授权, 必须 --allow-huge --reason \"<原因>\" 双写才放行(只给 --allow-huge 会被拒), 只造元数据用 --no-data 不受限。默认不给 announce ⇒ 纯本地做种、零外连; 自造种子一律打 real-fake 标签, 与真实种子互不相干"
+note    = "默认 dry-run, 加 --yes 才真造真加; 默认 256K(KB 级就够看状态), 关键参数 --size 8M | --pattern random|zeros|text | --dir <落点> | --from <现成文件> | --no-data(不落数据) | --paused | --port <当前环境白名单端口>(缺省副实例)。落点只认 tests/real/.work/ 与内存盘 qbt-fake(候选探测 R:/qbt-fake → Z:/R/qbt-fake —— 环境2 的 Z:\\R 是宿主机内存盘共享, 同一物理盘, 26-11-28; 都缺席才退 .work 真写盘): ≥32M 自动落内存盘(免写盘代价, 重启即清空, 大种子优先 --no-data)。> 2G 原则上不造, 命令会停下来等授权, 必须 --allow-huge --reason \"<原因>\" 双写才放行(只给 --allow-huge 会被拒), 只造元数据用 --no-data 不受限。默认不给 announce ⇒ 纯本地做种、零外连; 自造种子一律打 real-fake 标签, 与真实种子互不相干"
 
 [tasks."real.seed.list"]
 run     = ["uv run python tests/real/seed.py list <args>"]

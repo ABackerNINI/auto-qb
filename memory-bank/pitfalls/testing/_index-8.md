@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 8/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `sidefx-diagnostic-probe.md` … `test-plan-docstring-sections.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `side-effects.md` … `test-lock-path-injection.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/unit/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |
 | [sidefx-diagnostic-probe.md](sidefx-diagnostic-probe.md) | 生产失败路径上的「只进日志」诊断探针(端口占用者 `ss -ltnp` / `lsof` / PowerShell)在测试里会真跑外部命令 ⇒ Linux CI 的 sidefx 越界; Windows 本机的绿是被通知器守卫偶然遮蔽, 且报错归属到该 worker 最后跑的用例, 与肇事者无关 | sidefx 越界, POPEN, ss -ltnp, port_owner, describe_port_owner, 端口占用者探针, WebUIBindError, CI 红本机绿, xdist, teardown ERROR |
 | [sidefx-import-time-temp-roots.md](sidefx-import-time-temp-roots.md) | sidefx 会话守卫的临时根集合不得在模块导入时固化 | 串行 -n 0 跑测试出现 sidefx 越界, 临时目录内删除/建链被判越界, TEMP_ROOTS 与 gettempdir 不一致 |
 | [sim-root-sentinel.md](sim-root-sentinel.md) | `tools/sim/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 sim 都撞 `B1: --root 已存在且非空, 但缺哨兵`。 | dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景 |
@@ -23,4 +24,3 @@
 | [sync-midrun-coverage-synthesis.md](sync-midrun-coverage-synthesis.md) | test.full(xdist+coverage)运行期间执行 `my-commit-flow.sync` 快进换入远端新代码 —— 已启动的 worker 仍持旧模块字节码跑完全程, 新增/改动的源码行从未被执行, coverage 合成时这些行全记 miss, 总覆盖率跌破 99.5% 闸门误红(实测: relocate_exec miss 15→110 / relocate_proof 0→50, TOTAL 99.69%→98.68%)。测试结果本身全绿, 红的只是覆盖率合成 —— 但这一轮 135s 白烧且基线切片不能取数。 | test.full 运行中, 评审 pack 前置 sync, 会话中途 sync, 覆盖率误红, 覆盖率跌破闸门, miss 数暴涨, 基线取数 |
 | [test-data-dir-prod-fallback-write.md](test-data-dir-prod-fallback-write.md) | 测试环境 data_dir 缺省落空串时, 模块侧 `_data_dir()` 按 `or "auto-qb-data"` 兜底 —— 测试驱动的 journal/spec 写点全部落进生产红线目录 `auto-qb-data/relocate/` (T2 引入 T3 发现, 残留 j1.json/ja.json 即此来); 修法 = autouse 夹具把 env 缺省钉到 tmp_path, 显式传参恒优先。教训: 默认值兜底指向生产目录本身就是坑。 | auto-qb-data 污染, 测试写红线目录, data_dir 兜底, _data_dir 默认值, 测试驱动触盘写点, env 夹具钉 data_dir, autouse 夹具, 残留 journal json, relocate 测试 |
 | [test-lock-path-injection.md](test-lock-path-injection.md) | 工具侧 `Storage` 的默认锁锚点(S12/D8)从 `data_dir` 迁到用户级指针目录(`%LOCALAPPDATA%/global-traffic-monitor/instance.lock` 等) —— 于是 `Storage(str(tmp_path))` 后直接 `acquire_lock()` 的测试**不再动 tmp**, 而是去锁真实用户目录: 沙箱内 `os.makedirs` 报 `PermissionError [WinError 5]`, 沙箱外更隐蔽(污染真实目录 / 跨用例互相抢锁)。修法 = 每处装配显式传 `lock_path=<tmp>/instance.lock`, 发现指针同理传 `endpoint_file=<tmp>/endpoint.json`。 | 加/改工具侧测试, Storage, acquire_lock, 真实用户目录, PermissionError WinError 5, 拒绝访问, AppData, LOCALAPPDATA, global-traffic-monitor, instance.lock, endpoint.json, 锁锚点, 跨用例抢锁, S12 |
-| [test-plan-docstring-sections.md](test-plan-docstring-sections.md) | test_plan_docstring_guard 只审计 docstring 主「## 测试计划」段, 用例条目写进其它同级小节不进审计面, 首次全量才被点名 | 测试计划, docstring 守卫, test_plan_docstring_guard, 用例清单, 同级小节 |

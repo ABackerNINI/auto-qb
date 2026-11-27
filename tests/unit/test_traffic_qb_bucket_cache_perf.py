@@ -91,6 +91,16 @@ A4 温态断言 best-of-3 结构性去抖(26-11-19, 计划 26-11-18-0037 阶段 
 - 线值 100/100/150/250 四线不动(去抖后无需再追线), 隔离典型数字远低于各线。
 计时助手单点 _warm_p95_best_of_3(beat, beats), 四形态共享; 打印誊写口径改为
 各轮 p95 逐轮列出 + best-of-3 取值。冷态豁免记录面不动(冷态本就不断言)。
+
+A4 组图两线环境抬线(26-11-28, 用户拍板「抬线」): 本批接入环境2(VM, 任务档案
+26-11-28-test-z-r-ramdisk-tmp-guard)后, 组图两用例在提交闸门确定性越线 —— VM 算力
+较标定机(环境1)慢 ~2.2x, 组图面放大到 ~3.5x(本机实测典型 p95 ~390-436 / 轮尾 ~460-465,
+覆盖原线)。抬线 **150→600 / 250→600**: = 本机轮尾最劣(465/460)的 ~1.3x(与 26-11-19
+选线「覆盖实测压力尾」同哲学), 原线在本机连最优轮(266-353)都过不去, 属环境差非回归
+(两次独立串行复跑 + 闸门实测, 逐轮数字见入池 issue 26-11-28-0521 §02)。**代价如实
+记录**: 在环境1(快机)上 600 线只拦 ~4-5x 级退化, 组图回归判别力实质让位给隔离面
+打印数字 —— 环境相对化(按本机定标脉冲缩放阈值)是正解, 已入池 issue(26-11-28)。
+单种两线(100)不动: 本机实测温态 p95 仍远低于线(实测数字见 issue §02)。
 """
 import math
 import time
@@ -290,7 +300,8 @@ def test_a4_bench_idle_single_series_24h(tmp_path, monkeypatch):
 
 
 def test_a4_bench_group_m30_warm(tmp_path, monkeypatch):
-    """A4 组图 M=30 温态 p95(<150ms 硬线, 活跃形态; 3 轮 x 40 拍 best-of-3)+
+    """A4 组图 M=30 温态 p95(<600ms 硬线, 活跃形态; 3 轮 x 40 拍 best-of-3;
+    26-11-28 环境抬线 150→600, 见模块 docstring「A4 组图两线环境抬线」节)+
     冷态记录实测(豁免)。组点数按成员史实际时长/k 推导: 2h 史 = 4800 样本 ->
     k=116 -> 组数 42。"""
     members = [f"{i:032x}" for i in range(30)]
@@ -326,16 +337,17 @@ def test_a4_bench_group_m30_warm(tmp_path, monkeypatch):
     rounds_txt = "/".join(f"{p * 1000:.2f}" for p in round_p95s)
     print(
         f"[A4 bench] 组图M=30活跃 冷态(2h/员史)={group_cold * 1000:.1f}ms(记录, 豁免) "
-        f"温态p95(best-of-3)={warm_p95 * 1000:.2f}ms(线150) 轮p95[{rounds_txt}] "
+        f"温态p95(best-of-3)={warm_p95 * 1000:.2f}ms(线600) 轮p95[{rounds_txt}] "
         f"最优轮min={min(best) * 1000:.2f} 中位={_pctl(best, 0.5) * 1000:.2f} max={max(best) * 1000:.2f}ms"
     )
-    assert warm_p95 < 0.15, f"组图温态 p95(best-of-3) {warm_p95 * 1000:.2f}ms 超 A4 线 150ms"
+    assert warm_p95 < 0.6, f"组图温态 p95(best-of-3) {warm_p95 * 1000:.2f}ms 超 A4 线 600ms"
 
 
 def test_a4_bench_group_m30_idle_warm(tmp_path, monkeypatch):
-    """A4 组图 M=30 空闲形态温态(24h/员史, 旧面最劣形态)—— 线 250ms(26-11-19 去抖
-    重标定: 典型闸门并行 p95 97-114 的 >=2x, 覆盖实测压力尾 215.54; 取证数字与选线
-    理由见模块 docstring「A4 组图空闲线值去抖」节), 温态 3 轮 x 40 拍 best-of-3
+    """A4 组图 M=30 空闲形态温态(24h/员史, 旧面最劣形态)—— 线 600ms(26-11-19 去抖
+    重标定 250: 典型闸门并行 p95 97-114 的 >=2x, 覆盖实测压力尾 215.54; 26-11-28 环境2
+    接入再抬 600, 本机 VM 算力慢 ~2.2x/组图面 ~3.5x, 数字与理由见模块 docstring
+    「A4 组图两线环境抬线」节), 温态 3 轮 x 40 拍 best-of-3
     (同日再遇闸门 3 failed 复跑绿, 结构性去抖见「A4 温态断言 best-of-3 去抖」节);
     冷态记录实测(豁免)+ 成员条目驻留账打印。"""
     members = [f"{i:032x}" for i in range(30)]
@@ -369,7 +381,7 @@ def test_a4_bench_group_m30_idle_warm(tmp_path, monkeypatch):
     rounds_txt = "/".join(f"{p * 1000:.2f}" for p in round_p95s)
     print(
         f"[A4 bench] 组图M=30空闲 冷态(24h/员史)={group_cold * 1000:.1f}ms(记录, 豁免) "
-        f"温态p95(best-of-3)={warm_p95 * 1000:.2f}ms(线250) 轮p95[{rounds_txt}] "
+        f"温态p95(best-of-3)={warm_p95 * 1000:.2f}ms(线600) 轮p95[{rounds_txt}] "
         f"最优轮min={min(best) * 1000:.2f} 中位={_pctl(best, 0.5) * 1000:.2f} max={max(best) * 1000:.2f}ms; "
         f"成员条目[{api._bucketcache.entry_stats('torrent:' + members[0], '24h')}] (其余 29 员同量级 -> 组图驻留 x30)"
     )
@@ -379,4 +391,4 @@ def test_a4_bench_group_m30_idle_warm(tmp_path, monkeypatch):
     # 尾最劣 215.54; 对旧桶缓存回归(隔离 200-240)在闸门形态(~240-360+)保持判别力。
     # 逐轮数字与选线理由见模块 docstring「A4 组图空闲线值去抖」节。同日再加 best-of-3
     # 结构性去抖(断言取 3 轮 p95 最小值, 闸门 3 failed 复跑绿的环境尖峰实证), 线不动。
-    assert warm_p95 < 0.25, f"组图空闲温态 p95(best-of-3) {warm_p95 * 1000:.2f}ms 超 A4 线 250ms"
+    assert warm_p95 < 0.6, f"组图空闲温态 p95(best-of-3) {warm_p95 * 1000:.2f}ms 超 A4 线 600ms"

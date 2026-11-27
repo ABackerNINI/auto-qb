@@ -1,7 +1,7 @@
 # 临时目录与跑全量
 
 > 摘要: 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设收尾会崩, 别手工加前缀。
-> 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集, R 盘缺席, 回落 TEMP, 快照守阵, 自举, auto-qb-tests, 外部 TMPDIR 拒收, rc=4, rc=3, 测试互斥锁, coverage 落点
+> 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集, R 盘缺席, 回落 TEMP, 快照守阵, 自举, auto-qb-tests, 外部 TMPDIR 拒收, rc=4, rc=3, 测试互斥锁, coverage 落点, Z 盘共享, 宿主机内存盘
 
 **Refs:** memory-bank/plans/26-11-02-0657-plan-testing-tmpdir-bootstrap.html
 
@@ -12,6 +12,12 @@
   · 探测 R: → H: → 系统 `%TEMP%`(单一配置点 `TMP_ROOT_CANDIDATES`; 本机无 R/H ⇒ 常态走 `%TEMP%`);
     实例根 `<根>/auto-qb-tests/<repo hash8>-<pid>-<rand6>` —— 连跑两次根互异, xdist worker 同根;
     各 clone 按 repo 路径 hash 分根, 互不共享。
+  · **映射盘共享不可作测试实例根**(26-11-28 实测撤回): Z:\R(宿主机内存盘经 VMware HGFS 共享)
+    曾试入候选, 全量 187 failed —— 映射盘被 realpath 解析成 `\\vmware-host\...` UNC ⇒ 产品卷
+    语义/搬迁闸门把 src 判远程卷成片假红, 且 junction 在共享挂载不可建(需本地 NTFS 卷, 另证)。
+    已从候选撤回并留守卫(顺序用例断言 Z: 永不入列); 内存盘共享只喂纯写面 —— real.seed 大种子
+    (`tests/real/seed.py::RAM_ROOT_CANDIDATES` 探针)与 sim root(`AUTOQB_SIM_ROOT`), 真机搬迁
+    数据走 rm04 的 junction 试建探针(共享盘探不过自动退 .work)。
   · 外部 `TMPDIR`(值不含 `auto-qb-tests` 标记)→ 进程响亮退出 **rc=4** 并给清理指引;
     旧 `set "TMPDIR=R:/Temp/auto-qb/tests"` 前缀**已废止**(R: 在本机不存在, 该写法自 2026-09-23 引入起
     从未生效, 全靠 gettempdir 静默回落掩盖 —— git 考证见计划 `plans/26-11-02-0657`)。

@@ -7,7 +7,7 @@ r"""_tmp_bootstrap 自举的回归阵(计划 26-11-02-0657)。
 
 ## 测试计划
 - test_candidates_single_source: 候选根字面量全仓库唯一, 不得复制到第二处
-- test_candidates_order_is_r_h_system: 固定顺序 R→H→系统 temp 回落(None)
+- test_candidates_order_is_r_h_system: 固定顺序 R→H→系统 temp 回落(None); 映射盘共享(Z:\R)不得入候选
 - test_bootstrap_mark_recognition: 路径含标记即自举值, 平台绝对外部路径样本不算(Win 盘符路径 / POSIX /var 系)
 - test_external_tmpdir_rejected_rc4: 外部 TMPDIR ⇒ SystemExit(4) + 拒收文案
 - test_idempotent_bootstrap_value_accepted: 继承的自举值幂等复用, 不重探测
@@ -45,10 +45,12 @@ def test_candidates_single_source():
 
 
 def test_candidates_order_is_r_h_system():
-    """固定顺序 R→H→系统回落(None), 与用户拍板口径一致。"""
+    r"""固定顺序 R→H→系统回落(None), 与用户拍板口径一致(26-11-28: 映射盘共享 Z:\R 不得入候选)。"""
     cands = list(tb.TMP_ROOT_CANDIDATES)
     assert cands[0][0] == "R:\\" and cands[1][0] == "H:\\"
     assert cands[-1][0] is None, "最后一级必须是系统 temp 回落(None)"
+    assert not any(c[0] and str(c[0]).upper().startswith("Z:")
+                   for c in cands), ("Z: 是映射盘(VMware HGFS), realpath 会解析成 UNC ⇒ 卷语义用例成片假红 —— 不得入候选(26-11-28 撤回实证)")
 
 
 def _external_tmp_samples() -> list[str]:

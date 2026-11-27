@@ -48,7 +48,7 @@
 - 依赖管理统一 **uv** (pyproject.toml PEP 621 + uv.lock 全量锁); 依赖变更后 `commands run env.sync` 重建 .venv 并 editable 安装。
 - 入口 `python src/auto-qb.py [CONFIG]` (兼容入口) / `python -m auto_qb` / `uv run auto-qb`; 运行模式: 正常 tick 循环 / `--dry-run` (写操作只打日志) / `--tray` (主循环入后台线程, UI 线程轮询只读快照, 单实例锁 + localhost IPC 双开唤起) / `--export-yaml` (从现有种子生成配置模板, `--only-missing` 只导未配置站点, 不进主循环)。
 - 项目命令 (测试/格式化/真机跑/提交) 一律走 commands 引擎按 task id, 单点见根 [AGENTS.md](../AGENTS.md)「命令」节; 测试口径与基线数字 → [testing/baseline.md](testing/baseline.md) (勿手抄)。
-- 一切"用完就扔"的临时产物放 `R:/Temp/auto-qb/<用途>/`; 跑测试的 TMPDIR 有自举守卫与判据 (见 [pitfalls/testing/tmpdir.md](pitfalls/testing/tmpdir.md)); 长期归档走 `D:/Projects/_archive/`; R 盘不支持符号链接, 依赖重解析点的工具别放。
+- 一切"用完就扔"的临时产物放 `R:/Temp/auto-qb/<用途>/`(环境2 经共享挂载 `Z:/R/Temp/auto-qb/<用途>/`, 同一物理内存盘, 26-11-28); 跑测试的 TMPDIR 有自举守卫与判据 (见 [pitfalls/testing/tmpdir.md](pitfalls/testing/tmpdir.md)); 长期归档走 `D:/Projects/_archive/`; R 盘不支持符号链接, 且 Z:\R 共享挂载上 junction 不可建(需本地 NTFS 卷, 26-11-28 探针实证) —— 依赖重解析点的工具别放内存盘。
 - Windows 磁盘文件检查走 `\\?\` 长路径前缀 (`utils.add_long_path_prefix_for_win`); 平台相关测试必须 monkeypatch 固定 `sys.platform`。
 - 已实测 qB: 5.2.3 (qB 5.0+ Web API 语义变化见 [pitfalls/backend/qb-api.md](pitfalls/backend/qb-api.md))。
 

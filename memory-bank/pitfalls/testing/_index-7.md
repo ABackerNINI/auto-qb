@@ -1,13 +1,14 @@
 # testing — 测试 / 冒烟 / 仿真纪律 · 卷 7/9
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 生成; 主索引 [_index.md](_index.md) 是分卷路由。
-> 本卷主题: `real-suite-cascade-skip.md` … `side-effects.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
+> 本卷主题: `real-probe-rid-window.md` … `seed-store-full-replace.md`(共 16 条); 主题越多时索引按文件名分卷, 每卷 ≤ 8,000 字符。
 > **检索纪律**: 先读本索引定位, 再按需打开单个主题文件 —— **不要整读本目录**。
 
 ## 主题
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [real-probe-rid-window.md](real-probe-rid-window.md) | 真机探针增量窗口: trigger 后重置 rid 会把窗口内事件被全量冲掉(假阴性) | 真机探针, 增量窗口, rid 重置, 全量冲掉, 假阴性, sync/maindata, torrents_removed, 删后重加, 探针方法论 |
 | [real-suite-cascade-skip.md](real-suite-cascade-skip.md) | 真机 suite 一条用例失败后的收尾恢复只等 WEB 可达, libtorrent connect 滞后窗内**按字母序下一个模块**的模块闸 `check_online` 单发探测撞窗 → 整模块成块 SKIP —— **跨文件级联**的环境级假红形态; skip 必须单跑核真实三态, 不能当 BLOCKED 记账。 | 真机 suite, 级联 skip, 整模块 skip, check_online, qb_up, libtorrent 滞后窗, 环境级假红, RM04 级联, suite skip 成块 |
 | [red-verify-must-hit-behavior.md](red-verify-must-hit-behavior.md) | 红绿双验的「红」若只把实现**换个写法**(改变量名 / 挪声明位置)而不改变可观测行为或几何, 守阵会**绿着放行假修复**——因为守阵钉的是结果(对齐 ±1px / 计数相等 / 节点身份), 不是代码形态。红验设计纪律: 写守阵前先回答「这条断言在什么**行为破坏**下会红」, 然后真把那个行为改坏一次; 若守阵不红, 是守阵错了不是破坏错了。同类陷阱: 量具自身的口径错误(把原始字节数当格式化文案断言 / 对错弹层元素断言)也会造成「假红」, 修量具 ≠ 修实现, 两者要在报告里分开记。**另一同源形态(2026-10-16 新增)**: 被钉分支与**防御性兜底分支**在同一输入上同结果时, 删掉被钉分支的突变会逃过守阵 —— 用例必须选「只有被钉分支能决定结果」的输入。 | 红绿双验, 红验, 改坏实现, 守阵没红, 假修复, 假红, 量具写错, 守阵测什么, 行为回归用例, 几何守阵, 兜底分支掩盖, 突变逃过守阵, 分支顶替, 同结果输入, 防御性回退, 选输入 |
 | [redverify-anchor-lineendings.md](redverify-anchor-lineendings.md) | 变异审计的**红验**要靠「把源码某段文本替换成变异体 → 跑目标用例 → 还原」。主仓相当一部分 `.py` 是 **CRLF** 行尾(如 `src/auto_qb/config/schema/__init__.py`), 而红验脚本通常 `read_bytes().decode()` 后直接拿**带 `\n` 的多行字符串**当锚点 —— CRLF 文件里这种锚点 `count == 0`, 替换**根本没发生**, 但脚本若只按「跑完绿不绿」判 KILLED/SURVIVED, 就会把「没变异」的绿当成「变异存活」(假 SURVIVED), 或反过来把空转的探针当通过。第二个同源陷阱: 锚点里的**缩进空格靠手抄**, 极易差 1 个(实测 52 vs 51 字符), 同样静默失配。判别: 红验结果里出现 `ANCHOR-MISS` 就停手; 没有这个兜底时, 表现为「明明写了对的守阵却仍 SURVIVED」。处置: ①锚点先 `replace("\r\n", "\n")` 归一到 LF 空间再匹配、写盘前转回; ②缩进一律用 `" " * N` 拼接, 不手抄; ③锚点 `count != 1` 必须报错停手(数量 >1 说明锚点不唯一, 也不可用)。 | 红验, 变异测试, mutmut, apply, 同构变异, 锚点, 锚点失配, ANCHOR-MISS, 源码替换, 还原, CRLF, LF, 行尾, newline, 缩进, 空格数, 差一空格, read_bytes, write_bytes, 假绿, 假存活, 守阵空转, 探针空转, dump 行块, 函数相对行号, hunk 头, qualname, 分隔符字形, docstring 续行, 子进程超时, 解释器漂移, venv 解释器, sys.executable, 假红, 环境坏, 基线复跑, TimeoutExpired, 超时未接住, 脚本崩在中途, 收尾自证被跳过, 守阵挂起, 挂起也算红, 死锁, 非重入锁 |
@@ -23,4 +24,3 @@
 | [sandbox-tool-cache.md](sandbox-tool-cache.md) | agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**: CPython `tempfile._mkstemp_inner` 在 Windows 上把 `PermissionError` 当成"重名"继续换名重试 ⇒ 命令**挂住 + 100% 单核 + 持续写磁盘**, 且**全程没有任何报错**。姊妹形态(2026-10-16): 沙箱把 `LOCALAPPDATA` 裁成空串时, `uv python list` 之类的托管命令会把缓存目录解析成 **CWD 相对路径** —— 仓库根落 45MB 部分下载垃圾, 且该命令本身先挂住 120s。 | 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑, LOCALAPPDATA 为空, uv python list 挂住, 仓库根 Python 目录, 缓存落 CWD, 部分下载垃圾, mypy, .mypy_cache, dev.typecheck |
 | [sandbox-venv-in-workspace.md](sandbox-venv-in-workspace.md) | agent 沙箱给工作区目录打了 Low 完整性标签 + 沙箱 capability ACE, 在**工作区内**新建的 venv, 其 `Scripts/python.exe` 读不到**同目录的** `pyvenv.cfg` —— 报 `Cannot read ... pyvenv.cfg` / exit 107 (`uv run` 另报 `uv trampoline failed to spawn Python child process: permission denied (os error 5)`); 重建 venv 无效, 把同一份 venv 拷到工作区外即正常。处置 = `UV_PROJECT_ENVIRONMENT` 指到工作区外。 | exit 107, Cannot read pyvenv.cfg, pyvenv.cfg 不可读, uv run 失败, 工具 venv 坏, permission denied os error 5, uv trampoline, venv 重建无效, gtm 测试跑不了, UV_PROJECT_ENVIRONMENT, env.sync, trampoline 失效, 既有 venv 突然坏 |
 | [seed-store-full-replace.md](seed-store-full-replace.md) | `tests/unit/helpers.py::seed_store(mgr, torrents)` 的形参像「灌入这些种子」(增量), 实际语义是 | seed_store, 全量替换, 整体替换, by_hash, 增量追加, 部分灌入, 挤出快照, 种子不存在, webui_helpers, |
-| [side-effects.md](side-effects.md) | 测试不得产生真实系统副作用, 由 `tests/unit/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。 | 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试 |

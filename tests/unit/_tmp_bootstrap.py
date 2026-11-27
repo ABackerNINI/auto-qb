@@ -1,9 +1,10 @@
-"""测试临时目录自举 + 写重型测试互斥锁(计划 26-11-02-0657)。
+r"""测试临时目录自举 + 写重型测试互斥锁(计划 26-11-02-0657)。
 
-进程启动极早期由 tests/conftest.py 模块级调用一次(`bootstrap()`)。职责:
+进程启动极早期由 tests/unit/conftest.py 模块级调用一次(`bootstrap()`)。职责:
 
 1. 探测实例唯一临时根: 候选顺序 R: → H: → 系统 temp(单一配置点 TMP_ROOT_CANDIDATES,
-   唯一一份, 引用者 import 不得复制字面量 —— 散落守卫见 tests/test_tmp_bootstrap.py);
+   唯一一份, 引用者 import 不得复制字面量 —— 散落守卫见 tests/unit/test_tmp_bootstrap.py;
+   映射盘共享(Z:\R)不可入候选, 撤回实证见元组尾注);
 2. 外部 TMPDIR 一律拒收(rc=4): 值不含 BOOTSTRAP_MARK 即视为外部注入, 响亮退出, 不兜底
    (旧 config 写死 R:/ 自 2026-09-23 引入起在本机静默回落从未生效 —— 教训就是不许静默);
 3. 幂等: 已自举(值含标记, 如 xdist worker / 嵌套 pytest 继承 env)则复用, 不重探测;
@@ -35,6 +36,10 @@ TMP_ROOT_CANDIDATES = (
     ("R:\\", "Temp"),
     ("H:\\", "Temp"),
     (None, ""),  # 系统 temp 回落
+    # ! 别把映射盘共享(Z:\R=宿主机内存盘, VMware HGFS)加进候选 —— 26-11-28 实测撤回: 映射盘被
+    #   realpath 解析成 \\vmware-host\... UNC ⇒ 卷语义/搬迁闸门类用例成片假红(全量 187 failed),
+    #   且 junction 在共享挂载上不可建(需本地 NTFS 卷)。内存盘共享只喂纯写面(见
+    #   tests/real/seed.py::RAM_ROOT_CANDIDATES 与 rm04 的 _ram_root 探针), 实例根必须本地卷。
 )
 
 BOOTSTRAP_MARK = "auto-qb-tests"  # 自举值可识别标记(路径段)
@@ -148,7 +153,7 @@ def _pick_root() -> Path:
         errors.append(f"{base} 不可写")
     raise SystemExit(
         f"[FATAL] 临时根探测失败: 所有候选不可写 ({'; '.join(errors)})\n"
-        f"候选顺序见 tests/_tmp_bootstrap.py::TMP_ROOT_CANDIDATES(R→H→系统temp, 单一配置点)。"
+        f"候选顺序见 tests/unit/_tmp_bootstrap.py::TMP_ROOT_CANDIDATES(R→H→系统temp, 单一配置点)。"
     )
 
 
@@ -188,9 +193,9 @@ def _acquire_instance_root() -> Path:
             return _INSTANCE_ROOT
         print(
             f"[FATAL] 外部 TMPDIR 拒收: {env!r}(进程 {os.getpid()})。\n"
-            f"测试 TMPDIR 由 tests/_tmp_bootstrap.py 自举探测(R→H→%TEMP%), 不接受外部设置。\n"
+            f"测试 TMPDIR 由 tests/unit/_tmp_bootstrap.py 自举探测(R→H→%TEMP%), 不接受外部设置。\n"
             f"正确做法: 清掉环境变量后重跑(set TMPDIR= 或新 shell); "
-            f"要换根, 改 tests/_tmp_bootstrap.py::TMP_ROOT_CANDIDATES 单一配置点。",
+            f"要换根, 改 tests/unit/_tmp_bootstrap.py::TMP_ROOT_CANDIDATES 单一配置点。",
             file=sys.stderr,
         )
         raise SystemExit(RC_EXTERNAL_TMPDIR) from None

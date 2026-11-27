@@ -103,8 +103,8 @@ auto  = true
 # 每片各自重算(单包结论被当成全局结论), 且多片 pytest -n 8 会在同一资源池并发。故不分片,
 # 展开后超单条上限即 STOP(缩小本次提交范围)。
 shard = false
-timeout = 300
-note  = "包与引擎的脚本测试: 改哪个包跑哪个包(≥2 包/引擎改动保守整跑) —— test.pkg 本体保留给手工整跑与 scoped 的 --full 转调"
+timeout = 600
+note  = "包与引擎的脚本测试: 改哪个包跑哪个包(≥2 包/引擎改动保守整跑) —— test.pkg 本体保留给手工整跑与 scoped 的 --full 转调; timeout 300→600(2026-11-28: 环境2 提交闸门连跑负载下 pkg.scoped 实测 >300s 被杀, 独立 249.5s, 600≈2.4x 余量)"
 
 [[gates]]
 match = ["memory-bank/*"]

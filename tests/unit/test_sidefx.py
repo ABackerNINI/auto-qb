@@ -17,6 +17,7 @@
 - test_sidefx_recorder_install_uninstall_restores: 装卸安全 —— uninstall 还原各入口, 不污染后续
 - test_sidefx_aumid_write_is_stubbed: AUMID 键写入被拦成 StubRegKey; 且它**不在**放行清单(真落盘即越界)
 - test_sidefx_report_shape: 台账报告可读(总数/越界数/分类计数)
+- test_sidefx_ram_scratch_allowed_and_outside: 内存盘纯写面(RAM_SCRATCH_ROOTS)放行/越界双验 —— 探针删除与建链在内存盘落点不判越界, 面外照旧
 """
 import os
 import tempfile
@@ -204,6 +205,20 @@ def test_sidefx_aumid_write_is_stubbed():
     assert isinstance(key, sidefx.StubRegKey), "AUMID 键应被拦成不落盘的替身"
     # 反向断言: 放行清单里没有 AUMID —— 守卫一旦失效、真的写下去, 记账器必须判越界
     assert sidefx.is_violation(("REG", aumid_key))
+
+
+def test_sidefx_ram_scratch_allowed_and_outside():
+    """内存盘纯写面(26-11-28): FSDEL/SYMLINK 落在 RAM_SCRATCH_ROOTS(种子/rm04 探针落点)不判越界; 面外照旧越界。
+
+    两侧同经 _norm_path 归一(Z:\\R 映射盘会被 realpath 解析成 UNC), 前缀比对不裸拼字面量。
+    """
+    assert not sidefx.is_violation(("FSDEL", r"Z:/R/qbt-fake/.probe-1"))
+    assert not sidefx.is_violation(("FSDEL", r"R:/qbt-fake/rm04/.probe-2"))
+    assert not sidefx.is_violation(("SYMLINK", r"Z:/R/qbt-fake/rm04/link"))
+    # 面外样本: 仓库内文件与内存盘白名单外的兄弟路径, 必须照旧判越界
+    assert sidefx.is_violation(("FSDEL", r"Z:/R/elsewhere/x.bin"))
+    assert sidefx.is_violation(("SYMLINK", r"Z:/R/other/link"))
+    assert sidefx.is_violation(("FSDEL", "src/auto_qb/infra/utils.py"))
 
 
 def test_sidefx_report_shape():

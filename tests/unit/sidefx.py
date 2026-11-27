@@ -13,8 +13,8 @@ r"""测试期"真实系统副作用"**记账器与判定策略**(2026-09-18 普�
 | `POPEN` | `subprocess.Popen.__init__` | 可执行名 ∈ `ALLOWED_EXECUTABLES`, 或**临时目录里的 wrapper**(`commands` / `commands.cmd`) |
 | `REG` | `winreg.CreateKeyEx` / `DeleteKey` | 键路径 ∈ `ALLOWED_REG_KEYS` |
 | `REGVAL` | `winreg.SetValueEx` / `DeleteValue` | 值名 ∈ `ALLOWED_REG_VALUES` |
-| `FSDEL` | `os.remove` / `unlink` / `rmdir` + `shutil.rmtree` | 路径落在临时目录(带 `dir_fd` 的先补齐为绝对路径) |
-| `SYMLINK` | `os.symlink` | 路径落在临时目录(同上) |
+| `FSDEL` | `os.remove` / `unlink` / `rmdir` + `shutil.rmtree` | 路径落在临时目录(带 `dir_fd` 的先补齐为绝对路径)或 `RAM_SCRATCH_ROOTS`(内存盘纯写面, 26-11-28) |
+| `SYMLINK` | `os.symlink` | 路径落在临时目录(同上)或 `RAM_SCRATCH_ROOTS` |
 | `BIND` | `socket.socket.bind` | 地址为回环 |
 | `CONNECT` | `socket.socket.connect` / `socket.create_connection` | 目标为回环(测试不得连外网) |
 | `LAUNCH` | `os.startfile` / `os.system` / `webbrowser.open` / `utils._win_shell_open` / `utils._win_shell_enter` | **无** —— 一律越界 |
@@ -143,7 +143,7 @@ def _temp_roots() -> List[str]:
 
     !不能固化成模块级常量(2026-11-02 串行 `-n 0` 的 12 条假阳性): `tests/conftest.py` 先
     `import sidefx`、后跑 `_tmp_bootstrap.bootstrap()` 把 `TMPDIR` 切到实例根
-    (`R:\\Temp\\auto-qb-tests\\<实例>`)。导入时求值只拿到切换前的系统 temp ⇒ 实例根内的
+    (`<系统temp>\\auto-qb-tests\\<实例>`)。导入时求值只拿到切换前的系统 temp ⇒ 实例根内的
     删除/建链全被判"临时目录外"(xdist worker 导入时 TMPDIR 已就位, 所以只有串行暴露)。
     改为首次判定时求值 + 按 `_roots_signature()` 失效: 每条路径多几次 env 读取, 不重复 realpath。
     """
@@ -178,6 +178,30 @@ def is_temp_path(path: Any) -> bool:
         return False
     for root in _temp_roots():
         if target == root or target.startswith(root.rstrip("\\/") + os.sep):
+            return True
+    return False
+
+
+# ============================ 内存盘纯写面(26-11-28) ============================
+# 宿主机内存盘 R:\ 经共享挂载 Z:\R(VMware HGFS) —— 真机大种子/rm04 探针的落点
+# (tests/real/seed.py::RAM_ROOT_CANDIDATES、rm04_relocate._ram_root)。这些根下的
+# FS 删除/建链是**探针刻意行为**(探测内存盘可用性), 不是越界副作用, 放行。
+# ! Z:\R 是映射盘: realpath 会把它解析成 \\vmware-host\... UNC, 因此这里两侧同样经
+#   _norm_path 归一后比对, 事件路径与根字面量各自归一, 不裸拼前缀。
+RAM_SCRATCH_ROOTS = (r"R:\qbt-fake", r"Z:\R\qbt-fake")
+
+
+def _in_ram_scratch(path: Any) -> bool:
+    try:
+        target = _norm_path(path)
+    except (OSError, ValueError):
+        return False
+    for root in RAM_SCRATCH_ROOTS:
+        try:
+            base = _norm_path(root)
+        except (OSError, ValueError):
+            continue
+        if target == base or target.startswith(base.rstrip("\\/") + os.sep):
             return True
     return False
 
@@ -225,9 +249,9 @@ def is_violation(record: "Record") -> bool:
     if kind == "REGVAL":
         return str(detail) not in ALLOWED_REG_VALUES
     if kind == "FSDEL":
-        return not is_temp_path(detail)
+        return not (is_temp_path(detail) or _in_ram_scratch(detail))
     if kind == "SYMLINK":
-        return not is_temp_path(detail)
+        return not (is_temp_path(detail) or _in_ram_scratch(detail))
     if kind in ("BIND", "CONNECT"):
         return not is_loopback(detail)
     if kind == "LAUNCH":
