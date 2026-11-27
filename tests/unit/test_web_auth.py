@@ -9,6 +9,10 @@
 - test_skip_local_verify_cross_site_guard_write_origin: skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护) —— 跨站 Origin 403 且不入队, 同源/无 Origin 放行, GET 不校验(跨站读拿不到响应体, 危害面在写); *.localhost 子域同源同样成立
 - test_skip_local_verify_cross_site_guard_all_write_endpoints: 全部写端点穷举(迭代路由表) —— 跨站 Origin 下一律 403(闸在全局依赖单点, 先于任何处理器/422)
 - test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
+- test_cross_site_host_rejection_contract: 直调跨站闸钉死缺 Host / attacker.com 的 403 detail 与恰好一条 WARNING 逐字契约(缺 Host 保留冒号后空值与尾随空格)
+- test_cross_site_origin_rejection_contract: 直调跨站闸钉死合法 Host + POST + 跨站 Origin 的 403 detail 与 WARNING 逐字契约
+- test_cross_site_origin_port_mismatch_rejected_before_enqueue: 同主机异端口 Origin 在入队前 403, detail 精确且命令队列与唤醒记录均为空; 同源正对照先证明暂停端点确会入队并唤醒
+- test_require_token_missing_client_fails_closed: skip=true + 合法 Host + client=None + 无 Authorization 直调鉴权 -> 401 invalid token, 不抛 AttributeError
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
 - test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性 / *.localhost 后缀判定)
 - test_allowed_hostnames_normalizes_configured_host: 自配 Host 精确归一化(去空白/方括号、转小写), loopback 与 X 字符边界用完整 frozenset 相等钉死
@@ -350,6 +354,97 @@ def test_skip_local_verify_cross_site_guard_credentials_bypass(web_env):
     assert remote.get("/api/status", headers=bad).status_code == 401
 
 
+def test_cross_site_host_rejection_contract(caplog):
+    """缺 Host / attacker.com: 直调跨站闸, 403 detail 与单条 WARNING 逐字钉死"""
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import _reject_cross_site
+
+    caplog.set_level(logging.WARNING, logger="auto_qb.web")
+    for host in (None, "attacker.com"):
+        caplog.clear()
+        request = _auth_request(host=host, include_host=host is not None)
+        with pytest.raises(HTTPException) as ei:
+            _reject_cross_site(request, "127.0.0.1")
+        assert ei.value.status_code == 403
+        assert ei.value.detail == "host not allowed (cross-site protection)"
+        warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
+        assert len(warns) == 1
+        assert warns[0].getMessage() == f"WEB 跨站防护拒绝(Host 不在白名单): {host or ''}"
+
+
+def test_cross_site_origin_rejection_contract(caplog):
+    """合法 Host + POST + 跨站 Origin: 直调跨站闸, 403 detail 与生产日志层脱敏后的单条 WARNING 逐字钉死"""
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import _reject_cross_site
+
+    caplog.set_level(logging.WARNING, logger="auto_qb.web")
+    request = _auth_request(method="POST", origin="http://evil.com")
+    with pytest.raises(HTTPException) as ei:
+        _reject_cross_site(request, "127.0.0.1")
+    assert ei.value.status_code == 403
+    assert ei.value.detail == "origin not allowed (cross-site protection)"
+    warns = [r for r in caplog.records if r.name == "auto_qb.web" and r.levelno == logging.WARNING]
+    assert len(warns) == 1
+    assert warns[0].getMessage() == "WEB 跨站防护拒绝(Origin 跨站): http:??evil.com"
+
+
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
+def test_cross_site_origin_port_mismatch_rejected_before_enqueue(web_env):
+    """同主机异端口 Origin 必须在入队前 403, 队列与唤醒记录均保持为空
+
+    同源正对照先走真实写端点 /api/torrents/HA/pause, 证明该端点确会入队并唤醒;
+    随后异端口 Origin 必须在同一副作用发生前被 403 拒绝, 避免只读端点令空队列断言恒真。
+    """
+    mgr, client = web_env
+    mgr.config.web.skip_local_verify = True
+    assert mgr.web.commands.empty()
+    assert mgr._wake_calls == []
+
+    host_hdr = {"Host": "127.0.0.1:8080"}
+    # 同源正对照: 真实暂停端点应接受请求、入队一条命令并唤醒主循环。
+    response = client.post(
+        "/api/torrents/HA/pause",
+        headers={
+            **host_hdr, "Origin": "http://127.0.0.1:8080"
+        },
+    )
+    assert response.status_code == 200
+    assert mgr.web.commands.qsize() == 1
+    assert len(mgr._wake_calls) == 1
+    mgr.web.commands.get_nowait()
+    mgr._wake_calls.clear()
+
+    # 异端口负例: 同一写端点须在入队与唤醒前拒绝, 错误契约逐字钉死。
+    response = client.post(
+        "/api/torrents/HA/pause",
+        headers={
+            **host_hdr, "Origin": "http://127.0.0.1:9999"
+        },
+    )
+    assert response.status_code == 403
+    assert response.json() == {"detail": "origin not allowed (cross-site protection)"}
+    assert mgr.web.commands.empty()
+    assert mgr._wake_calls == []
+
+
+def test_require_token_missing_client_fails_closed(web_env):
+    """缺 request.client 时不得抛 AttributeError: 无凭证 fail-closed 落 401 invalid token"""
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import make_require_token
+
+    mgr, _client = web_env
+    mgr.config.web.skip_local_verify = True
+    require_token = make_require_token(mgr)
+    request = _auth_request(client=None)
+    with pytest.raises(HTTPException) as ei:
+        require_token(request, "")
+    assert ei.value.status_code == 401
+    assert ei.value.detail == "invalid token"
+
+
 @pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_default_off_no_cross_site_guard(web_env):
     """默认关闭零变化: 外部 Host/Origin 不触发 403, 仍走既有 401 路径(安全纪律)"""
@@ -519,12 +614,18 @@ def test_auth_default_port_host_matrix():
 
 
 def _auth_request(
-    path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET", origin=None
+    path="/api/events",
+    query="",
+    host="127.0.0.1:8080",
+    client=("127.0.0.1", 50000),
+    method="GET",
+    origin=None,
+    include_host=True,
 ):
     """构造 require_token 直调用的 Request(绕开 TestClient 的流式端点阻塞)"""
     from starlette.requests import Request as StarletteRequest
 
-    headers = [(b"host", host.encode())]
+    headers = [(b"host", host.encode())] if include_host else []
     if origin:
         headers.append((b"origin", origin.encode()))
     scope = {
