@@ -3,9 +3,17 @@
 v4 样本槽流(V4Slot 序列, 由 traffic_store_codec.v4_block_slots / v4_block_slots_from 展开;
 聚合接缝经 traffic_grid.v4_series_slots 平展) -> 样本分组点列 —— 26-11-15-1104 挂钟桶面
 (F2 归桶 / 桶值缓存 / 持有回填 / F3 尾桶持有)的替代读侧。与旧面的关系:
-- 分组锚从栅格桶键换成样本索引(§03「锚换样本索引」): 组 = 窗内第 [i*k, (i+1)*k) 个样本
-  (窗首样本 = 序号 0, 确定性由 (槽流, t0, t1) 单点给出; 同 tick 采样的成员系列槽 ts 序列
-  恒同 -> 逐成员分组点列同构, 组端点 Sigma 现算可用)。
+- 分组锚(k=1 与 k>1 两档, 26-11-27 S1a F3 改锚 —— 计划 26-11-26-2333 INV-3 后端半边):
+  k=1 逐样本直通(组 = 单样本, 组键 = 窗内序号; 抖动样本不合并 —— 每样本恒一点);
+  k>1 = 时间桶锚(单点 group_bucket): 组 = 样本 ts 落入的时间桶 floor(ts / (k*si)),
+  桶相位 = epoch 原点、桶宽 = 组距标称 k x si —— 组界是纯 ts 函数, 与窗位置无关:
+  滑动窗对账(30s GET)的已闭合组点逐位不动(同批样本恒同桶), 对账只补精度不改形状
+  (S0 取证: 旧「窗内第 [i*k,(i+1)*k) 个样本」锚随窗沿平移整列换格, 30m 窗每 30s 对账
+  dropped~407-410 即此根因, 报告 26-11-27-0526 症状3)。窗首跨界桶只收窗内成员
+  (窗外样本弃入同旧面 g=None), 桶值随窗沿左移单点重写一次后随桶整体出窗 —— 有界,
+  不再整列改写。stride 翻 k(缺口标记数变化)时桶宽整体重对齐 = 真换窗语义(前端 rewin,
+  计划 F4 step 名义变化); 同 tick 采样的成员系列槽 ts 序列恒同 -> 逐成员分组点列同构
+  保留(桶界同式同源), 组端点 Sigma 现算可用。
 - 差分链 / 接缝摊配 / null 标记判定承袭旧面单点, 不重写: 摊配 = traffic_grid.
   _seam_spread_delta(原样提取件); 重置/基线缺失三层口径 = traffic_grid._bucket_delta;
   null 标记 = 旧 fold 的 n 槽(floor 取整 + last_was_null 去重)与块间真空(首槽声称覆盖
@@ -15,14 +23,20 @@ v4 样本槽流(V4Slot 序列, 由 traffic_store_codec.v4_block_slots / v4_block
 
 契约要点(计划 §03 逐条):
 - points = ({t, dl, up} | {t, dl: None, up: None}) 升序点列: 每点必带 t(真值点 = 组末样本
-  ts, k=1 即样本 ts; 空值点 = floor(ts)), 空值点 = n 游程/块间真空折叠一点。旧「null 无 t
-  的定长桶数组」形态不出现。
+  ts, k=1 即样本 ts, k>1 即桶末样本 ts; 空值点 = floor(ts)), 空值点 = n 游程/块间真空
+  折叠一点。旧「null 无 t 的定长桶数组」形态不出现。
+- 输出形状 = 脊柱点列 + 活尾组点(INV-1/INV-3): 真值点按桶闭合二分 —— 已闭合桶(时间桶
+  已被后继样本越过)为脊柱点(跨请求逐位不动), 末个真值点 = 活尾组点(进行中桶, 组内已落
+  样本真实均值, 每 tick 随样本收敛一次); tail_open = points[-1] 是否活尾组点(按发射列
+  尾点身份推导, k>1 且尾项为最高时间桶组点; k=1 直通窗尾点恒定不折叠 = False)。组闭合迁移: 后继样本落入新桶 -> 旧桶点即成
+  脊柱(t/值逐位不变), 新桶点为活尾组点。
 - 分组口径 k: 初值 = max(1, ceil(窗内预期样本数 / 500)); 窗内有缺口标记时上调直至
   「组点数 + 空值点数 <= 500」(MAX_RAW_POINTS, 模块常量非配置键 —— 黄金法则 4: 只有配置
   键才进 validate_config); k 上限 = 窗内实际样本数; 缺口标记数 >= 500 时预算数学不可达
   —— 按 k 上限交付并置 over_budget=True 如实标注(诚实优先于预算, 不静默), 缺口显式
   空值语义不弃。k=1 逐样本(1m/5m); k>1 组内均值 = Sigma delta / Sigma dt(与现行桶均值
-  同口径: 端点归属 + 覆盖毫秒分母 + round 取整, 锚换样本索引); x = 组末样本 ts。
+  同口径: 端点归属 + 覆盖毫秒分母 + round 取整, 组键换时间桶); 组距标称 = k x si =
+  时间桶宽(meta.interval_s 同源积, 前端活尾组折叠 S2/F1 与对账等价电池消费同式)。
 - 尾组: 末组可不满 k(进行中), t = 最新样本 ts, 值 = 组内已落样本真实均值 —— 恒真值
   无克隆无持有(持有面随桶面退役; 每 tick 随样本更新由重装配自然承载)。
 - 字节守恒: 差分链/totals 语义不变 —— 漏采区间字节含在后继样本快照差分里(短缝摊配
@@ -65,12 +79,23 @@ class GroupAssemblyResult:
     分组口径 k(组距标称 = k x 采样间隔, 供 meta schema=2 / stride=k —— meta 组装本身
     不在本模块); over_budget = 缺口标记数 >= MAX_RAW_POINTS 的超预算如实标注(k 已按
     上限交付, 空值语义不弃)。
+
+    tail_open(26-11-27 S1a F3, 脊柱/活尾二分标注; 26-11-27 评审修复: 推导按发射列尾点
+    身份, 不按 totals): points[-1] 是否活尾组点 —— k>1 且尾项为组点且其 t 属最高时间桶
+    (进行中桶, 组内已落样本真实均值, 随样本收敛)时 True; 前端折叠与对账电池据此把列
+    二分为脊柱 points[:-1] + 活尾 points[-1]。空值点与组点按 (t, kind) 升序合并、同刻
+    空值点在前 —— 空值点与活尾组点相对次序由此唯一确定: 尾随空值点(t 大于活尾组点 t,
+    如末槽 n 槽)居末时该空值点归脊柱且 tail_open=False; 整窗重置/链首(totals 全 None)
+    不影响判定(组点身份不看 totals)。k=1 直通窗(尾点恒定不折叠)与无组点窗(纯缺口/
+    空列)恒 False。脊柱点跨请求逐位不动(k>1 组键 = 时间桶, 与窗位置无关)是对账零形状
+    改写(INV-3)的装配面保证。
     """
 
     points: tuple
     totals: tuple
     stride: int
     over_budget: bool
+    tail_open: bool = False
 
 
 def _check_window(t0: float, t1: float, sample_interval_s: float) -> tuple:
@@ -159,6 +184,16 @@ def _pick_stride(n_samples: int, n_marks: int, expected: float) -> tuple:
     return min(max(k_init, k_need, 1), max(1, n_samples)), False
 
 
+def group_bucket(ts: float, stride: int, si: float) -> int:
+    """k>1 组键单点(26-11-27 S1a F3, 计划 26-11-26-2333): 时间桶锚 floor(ts / (k*si)) ——
+    桶相位 = epoch 原点, 桶宽 = 组距标称 k x si。装配(本模块)与分组缓存(响应期组界
+    现推)两侧均须经本函数取桶键, 前端活尾组折叠(S2/F1)与对账等价电池(S1b)以
+    meta.interval_s(= k x si 同源积, _meta 单点同式)复算同式 —— 禁止任何一侧重 derive
+    (漂移无 fail-fast, 同 group_null_lo 评审纪律)。floor 约定: ts 恰落桶界归后桶
+    (确定性单值); 前端 Math.floor 同式逐位一致(IEEE 754 double 同算)。"""
+    return math.floor(ts / (stride * si))
+
+
 def group_null_lo(t0: float, sample_interval_s: float) -> float:
     """装配消费下界单点(公开): t0 - si - 回看界 —— 差分链消费下界(null 标记判定界/窗外
     种子 D3 回看给足)与读窗起点(traffic_qb read_window 起点)三处同源引用本函数, 不得
@@ -178,8 +213,10 @@ def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float)
     消费规则(承袭 fold): obs 槽 ts >= t1 窗尾外不消费; ts < 消费下界不进差分链;
     n 槽不分界全走标记判定(旧面同构); prev_chain_end 逐槽推进(含未消费槽 —— 旧面
     块尾游标终值同构, 真空判定基准不丢块)。差分对逐向独立(delta/摊配/重置), 端点
-    (本槽)归属其组; 窗外槽无组(序号不计)—— 摊配份额弃入(旧面份额入窗外桶、发射期
-    窗过滤不外发, 响应面非整体等价 —— 窗首组除外显差异, 详 bucket_add 注释)。组值 =
+    (本槽)归属其组; 窗外槽无组(键 None)—— 摊配份额弃入(旧面份额入窗外桶、发射期
+    窗过滤不外发, 响应面非整体等价 —— 窗首组除外显差异, 详 bucket_add 注释); 窗首跨界
+    桶只收窗内成员(窗外同桶样本弃入, 桶值随窗沿左移单点重写一次后随桶出窗, S1a F3
+    有界改写面)。组值 =
     Sigma delta * 1000 / Sigma 覆盖毫秒(round 取整);
     组内无有效差分对时 0 线(无缝链首, D4)或 None(断链: 缝 > 停机洞阈值/断连标记)。
     totals = 组内逐样本相邻快照差分(_bucket_delta, 对上一已消费观测槽)求和, 窗首组含
@@ -249,7 +286,10 @@ def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float)
         hole = unobs_ms > _V4_SEAM_NULL_S * 1000
         broke = unobs_ms > 0 or marked
         if s.ts >= t0:
-            g = n_win // stride
+            # 组键(26-11-27 S1a F3): k=1 逐样本直通(键 = 窗内序号, 抖动不合并);
+            # k>1 = 时间桶锚(单点 group_bucket)—— 组界与窗位置无关, 已闭合桶跨请求
+            # 逐位不动(INV-3 对账零形状改写); n_win 计数保留(k=1 键)
+            g = n_win if stride == 1 else group_bucket(s.ts, stride, si)
             e = accs.get(g)
             if e is None:
                 e = accs[g] = [0, 0, 0, 0, broke, s.ts, o[2], o[3], None, None]
@@ -302,8 +342,10 @@ def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float)
                     e[3] += cov_ms_pair
         prev_slot = (s.ts, o[2], o[3])
         marked = False  # 断连面随观测槽消费复位(旧面同判; 未消费槽不复位)
-    # 发射: 组点(t = 组末样本 ts)与空值点合并升序, 同刻空值点在前(旧 emit 同判, 稳定);
-    # totals 随点同构发射(组 = 累加器快照差分和, 空值点 = None)
+    # 发射: 组点(t = 组末样本 ts; k>1 = 桶末样本 ts)与空值点合并升序, 同刻空值点在前(旧 emit 同判, 稳定);
+    # totals 随点同构发射(组 = 累加器快照差分和, 空值点 = None)。空值点与活尾组点相对次序由该
+    # 合并序唯一确定: 尾随空值点(t 大于活尾组点 t)居末; 活尾组点 = 最高时间桶组点(进行中桶),
+    # 其余真值点 = 脊柱点
     items: list = []
     for g in sorted(accs):
         e = accs[g]
@@ -318,7 +360,22 @@ def assemble_group_points(slots, t0: float, t1: float, sample_interval_s: float)
     for _t, _kind, p, tot in items:
         points.append(p)
         totals.append(tot)
-    return GroupAssemblyResult(points=tuple(points), totals=tuple(totals), stride=stride, over_budget=over_budget)
+    # tail_open(26-11-27 评审修复): 恒等价于「points[-1] 是活尾组点」(前端二分契约脊柱
+    # points[:-1] + 活尾 points[-1]) —— k>1 且列非空且尾项为组点(kind 1; 同刻空值点在前
+    # 的合并序保证 t 相等时组点居末)且其 t = 最高时间桶组点 t。不用 any(totals) 推导,
+    # 两可达形态失配: (1)尾随空值点居末(totals 有真值 -> True, 实际尾点是空值点); (2)整窗
+    # 重置/链首 totals 全 None -> False, 实际尾点是活尾组点(未标注变动点破坏 INV-3)。
+    live_tail_t = accs[max(accs)][5] if accs else None
+    tail_open = bool(
+        stride > 1 and items and live_tail_t is not None and items[-1][0] == live_tail_t and items[-1][1] == 1
+    )
+    return GroupAssemblyResult(
+        points=tuple(points),
+        totals=tuple(totals),
+        stride=stride,
+        over_budget=over_budget,
+        tail_open=tail_open,
+    )
 
 
 def assemble_group_points_from_blocks(blocks, t0: float, t1: float, sample_interval_s: float) -> GroupAssemblyResult:

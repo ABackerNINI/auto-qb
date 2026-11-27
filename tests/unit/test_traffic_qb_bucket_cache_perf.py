@@ -292,7 +292,7 @@ def test_a4_bench_idle_single_series_24h(tmp_path, monkeypatch):
 def test_a4_bench_group_m30_warm(tmp_path, monkeypatch):
     """A4 组图 M=30 温态 p95(<150ms 硬线, 活跃形态; 3 轮 x 40 拍 best-of-3)+
     冷态记录实测(豁免)。组点数按成员史实际时长/k 推导: 2h 史 = 4800 样本 ->
-    k=116 -> 组数 42。"""
+    k=116 -> 43 桶(26-11-27 S1a 时间桶锚: 窗首跨界桶部分成员 +1)。"""
     members = [f"{i:032x}" for i in range(30)]
     writers = {}
     t_end = None
@@ -309,7 +309,7 @@ def test_a4_bench_group_m30_warm(tmp_path, monkeypatch):
     payload = api.payload_group(key_text, "24h")
     group_cold = time.perf_counter() - t0
     assert 0 < len(payload["points"]) <= 500  # 组点 + 空值点 <= MAX_RAW_POINTS
-    assert len(payload["points"]) == 42  # 成员史 2h = 4800 样本 -> k=116 -> ceil(4800/116)=42
+    assert len(payload["points"]) == 43  # 成员史 2h = 4800 样本 -> k=116 -> 42 桶 + 窗首跨界桶(时间桶锚 S1a)
 
     # 组图温态: 假钟每拍 advance + 30 成员各真只增追加 1 条(setup 期 writer 复用),
     # 3 轮 x 40 拍 best-of-3(见模块 docstring「A4 温态断言 best-of-3 去抖」节)

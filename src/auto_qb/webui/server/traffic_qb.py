@@ -20,7 +20,10 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   t0 - 采样间隔 - 回看界, 窗首种子 D3 与接缝锚回看给足 —— 26-11-18-0037 阶段 1 T1b;
   24h 窗常态 3 个/t0 相位近日界边角至多 4 个), 槽流 -> core.traffic_group_assembly
   样本分组装配(§03 契约: points 每点带 t 的样本分组点列, 缺口 = 显式空值点; meta
-  schema=2/stride=k), 经 core.traffic_group_cache.V4SeriesGroupCache 分组点列缓存
+  schema=2/stride=k; 26-11-27 S1a F3: k>1 组键 = 时间桶锚, 输出形状 = 脊柱点列 +
+  活尾组点(末个真值点, 进行中桶真实均值) —— 组界与窗位置无关, 滑动窗对账已闭合桶点
+  逐位不动(INV-3 对账零形状改写; 响应 payload 形状不变, 前端 S2 折叠以 meta.stride x
+  sample_interval_s 同式桶宽消费)), 经 core.traffic_group_cache.V4SeriesGroupCache 分组点列缓存
   (T1c-1: 天游标只展新增槽 + 逐样本前缀和, 重复请求 O(组数) 现推组界 —— 旧挂钟桶面
   (F1 桶宽/F2 归桶/F3 持有/F4-2 V4SeriesBucketCache 桶值缓存)已随 T1c-2 退役删除);
   agg 段窗(3d/7d/30d/6mo/1y/all)经 V4DayCache.read_agg 单文件读取

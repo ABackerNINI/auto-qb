@@ -60,12 +60,13 @@ def test_steady_flow_per_sample_and_group_mean():
     assert len(real) == 60  # 窗内样本 @t0..t0+118(种子窗外, 只作基线)
     assert all(dl == 100 and up == 50 for _, dl, up in real)  # 稳态逐样本恒值
     assert _totals_sum(res, "dl") == 200 * 60 == (1000 + 200 * 60) - 1000  # 遥差(含种子基线)
-    # k>1 组均值: 预期 1500 样本 -> k=3; 窗内 69 样本(k=1..69, 种子窗外)-> 23 组(末组 1 样本)
+    # k>1 组均值: 预期 1500 样本 -> k=3, 桶宽 6s(26-11-27 S1a 时间桶锚); 窗内 69 样本
+    # (k=1..69, 种子窗外)-> 24 桶(窗首跨界桶只收窗内首样本 t0, 余桶恰 3 样本/末桶 2 样本)
     res3 = assemble_group_points(v4_block_slots(blk), t0, t0 + 3000, 2)
     assert res3.stride == 3
     real3 = _real(res3)
-    assert len(real3) == 23
-    assert real3[0][0] == t0 + 4  # 首组组末样本 ts(组 = 样本 k=1..3)
+    assert len(real3) == 24
+    assert real3[0][0] == t0  # 窗首跨界桶(只含窗内首样本)桶末样本 ts
     assert all(dl == 100 and up == 50 for _, dl, up in real3)
     # 字节守恒: Sigma(totals) = 末窗内样本快照 - 种子快照(两窗各自遥差; 同窗跨 k 恒等由
     # test_traffic_group_assembly::test_byte_conservation_totals_sum_invariant_across_k 钉)

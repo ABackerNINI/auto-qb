@@ -148,11 +148,11 @@ def test_api_traffic_qb_window_validation(web_env):
 
 
 def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch):
-    """global 24h 窗(raw 段, 26-11-18-0037 T1b 样本分组契约): 天文件块 -> 样本分组装配
-    (k = ceil(窗内预期样本数/500) = 6, 组点 t = 组末样本 ts; n 游程折叠为显式空值点
-    {t, dl: None, up: None}) + totals = 组粒度快照差分和(重置逐向 None / 跨断连字节
-    承袭在后继样本快照差分里 —— 字节守恒) + 读取竞态降级: 回上一份成功快照标
-    stale=true, 不以空态冒充无数据(§08)"""
+    """global 24h 窗(raw 段, 26-11-18-0037 T1b 样本分组契约; 26-11-27 S1a 时间桶锚改判):
+    天文件块 -> 样本分组装配(k=6 桶宽 180s, 稀疏数据每观测样本独桶, t = 桶末样本 ts;
+    n 游程折叠为显式空值点 {t, dl: None, up: None}) + totals = 桶粒度快照差分和
+    (重置逐向 None / 跨断连字节承袭在后继样本快照差分里 —— 字节守恒) + 读取竞态降级:
+    回上一份成功快照标 stale=true, 不以空态冒充无数据(§08)"""
     from auto_qb.core.traffic_store import V4Block, V4DayCache, V4NullRun, V4Sample, v4_epoch_date_str
     from auto_qb.webui.server import traffic_qb as _tq_meta
 
@@ -160,14 +160,15 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
     auth = _auth(mgr)
     # (T1b)生效间隔 30s(multiplier 15 x main_tick 2.0): 24h 窗内预期样本 2880 -> 分组口径
     # k = ceil(2880/500) = 6(与旧挂钟桶宽 180 = 6 x 30 同值 —— k_init 与旧加宽因子同源),
-    # meta.interval_s = 组距标称 = 6 x 30 = 180
+    # meta.interval_s = 组距标称 = 6 x 30 = 180 = 时间桶宽(26-11-27 S1a F3)
     _enable_qb_traffic(mgr, sample_interval_multiplier=15)
     store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 7200) // 180) * 180  # 窗内 2h 处的 180s 对齐锚(数据节律 = 180s/记录)
-    # 块首记录槽位恰在 base+180, 其后标称 180s 逐槽对齐; 6 个观测样本(base+180..+900 与
-    # 断连恢复样本 base+1620)按窗内序号 0..5 -> 恰同属一组(k=6, 组点 t = 组末样本 ts =
-    # base+1620); n 游程 3 槽(base+1080/1260/1440)折叠为一个显式空值点(t = floor(首槽 ts))
+    # 块首记录槽位恰在 base+180, 其后标称 180s 逐槽对齐; 数据节律(180s)= 桶宽(k x si =
+    # 180s)—— 稀疏数据每观测样本独占一个时间桶(6 个观测样本 base+180..+900 与
+    # 断连恢复样本 base+1620 各自一点, t = 桶末样本 ts); n 游程 3 槽(base+1080/1260/1440)
+    # 折叠为一个显式空值点(t = floor(首槽 ts))
     # v4 行型: 计数器回落处拆块(与写侧「重置强制关块重立基线」一致), 槽位序列不变
     store.append_records(
         "global",
@@ -217,17 +218,28 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
         "stale": False,
         "server_started_at": _tq_meta._SERVER_STARTED_AT,
     }
-    # (T1b)样本分组点列: 单组(k=6 恰吞全部 6 样本)真值点 + 断连显式空值点, 升序合并;
-    # 组速率 = Sigma delta x 1000 / Sigma 覆盖毫秒(dl 2880B/540s -> 5, up 1440B/720s -> 2;
-    # 重置/停机洞样本的差分对不进覆盖), 组点 t = 组末样本 ts
-    assert len(body["points"]) == 2
+    # (T1b/26-11-27 S1a 改判)样本分组点列: 时间桶锚下每观测样本独桶(数据节律 = 桶宽),
+    # 断连显式空值点升序合并; 桶速率 = Sigma delta x 1000 / Sigma 覆盖毫秒(单样本桶 =
+    # 逐样本差分/覆盖; 重置样本差分对不进覆盖 -> 0 线, 断链样本按摊配面真实入账)
+    assert len(body["points"]) == 7  # 6 观测样本桶 + 1 断连空值点
     assert point_at(body, base + 1080) == {"t": base + 1080, "dl": None, "up": None}  # n 游程折叠显式空值点(E3)
-    assert point_at(body, base + 1620) == {"t": base + 1620, "dl": 5, "up": 2}  # 组均值(非组末样本 ts 处无点)
-    # totals = 组粒度快照差分和(逐样本相邻差分按端点所属组求和, 重置/基线缺失贡献 0):
+    assert point_at(body, base + 180) == {"t": base + 180, "dl": 0, "up": 0}  # 链首无基线 0 线(D4)
+    assert point_at(body, base + 360) == {"t": base + 360, "dl": 10, "up": 5}  # delta(1800,900)/180s
+    assert point_at(body, base + 540) == {"t": base + 540, "dl": 1, "up": 1}  # delta(180,180)/180s
+    assert point_at(body, base + 720) == {"t": base + 720, "dl": 5, "up": 1}  # delta(900,180)/180s
+    assert point_at(body, base + 900) == {"t": base + 900, "dl": 0, "up": 1}  # dl 快照回落(重置 0 线)/ up 180
+    # 缝后样本速率面断链(marked 台阶差分诚实丢弃, 旧面同判)—— 跨断连字节仍在 totals
+    # 快照差分里; 速率点 = 断链组点(dl/up 双 None, 与显式空值点同形态不同来源)
+    assert point_at(body, base + 1620) == {"t": base + 1620, "dl": None, "up": None}
+    # totals = 桶粒度快照差分和(逐样本相邻差分按端点所属桶求和, 重置/基线缺失贡献 0):
     # dl 1800+180+900 + 0(重置) + 1200(跨断连快照差分) = 4080; up 900+180+180+180+180 = 1620
     # —— 漏采区间字节含在后继样本快照差分里(字节守恒, Sigma(totals) 分组前后恒等)
     assert total_at(body, base + 1080) is None  # 空值点 totals = None
-    assert total_at(body, base + 1620) == {"t": base + 1620, "dl": 4080, "up": 1620}
+    assert total_at(body, base + 360) == {"t": base + 360, "dl": 1800, "up": 900}
+    assert total_at(body, base + 900) == {"t": base + 900, "dl": None, "up": 180}  # 重置逐向 None
+    assert total_at(body, base + 1620) == {"t": base + 1620, "dl": 1200, "up": 180}
+    assert sum(t["dl"] for t in body["totals"] if t and t["dl"] is not None) == 4080
+    assert sum(t["up"] for t in body["totals"] if t and t["up"] is not None) == 1620
 
     # 读取竞态降级(§08「最坏返回上一秒快照 + stale」):
     # a) 24h 已有成功响应入 last-good -> 降级回上一份快照(点值不变) + stale=true;
@@ -574,6 +586,9 @@ def test_api_traffic_qb_global_30d_hour_segment(web_env):
     )
     body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "30d"}).json()
     assert body["meta"]["interval_s"] == 3600 and body["meta"]["window"] == "30d"
+    # 回落守阵(26-11-27 S1a, 计划 §07 meta.stride 兼容面): agg 段窗无 stride/schema 键
+    # —— 前端首次消费 meta.stride 时无 stride 回落现行为(F1/S2 兼容分支的锚面)
+    assert "stride" not in body["meta"] and "schema" not in body["meta"]
     # span_s(2026-11-21): agg 段窗同样携带(窗长语义单点 = WINDOW_SPECS 经栅格差值;
     # 前端 schema=2 门不消费 —— 键在, 值只作契约形状面)
     assert body["meta"]["span_s"] == 2592000

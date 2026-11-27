@@ -14,8 +14,8 @@
   高频掉样本 + 多天文件游标面, 逐拍逐位等价
 - test_tail_group_true_value_updates_each_tick: 尾组恒真值且每 tick 更新 —— 追加样本后
   末组点 t/值随样本推进(无克隆无持有), 逐拍与冷算逐位等价
-- test_stride_raises_on_new_marks: 缺口标记新增 -> k 上调组界整体重排(前缀差分现推),
-  与冷算逐位等价(k 上调不是降级路径, 是组界平移的常态形态)
+- test_stride_raises_on_new_marks: 缺口标记新增 -> k 上调组界整体重排(桶宽重对齐,
+  前缀差分现推), 与冷算逐位等价(k 上调不是降级路径, 是真换窗语义的常态形态)
 - test_over_budget_propagation: 缺口标记数 >= 500(预算数学不可达)-> over_budget=True
   如实标注 + stride = 窗内样本数(k 上限)+ 空值点一个不弃, 与冷算逐位等价
 - test_tail_snapshot_handoff: 活尾快照整体替换面 —— 未落盘槽走活尾 -> 下一拍落盘磁盘
@@ -116,7 +116,8 @@ def _cold_reference(days, grid, tail_slots, si):
 
 
 def _assert_bitwise(got, want, tag):
-    """四元组逐位对账(points/totals 逐元素, stride/over_budget 标量)"""
+    """五元组逐位对账(points/totals 逐元素, stride/over_budget/tail_open 标量 —— 26-11-27
+    S1a GroupAssemblyResult 增 tail_open 后纳入等价面)"""
     assert got.points == want.points, (
         f"{tag}: points 逐位不等 len {len(got.points)}/{len(want.points)} "
         f"首个差异 {next(((i, x, y) for i, (x, y) in enumerate(zip(got.points, want.points)) if x != y), None)}"
@@ -127,6 +128,7 @@ def _assert_bitwise(got, want, tag):
     )
     assert got.stride == want.stride, f"{tag}: stride {got.stride} != {want.stride}"
     assert got.over_budget == want.over_budget, f"{tag}: over_budget {got.over_budget} != {want.over_budget}"
+    assert got.tail_open == want.tail_open, f"{tag}: tail_open {got.tail_open} != {want.tail_open}"
 
 
 def _polling(tmp_path, key, window, polls, *, seed=2026_11_18, compact_min_dead=None):
@@ -902,13 +904,14 @@ def test_dips_eps_band_regression_whitebox():
     # 响应按 t 排序(冷算 items.sort 同判)—— 与冷算逐位等价
     _assert_bitwise(res, assemble_group_points(slots, 0.0, 200.0, 2.0), "dips-bypass")
     assert {p["t"] for p in res.points} == {100.0, 99.9999995, 102.0}
-    # k=2 组(窗内预期样本 (1902-900)/2 = 501 > 500 -> k_init = 2): 破例位落组内 ->
-    # 旁路全组取 max 实际触发 —— 窗内末组 = 样本对 [1000.0, 1000.0 - eps/2](绝对序号
-    # 53, 54, 破例位 54 = 组末位), 旁路缺席时 ts[ib-1] 即回退值, 组末 t 应为组内 ts
-    # 最晚者 1000.0(非回退样本; 冷算 e[5] 判据同, 对账见 _assert_bitwise)
+    # k=2 组(窗内预期样本 (1902-900)/2 = 501 > 500 -> k_init = 2): 破例位落桶内 ->
+    # 旁路全桶取 max 实际触发 —— 窗内末桶 = 样本对 [1002.0, 1002.0 - eps/2](绝对序号
+    # 53, 54, 破例位 54 = 段末位; 两样本同桶: 桶界 1000/1004), 旁路缺席时 ts[ib-1] 即
+    # 回退值, 组末 t 应为桶内 ts 最晚者 1002.0(非回退样本; 冷算 e[5] 判据同, 对账见
+    # _assert_bitwise)
     slots2 = tuple(
         V4Slot(
-            ts=1000.0 - _V4_VACUUM_EPS_S / 2 if j == 51 else 900.0 + 2.0 * j,
+            ts=1002.0 - _V4_VACUUM_EPS_S / 2 if j == 51 else (1002.0 if j == 50 else 900.0 + 2.0 * j),
             dt_s=2.0,
             obs=(10 * (j + 1), 10 * (j + 1), 100 * (j + 1), 100 * (j + 1)),
             is_zero=False,
@@ -919,8 +922,9 @@ def test_dips_eps_band_regression_whitebox():
     res2 = st.respond(900.0, 1902.0, 2.0)
     _assert_bitwise(res2, assemble_group_points(slots + slots2, 900.0, 1902.0, 2.0), "dips-bypass-k2")
     assert res2.stride == 2  # k=2 实际触发(窗内预期 501 > 500)
-    assert [p["t"] for p in res2.points].count(1000.0) == 1  # 破例组组末 t = 组内 ts max
-    assert all(p["t"] != 1000.0 - _V4_VACUUM_EPS_S / 2 for p in res2.points)  # 非回退样本值
+    assert [p["t"] for p in res2.points].count(1002.0) == 1  # 破例桶组末 t = 桶内 ts max
+    assert all(p["t"] != 1002.0 - _V4_VACUUM_EPS_S / 2 for p in res2.points)  # 非回退样本值
+    assert res2.tail_open is True  # 末真值点(最高桶) = 活尾组点
     # compact 裁窗沿前破例位(生产 compact(i_lo) 同形, i_lo = 窗首样本序号 3): pos 1 已裁,
     # 窗内破例位(pos 54)存活(后继响应旁路仍需)
     st.compact(3)

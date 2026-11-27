@@ -1,17 +1,20 @@
-"""traffic_group_cache: 样本分组点列缓存(plan 26-11-18-0037 阶段 1 T1c-1; §03 读侧契约)
+"""traffic_group_cache: 样本分组点列缓存(plan 26-11-18-0037 阶段 1 T1c-1; §03 读侧契约;
+26-11-27 S1a 组界换代: k>1 组键 = 时间桶锚, 详 traffic_group_assembly.group_bucket)
 
 per (系列键, window) 缓存 assemble_group_points 的装配结果(points/totals/stride/
-over_budget), 是 26-11-15-1104 桶值缓存(V4SeriesBucketCache, T1c-2 退役)的「改造转世」:
+over_budget/tail_open), 是 26-11-15-1104 桶值缓存(V4SeriesBucketCache, T1c-2 退役)的「改造转世」:
 _V4BucketDayCursor 的「消费集 = 槽流前缀、只展新增槽」游标模式原样承袭, 折叠面从挂钟
-桶累加器换成样本分组前缀和 —— 分组锚是「窗内第 i 个样本」(窗首样本 = 序号 0, T1a 装配
-契约), 响应窗 [t0, t1) 随 now 平移, 窗内样本集两端同时变动(窗沿掉样本/尾端进样本),
-组界随之整体平移 —— 「已闭合组不动」在滑动窗下不成立(k>1 时窗沿每掉一个样本全部组界
-移一位), 因此本缓存不做组粒度封口, 而是把增量做在**样本粒度**:
+桶累加器换成样本分组前缀和 —— 分组锚(k>1)是时间桶(组键 = floor(ts/(k*si)), 纯 ts 函数,
+26-11-27 S1a F3 换代: 旧「窗内第 i 个样本」锚随窗沿平移整列换格, S0 症状3 根因),
+响应窗 [t0, t1) 随 now 平移只改发射集(出窗桶点丢弃/新桶点入列), 已闭合桶点跨请求
+逐位不动(INV-3 对账零形状改写); stride 翻 k 时桶宽整体重对齐 = 真换窗语义。本缓存
+仍不做组粒度封口(摊配回写面天然限制在等值游程 pending 后缀, 组界推导是响应期纯函数),
+增量仍做在**样本粒度**:
 
 - 槽流前缀逐样本的最终增量/覆盖/totals/断链旗以**前缀和数组**(array('q'/'d'), O(1) 追加)
   持久化; 重复请求只对新增槽做增量折叠(O(新增槽)), 组点列在响应期由前缀和按当前窗的
-  组界(窗首样本序号 + g*k)O(组数) 现推 —— 组界怎么移(k 上调/窗沿平移)都只是前缀差分,
-  与冷算逐位等价(同窗同输入 -> 同 points/totals/stride/over_budget, 新电池主断言,
+  组界(k=1 窗内序号逐样本; k>1 时间桶界经 bisect 现推桶样本区间)O(组数) 现推 ——
+  与冷算逐位等价(同窗同输入 -> 同 points/totals/stride/over_budget/tail_open, 新电池主断言,
   旧电池 test_cache_polling_bitwise_equivalent 的转世)。
 - 尾组语义由前缀和自然承载: 尾组 = 末组(可不满 k), 其样本差分/覆盖随新增槽即时入账,
   每 tick 重推即更新 —— 无克隆无持有(§03 尾组恒真值)。
@@ -68,6 +71,7 @@ from .traffic_group_assembly import (
     _check_window,
     _pick_stride,
     _slot_null_marks,
+    group_bucket,
     group_null_lo,
 )
 from .traffic_store_codec import v4_block_slots_from
@@ -350,14 +354,21 @@ class _GroupFoldState:
 
     def respond(self, t0: float, t1: float, si: float) -> GroupAssemblyResult:
         """当前窗 [t0, t1) 的分组点列推导(与冷算逐位等价的响应面):
-        k 选取 = _pick_stride(窗内样本数, 窗内标记数, 预期样本数); 组 g = 窗内序号
-        [g*k, (g+1)*k) 的样本区间 -> 前缀差分 -> 组值 = Sigma delta x 1000 / Sigma 覆盖
+        k 选取 = _pick_stride(窗内样本数, 窗内标记数, 预期样本数); 组界(26-11-27 S1a F3):
+        k=1 = 窗内序号逐样本(每组恰 1 样本); k>1 = 时间桶(单点 group_bucket 同式, 桶宽
+        w = stride*si): 桶 g 的样本区间 = [bisect(g*w), bisect((g+1)*w)) ∩ 窗内 [i_lo, N)
+        —— 与冷算「窗内样本按自身 ts 归桶」逐位同成员集(桶界纯 ts 函数, 窗沿平移不移
+        桶界 -> 已闭合桶点跨请求逐位不动, INV-3); 空桶(短缝无样本)跳过 = 冷算 accs 无键
+        同判。前缀差分 -> 组值 = Sigma delta x 1000 / Sigma 覆盖
         (round 取整; 覆盖 0 时 broke 组 None / 无缝链首 0 线); 组点 t = 组末样本 ts;
         totals = 组内逐样本快照差分和(逐向 None = 全部基线缺失/重置); 显式空值点与组点
         按 (t, kind) 稳定合并(同刻空值在前, 冷算 items.sort 同判); 单方向前缀差分语义 =
         已定影段 [max(a, base), min(b, r0)) 的 fin 尾差分 + 开放段(等值 pending 项, delta
-        恒 0)的开放覆盖尾差分。
-        性能注: 本方法是温态每请求 O(组数) 主路径(A4 组图 = 成员数 x 组数), 前缀差分
+        恒 0)的开放覆盖尾差分。tail_open = points[-1] 是否活尾组点(26-11-27 评审修复:
+        按发射列尾点身份推导, 冷算同式 —— k>1 且尾项 t = 最高时间桶组点 t; 尾随空值点
+        居末/整窗重置 totals 全 None 两形态不再失配, 详 traffic_group_assembly 返回处注释)。
+        性能注: 本方法是温态每请求 O(组数) 主路径(A4 组图 = 成员数 x 组数; 桶界每桶两次
+        bisect + 单段元组, O(组数 log 样本)), 前缀差分
         内联展开、数组/标量全部本地绑定、无标记窗跳过合并面。"""
         base = self.base
         ts = self.ts
@@ -367,6 +378,51 @@ class _GroupFoldState:
         dips = self.dips
         stride, over_budget = _pick_stride(n_win, len(marks), (t1 - t0) / si)
         n_group = -(-n_win // stride) if n_win else 0
+        # 组界 -> 桶 -> 连续样本区间段(26-11-27 S1a F3): k=1 逐样本(每组恰一段 1 样本);
+        # k>1 = 时间桶(单点 group_bucket 同式, 桶宽 w = stride*si): 桶 g 的窗内样本区间 =
+        # [bisect(g*w), bisect((g+1)*w)) ∩ [i_lo, N) —— 与冷算「窗内样本按自身 ts 归桶」
+        # 逐位同成员集(桶界纯 ts 函数, 窗沿平移不移桶界 -> 已闭合桶点跨请求逐位不动,
+        # INV-3); 空桶(短缝无样本)不入表 = 冷算 accs 无键同判。eps 带破例位(dips)落窗内
+        # 时 ts 非降在破例处断裂, bisect 界不可靠(破例样本按自身 ts 归桶与索引序错位)——
+        # 转逐样本归桶精确面(O(n_win) 一次性; 防御路径, 生产形态不可达), 并逐样本按冷算
+        # 谓词 ts >= t0 过滤(评审 #3: bisect i_lo 只保证首窗内样本, eps 带内 t0 可落在
+        # 回退样本 ts 与其前槽之间)—— 桶成员集与冷算逐位同。两路径统一产出 桶键 ->
+        # 连续区间段元组(破例面桶可多段)
+        w = stride * si  # 桶宽, 仅作 bisect 界(桶键一律经 group_bucket 单点, 同式同值)
+        bucketed = stride > 1 and n_win > 0
+        if bucketed:
+            bucket_spans: dict = {}
+            if any(i_lo <= p < self.N for p in dips):
+                prev_key = None
+                run_start = i_lo
+                for pos in range(i_lo, self.N):
+                    if ts[pos - base] < t0:
+                        # 冷算谓词对齐(评审 #3): 破例回退样本 ts < t0 不属窗内成员集
+                        # (与冷算 s.ts >= t0 同判), 段在此断开 —— 跨段累加面已支持同桶多段
+                        if prev_key is not None:
+                            bucket_spans.setdefault(prev_key, []).append((run_start, pos))
+                        prev_key = None
+                        run_start = pos + 1
+                        continue
+                    key = group_bucket(ts[pos - base], stride, si)
+                    if key != prev_key:
+                        if prev_key is not None:
+                            bucket_spans.setdefault(prev_key, []).append((run_start, pos))
+                        prev_key = key
+                        run_start = pos
+                if prev_key is not None:
+                    bucket_spans.setdefault(prev_key, []).append((run_start, self.N))
+            else:
+                b_lo = group_bucket(t0, stride, si)  # 窗内样本桶下极限(每样本 ts >= t0)
+                b_hi = group_bucket(ts[self.N - 1 - base], stride, si)  # 无窗内破例: 末样本即窗内 ts 最大
+                for g in range(b_lo, b_hi + 1):
+                    a = max(i_lo, base + bisect_left(ts, g * w))
+                    b = min(self.N, base + bisect_left(ts, (g + 1) * w))
+                    if a < b:
+                        bucket_spans[g] = ((a, b), )
+            groups_iter = iter(sorted(bucket_spans.items()))
+        else:
+            groups_iter = ((g, ((i_lo + g * stride, min(i_lo + (g + 1) * stride, self.N)), )) for g in range(n_group))
         brk = self.brk
         tdl = self.tdl
         tdlc = self.tdlc
@@ -384,50 +440,57 @@ class _GroupFoldState:
         up_r0 = up.r0
         points: list = []
         totals: list = []
-        for g in range(n_group):
-            a = i_lo + g * stride
-            b = a + stride
-            if b > self.N:
-                b = self.N
-            ia = a - base
-            ib = b - base
-            # 组末 t = 组内 ts 最晚者(冷算 e[5] 判据): 单调段末位即最晚; eps 带内回退槽
-            # (dips 破例位落组内)走旁路全组取 max(评审 #5, 稀疏表常态 O(1))
-            t_end = ts[ib - 1]
-            if dips:
-                j = bisect_left(dips, a + 1)
-                if j < len(dips) and dips[j] < b:
-                    t_end = max(ts[ia:ib])
-            # 单方向前缀差分(已定影段 [max(a,base), min(b,r0)) + 开放段覆盖; 开放段
-            # delta 恒 0) —— 冷算组累加器同态的本地算术
-            lo = ia if ia > 0 else 0
-            hi = ib if ib < dl_r0 - base else dl_r0 - base
-            if hi > lo:
-                d_dl = dl_fd[hi] - dl_fd[lo]
-                c_dl = dl_fc[hi] - dl_fc[lo]
-            else:
-                d_dl = 0
-                c_dl = 0
-            lo2 = ia + base if ia + base > dl_r0 else dl_r0
-            if b > lo2:
-                c_dl += dl_oc[b - dl_r0] - dl_oc[lo2 - dl_r0]
-            hi = ib if ib < up_r0 - base else up_r0 - base
-            if hi > lo:
-                d_up = up_fd[hi] - up_fd[lo]
-                c_up = up_fc[hi] - up_fc[lo]
-            else:
-                d_up = 0
-                c_up = 0
-            lo2 = ia + base if ia + base > up_r0 else up_r0
-            if b > lo2:
-                c_up += up_oc[b - up_r0] - up_oc[lo2 - up_r0]
-            broke = brk[ib] - brk[ia] > 0
-            dl_v = int(round(d_dl * 1000 / c_dl)) if c_dl > 0 else (None if broke else 0)
-            up_v = int(round(d_up * 1000 / c_up)) if c_up > 0 else (None if broke else 0)
-            tot_dl = tdl[ib] - tdl[ia] if tdlc[ib] > tdlc[ia] else None
-            tot_up = tup[ib] - tup[ia] if tupc[ib] > tupc[ia] else None
+        live_tail_t = None  # 最高键组点 t(升序迭代末次覆盖)—— tail_open 尾点身份判定锚
+        for _g, spans in groups_iter:
+            # 跨段累加(常态单段; 破例面桶可多段): 组值/totals/断链旗 = 段和或段或,
+            # 组末 t = 段内 ts 最晚者的最大值(冷算 e[5] 判据同)
+            d_dl = c_dl = d_up = c_up = 0
+            broke_any = False
+            t_end = None
+            tot_dl = tot_up = 0
+            has_dl = has_up = False
+            for a, b in spans:
+                ia = a - base
+                ib = b - base
+                # 段末 t = 段内 ts 最晚者: 单调段末位即最晚; eps 带内回退槽(dips 破例位落
+                # 段内)走旁路全段取 max(评审 #5, 稀疏表常态 O(1))
+                t = ts[ib - 1]
+                if dips:
+                    j = bisect_left(dips, a + 1)
+                    if j < len(dips) and dips[j] < b:
+                        t = max(ts[ia:ib])
+                if t_end is None or t > t_end:
+                    t_end = t
+                # 单方向前缀差分(已定影段 [max(a,base), min(b,r0)) + 开放段覆盖; 开放段
+                # delta 恒 0) —— 冷算组累加器同态的本地算术
+                lo = ia if ia > 0 else 0
+                hi = ib if ib < dl_r0 - base else dl_r0 - base
+                if hi > lo:
+                    d_dl += dl_fd[hi] - dl_fd[lo]
+                    c_dl += dl_fc[hi] - dl_fc[lo]
+                lo2 = ia + base if ia + base > dl_r0 else dl_r0
+                if b > lo2:
+                    c_dl += dl_oc[b - dl_r0] - dl_oc[lo2 - dl_r0]
+                hi = ib if ib < up_r0 - base else up_r0 - base
+                if hi > lo:
+                    d_up += up_fd[hi] - up_fd[lo]
+                    c_up += up_fc[hi] - up_fc[lo]
+                lo2 = ia + base if ia + base > up_r0 else up_r0
+                if b > lo2:
+                    c_up += up_oc[b - up_r0] - up_oc[lo2 - up_r0]
+                if brk[ib] - brk[ia] > 0:
+                    broke_any = True
+                if tdlc[ib] > tdlc[ia]:
+                    tot_dl += tdl[ib] - tdl[ia]
+                    has_dl = True
+                if tupc[ib] > tupc[ia]:
+                    tot_up += tup[ib] - tup[ia]
+                    has_up = True
+            dl_v = int(round(d_dl * 1000 / c_dl)) if c_dl > 0 else (None if broke_any else 0)
+            up_v = int(round(d_up * 1000 / c_up)) if c_up > 0 else (None if broke_any else 0)
             points.append({"t": t_end, "dl": dl_v, "up": up_v})
-            totals.append({"t": t_end, "dl": tot_dl, "up": tot_up})
+            totals.append({"t": t_end, "dl": tot_dl if has_dl else None, "up": tot_up if has_up else None})
+            live_tail_t = t_end
         if marks or dips:
             # 合并排序面: 显式空值点与组点按 (t, kind) 稳定合并(冷算 items.sort 同判);
             # dips 非空时组点 t 可非单调(eps 带回退组末), 无标记也须按 t 排序(冷算同)
@@ -436,7 +499,18 @@ class _GroupFoldState:
             items.sort(key=lambda it: (it[0], it[1]))
             points = [it[2] for it in items]
             totals = [it[3] for it in items]
-        return GroupAssemblyResult(points=tuple(points), totals=tuple(totals), stride=stride, over_budget=over_budget)
+        # tail_open(26-11-27 评审修复, 冷算同式): 恒等价于「points[-1] 是活尾组点」——
+        # k>1 且列非空且尾项 t = 最高时间桶组点 t(同刻空值点在前的合并序保证 t 相等时
+        # 组点居末); 不用 any(totals) 推导(尾随空值点居末/整窗重置 totals 全 None 两形态
+        # 失配, 详 traffic_group_assembly 返回处注释)。
+        tail_open = bool(stride > 1 and points and live_tail_t is not None and points[-1]["t"] == live_tail_t)
+        return GroupAssemblyResult(
+            points=tuple(points),
+            totals=tuple(totals),
+            stride=stride,
+            over_budget=over_budget,
+            tail_open=tail_open,
+        )
 
     # ---------- 快照回滚(活尾折叠专用, O(1)) ----------
 
