@@ -1,9 +1,9 @@
 # 26-11-27-webui-sse — SSE 推送候选 P1/P2/P3 联合实施
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-27
 **Updated:** 2026-11-27
-**Summary:** 立项轮: 三路取证 + grilling 两轮 12 问拍板(D1-D12 全按推荐) + 计划 26-11-27-0530 入库 Open, issue 0408 翻 In Progress; S1(P1 错误日志推送化)与 S1 补充(单游标回捞缺口 D13)已收口, S2(P2 transfer D5b 两段回执)已实施收口(真机 BLOCKED), 计划整体仍 Open(S3 未做)
+**Summary:** 三路取证 + grilling 两轮 12 问拍板(D1-D12) + 计划 26-11-27-0530 入库; S1(P1 错误日志推送化 + D13 单游标回捞)、S2(P2 transfer D5b 两段回执, 真机 BLOCKED 按 D11 不阻断)、S3(P3 抽屉推送化只读评估: 空转率/RoCache 命中率实测 + 结论条件触发)三阶段全收口, 计划整体 Done, issue 0408 翻 Done
 **Topics:** webui-sse
 **Refs:** memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/testing/baselines/26-11-27-0608-webui-sse-s1-frontend.md, memory-bank/testing/baselines/26-11-27-1244-webui-sse-s1-gap-recover.md, memory-bank/testing/baselines/26-11-27-1324-webui-sse-s2-transfer-two-hop.md
 
@@ -36,7 +36,7 @@
 | S0 | 三路只读取证 + grilling 两轮 + 计划入库 + 认领链 | Done (2026-11-27) |
 | S1 | P1 错误日志推送化（后端事件 + 前端接线 + 对账 + 守阵） | Done (2026-11-27) |
 | S2 | P2 transfer D5b 两段回执（受理段可区分 + 终态覆盖 + 前端两段 + 真机冒烟） | Done (2026-11-27) |
-| S3 | P3 抽屉推送化只读评估（空转率/缓存命中率 + 结论） | Open |
+| S3 | P3 抽屉推送化只读评估（空转率/缓存命中率 + 结论） | Done (2026-11-27) |
 
 ## 进度日志
 
@@ -74,3 +74,12 @@
 - 计划整体仍 Open(S3 抽屉只读评估未做), issue 26-11-20-0408 状态未动。
 
 - 2026-11-27 13:24 S2 transfer D5b 两段回执实施收口: 后端零改动守阵 + 前端 POST 后本地渲染受理段 + 本批局部 settled 双跳幂等 + 双皮肤 e2e + 真机 guard BLOCKED
+
+### R4 · S3 抽屉推送化只读评估收口 (2026-11-27)
+
+- S3-a 实测(一次性探针, 未落文件, 不依赖 qB 真机): ①**RoCache 命中率** —— 项目真实 `RoCache`(`context.py:15-48`) 注入假钟, 按 `currentPollMs()` 三档推进 N=10000 拍, 以 `fn` 调用次数反推: trackers(ttl=2.0s)@1.5s=50.00% / @2s=0% / @3s=0%, peers(ttl=1.0s) 三档均 0%, tp 双源@1.5s=25.00%。②**抽屉轮询空转率** —— `node` 经 `vm` 加载真实 `_dtMergeRows`(`drawer_store.js:35-48`), 喂 python 实测命中序列(N=2000): 命中拍返回同一行对象引用 → 字段零变化 / 行引用稳定 / 顶层新数组(Vue 同值不触发), 可确定空转 trackers@1.5s=50.00% / tp 双源@1.5s=25.00% / @2s·@3s=0%。③口径: 空转率是「缓存命中驱动的结构性下界」, 真实 qB 数据变化率需真机, D11 P3 免真机故不测; 1s/2s 是本项目 Web `RoCache` 非 qB 自身缓存。
+- S3-b 结论: **条件触发(暂不实施)**。理由: 空转只在 1.5s 档出现且峰值 50%(单源)/25%(双源), 2s/3s 档缓存不吸收; 渲染层已「写字段不重建 + Vue 同值不触发」, 空转用户可见成本≈0; P0 per-scope 通道(26-11-18-0037)仍 Open、真机冒烟未清偿, 复用前提不成立。触发阈值(三条同时满足才另起独立排期, 不在本计划内实施): (a) 真机实测抽屉页签空转率 ≥60%; (b) 同口径 RoCache 命中率 ≤10%; (c) P0 计划 26-11-18-0037 收口且真机冒烟通过。结论与数字已回填计划 §03 S3 行 / §07 P3 风险行 / §10 R6。
+- 三阶段全收口: S1/S2/S3 均 Done; 计划 doc-status Open→Done, 本档案 Status In Progress→Done, issue 26-11-20-0408 In Progress→Done(S2-c 真机 BLOCKED 按 D11 不阻断入库, 留痕于 R3)。零产品代码改动、零新增测试、零新增基线切片(纯文档批)。
+- review: 降级自查(§⑧) 20 条逐条走; 首轮发现 2 minor(空转率 0% 口径限定 1 / 推送化改造成本反面证据 1)均属本批且当场修, 复评轮零发现零 actionable; review.check 检 2/2 通过弃 0; ship.gate 全绿; 本地分支态(ls-remote 无 ref)跳过 pack 前置 sync; 24 行 基 61b2d0509044
+
+- 2026-11-27 13:37 S3 抽屉推送化只读评估收口: 实测空转率/RoCache 命中率 + 结论条件触发; 三阶段全收口

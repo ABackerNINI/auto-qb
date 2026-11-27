@@ -11,7 +11,7 @@
 <meta name="doc-topic" content="webui-sse">
 <meta name="doc-refs" content="memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/plans/26-11-10-2350-plan-relocate-probe-async.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html, memory-bank/plans/26-11-27-0530-plan-webui-sse.html, memory-bank/tasks/26-11-27-webui-sse.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="SSE 推送候选全景盘点: 流量图/错误日志/长任务/抽屉的推送化机会与排除项">
 <meta name="issue-summary" content="盘点 /api/events 基建之外可用 SSE 优化的功能面, 标出 P0-P3 候选与不宜推送的轮询面">
 <style>
@@ -91,7 +91,7 @@
   <div class="item"><div class="k">编号</div><div class="v">26-11-20-0408-feat-webui-sse-candidate-inventory</div></div>
   <div class="item"><div class="k">报告时间</div><div class="v">2026-11-20 04:08</div></div>
   <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
   <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
   <div class="item"><div class="k">发现者</div><div class="v">worktree</div></div>
 </div>
@@ -177,11 +177,18 @@ memory-bank/issues/26-10-01-1946-docs-roadmap-sse-websocket-drift.html §04:
   <ul>
     <li>2026-11-20 04:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-11-27 — 状态 Open → In Progress（kb.status）</li>
+    <li>2026-11-27 — 状态 In Progress → Done（kb.status）</li>
 </ul>
   <h3>复验</h3>
   <p>2026-11-20 04:00 已按 HEAD <code>7bd4e7f4</code> 逐条核对 §04 锚点；认领后重跑对应 grep 关键词确认锚点仍有效，并按当时的面板状态确认轮询面仍存在。</p>
   <h3>修复后补充</h3>
-  <p class="todo">待实施：本件是候选清单，实际落地应拆到各功能的计划/issue；实施时在此回写「实际修法 / 验证方式 / 测试数字」，与建议修法不同则保留原文并说明改道原因。</p>
+  <p>2026-11-27 认领收口: 计划 26-11-27-0530 三阶段 S1/S2/S3 全 Done, 本件同步翻 Done。实际落地与验证方式按 P1/P2/P3 分列如下。</p>
+  <ul>
+    <li><b>P1 错误日志</b>: 已实施 —— <code>append_err</code> 出锁后 <code>notify("errlog", {seq, level, msg})</code>, 前端 <code>startEvents</code> 注册 <code>errlog</code> 监听 + 60s GET 降为对账; D13 单游标回捞缺口一并收口。验证: 单测 + node 电池 + 双皮肤 e2e, 数字见 kb.baseline 切片 <code>webui-sse-s1-frontend</code> / <code>webui-sse-s1-gap-recover</code>。</li>
+    <li><b>P2 长任务两段回执</b>: relocate 半边原已交付不重做(D4); transfer D5b 已实施 —— 后端零改动, 受理段由前端 POST 返回后本地渲染, 终态走 <code>set_result -&gt; notify("cmd")</code> 覆盖同 <code>cmd_id</code>。验证: 单测守阵 + node 电池 + 双皮肤 e2e, 数字见 kb.baseline 切片 <code>webui-sse-s2-transfer-two-hop</code>。<b>真机 S2-c 按 D11 记 BLOCKED</b>(qB 端口无监听进程), 不阻断入库。</li>
+    <li><b>P3 抽屉</b>: 本批只做只读评估, 未写实施代码 —— 实测 RoCache 命中率(trackers@1.5s=50.00% / tp 双源@1.5s=25.00% / 2s·3s=0%)与抽屉轮询空转率(同口径), 结论「条件触发(暂不实施)」, 触发阈值与理由见计划 26-11-27-0530 §03/§07; 另起独立排期不在本计划内实施。</li>
+  </ul>
+  <p class="hint">原 §06 P3 行「上游 qB 自身有 1s/2s 缓存」为入池时措辞偏差, 实为本项目 Web <code>RoCache</code>(<code>context.py:31</code> / <code>torrent_detail.py:88-91</code>), 以计划 §02 的修正口径为准, 原文保留不改写。</p>
 </section>
 
 <footer>

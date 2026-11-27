@@ -7,9 +7,9 @@
 <title>SSE 推送候选 P1/P2/P3 联合实施</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-sse">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-27-0530">
-<meta name="doc-updated" content="26-11-27-1324">
+<meta name="doc-updated" content="26-11-27-1337">
 <meta name="doc-refs" content="memory-bank/issues/26-11-20-0408-feat-webui-sse-candidate-inventory.html, memory-bank/plans/26-11-20-0127-plan-transfer-verify-async.html, memory-bank/plans/26-11-18-0037-plan-traffic-stepwise-display.html, memory-bank/tasks/26-11-27-webui-sse.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>SSE 推送候选 P1/P2/P3 联合实施</h1>
 <p class="lede">本篇只回答: 候选全景清单中 P1 错误日志、P2 transfer 两段回执怎么落地，P3 抽屉为什么只做只读评估不出实施代码。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-27-0530 · <b>doc-updated</b> 26-11-27-1324 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-27-0530 · <b>doc-updated</b> 26-11-27-1337 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling 两轮(2026-11-27, D1-D12 全按推荐) + 三路只读取证(2026-11-27) + issue 26-11-20-0408 候选清单
 </div>
 
@@ -120,7 +120,7 @@
   <tr><th>阶段</th><th>范围</th><th>落点</th><th>不做</th></tr>
   <tr><td>S1 · P1</td><td>错误日志推送化</td><td><code>runtime_stream.py</code> 的 <code>append_err</code> 出锁后 <code>notify("errlog", {seq, level, msg})</code>; <code>polling.js</code> 加监听; <code>lifecycle.js</code> 事件入历史 + 60s GET 保留对账</td><td>不扩专用端点; 不新增配置键; 不改 seq 重启归零语义</td></tr>
   <tr><td>S2 · P2</td><td>transfer D5b 两段回执</td><td>受理段由<b>前端 POST 返回即本地渲染</b>（沿用 <code>transfer_flow.js:337</code> 的 pending 图标形态）, 后端不推受理信号; 终态由现有 <code>receipt_port -&gt; set_result -&gt; notify("cmd")</code> 覆盖同 <code>cmd_id</code>; <code>waitCmd</code> 兜底</td><td>不动 relocate; 受理信号不进任何 SSE 事件面(cmd/truth 均不推); 不改通用 <code>waitCmd</code> 三态终结语义; 不建新事件类型</td></tr>
-  <tr><td>S3 · P3</td><td>抽屉推送化收益评估</td><td>量化 <code>startPoll("drawer")</code> 空转率与 <code>RoCache</code> 命中率, 结论写回本节</td><td>不写实施代码; 不建 report/子 issue; 不碰 P0 收口</td></tr>
+  <tr><td>S3 · P3</td><td>抽屉推送化收益评估</td><td>实测(2026-11-27 S3, 一次性探针未落文件, 取数见 §07): <b>RoCache 命中率</b> trackers@1.5s=50.00% / @2s·@3s=0%, peers 三档均 0%, tp 双源合并@1.5s=25.00%; <b>抽屉轮询空转率</b>(命中驱动可确定下界) trackers@1.5s=50.00% / tp 双源@1.5s=25.00% / @2s·@3s=0%。结论 <b>条件触发(暂不实施)</b>, 阈值见 §07; 本批不写实施代码</td><td>不写实施代码; 不建 report/子 issue; 不碰 P0 收口</td></tr>
 </table>
 
 <h2><span class="no">§04</span>实施步骤</h2>
@@ -167,7 +167,7 @@
   <tr><td class="wr">受理段被当终态提前结算</td><td><code>onCmdEvent</code> 按 <code>cmd_id</code> 无条件兑现 waiter 且 <code>warn</code> 终结（<code>commands.js:234-235/323-324</code>）; <code>onTruthEvent</code> 认 <code>truth</code> 即结算（<code>:348-372</code>）—— 服务端受理信号无论走 cmd 还是 truth 都会被当终态</td><td><span class="wr">S2-a 硬约束</span>: <b>后端不推受理信号</b>, 受理段由前端 POST 返回即本地渲染; 终态才走 <code>set_result -&gt; notify("cmd")</code>; 不改 <code>waitCmd</code>、不建新事件类型。这是 S2 最高优先级风险。</td></tr>
   <tr><td>双跳时序竞态</td><td>终态在受理段渲染前到达</td><td>前端两段处理须幂等: 终态先到直接结算, 受理段后到不改变已结算态。</td></tr>
   <tr><td>P0 未收口污染本计划</td><td>有人要求顺手补 P0 的 Docker e2e / 真机冒烟</td><td>范围守恒: P0 收口留在 26-11-18-0037 与 26-11-18-webui-traffic-stepwise, 本计划不碰。</td></tr>
-  <tr><td>P3 评估结论悬空</td><td>量化数据不足以下结论</td><td>写「条件触发」并列出触发阈值（空转率/缓存命中率的实测值）, 另起独立排期, 不在本计划内扩大范围。</td></tr>
+  <tr><td>P3 评估结论悬空</td><td>量化数据不足以下结论</td><td><b>结论: 条件触发(暂不实施)</b>。实测(2026-11-27 S3, 一次性探针, 未落文件): ①<b>RoCache 命中率</b> —— 用项目真实 <code>RoCache</code>(<code>context.py:15-48</code>)注入假钟、按 <code>currentPollMs()</code> 三档推进 N=10000 拍, 以 <code>fn</code> 调用次数反推: trackers(ttl=2.0s)@1.5s=50.00%(5000/10000) / @2s=0% / @3s=0%; peers(ttl=1.0s)三档均 0%; tp 双源合并@1.5s=25.00%(5000/20000)。②<b>抽屉轮询空转率</b> —— <code>node</code> 经 <code>vm</code> 加载真实 <code>_dtMergeRows</code>(<code>drawer_store.js:35-48</code>), 喂 python 实测命中序列(N=2000): 命中拍返回同一行对象引用 → 字段零变化/行引用稳定/顶层新数组(Vue 同值不触发), 可确定空转 trackers@1.5s=50.00%(1000/2000) / tp 双源@1.5s=25.00% / @2s·@3s=0%(0% 仅表示 RoCache 不吸收、可确定空转为 0, 不代表实际无空转; 真实 qB 数据变化率需真机, D11 P3 免真机故本批不测)。<b>理由</b>: 结构性空转只在 1.5s 档出现且峰值 50%(单源)/25%(双源), 2s/3s 档缓存不吸收; 渲染层已「写字段不重建 + Vue 同值不触发」把空转的用户可见成本压到≈0, 剩余仅 qB 调用且已被 RoCache 部分吸收; <b>反面证据</b>: 推送化本身需 per-scope 订阅 + seq + 对账 + 断档重拉 + 前后端同提交, 改造成本不低, 且命中率越高说明 RoCache 已吸收越多 qB 调用、可省调用越少(本批实测 1.5s 双源 25% 已吸收四分之一), 收益上限受限; P0 per-scope 通道(26-11-18-0037)仍 Open、真机冒烟未清偿, 复用前提不成立。<b>触发阈值(三条同时满足才另起独立排期, 不在本计划内实施)</b>: (a) 真机实测抽屉页签空转率 ≥60%(本批仅结构性下界, 真实 qB 数据变化率需真机、D11 P3 免真机); (b) 同口径 RoCache 命中率 ≤10%(本批实测 1.5s 双源 25% / 2s·3s 0%), 即缓存已吸收不了白拉、每拍真实穿透 qB; (c) P0 计划 26-11-18-0037 收口且真机冒烟通过。</td></tr>
 </table>
 
 <h2><span class="no">§10</span>变更记录</h2>
@@ -178,6 +178,7 @@
   <li><span class="tag">R3 · 26-11-27-0542</span> 三轮评审修复完成(major 1 + minor 1, 第三轮零发现): S2 受理段定案=后端不推信号、前端本地渲染</li>
   <li><span class="tag">R4 · 26-11-27-1241</span> S1 补充(用户新拍板 D13): 补上单游标回捞缺口 —— 事件路径间隙侦测记对账回退游标（最后连续位, <code>min</code> 保最早）, 60s GET 用回退游标回捞被 <code>notify</code> 丢弃的低 seq 条目（去重/排序/游标 max 复用 merge, 对账不计未读）, 成功后按条件清空、失败保留, reseed 同步清空; 后端 <code>after</code> 严格 <code>seq &gt; after</code>, 故回退基准取「最后连续位」并以到达 seq-1 封顶。扩 r4 node 电池 + error_history 静态守阵。计划整体仍 Open（S2/S3 未做）。</li>
   <li><span class="tag">R5 · 26-11-27-1324</span> S2 transfer D5b 两段回执实施收口: 后端零改动守阵 + 前端 POST 返回后本地渲染受理段 + 本批局部 settled 双跳幂等 + 双皮肤 e2e; 真机 guard BLOCKED; 整体仍 Open(S3 未做)</li>
+  <li><span class="tag">R6 · 26-11-27-1336</span> S3 抽屉推送化只读评估收口: 实测 RoCache 命中率(trackers@1.5s=50.00%/tp 双源=25.00%/2s·3s=0%)与抽屉轮询空转率(同口径 50.00%/25.00%/0%), 结论=条件触发(阈值见 §07, 三条同时满足才另起独立排期); 三阶段 S1/S2/S3 全完成, S2-c 真机 BLOCKED 按 D11 不阻断入库</li>
 </ul>
 
 </div>
