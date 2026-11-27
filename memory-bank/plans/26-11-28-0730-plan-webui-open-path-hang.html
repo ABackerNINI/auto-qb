@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 打开目标文件夹偶发卡死：取证先行的异步隔离修复计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-open-path-hang">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-28-0730">
+<meta name="doc-updated" content="26-11-28-0730">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-28-webui-open-path-hang.md, memory-bank/issues/26-11-28-0731-bug-webui-open-path-hang.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-open-path-hang</div>
+<h1>WEBUI 打开目标文件夹偶发卡死：取证先行的异步隔离修复计划</h1>
+<p class="lede">本篇只回答一件事：先稳定复现并抓到「打开目标文件夹偶发卡死」的根因，再据此判断是否适用「命令队列 deferred 回执 + 后台隔离 + 前端三态」这套修复；抓不到现场时如何诚实降级为加固。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-28-0730 · <b>doc-updated</b> 26-11-28-0730 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 2026-11-28 会话四轮 grilling(Q1-Q12) + 三份只读事实清单(命令队列/日志/真机基建、诊断工具、异步回执) + 用户逐项拍板
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>问题</b>：Win11 uv 直跑下，选中种子按 o（或右键）打开目标文件夹时偶发进程级卡死——WEBUI 断联、无相关日志、Ctrl+C 无效，只能强关终端；同一路径重启后正常。</p>
+<p><b>完成定义</b>：取证 gate 产出根因证据后，按 §06 D14 分支判决；若判适用，则修复后满足 §04 的三条验收判据。常规打开 &lt; 2s 用户无感，慢 Shell 在 WEBUI 上有「正在执行」语义，失败有明确回执与复制路径兜底，在途重复点击不新起任务。</p>
+<p><b>不变量（违反即破坏设计）</b>：</p>
+<ul>
+  <li>单一写线程：打开动作绝不投进主循环同步执行；现有命令队列 handler 在主循环同步跑（<code>runtime_commands.py:57/59</code>），只能借 transfer 的 deferred 通道让主循环<b>写回执</b>，不能让它跑 Shell。</li>
+  <li>置前失败静默、绝不影响打开本体——沿用 <code>explorer-foreground</code> 坑档三轮固化的语义，抬 Z 序 / AttachThreadInput / ALT 解锁 / 硬切四层都不抛错。</li>
+  <li>长路径 PIDL 与「定位选中」语义不退化（<code>utils.py:374-514</code>），不为了省事退回字符串路线。</li>
+  <li>新配置键须进 <code>validate_config</code> + schema（黄金法则 4）——故诊断开关走环境变量 <code>AQB_OPEN_PATH_DIAG=1</code>，不新增 config 键。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+<thead><tr><th>面</th><th>事实（文件:行号）</th><th>后果</th></tr></thead>
+<tbody>
+<tr><td>同步阻塞点</td><td><code>routes/fs.py:314</code> → <code>file_access.py:223</code> → <code>utils.py:908-965</code>：<code>EnumWindows</code> 快照(:939)、<code>SHParseDisplayName</code>(:433)、<code>SHOpenFolderAndSelectItems</code>(:464)、<code>ShellExecuteExW</code>(:512)、<code>subprocess.run</code>(:530)、<code>os.startfile</code>(:532) 全同步无超时</td><td>任一 Shell/DCOM 调用挂起即占死 uvicorn worker</td></tr>
+<tr><td>日志盲区</td><td>端点零 logger（<code>fs.py:223-317</code>）；链路仅 DEBUG（<code>utils.py:434/439/442/872/878</code>），默认 INFO（<code>models.py:17</code>）不落盘；uvicorn <code>log_level="warning"</code>（<code>lifecycle.py:202-206</code>）过滤访问日志</td><td>用户报「无相关 log」是级别问题，不是没执行</td></tr>
+<tr><td>置前线程</td><td>已 daemon（<code>utils.py:897-905</code>），但内部 Win32 调用同步、可泄漏线程；窗口快照仍在请求线程(:939)</td><td>次嫌未清</td></tr>
+<tr><td>前端</td><td><code>menu.js:481-494</code> 无 busy/幂等闸；<code>auth.js:13-14</code> 15s fetch 超时后只弹错误</td><td>慢 Shell 时用户「点了没反应」，易再点一次</td></tr>
+<tr><td>命令队列</td><td>handler 主循环同步执行（<code>runtime_commands.py:28-110</code>）；<code>defer_receipt</code> 是「立即写 ok + truth 稍后推」(:320-336)，不是延后终态；transfer/reannounce 已蹚出「后台跑完→回灌→主循环 set_result」先例</td><td>能复用通道，但不能直接投 handler</td></tr>
+<tr><td>空白</td><td>issues 无卡死专单；config 无 open-path/置前项；真机 RM08 无 open-path 用例；守阵 <code>test_web_hr_fs.py:204-205</code> 钉「不入队列」</td><td>新面，需补 issue/守阵/真机例</td></tr>
+</tbody>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>分期：S0 取证 gate → S1 修复（仅在 gate 判适用时）→ S2 验收。gate 不通过走 S1' 加固分支。</b></p>
+<p><b>S0 取证 gate</b>：① 打开 DEBUG/端点 INFO + <code>faulthandler</code> 看门狗（现成范式 <code>tests/real/tools/run_s0_boot.py:57,89</code>）；② 故障注入确定性复现链（<code>sidefx.py:339-361</code> 钉住的 <code>_win_shell_open</code>/<code>_win_shell_enter</code> 注入点，319-337 是 stdlib LAUNCH patch 不是 Shell 段 + <code>ui_harness.py:997-1021</code> 的 Event.wait 挂起模式）；③ 真机用 CDP 专用 profile 浏览器（<code>hr_fetch_experiment.py:562-580</code>）重复按 o/右键叠加前台条件；④ 按 §06 D14 判决。schtasks 冷后台法被会话安全策略禁（<code>plans/26-10-16-0541:277</code>），不纳入。</p>
+<p><b>S1 修复主线</b>（拍板 D1/Q8a/Q8b/Q8c/D2/D3）：端点改 <code>ctx.enqueue</code> 投递新 <code>open_path</code> 命令（<code>commands.py:68-117</code> 加 handler；<code>commands_common.py:152-171</code> 加 <code>DEFERRED_RECEIPT_COMMANDS</code>），handler 只投递 daemon 线程、Shell 隔离硬超时 8s、置前总时限 5s；daemon 完成经结果队列回灌，主循环 <code>set_result</code> 写终态。前端 <code>POST</code> 拿 cmd_id → <code>waitCmd</code>（<code>commands.js:192-220</code>）→ 2s 后仍 pending 才显示 sticky busy toast（<code>ui_feedback.js:42-61</code>），终态用 <code>_finishToast</code>(:62-75) 原位改文案；按目标键 inflight Set 在 await 前占闸、finally 清理（<code>dialogs_meta.js:7-15</code> 纪律）。失败回执带复制路径兜底。</p>
+<p><b>S1' 加固分支</b>：gate 拿不到现场时，只做「已知无超时点全部隔离+超时」（即 S1 的后端部分），文档明确标注「根因未确证，属加固非修复」。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<thead><tr><th>步</th><th>内容</th><th>验收判据</th></tr></thead>
+<tbody>
+<tr><td>S0.1</td><td>端点入口 INFO、Shell 进出 DEBUG+耗时、daemon 启停 DEBUG；<code>AQB_OPEN_PATH_DIAG=1</code> 开 faulthandler 15s 看门狗</td><td>诊断模式下卡死可得栈 + 最后一步日志；默认模式日志零增量</td></tr>
+<tr><td>S0.2</td><td>故障注入：patch <code>_win_shell_open</code> 为挂起，验证症状链</td><td>能确定性地让请求线程占死、WEBUI 无响应</td></tr>
+<tr><td>S0.3</td><td>真机 CDP 重复按键 + 叠加前台条件，记录触发率；必要时长时守候常开抓栈</td><td>拿到至少一次现场，或明确记录「未复现」</td></tr>
+<tr><td>S0.4</td><td>按 D14 判决适用性</td><td>判决写进任务档案 §思考过程与决策</td></tr>
+<tr><td>S1.1</td><td>后端：新命令 + deferred 回执 + Shell/置前 daemon 隔离与超时</td><td>故障注入下请求 ≤8s 返回明确错误；<code>GET /api/state</code> 仍响应，state mtime 继续推进</td></tr>
+<tr><td>S1.2</td><td>前端：cmd_id 等待 + 2s 延迟 busy toast + 按目标 inflight 闸 + 复制路径兜底</td><td>&lt;2s 完成无 toast；&gt;2s 出现「正在执行」；同目标连点只起一个任务</td></tr>
+<tr><td>S2</td><td>守阵同步（<code>test_web_hr_fs.py</code> 等 ~12 处同步断言改 deferred 口径）+ 新增超时/幂等用例；真机 CDP 按 o 20 次 + 右键 20 次</td><td>全量绿（见 kb.baseline）；真机无卡死；若 S0 抓到现场则同场景复测不再卡</td></tr>
+</tbody>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><span class="good">无剩余待拍板</span>：Q1-Q12 与 Q8a/b/c 全部已拍（见 §06）。唯一开放分支是 D14 未覆盖的第四类根因——若出现，回炉 grilling，不在本计划内自行决断。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<thead><tr><th>编号</th><th>决策</th><th>结论（2026-11-28）</th></tr></thead>
+<tbody>
+<tr><td>D1 / Q1</td><td>修复策略</td><td>异步化 + 硬超时；命令队列直投路线排除</td></tr>
+<tr><td>D2 / Q2</td><td>失败反馈</td><td>明确错误 toast + 复制路径兜底</td></tr>
+<tr><td>D3 / Q3</td><td>置前链路</td><td>保留，整体搬进 daemon + 每步/总时限，失败静默</td></tr>
+<tr><td>D4 / Q4</td><td>验收与 gate</td><td><b>c+a</b>：先稳定复现找根因再定方案；随后故障注入 + 真机冒烟</td></tr>
+<tr><td>D5 / Q5</td><td>根因证据</td><td>faulthandler 全线程栈 + DEBUG/端点 INFO 双保险</td></tr>
+<tr><td>D6 / Q6</td><td>复现策略</td><td>故障注入 → 真机构造 → 长时守候兜底</td></tr>
+<tr><td>D7 / Q7</td><td>gate 不通过</td><td>转「未确证加固」并诚实标注；用户可选挂起等待现场</td></tr>
+<tr><td>D8 / Q8</td><td>时延约束</td><td>常规 &lt;2s 无感；慢 Shell 有「正在执行」；避免用户再点一次</td></tr>
+<tr><td>D9 / Q8a</td><td>回执通道</td><td>走现有命令队列 deferred 通道（transfer 先例），同步改守阵</td></tr>
+<tr><td>D10 / Q8b</td><td>busy 时机</td><td>延迟 2s 再显示 sticky busy toast，终态原位改文案</td></tr>
+<tr><td>D11 / Q8c</td><td>防重复</td><td>按 kind+id 建 inflight Set，await 前占闸、finally 清理</td></tr>
+<tr><td>D12 / Q9</td><td>埋点开关</td><td>环境变量 <code>AQB_OPEN_PATH_DIAG</code>，不进 config schema</td></tr>
+<tr><td>D13 / Q10</td><td>验收判据</td><td>故障注入 + 真机 20+20 次 + 现场复测三判据</td></tr>
+<tr><td>D14 / Q11</td><td>适用性判决</td><td>Shell 挂起→全适用；置前 API 挂起→D3 加重；GIL/ctypes 或其他→不适用重设计</td></tr>
+<tr><td>D15 / Q12</td><td>文档治理</td><td>立任务档案 + issue 入池 + 本计划 HTML</td></tr>
+</tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<ul>
+  <li><b>守阵大面积改口径</b>（触发：S1.1 改端点为 enqueue）：<code>test_web_hr_fs.py:141-207</code> 等约 12 处钉同步 HTTP 响应的断言全部失效——逐条改为 deferred 口径，不删断言；401/404/501 可在路由即时返回的部分保留。</li>
+  <li><b>deferred 通道误用</b>（触发：把 <code>defer_receipt</code> 当延后终态）：它不是——必须照 transfer 走结果队列回灌 + 主循环 <code>set_result</code>，否则回执会提前写 ok。</li>
+  <li><b>置前体验倒退</b>（触发：搬线程时静默吞掉四层置前）：逐层保留并用现有守阵（<code>test_utils_windows.py</code> 置前系列）钉住，失败仍静默。</li>
+  <li><b>2s 定时器与终态竞态</b>（触发：&lt;2s 完成时定时器仍触发 busy toast）：终态路径先清 timer 再 <code>_finishToast</code>；幂等闸只在 finally 清，避免早放。</li>
+  <li><b>根因未确证即宣称修复</b>（触发：gate 空手）：强制走 S1' 标注「加固」，不得写「已修复」。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-28-0730</span> 初版：四轮 grilling 拍板 Q1-Q12 + Q8a/b/c；取证 gate 先行，deferred 回执 + 三态前端修复方案，附根因分支判决与加固降级路径。</li>
+</ul>
+
+</div>
+</body>
+</html>

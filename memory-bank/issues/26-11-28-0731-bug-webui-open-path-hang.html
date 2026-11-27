@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 打开目标文件夹偶发卡死：无响应/WEBUI 断联/无 log/Ctrl+C 无效 · bug · 计划外问题</title>
+<meta name="issue-slug" content="webui-open-path-hang">
+<meta name="issue-stamp" content="26-11-28-0731">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-open-path-hang">
+<meta name="doc-refs" content="memory-bank/plans/26-11-28-0730-plan-webui-open-path-hang.html, memory-bank/tasks/26-11-28-webui-open-path-hang.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 打开目标文件夹偶发卡死：无响应/WEBUI 断联/无 log/Ctrl+C 无效">
+<meta name="issue-summary" content="选中种子按 o 或右键打开目标文件夹偶发进程级卡死，Shell 同步调用无超时占死 uvicorn worker；需先取证稳定复现再定修复">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --mark: #161e26;     /* issue 特有: callout 底色 (plan.html 不用) */
+    --warn-bg: #2a2119;  /* issue 特有: 状态徽标底色 */
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 单栏流式版面: 与 plan.html 同一套 .sheet (封顶 1280px, 侧距 clamp(18~44px)); 旧双栏+粘性目录已删 */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+
+  /* 封面 meta 行: issue 特有, DOM 形态别改 —— 状态徽标 <span class="badge"> 被
+     flip_status (W4) 与 check_status_drift 的 BADGE_RE 机读 (k/v div 结构在判据里) */
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta-row .item .k { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; color: var(--dim); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; font-size: 14px; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-family: var(--mono); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">计划外问题（未修）· bug</div>
+<h1>WEBUI 打开目标文件夹偶发卡死：无响应/WEBUI 断联/无 log/Ctrl+C 无效</h1>
+<p class="lede">选中种子按 o 或右键打开目标文件夹偶发进程级卡死，Shell 同步调用无超时占死 uvicorn worker；需先取证稳定复现再定修复</p>
+<div class="meta-row">
+  <div class="item"><div class="k">编号</div><div class="v">26-11-28-0731-bug-webui-open-path-hang</div></div>
+  <div class="item"><div class="k">报告时间</div><div class="v">2026-11-28 07:31</div></div>
+  <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+  <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+  <div class="item"><div class="k">涉及模块</div><div class="v">webui/打开目标文件夹</div></div>
+  <div class="item"><div class="k">发现者</div><div class="v">nini</div></div>
+</div>
+
+<section id="s1">
+  <h2><span class="no">§01</span>现象与发现场景</h2>
+  <p>用户在日常使用 WEBUI 时报障：选中一个种子、按键盘 <code>o</code>（「打开目标文件夹」）时<b>偶尔</b>导致 auto-qb 卡死——彻底无响应、WEBUI 断联、无相关 log、无法 Ctrl+C 退出。触发平台 Win11 uv 直跑；右键菜单未测但用户判断后端同源、大概率一致。强行关闭终端重启后，选择同一种子能正常打开。</p>
+  <p>属于偶发，尚未拿到可重复的触发条件；用户明确要求先找到根因、稳定复现，再确定修复方案是否适用。</p>
+</section>
+
+<section id="s2">
+  <h2><span class="no">§02</span>证据</h2>
+  <p class="hint">用户报障原文与随后的静态取证；本次尚未拿到卡死现场（无 log 本身是级别问题，见 §05）。</p>
+<pre><code># 用户报障原文（2026-11-28）
+WEBUI上使用打开目标文件夹功能时偶尔会导致auto-qb卡死，彻底无响应，
+WEBUI断联，无相关log，无法ctrl+c退出。
+触发平台：win11 uv 直跑
+触发方式：选中一个种子，点击键盘o
+只是偶尔触发，强行关闭终端重启auto-qb后选择相同种子正常打开。
+
+# 静态取证：同步调用链（无超时）
+src/auto_qb/webui/server/routes/fs.py:314  common.open_path(target, select=select)
+src/auto_qb/infra/file_access.py:223       utils.open_path(...)
+src/auto_qb/infra/utils.py:433/464/512/530/532  SHParseDisplayName /
+  SHOpenFolderAndSelectItems / ShellExecuteExW / subprocess.run(explorer) /
+  os.startfile  —— 全部同步，跑在 uvicorn worker
+
+# 静态取证：「无 log」是级别问题
+src/auto_qb/config/models.py:17  默认 INFO
+src/auto_qb/infra/utils.py:434/439/442/872/878  链路日志全是 DEBUG
+src/auto_qb/webui/server/lifecycle.py:202-206  uvicorn log_level="warning" 过滤访问日志</code></pre>
+</section>
+
+<section id="s3">
+  <h2><span class="no">§03</span>影响面</h2>
+  <table>
+    <tr><th>维度</th><th>结论</th></tr>
+    <tr><td>触发条件</td><td>偶发未定；已排除「特定种子路径错误」（重启后同种子正常）。嫌疑面：Shell/DCOM 调用挂起（杀软扫描 / Shell 扩展慢 / Explorer 复用窗口）占死 uvicorn worker；置前线程内的 AttachThreadInput/keybd_event 等同步 Win32 调用次嫌。</td></tr>
+    <tr><td>影响范围</td><td>进程级：WEBUI 断联、主循环停摆、Ctrl+C 无效，只能强关终端；键盘 o 与右键两个入口共用同一后端端点。</td></tr>
+    <tr><td>严重度</td><td>高——用户失去对进程的控制且无自愈路径，只能强杀（state 落盘窗口可能丢失）。</td></tr>
+  </table>
+</section>
+
+<section id="s4">
+  <h2><span class="no">§04</span>定位锚点</h2>
+  <p class="hint">符号名 + grep 关键词为主，行号仅加速（取证 2026-11-28 07:31）。</p>
+  <ul>
+    <li><code>src/auto_qb/infra/utils.py:908</code> · <code>open_path</code> · grep <code>def open_path</code> —— 同步 Shell 调用入口。</li>
+    <li><code>src/auto_qb/infra/utils.py:374</code> · <code>_win_shell_with_pidl</code> · grep <code>CoInitializeEx|SHParseDisplayName</code> —— PIDL 路线的 COM 初始化与同步调用。</li>
+    <li><code>src/auto_qb/infra/utils.py:757</code> · <code>_win_force_foreground</code> · grep <code>AttachThreadInput|keybd_event|SwitchToThisWindow</code> —— 次嫌的同步 Win32 置前链路。</li>
+    <li><code>src/auto_qb/webui/server/routes/fs.py:223</code> · <code>api_open_path</code> · grep <code>/api/open-path</code> —— 端点，同步直调。</li>
+    <li><code>tests/unit/sidefx.py:339-361</code> · grep <code>_win_shell_open</code> —— Shell PIDL 故障注入的现成 patch 点（319-337 是 stdlib LAUNCH patch，不是 Shell 段）。</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">§05</span>根因<span class="opt">（可选）</span></h2>
+  <div class="callout">待查（取证 gate 未跑，不把猜测写成结论）。已排除：种子路径错误（重启后同种子正常）。两个待验假设：①同步 Shell/DCOM 调用无超时占死 uvicorn worker；②置前 daemon 线程内的同步 Win32 调用挂起。方案适用性按根因分支判决，见计划 §06 D14。</div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">§06</span>建议修法<span class="opt">（可选）</span></h2>
+  <p>方向（已由 grilling 拍板，详见计划 <code>memory-bank/plans/26-11-28-0730-plan-webui-open-path-hang.html</code>）：取证 gate 先行（faulthandler 栈 + DEBUG/端点 INFO 双保险、故障注入、真机 CDP 复现）；判适用后走命令队列 deferred 回执通道（transfer 先例）+ Shell/置前 daemon 隔离与硬超时；前端三态（&lt;2s 无感 → 2s 后 busy toast → 终态回执）+ 按目标 inflight 闸。gate 空手则诚实降级为「未确证加固」，不宣称修复。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">§07</span>状态变更日志</h2>
+  <ul>
+    <li>2026-11-28 07:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+  </ul>
+  <h3>复验</h3>
+  <p>复验：待 S0 取证 gate 执行后补「&lt;时间&gt; 仍复现 / 已消失 / 未复现」。</p>
+  <h3>修复后补充</h3>
+  <p>待 S1/S2 完成后补「实际修法 / 验证方式 / 测试数字（见 kb.baseline）」。</p>
+</section>
+
+<footer>
+  26-11-28-0731-bug-webui-open-path-hang.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+</footer>
+
+</div>
+</body>
+</html>
