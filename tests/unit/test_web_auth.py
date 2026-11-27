@@ -11,6 +11,8 @@
 - test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
 - test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性 / *.localhost 后缀判定)
+- test_allowed_hostnames_normalizes_configured_host: 自配 Host 精确归一化(去空白/方括号、转小写), loopback 与 X 字符边界用完整 frozenset 相等钉死
+- test_log_reject_sanitization_and_truncation_contract: 跨站拒绝日志恰好一条 auto_qb.web WARNING, 白名单字符原样、危险字符逐个替换为 ?、值截断恰好 100 字符
 - test_auth_default_port_host_matrix: HTTP 80 / HTTPS 443 缺省端口、Host 无端口与显式同/异端口正负矩阵(直接断言 helper 布尔值)
 - test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签(签发层回空串 + 路由层转 503)
 - test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token 查询串兜底已删除(密钥正确也不再是凭证)
@@ -28,6 +30,7 @@
 import logging
 import os
 import re
+import string
 import time
 from pathlib import Path
 
@@ -410,6 +413,86 @@ def test_auth_host_origin_parsing_helpers():
     blank_allowed = _allowed_hostnames("   ")
     assert empty_allowed == blank_allowed == frozenset({"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"})
     assert _hostname_allowed("127.0.0.1", empty_allowed) and _hostname_allowed("api.localhost", empty_allowed)
+
+
+def test_allowed_hostnames_normalizes_configured_host():
+    """自配 Host 归一化用完整集合钉死: 大小写、IPv6 方括号与 X 字符均不得漂移"""
+    from auto_qb.webui.server.auth import _allowed_hostnames
+
+    loopback = frozenset({"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"})
+    for raw_host in (" EXAMPLE.COM ", "\tEXAMPLE.COM\r\n"):
+        configured = _allowed_hostnames(raw_host)
+        assert configured == loopback | {"example.com"}, raw_host
+    assert "example.com" in configured and "EXAMPLE.COM" not in configured
+    assert _allowed_hostnames("\t\r\n") == loopback
+    assert _allowed_hostnames("[::1]") == loopback
+    xhost = _allowed_hostnames("XHOSTX")
+    assert xhost == loopback | {"xhostx"}
+    assert "xhostx" in xhost and "host" not in xhost
+
+
+def test_log_reject_sanitization_and_truncation_contract(caplog):
+    """拒绝日志逐字钉死: 显式字符契约表、单条 WARNING、危险字符逐个变 ?、值截 100 字符"""
+    from auto_qb.webui.server.auth import _log_reject
+
+    punctuation_expected = {
+        "!": "?",
+        '"': "?",
+        "#": "?",
+        "$": "?",
+        "%": "%",
+        "&": "?",
+        "'": "?",
+        "(": "?",
+        ")": "?",
+        "*": "?",
+        "+": "?",
+        ",": "?",
+        "-": "-",
+        ".": ".",
+        "/": "?",
+        ":": ":",
+        ";": "?",
+        "<": "?",
+        "=": "?",
+        ">": "?",
+        "?": "?",
+        "@": "?",
+        "[": "[",
+        "\\": "?",
+        "]": "]",
+        "^": "?",
+        "_": "_",
+        "`": "?",
+        "{": "?",
+        "|": "?",
+        "}": "?",
+        "~": "?",
+    }
+    assert set(punctuation_expected) == set(string.punctuation)
+    cases = [
+        ("09 AZaz中é", "09?AZaz中é"),
+        ("A B\nC\tD", "A?B?C?D"),
+    ]
+    cases.extend(punctuation_expected.items())
+
+    caplog.set_level(logging.WARNING, logger="auto_qb.web")
+    for value, expected in cases:
+        caplog.clear()
+        _log_reject("字符契约", value)
+        assert len(caplog.records) == 1
+        record = caplog.records[0]
+        assert record.name == "auto_qb.web"
+        assert record.levelno == logging.WARNING
+        assert record.getMessage() == f"WEB 跨站防护拒绝(字符契约): {expected}"
+
+    caplog.clear()
+    _log_reject("截断", "x" * 150)
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.name == "auto_qb.web"
+    assert record.levelno == logging.WARNING
+    assert record.getMessage() == "WEB 跨站防护拒绝(截断): " + "x" * 100
 
 
 def test_auth_default_port_host_matrix():

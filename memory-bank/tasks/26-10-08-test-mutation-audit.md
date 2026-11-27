@@ -383,6 +383,7 @@ Stage 1 子代理自身不提交；各步评审后的本地提交由主会话执
 - **B4 工具链修复**: verify 的自动 deselect 从整个 `DEFAULT_DESELECT` 收窄为新增 `VERIFY_DESELECT` 两条已证静态扫描，并继续叠加 `FLAKY_DESELECT`；`DEFAULT_DESELECT` 仅复用这两条，混合行为用例 `test_api_enqueue_wakes_main_loop` 保持启用。首版过度继承已经正确性评审捕获并修正。随后按安全/测试缺口评审补上完整 suite 命令指纹：verify 结果文件与基线缓存都带同一指纹，旧无指纹证据自然成为历史，同配置续跑仍跳过已判定 id，换配置必须重验，`--fresh` 只删当前指纹文件。
 - **B4 Review**: 本地分支态探针 ref 不存在，跳过 sync；末轮 `ship.gate` 全绿，`review.pack` 为 223 行、基哈希 `c6d5fec98c60`。正确性/安全/测试缺口三分面串行复评；累计 8 送检/8 过检，修 5、入池 0。后 3 条过检主张要求把结果身份泛化到任意 mirror/HEAD/工作树/注册表组合，均属计划外工具链增强；本计划固定同一镜像、HEAD 与候选清单且强制 `--recompute-baseline`，当前执行边界不会触发，裁决为非 actionable，未新建 issue。定向守阵、快速基线与 `git diff --check` 通过，数字见 `kb.baseline`。
 - **B4 结果**: 有效绿基线 `suite fingerprint=7303fae3660e`、0 失败（测试数字见 `kb.baseline`）；47 条主 verify 首轮为 46 SURVIVED / 0 KILLED / 1 FLAKY（`make_require_token__mutmut_87`），APPLY_FAIL/TIMEOUT/UNKNOWN 均为 0。该 FLAKY 以同一 target/mirror、workers=3、suite-timeout=1200、`--no-refresh`、`--recompute-baseline` 单条复跑为 SURVIVED，复跑仍保持绿基线；终态 47/47 SURVIVED、0 KILLED、0 未判定。三组只读预审与 dump diff 结论一致：`_allowed_hostnames` 3 条、`_log_reject` 8 条、`_reject_cross_site` 15 条、`make_require_token` 21 条，合计 47 条均为真洞（Observable contract 或安全语义缺口）；加上 B4 分类段已闭合的 6 条严格等价，53 条全部闭合、0 假存活。旧无指纹红基线结果继续只作无效轮证据；生产 `src/` 未改。
+- **B5a 结果**: B5a 已完成，仅 `tests/unit/test_web_auth.py` +83 行，补齐配置 Host 归一化与拒绝日志白名单/截断契约，对应 11 条真洞。临时红验显式清除 `TMPDIR`；11 条原始同构变异 + 3 条评审补充形态（`strip(" ")`、`isalnum`→`isalpha`、允许集加入 `;`）共 14 条全部为有效 `AssertionError` 红，源码逐条精确恢复且最终 `src/` 零 diff；目标测试复绿，`test.full` 通过（测试数字见 `kb.baseline`）。证据：`H:\Temp\auto-qb-mutants\b5a-minor-redverify-2026-11-27.json`。评审：本地分支态探针 ref 不存在，跳过 sync；`ship.gate` 全绿；`review.pack` 83 行、基哈希 `7ae3bb90e6eb`。按正确性/安全/测试缺口三分面评审，首轮测试缺口 2 条 minor 均经 `review.check` 过检并已修；修复触发第二轮三分面增量复评，零发现、零 actionable。累计送检 2/过检 2/修 2/入池 0，blocker 0，派发 6，轮 2。下一批 B5b 跨站契约。
 - **B4 下一步**: B4 已闭合；进入 B5，将 47 条真洞分三批补测，逐批做同构变异红验并还原复绿，6 条严格等价不再补测。
 
 - 2026-11-27 06:56 B2 补齐 Web 鉴权三类安全矩阵，定向池与快速基线通过；三分面评审 1 条过检但属既有生产设计，本批零 actionable，随本批本地入库
@@ -394,3 +395,5 @@ Stage 1 子代理自身不提交；各步评审后的本地提交由主会话执
 - 2026-11-27 11:39 B4 工具链修复完成并随本批本地入库，红基线无效轮保留，下一步重跑绿基线 verify
 
 - 2026-11-27 13:34 B4 绿基线 verify 闭合：47 条真洞、6 条等价、0 假存活，进入 B5 补测
+
+- 2026-11-27 15:11 B5a 完成 Host/日志契约补测，14 条红验通过，评审零 actionable
